@@ -287,6 +287,10 @@ void HudGaugeLock::render(float frametime)
 	vertex lock_point;
 	int sx, sy;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	// check to see if there are any missile to fire.. we don't want to show the 
 	// lock indicator if there are missiles to fire.
 	if ( !ship_secondary_bank_has_ammo(Player_obj->instance) ) {

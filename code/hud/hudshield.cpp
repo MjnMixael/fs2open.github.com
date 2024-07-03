@@ -560,6 +560,10 @@ void HudGaugeShield::showShields(object *objp, int mode)
 	ship_info	*sip;
 	hud_frames	*sgp=NULL;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	if ( objp->type != OBJ_SHIP )
 		return;
 
@@ -885,6 +889,10 @@ HudGaugeShield(HUD_OBJECT_TARGET_SHIELD, HUD_TARGET_SHIELD_ICON)
 
 void HudGaugeShieldTarget::render(float  /*frametime*/)
 {
+	if (Player_ship == nullptr) {
+		return;
+	}
+	
 	if (Player_ai->target_objnum == -1)
 		return;
 
@@ -934,6 +942,10 @@ void HudGaugeShieldMini::initBitmaps(char *fname)
 
 void HudGaugeShieldMini::render(float  /*frametime*/)
 {
+	if (Player_ship == nullptr) {
+		return;
+	}
+	
 	if (Player_ai->target_objnum == -1)
 		return;
 

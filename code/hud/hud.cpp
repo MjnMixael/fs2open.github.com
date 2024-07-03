@@ -739,6 +739,30 @@ void HudGauge::render(float  /*frametime*/)
 	}
 }
 
+// TODO convert coords to hud config coords.. HOW???? Math probably
+void HudGauge::renderConfig()
+{
+	if (!custom_gauge) {
+		return;
+	}
+
+	setGaugeColor();
+
+	if (!custom_text.empty()) {
+		char* text = new char[custom_text.size() + 1];
+		strcpy(text, custom_text.c_str());
+
+		hud_num_make_mono(text, font_num);
+		renderString(position[0] + textoffset_x, position[1] + textoffset_y, text);
+
+		delete[] text;
+	}
+
+	if (custom_frame.first_frame > -1) {
+		renderBitmap(custom_frame.first_frame + custom_frame_offset, position[0], position[1]);
+	}
+}
+
 void HudGauge::renderString(int x, int y, const char *str)
 {
 	int nx = 0, ny = 0;
@@ -1810,6 +1834,21 @@ void HudGaugeMissionTime::render(float  /*frametime*/)
 	}
 }
 
+void HudGaugeMissionTime::renderConfig()
+{
+	setGaugeColor();
+
+	// blit background frame
+	if (time_gauge.first_frame >= 0) {
+		renderBitmap(time_gauge.first_frame, position[0], position[1]);
+	}
+
+	// print out mission time in MM:SS format
+	renderPrintf(position[0] + time_text_offsets[0],position[1] + time_text_offsets[1],NOX("%02d:%02d"),0,0);
+
+	renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], XSTR("x%.0f", 216), 0);
+}
+
 /**
  * @brief Show supernova warning if there's a supernova coming
  */
@@ -2145,6 +2184,10 @@ void HudGaugeDamage::render(float  /*frametime*/)
 		Damage_flash_bright = !Damage_flash_bright;
 	}
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	num = 0;
 	for ( pss = GET_FIRST(&Player_ship->subsys_list); pss !=END_OF_LIST(&Player_ship->subsys_list); pss = GET_NEXT(pss) ) {
 		psub = pss->system_info;
@@ -2340,6 +2383,73 @@ void HudGaugeDamage::render(float  /*frametime*/)
 
 		char buf[128];
 		sprintf(buf, XSTR( "%d%%", 219), line.strength);
+		hud_num_make_mono(buf, font_num);
+
+		if (line.color_override != nullptr) {
+			gr_set_color_fast(line.color_override);
+		} else {
+			setGaugeColor(line.bright_index);
+		}
+
+		renderString(line.name_x, line.name_y, line.name.c_str());
+		renderString(line.value_x, line.value_y, buf);
+
+		setGaugeColor();
+	}
+
+	setGaugeColor();
+	renderBitmap(damage_bottom.first_frame, last_bx, last_by + bottom_bg_offset);
+}
+
+void HudGaugeDamage::renderConfig()
+{
+
+	if (damage_top.first_frame == -1) {
+		return;
+	}
+
+	DamageInfo info;
+
+	info.name = XSTR("Hull Integrity", 220);
+
+	info.strength = 100;
+
+	char buf[128];
+	sprintf(buf, XSTR("%d%%", 219), 100);
+	hud_num_make_mono(buf, font_num);
+
+	int w, h;
+	gr_get_string_size(&w, &h, buf);
+
+	info.name_x = position[0] + hull_integ_offsets[0];
+	info.name_y = position[1] + hull_integ_offsets[1];
+
+	info.value_x = position[0] + hull_integ_val_offset_x - w;
+	info.value_y = position[1] + hull_integ_offsets[1];
+
+	SCP_vector<DamageInfo> info_lines;
+
+	// Insert at the top since hull is always first
+	info_lines.insert(info_lines.begin(), info);
+
+	setGaugeColor();
+
+	// Draw the top of the damage pop-up
+	renderBitmap(damage_top.first_frame, position[0], position[1]);
+	renderString(position[0] + header_offsets[0], position[1] + header_offsets[1], XSTR("damage", 218));
+
+	// These variables keep track of where the background was drawn last so we can draw the bottom correctly
+	int last_bx = position[0];
+	int last_by = position[1] + middle_frame_start_offset_y;
+	for (auto& line : info_lines) {
+		if (line.draw_background) {
+			renderBitmap(damage_middle.first_frame, line.background_x, line.background_y);
+			last_bx = line.background_x;
+			last_by = line.background_y + line_h; // Add line_h here so that the footer is properly aligned
+		}
+
+		char buf[128];
+		sprintf(buf, XSTR("%d%%", 219), line.strength);
 		hud_num_make_mono(buf, font_num);
 
 		if (line.color_override != nullptr) {
@@ -2568,6 +2678,18 @@ void HudGaugeTextWarnings::render(float  /*frametime*/)
 	renderString(fl2i((float)position[0] - ((float)w / 2.0f)), position[1], Hud_text_flash);
 }
 
+void HudGaugeTextWarnings::renderConfig()
+{
+	int w, h;
+
+	// string size
+	gr_get_string_size(&w, &h, Hud_text_flash);
+
+	// string
+	setGaugeColor(HUD_C_BRIGHT);
+	renderString(fl2i((float)position[0] - ((float)w / 2.0f)), position[1], Hud_text_flash);
+}
+
 HudGaugeKills::HudGaugeKills():
 HudGauge(HUD_OBJECT_KILLS, HUD_KILLS_GAUGE, false, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255)
 {
@@ -2626,6 +2748,28 @@ void HudGaugeKills::render(float  /*frametime*/)
 
 	gr_get_string_size(&w, &h, num_kills_string);
 	renderString(position[0]+text_value_offsets[0]-w, position[1]+text_value_offsets[1], num_kills_string);
+}
+
+void HudGaugeKills::renderConfig()
+{
+	if (Kills_gauge.first_frame < 0) {
+		return;
+	}
+
+	setGaugeColor();
+
+	// Draw background
+	renderBitmap(Kills_gauge.first_frame, position[0], position[1]);
+	renderString(position[0] + text_offsets[0], position[1] + text_offsets[1], XSTR("kills:", 223));
+
+	// Display how many kills the player has so far
+	char num_kills_string[32];
+	int w, h;
+
+	sprintf(num_kills_string, "%d", '1000');
+
+	gr_get_string_size(&w, &h, num_kills_string);
+	renderString(position[0] + text_value_offsets[0] - w, position[1] + text_value_offsets[1], num_kills_string);
 }
 
 HudGaugeLag::HudGaugeLag():
@@ -2714,6 +2858,18 @@ void HudGaugeLag::render(float  /*frametime*/)
 		// Nothing to draw
 		return;
 	}
+}
+
+void HudGaugeLag::renderConfig()
+{
+	int lag_status;
+
+	if (Netlag_icon.first_frame == -1) {
+		return;
+	}
+
+	setGaugeColor();
+	renderBitmap(Netlag_icon.first_frame, position[0], position[1]);
 }
 
 /**
@@ -3111,6 +3267,29 @@ void HudGaugeSupport::render(float  /*frametime*/)
 		}
 		renderPrintf(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, NOX("%02d:%02d"), minutes, seconds);
 	}
+}
+
+void HudGaugeSupport::renderConfig()
+{
+	int show_time, w, h;
+	char outstr[64];
+
+	if (background.first_frame < 0)
+		return;
+
+	bm_get_info(background.first_frame, &w, &h);
+
+	// Set hud color
+	setGaugeColor();
+
+	renderBitmap(background.first_frame, position[0], position[1]);
+
+	renderString(position[0] + Header_offsets[0], position[1] + Header_offsets[1], XSTR("support", 224));
+
+	strcpy_s(outstr, XSTR("dock in:", 232));
+	renderString(position[0] + text_dock_offset_x, position[1] + text_val_offset_y, outstr);
+	renderPrintf(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, NOX("%02d:%02d"), 0, 0);
+
 }
 
 /**
@@ -3555,6 +3734,29 @@ void HudGaugeObjectiveNotify::render(float  /*frametime*/)
 	renderSubspace();
 	renderRedAlert();
 	renderObjective();
+}
+
+void HudGaugeObjectiveNotify::renderConfig()
+{
+	int w, h;
+	char buf[128];
+
+	if (Objective_display_gauge.first_frame < 0) {
+		return;
+	}
+
+	// Blit the background
+	setGaugeColor();
+	renderBitmap(Objective_display_gauge.first_frame, position[0], position[1]);
+
+	setGaugeColor();
+
+	bm_get_info(Objective_display_gauge.first_frame, &w, &h);
+
+	renderStringAlignCenter(position[0], position[1] + Objective_text_offset_y, w, XSTR("secondary objective", 238));
+
+	sprintf(buf, XSTR("complete (%d/%d)", 241), 1, 3);
+	renderStringAlignCenter(position[0], position[1] + Objective_text_val_offset_y, w, buf);
 }
 
 void HudGaugeObjectiveNotify::renderSubspace()
@@ -4010,6 +4212,12 @@ void HudGaugeMultiMsg::render(float  /*frametime*/)
 	}
 }
 
+void HudGaugeMultiMsg::renderConfig()
+{
+	gr_set_color_fast(&Color_normal);
+	renderString(position[0], position[1], "Terran Fighter : HUD Message Display");
+}
+
 HudGaugeVoiceStatus::HudGaugeVoiceStatus():
 HudGauge(HUD_OBJECT_VOICE_STATUS, HUD_MESSAGE_LINES, false, true, VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY, 255, 255, 255) 
 {
@@ -4044,6 +4252,11 @@ void HudGaugeVoiceStatus::render(float  /*frametime*/)
 		// probably shouldn't be displaying anything
 		break;
 	}	
+}
+
+void HudGaugeVoiceStatus::renderConfig()
+{
+	renderString(position[0], position[1], XSTR("[playing voice]", 245));
 }
 
 HudGaugePing::HudGaugePing():
@@ -4083,6 +4296,16 @@ void HudGaugePing::render(float  /*frametime*/)
 	}
 }
 
+void HudGaugePing::renderConfig()
+{
+	SCP_string ping_str;
+
+	sprintf(ping_str, XSTR("%d ms", 629), 100);
+	// Blit the string out
+	hud_set_default_color();
+	renderString(position[0], position[1], ping_str.c_str());
+}
+
 HudGaugeSupernova::HudGaugeSupernova():
 HudGauge(HUD_OBJECT_SUPERNOVA, HUD_DIRECTIVES_VIEW, false, false, 0, 255, 255, 255)
 {
@@ -4101,6 +4324,18 @@ void HudGaugeSupernova::render(float  /*frametime*/)
 		renderPrintf(position[0], position[1], "Wybuch supernowej: %.2f s", time_left);
 	} else {
 		renderPrintf(position[0], position[1], XSTR( "Supernova Warning: %.2f s", 1639), time_left);
+	}
+}
+
+void HudGaugeSupernova::renderConfig()
+{
+	auto time_left = 30.0f;
+
+	gr_set_color_fast(&Color_bright_red);
+	if (Lcl_pl) { //Hardcoded translations are great
+		renderPrintf(position[0], position[1], "Wybuch supernowej: %.2f s", time_left);
+	} else {
+		renderPrintf(position[0], position[1], XSTR("Supernova Warning: %.2f s", 1639), time_left);
 	}
 }
 
@@ -4162,4 +4397,9 @@ void HudGaugeFlightPath::render(float  /*frametime*/)
 	if(!in_frame) {
 		g3_end_frame();
 	}
+}
+
+void HudGaugeFlightPath::renderConfig()
+{
+	//This one looks complex and probably doesn't need to be in the hud config anyway so just do nothing
 }

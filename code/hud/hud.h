@@ -331,6 +331,7 @@ public:
 	virtual void pageIn();
 	virtual void initialize();
 	virtual void onFrame(float frametime);
+	virtual void renderConfig(); // Renders a version of the gauge's first frame for HUD config
 
 	bool setupRenderCanvas(int render_target = -1);
 	void setCockpitTarget(const cockpit_display *display);
@@ -393,6 +394,7 @@ public:
 	void initValueOffsets(int x, int y);
 	void render(float frametime) override;
 	void pageIn() override;
+	void renderConfig() override;
 };
 
 class HudGaugeTextWarnings: public HudGauge // HUD_TEXT_FLASH
@@ -404,6 +406,7 @@ public:
 	void render(float frametime) override;
 	void initialize() override;
 	int maybeTextFlash();
+	void renderConfig() override;
 };
 
 class HudGaugeKills: public HudGauge
@@ -419,6 +422,7 @@ public:
 	void initTextValueOffsets(int x, int y);
 	void render(float frametime) override;
 	void pageIn() override;
+	void renderConfig() override;
 };
 
 class HudGaugeLag: public HudGauge
@@ -432,6 +436,7 @@ public:
 	void initBitmaps(const char *fname);
 	void render(float frametime) override;
 	void pageIn() override;
+	void renderConfig() override;
 
 	void startFlashLag(int duration = 1400);
 	bool maybeFlashLag(bool flash_fast = false);
@@ -469,6 +474,7 @@ public:
 	void renderSubspace();
 	void pageIn() override;
 	void initialize() override;
+	void renderConfig() override;
 };
 
 class HudGaugeDamage: public HudGauge
@@ -528,6 +534,7 @@ protected:
 	void render(float frametime) override;
 	void pageIn() override;
 	void initialize() override;
+	void renderConfig() override;
 };
 
 class HudGaugeSupport: public HudGauge
@@ -550,6 +557,7 @@ public:
 	void initRearmTimer(bool choice);
 	void render(float frametime) override;
 	void pageIn() override;
+	void renderConfig() override;
 };
 
 class HudGaugeMultiMsg: public HudGauge
@@ -559,6 +567,7 @@ public:
 	HudGaugeMultiMsg();
 	bool canRender() const override;
 	void render(float frametime) override;
+	void renderConfig() override;
 };
 
 class HudGaugeVoiceStatus: public HudGauge
@@ -567,6 +576,7 @@ protected:
 public:
 	HudGaugeVoiceStatus();
 	void render(float frametime) override;
+	void renderConfig() override;
 };
 
 class HudGaugePing: public HudGauge
@@ -575,6 +585,7 @@ protected:
 public:
 	HudGaugePing();
 	void render(float frametime) override;
+	void renderConfig() override;
 };
 
 class HudGaugeSupernova: public HudGauge
@@ -582,6 +593,7 @@ class HudGaugeSupernova: public HudGauge
 public:
 	HudGaugeSupernova();
 	void render(float frametime) override;
+	void renderConfig() override;
 };
 
 class HudGaugeFlightPath: public HudGauge3DAnchor
@@ -594,6 +606,7 @@ public:
 	void initBitmap(const char *fname);
 	void initHalfSize(int w, int h);
 	void render(float frametime) override;
+	void renderConfig() override;
 };
 
 HudGauge *hud_get_custom_gauge(const char *name, bool check_all_gauges = false);

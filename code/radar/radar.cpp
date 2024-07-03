@@ -291,6 +291,10 @@ void HudGaugeRadarStd::render(float  /*frametime*/)
 
 	ok_to_blit_radar = 1;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	sensors_str = ship_get_subsystem_strength( Player_ship, SUBSYSTEM_SENSORS );
 
 	if ( ship_subsys_disrupted(Player_ship, SUBSYSTEM_SENSORS) ) {

@@ -288,6 +288,41 @@ void HudGaugeEscort::render(float  /*frametime*/)
 	renderIcon(x, y, i);
 }
 
+void HudGaugeEscort::renderConfig()
+{
+	if (Escort_gauges[0].first_frame < 0)
+		return;
+
+	// hud_set_default_color();
+	setGaugeColor();
+
+	// draw the top of the escort view
+	renderBitmap(Escort_gauges[0].first_frame, position[0], position[1]);
+	renderString(position[0] + header_text_offsets[0], position[1] + header_text_offsets[1], header_text);
+
+	int x = position[0] + list_start_offsets[0];
+	int y = position[1] + list_start_offsets[1];
+
+	// Show the last escort entry
+	renderBitmap(Escort_gauges[2].first_frame, x, y + bottom_bg_offset);
+	gr_set_color_fast(iff_get_color_by_team(0, 0, 0));
+
+	const int w = font::force_fit_string("Terran", 255, ship_name_max_width);
+
+	if (right_align_names) {
+		renderString(x + ship_name_offsets[0] + ship_name_max_width - w,
+			y + ship_name_offsets[1],
+			EG_ESCORT1,
+			"Terran");
+	} else {
+		renderString(x + ship_name_offsets[0], y + ship_name_offsets[1], EG_ESCORT1, "Terran");
+	}
+
+	// show ship integrity
+	renderPrintf(x + ship_integrity_offsets[0], y + ship_integrity_offsets[1], EG_NULL, "%d", "100");
+	setGaugeColor();
+}
+
 // draw the shield icon and integrity for the escort ship
 void HudGaugeEscort::renderIcon(int x, int y, int index)
 {

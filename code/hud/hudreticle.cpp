@@ -255,6 +255,10 @@ void HudGaugeReticle::render(float  /*frametime*/)
 		return;
 	}
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	ship_info *sip = &Ship_info[Player_ship->ship_info_index];
 	int bitmap_size_x, bitmap_size_y;
 	bm_get_info(crosshair.first_frame, &bitmap_size_x, &bitmap_size_y);
@@ -589,6 +593,10 @@ void HudGaugeThrottle::pageIn()
 void HudGaugeThrottle::render(float  /*frametime*/)
 {
 	if (throttle_frames.first_frame < 0) {
+		return;
+	}
+
+	if (Player_ship == nullptr) {
 		return;
 	}
 

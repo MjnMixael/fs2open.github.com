@@ -72,6 +72,7 @@ public:
 	void pageIn() override;
 	void renderIcon(int x, int y, int index);
 	void renderIconDogfight(int x, int y, int index);
+	void renderConfig() override;
 };
 
 #endif /* __FREESPACE_HUDESCORT_VIEW_H__ */

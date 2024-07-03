@@ -994,6 +994,10 @@ void HudGaugeEtsRetail::render(float  /*frametime*/)
 	int i;
 	int initial_position;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	ship* ship_p = &Ships[Player_obj->instance];
 
 	if ( Ets_bar.first_frame < 0 ) {

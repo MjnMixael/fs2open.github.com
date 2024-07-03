@@ -83,6 +83,7 @@ public:
 	void renderDots(int wing_index, int screen_index, int num_wings_to_draw);
 	void initFlash();
 	bool maybeFlashStatus(int wing_index, int wing_pos);
+	void renderConfig() override;
 };
 
 #endif

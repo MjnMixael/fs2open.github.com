@@ -858,9 +858,11 @@ void hud_config_popup_flag_clear(int i)
  */
 void hud_config_render_gauges(bool API_Access)
 {
-	int i;
+	for (int i = 0; i < static_cast<int>(default_hud_gauges.size()); i++) {
+		default_hud_gauges[i]->render(0.0f);
+	}
 
-	for ( i=0; i<NUM_HUD_GAUGES; i++ ) {
+	/*for (int i = 0; i < NUM_HUD_GAUGES; i++) {
 		color *use_color;
 		int alpha;
 		if ( (hud_config_show_flag_is_set(i)) ) {
@@ -902,33 +904,7 @@ void hud_config_render_gauges(bool API_Access)
 
 			gr_aabitmap(HC_gauge_coords[i].x, HC_gauge_coords[i].y, resize, false, HC_gauge_scale);
 		}
-		
-		/*
-		else {
-
-			int offset=0;
-				// set correct frame if using iff
-			if ( HC_gauge_regions[i].use_iff ) {
-				if ( HC_gauge_selected == i ) {
-					offset=2;
-				} else if ( HC_gauge_hot == i ) {
-					offset=1;
-				}
-
-				// If gauge is disabled, then draw disabled frame
-				if ( !(hud_config_show_flag_is_set(i)) ) {
-					offset=3;
-				}
-			}
-
-			if ( HC_gauge_regions[i].bitmap >= 0 ) {
-				Assert(offset < HC_gauge_regions[i].nframes);
-				gr_set_bitmap(HC_gauge_regions[i].bitmap+offset);
-				gr_bitmap(HC_gauge_regions[i].x, HC_gauge_regions[i].y, GR_RESIZE_MENU);
-			}
-		}
-		*/
-	}
+	}*/
 }
 
 void hud_config_init(bool API_Access, int x, int y, int w)

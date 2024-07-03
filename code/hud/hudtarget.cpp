@@ -3168,6 +3168,10 @@ void HudGaugeMissileTriangles::render(float  /*frametime*/)
 	missile_obj	*mo;
 	weapon		*wp;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	bool in_frame = g3_in_frame() > 0;
 	if(!in_frame)
 		g3_start_frame(0);
@@ -3214,6 +3218,10 @@ void HudGaugeOrientationTee::pageIn()
 void HudGaugeOrientationTee::render(float  /*frametime*/)
 {
 	object* targetp;
+
+	if (Player_ship == nullptr) {
+		return;
+	}
 
 	if (Player_ai->target_objnum == -1 || Player->target_is_dying)
 		return;
@@ -3974,6 +3982,10 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 	int			bank_to_fire;
 	int			frame_offset = -1;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	if (Player_ai->target_objnum == -1)
 		return;
 
@@ -4633,6 +4645,10 @@ HudGaugeReticleTriangle(HUD_OBJECT_TARGET_TRI, HUD_TARGET_TRIANGLE)
 
 void HudGaugeTargetTriangle::render(float  /*frametime*/)
 {
+	if (Player_ship == nullptr) {
+		return;
+	}
+	
 	if ( Player_ai->target_objnum == -1)
 		return;
 
@@ -4854,7 +4870,7 @@ void HudGaugeAutoTarget::initOffColor(int r, int g, int b, int a)
 
 void HudGaugeAutoTarget::render(float  /*frametime*/)
 {
-	if (Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
+	if (Player_ship == nullptr || Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
 		return;
 
 	int frame_offset;
@@ -4941,7 +4957,7 @@ void HudGaugeAutoSpeed::initOffColor(int r, int g, int b, int a)
 
 void HudGaugeAutoSpeed::render(float  /*frametime*/)
 {
-	if (Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
+	if (Player_ship == nullptr || Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
 		return;
 
 	int frame_offset;
@@ -5548,6 +5564,10 @@ void HudGaugeCmeasures::render(float  /*frametime*/)
 		return;	// failed to load coutermeasure gauge background
 	}
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	ship_info *sip = &Ship_info[Player_ship->ship_info_index];
 	if(sip->cmeasure_max < 0 || sip->cmeasure_type < 0){
 		return;
@@ -5592,6 +5612,10 @@ void HudGaugeAfterburner::render(float  /*frametime*/)
 {
 	float percent_left;
 	int	clip_h,w,h;
+
+	if (Player_ship == nullptr) {
+		return;
+	}
 
 	if ( Energy_bar.first_frame < 0 ){
 		return;
@@ -5701,6 +5725,10 @@ void HudGaugeWeaponEnergy::render(float  /*frametime*/)
 {
 	int x;
 	bool use_new_gauge = false;
+
+	if (Player_ship == nullptr) {
+		return;
+	}
 
 	// Goober5000 - only check for the new gauge in case of command line + a ballistic-capable ship
 	if (Cmdline_ballistic_gauge)
@@ -6153,6 +6181,10 @@ void HudGaugeWeapons::render(float  /*frametime*/)
 {
 	ship_weapon	*sw;
 	int			np, ns;		// np == num primary, ns == num secondary
+
+	if (Player_ship == nullptr) {
+		return;
+	}
 
 	if(Player_obj->type == OBJ_OBSERVER)
 		return;

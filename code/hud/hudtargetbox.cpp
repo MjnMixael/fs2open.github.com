@@ -384,6 +384,10 @@ void HudGaugeTargetBox::render(float frametime)
 {
 	object	*target_objp;
 
+	if (Player_ship == nullptr) {
+		return;
+	}
+
 	if ( Player_ai->target_objnum == -1)
 		return;
 	

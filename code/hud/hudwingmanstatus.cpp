@@ -587,6 +587,81 @@ void HudGaugeWingmanStatus::render(float  /*frametime*/)
 	}
 }
 
+void HudGaugeWingmanStatus::renderConfig()
+{
+	// hud_set_default_color();
+	setGaugeColor();
+
+	// blit the background frames
+	renderBackground(2);
+
+	int count = 0;
+	for (int j = 0; j < 2; j++) {
+		if (Wingman_status_dots.first_frame < 0) {
+			return;
+		}
+
+		int sx, sy;
+
+		if (grow_mode == GROW_DOWN) {
+			sx = actual_origin[0] + multiple_wing_offsets[0]; // wing_width = 35
+			sy = actual_origin[1] + multiple_wing_offsets[1] + count * wing_width;
+		} else {
+			sx = actual_origin[0] + multiple_wing_offsets[0] + (count - 1) * wing_width; // wing_width = 35
+			sy = actual_origin[1] + multiple_wing_offsets[1];
+		}
+
+		// draw wingman dots
+		int bitmap;
+
+		for (int i = 0; i < MAX_SHIPS_PER_WING; i++) {
+
+			if (use_expanded_colors) {
+				gr_set_color_fast(&Color_green);
+			} else {
+				setGaugeColor(HUD_C_NORMAL);
+			}
+
+			// use wingmen dot animation if present, otherwise use default --wookieejedi
+			if (HUD_wingman_status[j].dot_anim_override[i] >= 0) {
+				bitmap = HUD_wingman_status[j].dot_anim_override[i];
+			} else {
+				bitmap = Wingman_status_dots.first_frame;
+			}
+
+			if (bitmap > -1) {
+				renderBitmap(bitmap, sx + wingmate_offsets[i][0], sy + wingmate_offsets[i][1]);
+			}
+		}
+
+		// draw wing name
+		sx += wing_name_offsets[0];
+		sy += wing_name_offsets[1];
+
+		setGaugeColor();
+
+		SCP_string wingname = "Alpha";
+
+		if (j == 2) {
+			wingname = "Beta";
+		}
+
+		if (!use_full_wingnames) {
+			wingname = "alp";
+
+			if (j == 2) {
+				wingname = "bet";
+			}
+		}
+
+		// Goober5000 - center it (round the offset rather than truncate it)
+		int wingstr_width;
+		gr_get_string_size(&wingstr_width, nullptr, wingname.c_str());
+		renderString(sx - (int)std::lround((float)wingstr_width / 2.0f), sy, wingname.c_str());
+		count++;
+	}
+}
+
 // init the flashing timers for the wingman status gauge
 void hud_wingman_status_init_flash()
 {

@@ -1182,7 +1182,7 @@ void HudGaugeTalkingHead::render(float frametime)
 		return;
 	}
 
-	if(msg_id != -1 && head_anim != NULL) {
+	if(msg_id > -1 && head_anim != NULL) {
 		if(!head_anim->done_playing) {
 			// draw frame
 			// hud_set_default_color();
