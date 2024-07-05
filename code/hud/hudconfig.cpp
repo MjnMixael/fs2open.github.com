@@ -197,6 +197,9 @@ const char *Hud_config_mask_fname[GR_NUM_RESOLUTIONS] = {
 	"2_HUDConfig-m"
 };
 
+std::pair<int, int> HUD_config_width_height = {600, 375}; //TODO this is just a guess at the retail UI coords
+std::pair<int, int> HUD_config_origin = {123, 5};
+
 // hud config gauges
 struct HC_gauge_region	HC_gauge_regions[GR_NUM_RESOLUTIONS][NUM_HUD_GAUGES] =
 {
@@ -859,7 +862,7 @@ void hud_config_popup_flag_clear(int i)
 void hud_config_render_gauges(bool API_Access)
 {
 	for (int i = 0; i < static_cast<int>(default_hud_gauges.size()); i++) {
-		default_hud_gauges[i]->render(0.0f);
+		default_hud_gauges[i]->renderConfig();
 	}
 
 	/*for (int i = 0; i < NUM_HUD_GAUGES; i++) {

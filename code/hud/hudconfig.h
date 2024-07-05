@@ -52,6 +52,8 @@ extern int HUD_default_popup_mask;
 extern int HUD_default_popup_mask2;
 extern int HUD_config_default_flags;
 extern int HUD_config_default_flags2;
+extern std::pair<int, int> HUD_config_width_height;
+extern std::pair<int, int> HUD_config_origin;
 
 /**
  * @brief Contains core HUD configuration data

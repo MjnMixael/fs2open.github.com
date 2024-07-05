@@ -312,14 +312,13 @@ void HudGaugeEscort::renderConfig()
 	if (right_align_names) {
 		renderString(x + ship_name_offsets[0] + ship_name_max_width - w,
 			y + ship_name_offsets[1],
-			EG_ESCORT1,
 			"Terran");
 	} else {
-		renderString(x + ship_name_offsets[0], y + ship_name_offsets[1], EG_ESCORT1, "Terran");
+		renderString(x + ship_name_offsets[0], y + ship_name_offsets[1], "Terran");
 	}
 
 	// show ship integrity
-	renderPrintf(x + ship_integrity_offsets[0], y + ship_integrity_offsets[1], EG_NULL, "%d", "100");
+	renderString(x + ship_integrity_offsets[0], y + ship_integrity_offsets[1], "100");
 	setGaugeColor();
 }
 

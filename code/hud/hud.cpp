@@ -763,7 +763,7 @@ void HudGauge::renderConfig()
 	}
 }
 
-void HudGauge::renderString(int x, int y, const char *str)
+void HudGauge::renderString(int x, int y, const char* str, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -788,11 +788,11 @@ void HudGauge::renderString(int x, int y, const char *str)
 		gr_set_color_fast(&gauge_color);
 	}
 
-	gr_string(x + nx, y + ny, str);
+	gr_string(x + nx, y + ny, str, GR_RESIZE_NONE);
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderString(int x, int y, int gauge_id, const char *str)
+void HudGauge::renderString(int x, int y, int gauge_id, const char *str, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -825,21 +825,21 @@ void HudGauge::renderString(int x, int y, int gauge_id, const char *str)
 			gr_string(x + nx + 1, y + ny + 1, str);
 			gr_set_color_fast(&gauge_color);
 		}
-		gr_string(x + nx, y + ny, str);
+		gr_string(x + nx, y + ny, str, GR_RESIZE_NONE);
 	}
 
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderStringAlignCenter(int x, int y, int area_width, const char *s)
+void HudGauge::renderStringAlignCenter(int x, int y, int area_width, const char *s, bool renderConfig)
 {
 	int w, h;
 
 	gr_get_string_size(&w, &h, s);
-	renderString(x + ((area_width - w) / 2), y, s);
+	renderString(x + ((area_width - w) / 2), y, s, renderConfig);
 }
 
-void HudGauge::renderPrintf(int x, int y, const char* format, ...)
+void HudGauge::renderPrintf(int x, int y, const char* format, bool renderConfig, ...)
 {
 	char tmp[256] = "";
 	va_list args;
@@ -850,10 +850,10 @@ void HudGauge::renderPrintf(int x, int y, const char* format, ...)
 	va_end(args);
 	tmp[sizeof(tmp)-1] = '\0';
 
-	renderString(x, y, tmp);
+	renderString(x, y, tmp, renderConfig);
 }
 
-void HudGauge::renderPrintf(int x, int y, int gauge_id, const char* format, ...)
+void HudGauge::renderPrintf(int x, int y, int gauge_id, const char* format, bool renderConfig, ...)
 {
 	char tmp[256] = "";
 	va_list args;
@@ -864,10 +864,10 @@ void HudGauge::renderPrintf(int x, int y, int gauge_id, const char* format, ...)
 	va_end(args);
 	tmp[sizeof(tmp)-1] = '\0';
 
-	renderString(x, y, gauge_id, tmp);
+	renderString(x, y, gauge_id, tmp, renderConfig);
 }
 
-void HudGauge::renderBitmapColor(int frame, int x, int y)
+void HudGauge::renderBitmapColor(int frame, int x, int y, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -893,11 +893,11 @@ void HudGauge::renderBitmapColor(int frame, int x, int y)
 	}
 
 	gr_set_bitmap(frame);
-	gr_bitmap(x + nx, y + ny);
+	gr_bitmap(x + nx, y + ny, GR_RESIZE_NONE);
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderBitmap(int x, int y)
+void HudGauge::renderBitmap(int x, int y, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -922,18 +922,18 @@ void HudGauge::renderBitmap(int x, int y)
 		}
 	}
 	
-	gr_aabitmap(x + nx, y + ny);
+	gr_aabitmap(x + nx, y + ny, GR_RESIZE_NONE);
 
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderBitmap(int frame, int x, int y)
+void HudGauge::renderBitmap(int frame, int x, int y, bool renderConfig)
 {
 	gr_set_bitmap(frame);
-	renderBitmap(x, y);
+	renderBitmap(x, y, renderConfig);
 }
 
-void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy)
+void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, bool renderConfig)
 {
 	int nx = 0, ny = 0; 
 	
@@ -965,7 +965,7 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderLine(int x1, int y1, int x2, int y2)
+void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -988,7 +988,7 @@ void HudGauge::renderLine(int x1, int y1, int x2, int y2)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2)
+void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -1011,7 +1011,7 @@ void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderRect(int x, int y, int w, int h)
+void HudGauge::renderRect(int x, int y, int w, int h, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -1034,7 +1034,7 @@ void HudGauge::renderRect(int x, int y, int w, int h)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderCircle(int x, int y, int diameter, bool filled) 
+void HudGauge::renderCircle(int x, int y, int diameter, bool filled, bool renderConfig)
 {
 	int nx = 0, ny = 0;
 
@@ -3288,7 +3288,7 @@ void HudGaugeSupport::renderConfig()
 
 	strcpy_s(outstr, XSTR("dock in:", 232));
 	renderString(position[0] + text_dock_offset_x, position[1] + text_val_offset_y, outstr);
-	renderPrintf(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, NOX("%02d:%02d"), 0, 0);
+	renderString(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, "00:00");
 
 }
 

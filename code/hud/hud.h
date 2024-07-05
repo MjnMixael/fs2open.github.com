@@ -343,20 +343,20 @@ public:
 	void setGaugeFrame(int frame_offset);
 
 	// rendering functions
-	void renderBitmap(int x, int y);
-	void renderBitmap(int frame, int x, int y);
-	void renderBitmapColor(int frame, int x, int y);
-	void renderBitmapUv(int frame, int x, int y, int w, int h, float u0, float v0, float u1, float v1);
-	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy);
-	void renderString(int x, int y, const char *str);
-	void renderString(int x, int y, int gauge_id, const char *str);
-	void renderStringAlignCenter(int x, int y, int area_width, const char *s);
-	void renderPrintf(int x, int y, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(4, 5);
-	void renderPrintf(int x, int y, int gauge_id, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(5, 6);
-	void renderLine(int x1, int y1, int x2, int y2);
-	void renderGradientLine(int x1, int y1, int x2, int y2);
-	void renderRect(int x, int y, int w, int h);
-	void renderCircle(int x, int y, int diameter, bool filled = true);
+	void renderBitmap(int x, int y, bool renderConfig = false);
+	void renderBitmap(int frame, int x, int y, bool renderConfig = false);
+	void renderBitmapColor(int frame, int x, int y, bool renderConfig = false);
+	void renderBitmapUv(int frame, int x, int y, int w, int h, float u0, float v0, float u1, float v1, bool renderConfig = false);
+	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, bool renderConfig = false);
+	void renderString(int x, int y, const char* str, bool renderConfig = false);
+	void renderString(int x, int y, int gauge_id, const char* str, bool renderConfig = false);
+	void renderStringAlignCenter(int x, int y, int area_width, const char *s, bool renderConfig = false);
+	void renderPrintf(int x, int y, SCP_FORMAT_STRING const char* format, bool renderConfig = false, ...) SCP_FORMAT_STRING_ARGS(4, 5);
+	void renderPrintf(int x, int y, int gauge_id, SCP_FORMAT_STRING const char* format, bool renderConfig = false, ...)  SCP_FORMAT_STRING_ARGS(5, 6);
+	void renderLine(int x1, int y1, int x2, int y2, bool renderConfig = false);
+	void renderGradientLine(int x1, int y1, int x2, int y2, bool renderConfig = false);
+	void renderRect(int x, int y, int w, int h, bool renderConfig = false);
+	void renderCircle(int x, int y, int diameter, bool filled = true, bool renderConfig = false);
 
 	void unsize(int *x, int *y);
 	void unsize(float *x, float *y);
