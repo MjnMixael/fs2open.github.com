@@ -79,7 +79,7 @@ public:
 	void doneDrawingHtl();
 	void drawOutlinesHtl();
 	void setupViewHtl();
-	void render(float frametime) override;
+	void render(float frametime, bool config = false) override;
 	void pageIn() override;
 	void plotBlip(blip* b, vec3d *pos, float *alpha);
 

@@ -197,6 +197,12 @@ const char *Hud_config_mask_fname[GR_NUM_RESOLUTIONS] = {
 	"2_HUDConfig-m"
 };
 
+// Coordinates for the new HUD configuration menu
+const int HC_gauge_config_coords[GR_NUM_RESOLUTIONS][4] = {
+	{121, 615, 6, 371}, // Coordinates for 640x480
+	{195, 985, 10, 595} // Coordinates for 1024x768
+};
+
 // hud config gauges
 struct HC_gauge_region	HC_gauge_regions[GR_NUM_RESOLUTIONS][NUM_HUD_GAUGES] =
 {
@@ -851,6 +857,31 @@ void hud_config_popup_flag_clear(int i)
 	}
 }
 
+void hud_config_convert_coords(int inGameX, int inGameY, int& outConfigX, int& outConfigY, float& outScale)
+{
+	// Get the current resolution's configuration coordinates
+	int x1 = HC_gauge_config_coords[gr_screen.res][0];
+	int x2 = HC_gauge_config_coords[gr_screen.res][1];
+	int y1 = HC_gauge_config_coords[gr_screen.res][2];
+	int y2 = HC_gauge_config_coords[gr_screen.res][3];
+
+	// Calculate the menu width and height
+	int menuWidth = x2 - x1;
+	int menuHeight = y2 - y1;
+
+	// Determine the scaling factor
+	float scaleX = static_cast<float>(menuWidth) / gr_screen.max_w;
+	float scaleY = static_cast<float>(menuHeight) / gr_screen.max_h;
+
+	// Use the smaller scale to maintain aspect ratio
+	outScale = std::min(scaleX, scaleY);
+
+	// Apply scaling and offset
+	outConfigX = x1 + static_cast<int>(inGameX * scaleX);
+	outConfigY = y1 + static_cast<int>(inGameY * scaleY);
+}
+
+
 /*!
  * @brief render all the hud config gauges
  *
@@ -858,9 +889,38 @@ void hud_config_popup_flag_clear(int i)
  */
 void hud_config_render_gauges(bool API_Access)
 {
-	int i;
+	gr_line(HC_gauge_config_coords[gr_screen.res][0],
+		HC_gauge_config_coords[gr_screen.res][2],
+		HC_gauge_config_coords[gr_screen.res][0],
+		HC_gauge_config_coords[gr_screen.res][3],
+		GR_RESIZE_MENU);
+	gr_line(HC_gauge_config_coords[gr_screen.res][0],
+		HC_gauge_config_coords[gr_screen.res][2],
+		HC_gauge_config_coords[gr_screen.res][1],
+		HC_gauge_config_coords[gr_screen.res][2],
+		GR_RESIZE_MENU);
+	gr_line(HC_gauge_config_coords[gr_screen.res][1],
+		HC_gauge_config_coords[gr_screen.res][2],
+		HC_gauge_config_coords[gr_screen.res][1],
+		HC_gauge_config_coords[gr_screen.res][3],
+		GR_RESIZE_MENU);
+	gr_line(HC_gauge_config_coords[gr_screen.res][0],
+		HC_gauge_config_coords[gr_screen.res][3],
+		HC_gauge_config_coords[gr_screen.res][1],
+		HC_gauge_config_coords[gr_screen.res][3],
+		GR_RESIZE_MENU);
+	default_hud_gauges[26]->render(0, true);
 
-	for ( i=0; i<NUM_HUD_GAUGES; i++ ) {
+	/*for (auto& gauge : default_hud_gauges) {
+		SCP_string name = gauge->getCustomGaugeName();
+		if (!name.empty() && all_gauges.count(name) == 0) {
+			head.add_data(name.c_str());
+			all_gauges.insert(std::move(name));
+		}
+	}*/
+	
+	// This is the old code that rendered the fake gauge stand-ins
+	/*for (int i = 0; i < NUM_HUD_GAUGES; i++) {
 		color *use_color;
 		int alpha;
 		if ( (hud_config_show_flag_is_set(i)) ) {
@@ -902,33 +962,7 @@ void hud_config_render_gauges(bool API_Access)
 
 			gr_aabitmap(HC_gauge_coords[i].x, HC_gauge_coords[i].y, resize, false, HC_gauge_scale);
 		}
-		
-		/*
-		else {
-
-			int offset=0;
-				// set correct frame if using iff
-			if ( HC_gauge_regions[i].use_iff ) {
-				if ( HC_gauge_selected == i ) {
-					offset=2;
-				} else if ( HC_gauge_hot == i ) {
-					offset=1;
-				}
-
-				// If gauge is disabled, then draw disabled frame
-				if ( !(hud_config_show_flag_is_set(i)) ) {
-					offset=3;
-				}
-			}
-
-			if ( HC_gauge_regions[i].bitmap >= 0 ) {
-				Assert(offset < HC_gauge_regions[i].nframes);
-				gr_set_bitmap(HC_gauge_regions[i].bitmap+offset);
-				gr_bitmap(HC_gauge_regions[i].x, HC_gauge_regions[i].y, GR_RESIZE_MENU);
-			}
-		}
-		*/
-	}
+	}*/
 }
 
 void hud_config_init(bool API_Access, int x, int y, int w)

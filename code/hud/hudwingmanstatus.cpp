@@ -556,7 +556,7 @@ int hud_wingman_status_wingmen_exist(int num_wings_to_draw)
 	return 0;
 }
 
-void HudGaugeWingmanStatus::render(float  /*frametime*/)
+void HudGaugeWingmanStatus::render(float  /*frametime*/, bool config)
 {
 	int i, count, num_wings_to_draw = 0;
 

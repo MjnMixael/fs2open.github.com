@@ -11,6 +11,7 @@
 
 
 #include "gamesnd/gamesnd.h"
+#include "hud/hudconfig.h"
 #include "hud/hudreticle.h"
 #include "hud/hudtargetbox.h"
 #include "io/timer.h"
@@ -249,7 +250,7 @@ void HudGaugeReticle::initFirepointDisplay(bool firepoint, int scaleX, int scale
 	firepoint_size = size;
 }
 
-void HudGaugeReticle::render(float  /*frametime*/)
+void HudGaugeReticle::render(float  /*frametime*/, bool config)
 {
 	if (crosshair.first_frame < 0) {
 		return;
@@ -631,7 +632,7 @@ void HudGaugeThrottle::pageIn()
 	bm_page_in_aabitmap( throttle_frames.first_frame, throttle_frames.num_frames);
 }
 
-void HudGaugeThrottle::render(float  /*frametime*/)
+void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 {
 	if (throttle_frames.first_frame < 0) {
 		return;
@@ -913,12 +914,20 @@ void HudGaugeThreatIndicator::pageIn()
 	bm_page_in_aabitmap(lock_warn.first_frame, lock_warn.num_frames);
 }
 
-void HudGaugeThreatIndicator::render(float  /*frametime*/)
+void HudGaugeThreatIndicator::render(float  /*frametime*/, bool config)
 {
 	setGaugeColor();
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0f;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], x, y, scale);
+	}
+
 	if (threat_arc.first_frame >= 0)
-		renderBitmap(threat_arc.first_frame+1, position[0], position[1]);
+		renderBitmap(threat_arc.first_frame+1, x, y, scale, config);
 
 	renderLaserThreat();
 	renderLockThreat();
@@ -1067,7 +1076,7 @@ void HudGaugeWeaponLinking::pageIn()
 	}
 }
 
-void HudGaugeWeaponLinking::render(float  /*frametime*/)
+void HudGaugeWeaponLinking::render(float  /*frametime*/, bool config)
 {
 	int			gauge_index=0, frame_offset=0;
 	ship_weapon	*swp;

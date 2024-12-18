@@ -887,7 +887,7 @@ void HudGaugeEts::initBitmaps(char *fname)
 	}
 }
 
-void HudGaugeEts::render(float  /*frametime*/)
+void HudGaugeEts::render(float  /*frametime*/, bool config)
 {
 }
 
@@ -989,7 +989,7 @@ HudGaugeEts(HUD_OBJECT_ETS_RETAIL, 0)
 /**
  * Render the ETS retail gauge to the screen (weapon+shield+engine)
  */
-void HudGaugeEtsRetail::render(float  /*frametime*/)
+void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 {
 	int i;
 	int initial_position;
@@ -1073,7 +1073,7 @@ HudGaugeEts(HUD_OBJECT_ETS_WEAPONS, (int)WEAPONS)
 {
 }
 
-void HudGaugeEtsWeapons::render(float  /*frametime*/)
+void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 {
 	int i;
 
@@ -1110,7 +1110,7 @@ HudGaugeEts(HUD_OBJECT_ETS_SHIELDS, (int)SHIELDS)
 {
 }
 
-void HudGaugeEtsShields::render(float  /*frametime*/)
+void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 {
 	int i;
 
@@ -1146,7 +1146,7 @@ HudGaugeEts(HUD_OBJECT_ETS_ENGINES, (int)ENGINES)
 {
 }
 
-void HudGaugeEtsEngines::render(float  /*frametime*/)
+void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 {
 	int i;
 

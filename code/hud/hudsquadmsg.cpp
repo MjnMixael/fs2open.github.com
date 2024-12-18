@@ -2660,7 +2660,7 @@ bool HudGaugeSquadMessage::canRender() const
 	return true;
 }
 
-void HudGaugeSquadMessage::render(float  /*frametime*/)
+void HudGaugeSquadMessage::render(float  /*frametime*/, bool config)
 {
 	char *title;
 	int bx, by, sx, sy, i, nitems, none_valid, messaging_allowed;
