@@ -203,5 +203,10 @@ void hud_config_color_load(const char *name);
  */
 void hud_config_color_save(const char* name);
 
+/*!
+* @brief convert the given HUD gauge coordinates to a set more appropriate for the HUD Config UI
+*/
+void hud_config_convert_coords(int inGameX, int inGameY, int& outConfigX, int& outConfigY, float& outScale);
+
 #endif
 

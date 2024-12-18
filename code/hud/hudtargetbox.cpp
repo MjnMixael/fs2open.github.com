@@ -380,7 +380,7 @@ void HudGaugeTargetBox::initFlashTimer(int index)
 	flash_flags &= ~(1<<index);
 }
 
-void HudGaugeTargetBox::render(float frametime)
+void HudGaugeTargetBox::render(float frametime, bool config)
 {
 	object	*target_objp;
 
@@ -1495,7 +1495,7 @@ void HudGaugeExtraTargetData::pageIn()
 /**
  * @note Formerly hud_targetbox_show_extra_ship_info(target_shipp, target_objp) (Swifty)
  */
-void HudGaugeExtraTargetData::render(float  /*frametime*/)
+void HudGaugeExtraTargetData::render(float  /*frametime*/, bool config)
 {
 	char tmpbuf[256];
 	int has_orders = 0;

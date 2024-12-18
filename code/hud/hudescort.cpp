@@ -234,7 +234,7 @@ int HudGaugeEscort::setGaugeColorEscort(int index, int team)
 	return is_flashing;
 }
 
-void HudGaugeEscort::render(float  /*frametime*/)
+void HudGaugeEscort::render(float  /*frametime*/, bool config)
 {
 	int	i = 0;
 

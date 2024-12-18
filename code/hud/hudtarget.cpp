@@ -2909,8 +2909,7 @@ void HudGaugeReticleTriangle::initTriHeight(float h)
 	Target_triangle_height = h;
 }
 
-void HudGaugeReticleTriangle::render(float  /*frametime*/)
-{
+void HudGaugeReticleTriangle::render(float /*frametime*/, bool config) {
 }
 
 // Render a missile warning triangle that has a tail on it to indicate distance
@@ -3162,7 +3161,7 @@ HudGaugeReticleTriangle(HUD_OBJECT_MISSILE_TRI, HUD_MISSILE_WARNING_ARROW)
 {
 }
 
-void HudGaugeMissileTriangles::render(float  /*frametime*/)
+void HudGaugeMissileTriangles::render(float /*frametime*/, bool config)
 {
 	object		*A;
 	missile_obj	*mo;
@@ -3211,7 +3210,7 @@ void HudGaugeOrientationTee::pageIn()
 // outer reticle ring.  If the T is at 12 o'clock, the target is facing the player, if the T
 // is at 6 o'clock the target is facing away from the player.  If the T is at 3 or 9 o'clock
 // the target is facing 90 away from the player.
-void HudGaugeOrientationTee::render(float  /*frametime*/)
+void HudGaugeOrientationTee::render(float /*frametime*/, bool config)
 {
 	object* targetp;
 
@@ -3674,7 +3673,7 @@ HudGaugeReticleTriangle(HUD_OBJECT_HOSTILE_TRI, HUD_HOSTILE_TRIANGLE)
 {
 }
 
-void HudGaugeHostileTriangle::render(float  /*frametime*/)
+void HudGaugeHostileTriangle::render(float /*frametime*/, bool config)
 {
 	if (hostile_obj && maybeFlashSexp() != 1) {
 		bool in_frame = g3_in_frame() > 0;
@@ -3899,7 +3898,7 @@ int HudGaugeLeadIndicator::pickFrame(float prange, float srange, float dist_to_t
 	return frame_offset;
 }
 
-void HudGaugeLeadIndicator::render(float  /*frametime*/)
+void HudGaugeLeadIndicator::render(float /*frametime*/, bool config)
 {
 	if(Player->target_is_dying) {
 		return;
@@ -4323,7 +4322,7 @@ void HudGaugeLeadSight::pageIn()
 	bm_page_in_aabitmap(Lead_sight.first_frame, Lead_sight.num_frames);
 }
 
-void HudGaugeLeadSight::render(float  /*frametime*/)
+void HudGaugeLeadSight::render(float /*frametime*/, bool config)
 {
 	vec3d		target_pos;
 	vec3d		source_pos;
@@ -4651,7 +4650,7 @@ HudGaugeReticleTriangle(HUD_OBJECT_TARGET_TRI, HUD_TARGET_TRIANGLE)
 {
 }
 
-void HudGaugeTargetTriangle::render(float  /*frametime*/)
+void HudGaugeTargetTriangle::render(float /*frametime*/, bool config)
 {
 	if ( Player_ai->target_objnum == -1)
 		return;
@@ -4872,7 +4871,7 @@ void HudGaugeAutoTarget::initOffColor(int r, int g, int b, int a)
 	gr_init_alphacolor(&Off_color, r, g, b, a);
 }
 
-void HudGaugeAutoTarget::render(float  /*frametime*/)
+void HudGaugeAutoTarget::render(float /*frametime*/, bool config)
 {
 	if (Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
 		return;
@@ -4959,7 +4958,7 @@ void HudGaugeAutoSpeed::initOffColor(int r, int g, int b, int a)
 	gr_init_alphacolor(&Off_color, r, g, b, a);
 }
 
-void HudGaugeAutoSpeed::render(float  /*frametime*/)
+void HudGaugeAutoSpeed::render(float /*frametime*/, bool config)
 {
 	if (Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
 		return;
@@ -5562,7 +5561,7 @@ void HudGaugeCmeasures::pageIn()
 	bm_page_in_aabitmap(Cmeasure_gauge.first_frame, Cmeasure_gauge.num_frames);
 }
 
-void HudGaugeCmeasures::render(float  /*frametime*/)
+void HudGaugeCmeasures::render(float /*frametime*/, bool config)
 {
 	if ( Cmeasure_gauge.first_frame < 0) {
 		return;	// failed to load coutermeasure gauge background
@@ -5608,7 +5607,7 @@ void HudGaugeAfterburner::initBitmaps(char *fname)
 }
 
 //	Render the HUD afterburner energy gauge
-void HudGaugeAfterburner::render(float  /*frametime*/)
+void HudGaugeAfterburner::render(float /*frametime*/, bool config)
 {
 	float percent_left;
 	int	clip_h,w,h;
@@ -5717,7 +5716,7 @@ void HudGaugeWeaponEnergy::pageIn()
 	bm_page_in_aabitmap( Energy_bar.first_frame, Energy_bar.num_frames);
 }
 
-void HudGaugeWeaponEnergy::render(float  /*frametime*/)
+void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 {
 	int x;
 	bool use_new_gauge = false;
@@ -6169,7 +6168,7 @@ void HudGaugeWeapons::pageIn()
 	}
 }
 
-void HudGaugeWeapons::render(float  /*frametime*/)
+void HudGaugeWeapons::render(float /*frametime*/, bool config)
 {
 	ship_weapon	*sw;
 	int			np, ns;		// np == num primary, ns == num secondary
@@ -6453,7 +6452,7 @@ void HudGaugeOffscreen::pageIn()
 {
 }
 
-void HudGaugeOffscreen::render(float  /*frametime*/)
+void HudGaugeOffscreen::render(float /*frametime*/, bool config)
 {
 	// don't show offscreen indicator if we're warping out.
 	if ( Player->control_mode != PCM_NORMAL ) {
@@ -6829,7 +6828,7 @@ void HudGaugeWarheadCount::pageIn()
 	bm_page_in_aabitmap(Warhead.first_frame, Warhead.num_frames);
 }
 
-void HudGaugeWarheadCount::render(float  /*frametime*/)
+void HudGaugeWarheadCount::render(float /*frametime*/, bool config)
 {
 	if(Player_obj->type == OBJ_OBSERVER) {
 		return;
@@ -7031,8 +7030,7 @@ void HudGaugeWeaponList::maybeFlashWeapon(int index)
 	}
 }
 
-void HudGaugeWeaponList::render(float  /*frametime*/)
-{
+void HudGaugeWeaponList::render(float /*frametime*/, bool config) {
 
 }
 
@@ -7057,7 +7055,7 @@ void HudGaugePrimaryWeapons::initPrimaryAmmoOffsetX(int x)
 	_pammo_offset_x = x;
 }
 
-void HudGaugePrimaryWeapons::render(float  /*frametime*/)
+void HudGaugePrimaryWeapons::render(float /*frametime*/, bool config)
 {
 	ship_weapon	*sw;
 
@@ -7170,7 +7168,7 @@ void HudGaugeSecondaryWeapons::initSecondaryUnlinkedOffsetX(int x)
 	_sunlinked_offset_x = x;
 }
 
-void HudGaugeSecondaryWeapons::render(float  /*frametime*/)
+void HudGaugeSecondaryWeapons::render(float /*frametime*/, bool config)
 {
 	ship_weapon	*sw;
 
@@ -7291,7 +7289,7 @@ void HudGaugeHardpoints::initDrawOptions(bool primary_models, bool secondary_mod
 	draw_secondary_models = secondary_models;
 }
 
-void HudGaugeHardpoints::render(float  /*frametime*/)
+void HudGaugeHardpoints::render(float /*frametime*/, bool config)
 {
 	int			sx, sy;
 	ship			*sp;

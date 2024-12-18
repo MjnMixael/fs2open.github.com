@@ -716,7 +716,7 @@ void HudGauge::onFrame(float  /*frametime*/)
 	
 }
 
-void HudGauge::render(float  /*frametime*/)
+void HudGauge::render(float /*frametime*/, bool config)
 {
 	if(!custom_gauge) {
 		return;
@@ -873,7 +873,7 @@ void HudGauge::renderBitmapColor(int frame, int x, int y)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderBitmap(int x, int y)
+void HudGauge::renderBitmap(int x, int y, float scale, bool config)
 {
 	int nx = 0, ny = 0;
 
@@ -897,16 +897,22 @@ void HudGauge::renderBitmap(int x, int y)
 			gr_set_screen_scale(base_w, base_h);
 		}
 	}
+
+	int resize = GR_RESIZE_FULL;
+
+	if (config) {
+		resize = GR_RESIZE_MENU;
+	}
 	
-	gr_aabitmap(x + nx, y + ny);
+	gr_aabitmap(x + nx, y + ny, resize, false, scale);
 
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderBitmap(int frame, int x, int y)
+void HudGauge::renderBitmap(int frame, int x, int y, float scale, bool config)
 {
 	gr_set_bitmap(frame);
-	renderBitmap(x, y);
+	renderBitmap(x, y, scale, config);
 }
 
 void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy)
@@ -1780,7 +1786,7 @@ void HudGaugeMissionTime::pageIn()
 	bm_page_in_aabitmap(time_gauge.first_frame, time_gauge.num_frames );
 }
 
-void HudGaugeMissionTime::render(float  /*frametime*/)
+void HudGaugeMissionTime::render(float /*frametime*/, bool config)
 {
 	float mission_time, time_comp;
 	int minutes=0;
@@ -2124,7 +2130,7 @@ void HudGaugeDamage::pageIn()
 	bm_page_in_aabitmap(damage_bottom.first_frame, damage_bottom.num_frames);
 }
 
-void HudGaugeDamage::render(float  /*frametime*/)
+void HudGaugeDamage::render(float  /*frametime*/, bool config)
 {
 	model_subsystem	*psub;
 	ship_subsys			*pss;
@@ -2543,7 +2549,7 @@ int HudGaugeTextWarnings::maybeTextFlash()
 	return flash_flags;
 }
 
-void HudGaugeTextWarnings::render(float  /*frametime*/)
+void HudGaugeTextWarnings::render(float  /*frametime*/, bool config)
 {
 	// note: Hud_text_flash globally allocated, address can't be NULL
 	if ( timestamp_elapsed(Hud_text_flash_timer) || Hud_text_flash[0] == '\0' ) {
@@ -2601,7 +2607,7 @@ void HudGaugeKills::pageIn()
 /**
  * @brief Display the kills gauge on the HUD
  */
-void HudGaugeKills::render(float  /*frametime*/)
+void HudGaugeKills::render(float /*frametime*/, bool config)
 {
 	if ( Kills_gauge.first_frame < 0 ) {
 		return;
@@ -2675,7 +2681,7 @@ bool HudGaugeLag::maybeFlashLag(bool flash_fast)
 	return draw_bright;
 }
 
-void HudGaugeLag::render(float  /*frametime*/)
+void HudGaugeLag::render(float /*frametime*/, bool config)
 {
 	int lag_status;
 
@@ -2966,7 +2972,7 @@ void HudGaugeSupport::pageIn()
 	bm_page_in_aabitmap( background.first_frame, background.num_frames);
 }
 
-void HudGaugeSupport::render(float  /*frametime*/)
+void HudGaugeSupport::render(float /*frametime*/, bool config)
 {
 	int	show_time, w, h;
 	char	outstr[64];
@@ -3550,7 +3556,7 @@ bool HudGaugeObjectiveNotify::maybeFlashNotify(bool flash_fast)
 	return draw_bright;
 }
 
-void HudGaugeObjectiveNotify::render(float  /*frametime*/)
+void HudGaugeObjectiveNotify::render(float /*frametime*/, bool config)
 {
 	renderSubspace();
 	renderRedAlert();
@@ -3998,7 +4004,7 @@ bool HudGaugeMultiMsg::canRender() const
 /**
  * @brief Render multiplayer text message currently being entered, if any
  */
-void HudGaugeMultiMsg::render(float  /*frametime*/)
+void HudGaugeMultiMsg::render(float /*frametime*/, bool config)
 {
 	char txt[MULTI_MSG_MAX_TEXT_LEN+20];
 
@@ -4017,7 +4023,7 @@ HudGauge(HUD_OBJECT_VOICE_STATUS, HUD_MESSAGE_LINES, false, true, VM_EXTERNAL | 
 {
 }
 
-void HudGaugeVoiceStatus::render(float  /*frametime*/)
+void HudGaugeVoiceStatus::render(float /*frametime*/, bool config)
 {
 	if(!(Game_mode & GM_MULTIPLAYER)){
 		return;
@@ -4057,7 +4063,7 @@ HudGauge(HUD_OBJECT_PING, HUD_LAG_GAUGE, false, false, 0, 255, 255, 255)
 /**
  * @brief Render multiplayer ping time to the server, if appropriate
  */
-void HudGaugePing::render(float  /*frametime*/)
+void HudGaugePing::render(float /*frametime*/, bool config)
 {
 	// If we shouldn't be displaying a ping time, return here
 	if(!multi_show_ingame_ping()){
@@ -4090,7 +4096,7 @@ HudGauge(HUD_OBJECT_SUPERNOVA, HUD_DIRECTIVES_VIEW, false, false, 0, 255, 255, 2
 {
 }
 
-void HudGaugeSupernova::render(float  /*frametime*/)
+void HudGaugeSupernova::render(float /*frametime*/, bool config)
 {
 	if (!supernova_active()) {
 		return;
@@ -4126,7 +4132,7 @@ void HudGaugeFlightPath::initHalfSize(int w, int h)
 	Marker_half[1] = h;
 }
 
-void HudGaugeFlightPath::render(float  /*frametime*/)
+void HudGaugeFlightPath::render(float /*frametime*/, bool config)
 {
 	object *obj;
 	vec3d p0,v;
