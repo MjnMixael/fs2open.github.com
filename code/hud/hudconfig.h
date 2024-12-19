@@ -53,6 +53,8 @@ extern int HUD_default_popup_mask2;
 extern int HUD_config_default_flags;
 extern int HUD_config_default_flags2;
 
+extern const int HC_gauge_config_coords[GR_NUM_RESOLUTIONS][4];
+
 /**
  * @brief Contains core HUD configuration data
  * @note Is not default init'd.  Assumes new player, PLR, or CSG reads will correctly set data.
@@ -206,7 +208,7 @@ void hud_config_color_save(const char* name);
 /*!
 * @brief convert the given HUD gauge coordinates to a set more appropriate for the HUD Config UI
 */
-void hud_config_convert_coords(int inGameX, int inGameY, int& outConfigX, int& outConfigY, float& outScale);
+void hud_config_convert_coords(int inGameX, int inGameY, int baseW, int baseH, int& outConfigX, int& outConfigY, float& outScale);
 
 #endif
 

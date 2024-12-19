@@ -857,7 +857,7 @@ void hud_config_popup_flag_clear(int i)
 	}
 }
 
-void hud_config_convert_coords(int inGameX, int inGameY, int& outConfigX, int& outConfigY, float& outScale)
+void hud_config_convert_coords(int inGameX, int inGameY, int baseW, int baseH, int& outConfigX, int& outConfigY, float& outScale)
 {
 	// Get the current resolution's configuration coordinates
 	int x1 = HC_gauge_config_coords[gr_screen.res][0];
@@ -870,8 +870,8 @@ void hud_config_convert_coords(int inGameX, int inGameY, int& outConfigX, int& o
 	int menuHeight = y2 - y1;
 
 	// Determine the scaling factor
-	float scaleX = static_cast<float>(menuWidth) / gr_screen.max_w;
-	float scaleY = static_cast<float>(menuHeight) / gr_screen.max_h;
+	float scaleX = static_cast<float>(menuWidth) / baseW;
+	float scaleY = static_cast<float>(menuHeight) / baseH;
 
 	// Use the smaller scale to maintain aspect ratio
 	outScale = std::min(scaleX, scaleY);
@@ -909,6 +909,7 @@ void hud_config_render_gauges(bool API_Access)
 		HC_gauge_config_coords[gr_screen.res][1],
 		HC_gauge_config_coords[gr_screen.res][3],
 		GR_RESIZE_MENU);
+	default_hud_gauges[25]->render(0, true);
 	default_hud_gauges[26]->render(0, true);
 
 	/*for (auto& gauge : default_hud_gauges) {

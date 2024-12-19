@@ -39,7 +39,7 @@ void gr_aabitmap(int x, int y, int resize_mode = GR_RESIZE_FULL, bool mirror = f
  * @param resize_mode The resize mode for translating the coordinated
  * @param mirror @c true to mirror the image
  */
-void gr_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode = GR_RESIZE_FULL, bool mirror = false);
+void gr_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode = GR_RESIZE_FULL, bool mirror = false, float scale_factor = 1.0f);
 /**
  * @brief Draws a normal-colored bitmap to the screen
  * @param x The x-coordinate of the draw call

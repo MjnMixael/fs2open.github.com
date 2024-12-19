@@ -739,69 +739,79 @@ void HudGauge::render(float /*frametime*/, bool config)
 	}
 }
 
-void HudGauge::renderString(int x, int y, const char *str)
+void HudGauge::renderString(int x, int y, const char *str, bool config)
 {
 	int nx = 0, ny = 0;
+	int resize = GR_RESIZE_FULL;
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
-
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
 	if (HUD_shadows) {
 		gr_set_color_fast(&Color_black);
-		gr_string(x + nx + 1, y + ny + 1, str);
+		gr_string(x + nx + 1, y + ny + 1, str, resize);
 		gr_set_color_fast(&gauge_color);
 	}
 
-	gr_string(x + nx, y + ny, str);
+	gr_string(x + nx, y + ny, str, resize);
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderString(int x, int y, int gauge_id, const char *str)
+void HudGauge::renderString(int x, int y, int gauge_id, const char *str, bool config)
 {
 	int nx = 0, ny = 0;
+	int resize = GR_RESIZE_FULL;
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
-
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
 
 	if ( gauge_id > -2 ) {
 		if (HUD_shadows) {
 			gr_set_color_fast(&Color_black);
-			emp_hud_string(x + nx + 1, y + ny + 1, gauge_id, str, GR_RESIZE_FULL);
+			emp_hud_string(x + nx + 1, y + ny + 1, gauge_id, str, resize);
 			gr_set_color_fast(&gauge_color);
 		}
-		emp_hud_string(x + nx, y + ny, gauge_id, str, GR_RESIZE_FULL);
+		emp_hud_string(x + nx, y + ny, gauge_id, str, resize);
 	} else {
 		if (HUD_shadows) {
 			gr_set_color_fast(&Color_black);
-			gr_string(x + nx + 1, y + ny + 1, str);
+			gr_string(x + nx + 1, y + ny + 1, str, resize);
 			gr_set_color_fast(&gauge_color);
 		}
-		gr_string(x + nx, y + ny, str);
+		gr_string(x + nx, y + ny, str, resize);
 	}
 
 	gr_reset_screen_scale();
@@ -882,25 +892,25 @@ void HudGauge::renderBitmap(int x, int y, float scale, bool config)
 	}
 
 	emp_hud_jitter(&x, &y);
-
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
-
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
-		} else {
-			gr_set_screen_scale(base_w, base_h);
-		}
-	}
-
+	
 	int resize = GR_RESIZE_FULL;
 
-	if (config) {
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
+		} else {
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
+		}
+	} else {
 		resize = GR_RESIZE_MENU;
 	}
 	
@@ -915,7 +925,7 @@ void HudGauge::renderBitmap(int frame, int x, int y, float scale, bool config)
 	renderBitmap(x, y, scale, config);
 }
 
-void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy)
+void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale, bool config)
 {
 	int nx = 0, ny = 0; 
 	
@@ -925,24 +935,30 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 
 	emp_hud_jitter(&x, &y); 
 
+	int resize = GR_RESIZE_FULL;
+
 	gr_set_bitmap(frame);
 
-	if( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
-
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
-	gr_aabitmap_ex(x + nx, y + ny, w, h, sx, sy);
+	gr_aabitmap_ex(x + nx, y + ny, w, h, sx, sy, resize, false, scale);
 
 	gr_reset_screen_scale();
 }
