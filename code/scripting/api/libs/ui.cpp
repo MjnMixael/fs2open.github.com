@@ -2370,19 +2370,20 @@ ADE_LIB_DERIV(l_UserInterface_HUDConfig,
 
 ADE_FUNC(initHudConfig,
 	l_UserInterface_HUDConfig,
-	"[number X, number Y, number Width]",
+	"[number X, number Y, number Width, number height]",
 	"Initializes the HUD Configuration data. Must be used before HUD Configuration data accessed. "
 	"X and Y are the coordinates where the HUD preview will be drawn when drawHudConfig is used. "
-	"Width is the pixel width to draw the gauges preview.",
+	"Width is the pixel width to draw the gauges preview. Height is hte pixel height to draw the gauges preview.",
 	nullptr,
 	nullptr)
 {
 	int x = 0;
 	int y = 0;
 	int w = 0;
-	ade_get_args(L, "|iii", &x, &y, &w);
+	int h = 0;
+	ade_get_args(L, "|iii", &x, &y, &w, &h);
 
-	hud_config_init(true, x, y, w);
+	hud_config_init(true, x, y, w, h);
 
 	return ADE_RETURN_NIL;
 }

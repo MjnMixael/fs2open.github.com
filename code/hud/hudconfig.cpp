@@ -518,6 +518,7 @@ static UI_WINDOW					HC_ui_window;
 int							HC_gauge_hot;			// mouse is over this gauge
 int							HC_gauge_selected;	// gauge is selected
 float						HC_gauge_scale; // scale used for drawing the hud gauges
+int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
 
 // HUD colors
 typedef struct hc_col {
@@ -596,6 +597,20 @@ void hud_config_synch_ui(bool API_Access)
 	}
 }
 
+void hud_config_init_dimensions(int x1, int x2, int y1, int y2)
+{
+	// Calculate the menu width and height
+	int menuWidth = x2 - x1;
+	int menuHeight = y2 - y1;
+
+	HC_gauge_coordinates[0] = x1;
+	HC_gauge_coordinates[1] = x2;
+	HC_gauge_coordinates[2] = y1;
+	HC_gauge_coordinates[3] = y2;
+	HC_gauge_coordinates[4] = menuWidth;
+	HC_gauge_coordinates[5] = menuHeight;
+}
+
 /*!
  * @brief init the UI components
  *
@@ -604,7 +619,7 @@ void hud_config_synch_ui(bool API_Access)
  * param[in] y				the y coord to render the preview display
  * param[in] w				the width of the preview display
  */
-void hud_config_init_ui(bool API_Access, int x, int y, int w)
+void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 {
 	int i;
 	struct ui_button_info			*hb;
@@ -612,9 +627,16 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w)
 	HC_gauge_coords.clear();
 	HC_gauge_coords.resize(NUM_HUD_GAUGES);
 
-	if (w < 0) {
-		HC_gauge_scale = 1.0f;
+	if (w < 0 || h < 0) {
+		HC_gauge_scale = 1.0f; //Unused after this big upgrade?
+		hud_config_init_dimensions(HC_gauge_config_coords[gr_screen.res][0],
+			HC_gauge_config_coords[gr_screen.res][1],
+			HC_gauge_config_coords[gr_screen.res][2],
+			HC_gauge_config_coords[gr_screen.res][3]);
 	} else {
+
+		hud_config_init_dimensions(x, x + w, y, y + h);
+		//Rest may be unused after the big upgrade
 
 		float sw = 0; // will be highest w value
 
@@ -857,28 +879,18 @@ void hud_config_popup_flag_clear(int i)
 	}
 }
 
-void hud_config_convert_coords(int inGameX, int inGameY, int baseW, int baseH, int& outConfigX, int& outConfigY, float& outScale)
+void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale)
 {
-	// Get the current resolution's configuration coordinates
-	int x1 = HC_gauge_config_coords[gr_screen.res][0];
-	int x2 = HC_gauge_config_coords[gr_screen.res][1];
-	int y1 = HC_gauge_config_coords[gr_screen.res][2];
-	int y2 = HC_gauge_config_coords[gr_screen.res][3];
-
-	// Calculate the menu width and height
-	int menuWidth = x2 - x1;
-	int menuHeight = y2 - y1;
-
 	// Determine the scaling factor
-	float scaleX = static_cast<float>(menuWidth) / baseW;
-	float scaleY = static_cast<float>(menuHeight) / baseH;
+	float scaleX = static_cast<float>(HC_gauge_coordinates[4]) / baseW;
+	float scaleY = static_cast<float>(HC_gauge_coordinates[5]) / baseH;
 
-	// Use the smaller scale to maintain aspect ratio
+	// Use the smallest scale factor
 	outScale = std::min(scaleX, scaleY);
 
 	// Apply scaling and offset
-	outConfigX = x1 + static_cast<int>(inGameX * scaleX);
-	outConfigY = y1 + static_cast<int>(inGameY * scaleY);
+	outX = HC_gauge_coordinates[0] + static_cast<int>(x * outScale);
+	outY = HC_gauge_coordinates[2] + static_cast<int>(y * outScale);
 }
 
 
@@ -889,6 +901,7 @@ void hud_config_convert_coords(int inGameX, int inGameY, int baseW, int baseH, i
  */
 void hud_config_render_gauges(bool API_Access)
 {
+	//Temporary.. render a box around the gauge config area just so I can visualize it while I work
 	gr_line(HC_gauge_config_coords[gr_screen.res][0],
 		HC_gauge_config_coords[gr_screen.res][2],
 		HC_gauge_config_coords[gr_screen.res][0],
@@ -909,9 +922,12 @@ void hud_config_render_gauges(bool API_Access)
 		HC_gauge_config_coords[gr_screen.res][1],
 		HC_gauge_config_coords[gr_screen.res][3],
 		GR_RESIZE_MENU);
+	//Temporary.. render specific gauges so I can get them converted one by one
+	default_hud_gauges[0]->render(0, true);
 	default_hud_gauges[25]->render(0, true);
 	default_hud_gauges[26]->render(0, true);
 
+	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {
 		SCP_string name = gauge->getCustomGaugeName();
 		if (!name.empty() && all_gauges.count(name) == 0) {
@@ -966,9 +982,9 @@ void hud_config_render_gauges(bool API_Access)
 	}*/
 }
 
-void hud_config_init(bool API_Access, int x, int y, int w)
+void hud_config_init(bool API_Access, int x, int y, int w, int h)
 {
-	hud_config_init_ui(API_Access, x, y, w);
+	hud_config_init_ui(API_Access, x, y, w, h);
 	hud_config_backup(); // save the HUD configuration in case the player decides to cancel changes
 	HUD_config_inited = 1;
 }

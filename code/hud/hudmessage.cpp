@@ -441,27 +441,43 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 {
 	hud_set_default_color();
 
-	// dependant on max_width, max_lines, and line_height
-	setClip(position[0], position[1], Window_width, Window_height+2);
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
+
+	// Config version doesn't need any clipping because we only render a single example line
+	if (!config) {
+		// dependant on max_width, max_lines, and line_height
+		setClip(x, y, static_cast<int>(Window_width * scale), static_cast<int>(Window_height * scale) + 2);
+	}
 
 	//Since setClip already sets makes drawing local, further renderings mustn't additionally slew
 	bool doSlew = reticle_follow;
 	reticle_follow = false;
 
-	for ( SCP_vector<Hud_display_info>::iterator m = active_messages.begin(); m != active_messages.end(); ++m) {
-		if ( !timestamp_elapsed(m->total_life) ) {
-			if ( !(Player->flags & PLAYER_FLAGS_MSG_MODE) || !Hidden_by_comms_menu) {
-				// set the appropriate color					
-				if ( m->msg.source ) {
-					setGaugeColor(HUD_C_BRIGHT);
-				} else {
-					setGaugeColor();
-				}
+	if (!config) {
+		for (SCP_vector<Hud_display_info>::iterator m = active_messages.begin(); m != active_messages.end(); ++m) {
+			if (!timestamp_elapsed(m->total_life)) {
+				if (!(Player->flags & PLAYER_FLAGS_MSG_MODE) || !Hidden_by_comms_menu) {
+					// set the appropriate color
+					if (m->msg.source) {
+						setGaugeColor(HUD_C_BRIGHT);
+					} else {
+						setGaugeColor();
+					}
 
-				// print the message out
-				renderPrintf(m->msg.x, m->y, "%s", m->msg.text.c_str());
+					// print the message out
+					renderPrintf(m->msg.x, m->y, config, "%s", m->msg.text.c_str());
+				}
 			}
 		}
+	} else {
+		setGaugeColor();
+		renderPrintf(x, y, config, "%s", "This is an example message on the HUD for the HUD config menu");
 	}
 
 	reticle_follow = doSlew;
