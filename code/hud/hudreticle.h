@@ -107,7 +107,7 @@ public:
 	void initBitmaps(char *fname);
 
 	void render(float frametime, bool config = false) override;
-	void renderThrottleSpeed(float current_speed, int y_end);
+	void renderThrottleSpeed(float current_speed, int y_end, bool config);
 	void renderThrottleLine(int y);
 	void renderThrottleForeground(int y_end);
 	void renderThrottleBackground(int y_end);

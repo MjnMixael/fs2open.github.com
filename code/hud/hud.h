@@ -346,9 +346,9 @@ public:
 	void renderBitmap(int frame, int x, int y, float scale = 1.0f, bool config = false);
 	void renderBitmapColor(int frame, int x, int y);
 	void renderBitmapUv(int frame, int x, int y, int w, int h, float u0, float v0, float u1, float v1);
-	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy);
-	void renderString(int x, int y, const char *str);
-	void renderString(int x, int y, int gauge_id, const char *str);
+	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false);
+	void renderString(int x, int y, const char *str, bool config = false);
+	void renderString(int x, int y, int gauge_id, const char *str, bool config = false);
 	void renderStringAlignCenter(int x, int y, int area_width, const char *s);
 	void renderPrintf(int x, int y, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(4, 5);
 	void renderPrintf(int x, int y, int gauge_id, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(5, 6);

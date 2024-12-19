@@ -641,26 +641,28 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	float	desired_speed, max_speed, current_speed, absolute_speed, absolute_displayed_speed, max_displayed_speed, percent_max, percent_aburn_max;
 	int	desired_y_pos, y_end;
 
-	ship_info	*sip;
-	sip = &Ship_info[Player_ship->ship_info_index];
+	ship_info	*sip = nullptr;
+	if (!config) {
+		sip = &Ship_info[Player_ship->ship_info_index];
+	}
 
-	current_speed = Player_obj->phys_info.fspeed;
+	current_speed = config ? 50 : Player_obj->phys_info.fspeed;
 	if ( current_speed < 0.0f){
 		current_speed = 0.0f;
 	}
 
-	max_speed = Player_obj->phys_info.max_vel.xyz.z;
+	max_speed = config ? 100 : Player_obj->phys_info.max_vel.xyz.z;
 	if ( max_speed <= 0 ) {
 		max_speed = sip->max_vel.xyz.z;
 	}
 
-	absolute_speed = Player_obj->phys_info.speed;
+	absolute_speed = config ? 50 : Player_obj->phys_info.speed;
 
 	// scale by distance modifier from hud_guages.tbl for display purposes
 	absolute_displayed_speed = absolute_speed * Hud_speed_multiplier;
 	max_displayed_speed = max_speed * Hud_speed_multiplier;
 
-	desired_speed = Player->ci.forward * max_speed;
+	desired_speed = config ? 75 : Player->ci.forward * max_speed;
 	if ( desired_speed < 0.0f ){		// so ships that go backwards don't force the indicators below where they can go
 		desired_speed = 0.0f;
 	}
@@ -690,7 +692,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		y_end -= (int)std::lround(percent_aburn_max * throttle_aburn_h);
 	}
 
-	if ( Player_obj->phys_info.flags & PF_AFTERBURNER_ON ) {
+	if ( !config && Player_obj->phys_info.flags & PF_AFTERBURNER_ON ) {
 		// default value is 240 when afterburner is on. 
 		//I'm assuming that this value is basically Bottom_offset_y - throttle_aburn_h - throttle_h
 		desired_y_pos = position[1] + Bottom_offset_y - throttle_aburn_h - throttle_h; 
@@ -707,7 +709,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	// draw throttle speed number
 	//hud_render_throttle_speed(current_speed, y_end);
 	// Absolute speed, not forward speed, for hud speed reticle - fixes the guage for sliding -- kazan
-	renderThrottleSpeed(absolute_displayed_speed, y_end);
+	renderThrottleSpeed(absolute_displayed_speed, y_end, config);
 
 	// draw target speed if necessary
 	if ( Show_target_speed ) {
@@ -715,7 +717,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		int w, h;
 
 		if ( Show_percent ) {
-			if ( Player_obj->phys_info.flags & PF_AFTERBURNER_ON ) {
+			if ( !config && Player_obj->phys_info.flags & PF_AFTERBURNER_ON ) {
 				strcpy_s(buf, XSTR( "A/B", 1669 ));
 			} else {
 				sprintf(buf, XSTR( "%d%%", 326), (int)std::lround( (desired_speed/max_speed)*100 ));
@@ -745,7 +747,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	}
 }
 
-void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end)
+void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool config)
 {
 	char buf[32];
 	int sx, sy, x_pos, y_pos, w, h;
@@ -772,7 +774,7 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end)
 	
 	renderPrintf(sx, sy, "%s", buf);
 
-	if ( object_get_gliding(Player_obj) ) { 
+	if (!config &&  object_get_gliding(Player_obj) ) { 
 		auto glide_str = XSTR("GLIDE", 1668);
 
 		if ( Use_custom_glide ) {
@@ -789,7 +791,7 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end)
 
 			renderString(sx+offset, sy + h, glide_str);
 		}
-	} else if ( Players[Player_num].flags & PLAYER_FLAGS_MATCH_TARGET ) {
+	} else if (!config && Players[Player_num].flags & PLAYER_FLAGS_MATCH_TARGET ) {
 		if ( Use_custom_match_speed ) {
 			renderMatchSpeedIcon(position[0] + Match_speed_offsets[0], position[1] + Match_speed_offsets[1]);
 		} else {
@@ -923,7 +925,7 @@ void HudGaugeThreatIndicator::render(float  /*frametime*/, bool config)
 	float scale = 1.0f;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], x, y, scale);
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	if (threat_arc.first_frame >= 0)
