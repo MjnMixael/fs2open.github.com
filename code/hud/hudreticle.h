@@ -108,9 +108,9 @@ public:
 
 	void render(float frametime, bool config = false) override;
 	void renderThrottleSpeed(float current_speed, int y_end, bool config);
-	void renderThrottleLine(int y);
-	void renderThrottleForeground(int y_end);
-	void renderThrottleBackground(int y_end);
+	void renderThrottleLine(int y, bool config);
+	void renderThrottleForeground(int y_end, bool config);
+	void renderThrottleBackground(int y_end, bool config);
 	void renderMatchSpeedIcon(int x, int y);
 
 	void pageIn() override;
@@ -140,8 +140,8 @@ public:
 	void render(float frametime, bool config = false) override;
 	void initialize() override;
 	void pageIn() override;
-	void renderLaserThreat();
-	void renderLockThreat();
+	void renderLaserThreat(bool config);
+	void renderLockThreat(bool config);
 };
 
 class HudGaugeWeaponLinking: public HudGauge

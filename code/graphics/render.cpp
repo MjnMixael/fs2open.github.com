@@ -301,12 +301,12 @@ void gr_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode,
         }
 
         if (dx1 < clip_left) {
-            sx += (clip_left - dx1) / scale_factor; // Adjust for scaling
+			sx += static_cast<int>((clip_left - dx1) / scale_factor); // Adjust for scaling
             dx1 = clip_left;
         }
 
         if (dy1 < clip_top) {
-            sy += (clip_top - dy1) / scale_factor; // Adjust for scaling
+			sy += static_cast<int>((clip_top - dy1) / scale_factor); // Adjust for scaling
             dy1 = clip_top;
         }
 

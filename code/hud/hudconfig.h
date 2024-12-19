@@ -104,6 +104,7 @@ extern int HC_gauge_hot;
 extern int HC_gauge_selected;
 extern int HC_select_all;
 extern float HC_gauge_scale;
+extern int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
 
 const char* HC_gauge_descriptions(int n);
 
@@ -115,7 +116,7 @@ const char* HC_gauge_descriptions(int n);
  * param[in] y				the y coord to render the preview display
  * param[in] w				the width to render the preview display
  */
-void hud_config_init(bool API_Access = false, int x = 0, int y = 0, int w = -1);
+void hud_config_init(bool API_Access = false, int x = 0, int y = 0, int w = -1, int h = -1);
 
 /*!
  * @brief do a hud config frame, including rendering the preview display and checking for button presses
@@ -206,9 +207,10 @@ void hud_config_color_load(const char *name);
 void hud_config_color_save(const char* name);
 
 /*!
-* @brief convert the given HUD gauge coordinates to a set more appropriate for the HUD Config UI
+* @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return the smaller scale value used
+* so that other offsets and positions can be multiplied in turn
 */
-void hud_config_convert_coords(int inGameX, int inGameY, int baseW, int baseH, int& outConfigX, int& outConfigY, float& outScale);
+void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
 
 #endif
 

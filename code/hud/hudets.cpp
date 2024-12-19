@@ -1015,17 +1015,17 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 	if (ship_has_energy_weapons(ship_p)) {
 		Letter = Letters[0];
 		position[0] = Gauge_positions[initial_position++];
-		renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], NOX("%c"), Letter);
+		renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], config, NOX("%c"), Letter);
 	}
 	if (!(Player_obj->flags[Object::Object_Flags::No_shields])) {
 		Letter = Letters[1];
 		position[0] = Gauge_positions[initial_position++];
-		renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], NOX("%c"), Letter);
+		renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], config, NOX("%c"), Letter);
 	}
 	if (ship_has_engine_power(ship_p)) {
 		Letter = Letters[2];
 		position[0] = Gauge_positions[initial_position++];
-		renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], NOX("%c"), Letter);
+		renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], config, NOX("%c"), Letter);
 	}
 
 	// draw gauges, skipping any gauge that is missing
@@ -1099,7 +1099,7 @@ void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 	setGaugeColor();
 
 	// draw the letters for the gauge first, before any clipping occurs
-	renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], NOX("%c"), Letter);
+	renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], config, NOX("%c"), Letter);
 
 	// draw the gauges for the weapon system
 	blitGauge(ship_p->weapon_recharge_index);
@@ -1135,7 +1135,7 @@ void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 	setGaugeColor();
 
 	// draw the letters for the gauge first, before any clipping occurs
-	renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], NOX("%c"), Letter);
+	renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], config, NOX("%c"), Letter);
 
 	// draw the gauge for the shield system
 	blitGauge(ship_p->shield_recharge_index);
@@ -1171,7 +1171,7 @@ void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 	setGaugeColor();
 
 	// draw the letters for the gauge first, before any clipping occurs
-	renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], NOX("%c"), Letter);
+	renderPrintf(position[0] + Letter_offsets[0], position[1] + Letter_offsets[1], config, NOX("%c"), Letter);
 
 	// draw the gauge for the engine system
 	blitGauge(ship_p->engine_recharge_index);

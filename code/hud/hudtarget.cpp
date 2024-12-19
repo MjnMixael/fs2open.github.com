@@ -5584,7 +5584,7 @@ void HudGaugeCmeasures::render(float /*frametime*/, bool config)
 		Int3();	// player ship doesn't exist?
 		return;
 	}
-	renderPrintf(position[0] + Cm_text_val_offsets[0], position[1] + Cm_text_val_offsets[1], NOX("%02d"), Player_ship->cmeasure_count);
+	renderPrintf(position[0] + Cm_text_val_offsets[0], position[1] + Cm_text_val_offsets[1], config, NOX("%02d"), Player_ship->cmeasure_count);
 }
 
 HudGaugeAfterburner::HudGaugeAfterburner():
@@ -6228,14 +6228,14 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 
 		// indicate if this is linked or currently armed
 		if ( ((sw->current_primary_bank == i) && !(Player_ship->flags[Ship::Ship_Flags::Primary_linked])) || ((Player_ship->flags[Ship::Ship_Flags::Primary_linked]) && !(Weapon_info[sw->primary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::Nolink]))) {
-			renderPrintf(position[0] + Weapon_plink_offset_x, name_y, EG_NULL, "%c", Weapon_link_icon);
+			renderPrintfWithGauge(position[0] + Weapon_plink_offset_x, name_y, EG_NULL, config, "%c", Weapon_link_icon);
 		}
 
 		// either render this primary's image or its name
 		if(Weapon_info[sw->primary_bank_weapons[0]].hud_image_index != -1) {
 			renderBitmap(Weapon_info[sw->primary_bank_weapons[i]].hud_image_index, position[0] + Weapon_pname_offset_x, name_y);
 		} else {
-			renderPrintf(position[0] + Weapon_pname_offset_x, name_y, EG_WEAPON_P2, "%s", weapon_name);
+			renderPrintfWithGauge(position[0] + Weapon_pname_offset_x, name_y, EG_WEAPON_P2, config, "%s", weapon_name);
 		}
 
 		// if this is a ballistic primary with ammo, render the ammo count
@@ -6291,14 +6291,14 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 
 		if ( sw->current_secondary_bank == i ) {
 			// show that this is the current secondary armed
-			renderPrintf(position[0] + Weapon_sunlinked_offset_x, name_y, EG_NULL, "%c", Weapon_link_icon);
+			renderPrintfWithGauge(position[0] + Weapon_sunlinked_offset_x, name_y, EG_NULL, config, "%c", Weapon_link_icon);
 
 			// indicate if this is linked
 			// don't draw the link indicator if the fire can't be fired link.
 			// the link flag is ignored rather than cleared so the player can cycle past a no-doublefire weapon without the setting being cleared
 			if ( Player_ship->flags[Ship::Ship_Flags::Secondary_dual_fire] && !wip->wi_flags[Weapon::Info_Flags::No_doublefire] &&
 					!The_mission.ai_profile->flags[AI::Profile_Flags::Disable_player_secondary_doublefire] ) {
-				renderPrintf(position[0] + Weapon_slinked_offset_x, name_y, EG_NULL, "%c", Weapon_link_icon);
+				renderPrintfWithGauge(position[0] + Weapon_slinked_offset_x, name_y, EG_NULL, config, "%c", Weapon_link_icon);
 			}
 
 			// show secondary weapon's image or print its name
@@ -6312,7 +6312,7 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 			if ((sw->current_secondary_bank >= 0) && ship_secondary_has_ammo(sw, i)) {
 				int ms_till_fire = timestamp_until(sw->next_secondary_fire_stamp[sw->current_secondary_bank]);
 				if ( (ms_till_fire >= 500) && ((wip->fire_wait >= 1 ) || (ms_till_fire > wip->fire_wait*1000)) ) {
-					renderPrintf(position[0] + Weapon_sreload_offset_x, name_y, EG_NULL, "%d", (int)std::lround(ms_till_fire/1000.0f));
+					renderPrintfWithGauge(position[0] + Weapon_sreload_offset_x, name_y, EG_NULL, config, "%d", (int)std::lround(ms_till_fire/1000.0f));
 				}
 			}
 		} else {
@@ -7100,14 +7100,14 @@ void HudGaugePrimaryWeapons::render(float /*frametime*/, bool config)
 
 		// indicate if this is linked or currently armed
 		if ( (sw->current_primary_bank == i) || (Player_ship->flags[Ship::Ship_Flags::Primary_linked]) ) {
-			renderPrintf(position[0] + _plink_offset_x, position[1] + text_y_offset, EG_NULL, "%c", Weapon_link_icon);
+			renderPrintfWithGauge(position[0] + _plink_offset_x, position[1] + text_y_offset, EG_NULL, config, "%c", Weapon_link_icon);
 		}
 
 		// either render this primary's image or its name
 		if(Weapon_info[sw->primary_bank_weapons[0]].hud_image_index != -1) {
 			renderBitmap(Weapon_info[sw->primary_bank_weapons[i]].hud_image_index, position[0] + _pname_offset_x, text_y_offset);
 		} else {
-			renderPrintf(position[0] + _pname_offset_x, position[1] + text_y_offset, EG_WEAPON_P2, "%s", weapon_name);
+			renderPrintfWithGauge(position[0] + _pname_offset_x, position[1] + text_y_offset, EG_WEAPON_P2, config, "%s", weapon_name);
 		}
 
 		// if this is a ballistic primary with ammo, render the ammo count
@@ -7207,14 +7207,14 @@ void HudGaugeSecondaryWeapons::render(float /*frametime*/, bool config)
 
 		if ( sw->current_secondary_bank == i ) {
 			// show that this is the current secondary armed
-			renderPrintf(position[0] + _sunlinked_offset_x, position[1] + text_y_offset, EG_NULL, "%c", Weapon_link_icon);
+			renderPrintfWithGauge(position[0] + _sunlinked_offset_x, position[1] + text_y_offset, EG_NULL, config, "%c", Weapon_link_icon);
 
 			// indicate if this is linked
 			// don't draw the link indicator if the fire can't be fired link.
 			// the link flag is ignored rather than cleared so the player can cycle past a no-doublefire weapon without the setting being cleared
 			if ( Player_ship->flags[Ship::Ship_Flags::Secondary_dual_fire] && !wip->wi_flags[Weapon::Info_Flags::No_doublefire] &&
 					!The_mission.ai_profile->flags[AI::Profile_Flags::Disable_player_secondary_doublefire] ) {
-				renderPrintf(position[0] + _slinked_offset_x, position[1] + text_y_offset, EG_NULL, "%c", Weapon_link_icon);
+				renderPrintfWithGauge(position[0] + _slinked_offset_x, position[1] + text_y_offset, EG_NULL, config, "%c", Weapon_link_icon);
 			}
 
 			// show secondary weapon's image or print its name
@@ -7228,7 +7228,7 @@ void HudGaugeSecondaryWeapons::render(float /*frametime*/, bool config)
 			if ((sw->current_secondary_bank >= 0) && ship_secondary_has_ammo(sw, i)) {
 				int ms_till_fire = timestamp_until(sw->next_secondary_fire_stamp[sw->current_secondary_bank]);
 				if ( (ms_till_fire >= 500) && ((wip->fire_wait >= 1 ) || (ms_till_fire > wip->fire_wait*1000)) ) {
-					renderPrintf(position[0] + _sreload_offset_x, position[1] + text_y_offset, EG_NULL, "%d", (int)std::lround(ms_till_fire/1000.0f));
+					renderPrintfWithGauge(position[0] + _sreload_offset_x, position[1] + text_y_offset, EG_NULL, config, "%d", (int)std::lround(ms_till_fire/1000.0f));
 				}
 			}
 		} else {

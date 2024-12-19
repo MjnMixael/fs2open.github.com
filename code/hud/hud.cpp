@@ -825,7 +825,7 @@ void HudGauge::renderStringAlignCenter(int x, int y, int area_width, const char 
 	renderString(x + ((area_width - w) / 2), y, s);
 }
 
-void HudGauge::renderPrintf(int x, int y, const char* format, ...)
+void HudGauge::renderPrintf(int x, int y, bool config, const char* format, ...)
 {
 	char tmp[256] = "";
 	va_list args;
@@ -836,10 +836,10 @@ void HudGauge::renderPrintf(int x, int y, const char* format, ...)
 	va_end(args);
 	tmp[sizeof(tmp)-1] = '\0';
 
-	renderString(x, y, tmp);
+	renderString(x, y, tmp, config);
 }
 
-void HudGauge::renderPrintf(int x, int y, int gauge_id, const char* format, ...)
+void HudGauge::renderPrintfWithGauge(int x, int y, int gauge_id, bool config, const char* format, ...)
 {
 	char tmp[256] = "";
 	va_list args;
@@ -850,7 +850,7 @@ void HudGauge::renderPrintf(int x, int y, int gauge_id, const char* format, ...)
 	va_end(args);
 	tmp[sizeof(tmp)-1] = '\0';
 
-	renderString(x, y, gauge_id, tmp);
+	renderString(x, y, gauge_id, tmp, config);
 }
 
 void HudGauge::renderBitmapColor(int frame, int x, int y)
@@ -911,6 +911,27 @@ void HudGauge::renderBitmap(int x, int y, float scale, bool config)
 			}
 		}
 	} else {
+		// Configuration mode: Scale to HC_gauge_config_coords
+		//int hc_x1 = HC_gauge_config_coords[gr_screen.res][0];
+		//int hc_x2 = HC_gauge_config_coords[gr_screen.res][1];
+		//int hc_y1 = HC_gauge_config_coords[gr_screen.res][2];
+		//int hc_y2 = HC_gauge_config_coords[gr_screen.res][3];
+
+		//int hc_width = hc_x2 - hc_x1-200;
+		//int hc_height = hc_y2 - hc_y1-200;
+
+		// Set scaling for the configuration menu
+		//gr_set_screen_scale(hc_width, hc_height, -1, -1, gr_screen.max_w, gr_screen.max_h, hc_width, hc_height, true);
+
+		// Adjust the position to configuration space
+		//nx = x + hc_x1; // Start from the configuration area's top-left corner
+		//ny = y + hc_y1;
+		//hud_config_convert_coords(x, y, base_w, base_h, nx, ny, ns);
+
+		// Adjust x and y to ensure x + nx = desired_final_nx
+		//x = 0;
+		//y = 0;
+
 		resize = GR_RESIZE_MENU;
 	}
 	
@@ -1821,14 +1842,14 @@ void HudGaugeMissionTime::render(float /*frametime*/, bool config)
 	}
 
 	// print out mission time in MM:SS format
-	renderPrintf(position[0] + time_text_offsets[0], position[1] + time_text_offsets[1], NOX("%02d:%02d"), minutes, seconds);
+	renderPrintf(position[0] + time_text_offsets[0], position[1] + time_text_offsets[1], config, NOX("%02d:%02d"), minutes, seconds);
 
 	// display time compression as xN
 	time_comp = f2fl(Game_time_compression);
 	if ( time_comp < 1 ) {
-		renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], /*XSTR( "x%.1f", 215), time_comp)*/ NOX("%.2f"), time_comp);
+		renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], config, /*XSTR( "x%.1f", 215), time_comp)*/ NOX("%.2f"), time_comp);
 	} else {
-		renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], XSTR( "x%.0f", 216), time_comp);
+		renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], config, XSTR( "x%.0f", 216), time_comp);
 	}
 }
 
@@ -3131,7 +3152,7 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 			minutes = 99;
 			seconds = 99;
 		}
-		renderPrintf(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, NOX("%02d:%02d"), minutes, seconds);
+		renderPrintf(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, config, NOX("%02d:%02d"), minutes, seconds);
 	}
 }
 
@@ -4122,9 +4143,9 @@ void HudGaugeSupernova::render(float /*frametime*/, bool config)
 
 	gr_set_color_fast(&Color_bright_red);
 	if (Lcl_pl) {
-		renderPrintf(position[0], position[1], "Wybuch supernowej: %.2f s", time_left);
+		renderPrintf(position[0], position[1], config, "Wybuch supernowej: %.2f s", time_left);
 	} else {
-		renderPrintf(position[0], position[1], XSTR( "Supernova Warning: %.2f s", 1639), time_left);
+		renderPrintf(position[0], position[1], config, XSTR( "Supernova Warning: %.2f s", 1639), time_left);
 	}
 }
 
