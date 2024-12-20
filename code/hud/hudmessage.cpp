@@ -447,6 +447,11 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+        int bmw;
+		int bmh;
+		gr_get_string_size(&bmw, &bmh, "This is an example message on the HUD for the HUD config menu");
+		hud_config_set_mouse_coords(gauge_config, x, x + bmw, y, y + bmh);
 	}
 
 	// Config version doesn't need any clipping because we only render a single example line

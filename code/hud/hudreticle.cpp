@@ -673,6 +673,11 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(throttle_frames.first_frame + 1, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 	desired_y_pos = y + static_cast<int>(Bottom_offset_y * scale) - (int)std::lround(static_cast<int>(throttle_h * scale) * desired_speed / max_speed) - 1;
@@ -967,6 +972,11 @@ void HudGaugeThreatIndicator::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+        // Ideally this doesn't eventually happen every single frame. Hmm.
+        int bmw;
+		int bmh;
+		bm_get_info(threat_arc.first_frame + 1, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 	if (threat_arc.first_frame >= 0)

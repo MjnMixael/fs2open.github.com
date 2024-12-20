@@ -773,6 +773,7 @@ void HudGauge::renderString(int x, int y, const char *str, bool config)
 	gr_reset_screen_scale();
 }
 
+// Strings don't currently scale for the config menu.. something to try and solve?
 void HudGauge::renderString(int x, int y, int gauge_id, const char *str, bool config)
 {
 	int nx = 0, ny = 0;

@@ -519,6 +519,7 @@ int							HC_gauge_hot;			// mouse is over this gauge
 int							HC_gauge_selected;	// gauge is selected
 float						HC_gauge_scale; // scale used for drawing the hud gauges
 int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
+int HC_gauge_mouse_coords[NUM_HUD_GAUGES][4];
 
 // HUD colors
 typedef struct hc_col {
@@ -636,6 +637,13 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 	} else {
 
 		hud_config_init_dimensions(x, x + w, y, y + h);
+
+		// Clear the mouse coords array
+		for (int count = 0; count < NUM_HUD_GAUGES; ++count) {
+			for (int j = 0; j < 5; ++j) {
+				HC_gauge_mouse_coords[count][j] = -1;
+			}
+		}
 		//Rest may be unused after the big upgrade
 
 		float sw = 0; // will be highest w value
@@ -879,6 +887,19 @@ void hud_config_popup_flag_clear(int i)
 	}
 }
 
+void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2) {
+	int values[4] = {x1, x2, y1, y2};
+	for (int i = 0; i < 4; ++i) {
+		HC_gauge_mouse_coords[1][i] = values[i];
+	}
+
+	//temporary stuff to show boxes
+	color clr = gr_screen.current_color;
+	gr_set_color(255, 255, 255);
+	hud_config_draw_box(x1, x2, y1, y2);
+	gr_set_color_fast(&clr);
+}
+
 void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale)
 {
 	// Determine the scaling factor
@@ -893,6 +914,13 @@ void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, in
 	outY = HC_gauge_coordinates[2] + static_cast<int>(y * outScale);
 }
 
+void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode)
+{
+	gr_line(x1, y1, x1, y2, resize_mode); // Left vertical line
+	gr_line(x1, y1, x2, y1, resize_mode); // Top horizontal line
+	gr_line(x2, y1, x2, y2, resize_mode); // Right vertical line
+	gr_line(x1, y2, x2, y2, resize_mode); // Bottom horizontal line
+}
 
 /*!
  * @brief render all the hud config gauges
@@ -902,26 +930,10 @@ void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, in
 void hud_config_render_gauges(bool API_Access)
 {
 	//Temporary.. render a box around the gauge config area just so I can visualize it while I work
-	gr_line(HC_gauge_config_coords[gr_screen.res][0],
-		HC_gauge_config_coords[gr_screen.res][2],
-		HC_gauge_config_coords[gr_screen.res][0],
-		HC_gauge_config_coords[gr_screen.res][3],
-		GR_RESIZE_MENU);
-	gr_line(HC_gauge_config_coords[gr_screen.res][0],
-		HC_gauge_config_coords[gr_screen.res][2],
+	hud_config_draw_box(HC_gauge_config_coords[gr_screen.res][0],
 		HC_gauge_config_coords[gr_screen.res][1],
 		HC_gauge_config_coords[gr_screen.res][2],
-		GR_RESIZE_MENU);
-	gr_line(HC_gauge_config_coords[gr_screen.res][1],
-		HC_gauge_config_coords[gr_screen.res][2],
-		HC_gauge_config_coords[gr_screen.res][1],
-		HC_gauge_config_coords[gr_screen.res][3],
-		GR_RESIZE_MENU);
-	gr_line(HC_gauge_config_coords[gr_screen.res][0],
-		HC_gauge_config_coords[gr_screen.res][3],
-		HC_gauge_config_coords[gr_screen.res][1],
-		HC_gauge_config_coords[gr_screen.res][3],
-		GR_RESIZE_MENU);
+		HC_gauge_config_coords[gr_screen.res][3]);
 	//Temporary.. render specific gauges so I can get them converted one by one
 	default_hud_gauges[0]->render(0, true);
 	default_hud_gauges[25]->render(0, true);
