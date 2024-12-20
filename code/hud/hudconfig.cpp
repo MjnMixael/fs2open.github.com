@@ -894,12 +894,12 @@ void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y
 	}
 
 	//temporary stuff to show boxes
-	color clr = gr_screen.current_color;
+	/*color clr = gr_screen.current_color;
 	color thisColor;
 	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
 	gr_set_color_fast(&thisColor);
 	hud_config_draw_box(x1, x2, y1, y2);
-	gr_set_color_fast(&clr);
+	gr_set_color_fast(&clr);*/
 }
 
 void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale)
@@ -932,10 +932,10 @@ void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode)
 void hud_config_render_gauges(bool API_Access)
 {
 	//Temporary.. render a box around the gauge config area just so I can visualize it while I work
-	hud_config_draw_box(HC_gauge_config_coords[gr_screen.res][0],
-		HC_gauge_config_coords[gr_screen.res][1],
-		HC_gauge_config_coords[gr_screen.res][2],
-		HC_gauge_config_coords[gr_screen.res][3]);
+	//hud_config_draw_box(HC_gauge_config_coords[gr_screen.res][0],
+		//HC_gauge_config_coords[gr_screen.res][1],
+		//HC_gauge_config_coords[gr_screen.res][2],
+		//HC_gauge_config_coords[gr_screen.res][3]);
 	//Temporary.. render specific gauges so I can get them converted one by one
 	default_hud_gauges[0]->render(0, true); // Message output
 	default_hud_gauges[1]->render(0, true); // Training message (not rendered)
