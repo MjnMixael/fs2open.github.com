@@ -3046,47 +3046,60 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 	int	show_time, w, h;
 	char	outstr[64];
 
-	if (background.first_frame < 0)
-		return;
-
-	if ( !Hud_support_view_active ) {
-		return;
-	}
-
-	// Don't render this gauge for multiplayer observers
-	if((Game_mode & GM_MULTIPLAYER) && ((Net_player->flags & NETINFO_FLAG_OBSERVER) || (Player_obj->type == OBJ_OBSERVER))){
-		return;
-	}
-
-	if ( Hud_support_objnum >= 0 ) {
-		// Check to see if support ship is still alive
-		if ( (Objects[Hud_support_objnum].signature != Hud_support_obj_sig) || (Hud_support_target_sig != Player_obj->signature) ) {
+	// Config should always render this gauge
+	if (!config) {
+		if (background.first_frame < 0)
 			return;
+
+		if ( !Hud_support_view_active ) {
+			return;
+		}
+
+		// Don't render this gauge for multiplayer observers
+		if((Game_mode & GM_MULTIPLAYER) && ((Net_player->flags & NETINFO_FLAG_OBSERVER) || (Player_obj->type == OBJ_OBSERVER))){
+			return;
+		}
+
+		if ( Hud_support_objnum >= 0 ) {
+			// Check to see if support ship is still alive
+			if ( (Objects[Hud_support_objnum].signature != Hud_support_obj_sig) || (Hud_support_target_sig != Player_obj->signature) ) {
+				return;
+			}
 		}
 	}
 
 	bm_get_info(background.first_frame, &w, &h);
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(w * scale), y, y + static_cast<int>(h * scale));
+	}
+
 	// Set hud color
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
-	renderBitmap(background.first_frame, position[0], position[1]);	
+	renderBitmap(background.first_frame, x, y, scale, config);	
 
-	renderString(position[0] + Header_offsets[0], position[1] + Header_offsets[1], XSTR( "support", 224));
+	renderString(x + static_cast<int>(Header_offsets[0] * scale), y + static_cast<int>(Header_offsets[1] * scale), XSTR( "support", 224), scale, config);
 
-	if ( Hud_support_view_fade > 1 ) {
+	if (!config && Hud_support_view_fade > 1 ) {
 		if ( !timestamp_elapsed(Hud_support_view_fade) ) {
 			if ( Hud_support_view_abort){
-				renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, XSTR( "aborted", 225));
+				renderStringAlignCenter(x, y + text_val_offset_y, w, XSTR( "aborted", 225));
 			} else {
-				renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, XSTR( "complete", 1407));
+				renderStringAlignCenter(x, y + text_val_offset_y, w, XSTR( "complete", 1407));
 			}
 		}
 		return;
 	}
 
 	show_time = 0;
-	if (Player_ai->ai_flags[AI::AI_Flags::Being_repaired]) {
+	if (!config && Player_ai->ai_flags[AI::AI_Flags::Being_repaired]) {
 		Assert(Player_ship->ship_max_hull_strength > 0);
 		
 		if (!enable_rearm_timer)
@@ -3127,13 +3140,13 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 				strcpy_s(outstr, XSTR("Waiting...", 1603));
 			}	
 		}
-		renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, outstr);
+		renderStringAlignCenter(x, y + text_val_offset_y, w, outstr);
 	}
-	else if (Player_ai->ai_flags[AI::AI_Flags::Repair_obstructed]) {
+	else if (!config && Player_ai->ai_flags[AI::AI_Flags::Repair_obstructed]) {
 		strcpy_s(outstr, XSTR( "obstructed", 229));
-		renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, outstr);
+		renderStringAlignCenter(x, y + text_val_offset_y, w, outstr);
 	} else {
-		if ( Hud_support_objnum == -1 ) {
+		if (!config && Hud_support_objnum == -1 ) {
 			if (The_mission.support_ships.arrival_location == ArrivalLocation::FROM_DOCK_BAY)
 			{
 				strcpy_s(outstr, XSTR( "exiting hangar", 1622));
@@ -3142,13 +3155,16 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 			{
 				strcpy_s(outstr, XSTR( "warping in", 230));
 			}
-			renderStringAlignCenter(position[0], position[1] + text_val_offset_y, w, outstr);
+			renderStringAlignCenter(x, y + text_val_offset_y, w, outstr);
 		} else {
-			ai_info *aip;
+			ai_info *aip = nullptr;
 
-			// Display "busy" when support ship isn't actually enroute to me
-			aip = &Ai_info[Ships[Objects[Hud_support_objnum].instance].ai_index];
-			if ( aip->goal_objnum != OBJ_INDEX(Player_obj) ) {
+			if (!config) {
+				// Display "busy" when support ship isn't actually enroute to me
+				aip = &Ai_info[Ships[Objects[Hud_support_objnum].instance].ai_index];
+			}
+
+			if (!config && aip->goal_objnum != OBJ_INDEX(Player_obj) ) {
 				strcpy_s(outstr, XSTR( "busy", 231));
 				show_time = 0;
 
@@ -3157,34 +3173,39 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 				show_time = 1;
 			}		
 
-			renderString(position[0] + text_dock_offset_x, position[1] + text_val_offset_y, outstr);
+			renderString(x + static_cast<int>(text_dock_offset_x * scale), y + static_cast<int>(text_val_offset_y * scale), outstr, scale, config);
 		}
 	}
 
-	if ( show_time ) {
+	if (config || show_time ) {
 		int seconds, minutes;
 
-		Assert( Hud_support_objnum != -1 );
+		if (!config) {
+			Assert(Hud_support_objnum != -1);
 
-		// Ensure support ship is still alive
-		if ( (Objects[Hud_support_objnum].signature != Hud_support_obj_sig) || (Hud_support_target_sig != Player_obj->signature) ) {
-			seconds = 0;
-		} else {
-			seconds = hud_get_dock_time( &Objects[Hud_support_objnum] );
-		}
+			// Ensure support ship is still alive
+			if ((Objects[Hud_support_objnum].signature != Hud_support_obj_sig) ||
+				(Hud_support_target_sig != Player_obj->signature)) {
+				seconds = 0;
+			} else {
+				seconds = hud_get_dock_time(&Objects[Hud_support_objnum]);
+			}
 
-		if ( seconds >= 0 ) {
-			minutes = seconds/60;
-			seconds = seconds%60;
-			if ( minutes > 99 ) {
+			if (seconds >= 0) {
+				minutes = seconds / 60;
+				seconds = seconds % 60;
+				if (minutes > 99) {
+					minutes = 99;
+					seconds = 99;
+				}
+			} else {
 				minutes = 99;
 				seconds = 99;
 			}
 		} else {
-			minutes = 99;
-			seconds = 99;
+			seconds = minutes = 0;
 		}
-		renderPrintf(position[0] + text_dock_val_offset_x, position[1] + text_val_offset_y, 1.0, config, NOX("%02d:%02d"), minutes, seconds);
+		renderPrintf(x + static_cast<int>(text_dock_val_offset_x * scale), y + static_cast<int>(text_val_offset_y * scale), scale, config, NOX("%02d:%02d"), minutes, seconds);
 	}
 }
 
