@@ -752,11 +752,11 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	renderThrottleForeground(y_end, config);
 
 	if (!config && Show_max_speed ) {
-		renderPrintf(x + Max_speed_offsets[0], y + Max_speed_offsets[1], config, "%d", (int)std::lround(max_displayed_speed));
+		renderPrintf(x + Max_speed_offsets[0], y + Max_speed_offsets[1], 1.0, config, "%d", (int)std::lround(max_displayed_speed));
 	}
 	
 	if (!config && Show_min_speed ) {
-		renderPrintf(x + Zero_speed_offsets[0], y + Zero_speed_offsets[1], config, "%s", XSTR( "0", 292));
+		renderPrintf(x + Zero_speed_offsets[0], y + Zero_speed_offsets[1], 1.0, config, "%s", XSTR("0", 292));
 	}
 }
 
@@ -793,7 +793,7 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool 
 		sy = x + static_cast<int>(Orbit_center_offsets[1] * scale);
 	}
 	
-	renderPrintf(sx, sy, config, "%s", buf);
+	renderPrintf(sx, sy, scale, config, "%s", buf);
 
 	if (!config &&  object_get_gliding(Player_obj) ) { 
 		auto glide_str = XSTR("GLIDE", 1668);
@@ -899,13 +899,13 @@ void HudGaugeThrottle::renderMatchSpeedIcon(int x, int y)
 		renderRect(x, y, Match_speed_icon_width + 2, gr_get_font_height() + 2);
 		
 		gr_set_color_fast(&Color_black);
-		renderPrintf(x + 1, y + 1, false, "%c", Match_speed_icon);
+		renderPrintf(x + 1, y + 1, 1.0, false, "%c", Match_speed_icon);
 
 		setGaugeColor();
 	}
 	else
 	{
-		renderPrintf(x, y, false, "%c", Match_speed_icon);
+		renderPrintf(x, y, 1.0, false, "%c", Match_speed_icon);
 	}
 }
 

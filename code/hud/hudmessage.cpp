@@ -305,7 +305,7 @@ void HudGaugeMessages::processMessageBuffer()
 		ptr = strstr(msg, NOX(": "));
 		if ( ptr ) {
 			int sw;
-			gr_get_string_size(&sw, nullptr, msg, (ptr + 2 - msg));
+			gr_get_string_size(&sw, nullptr, msg, 1.0f, (ptr + 2 - msg));
 			offset = sw;
 		}
 
@@ -451,10 +451,10 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
         int bmw;
 		int bmh;
 		SCP_string msg = "Terran Fighter: HUD Message Display"; // XSTR this?
-		gr_get_string_size(&bmw, &bmh, msg.c_str());
+		gr_get_string_size(&bmw, &bmh, msg.c_str(), scale);
 		hud_config_set_mouse_coords(gauge_config, x, x + bmw, y, y + bmh);
 		setGaugeColor(HUD_C_NONE, config);
-		renderPrintf(x, y, config, "%s", msg.c_str());
+		renderPrintf(x, y, scale, config, "%s", msg.c_str());
 
 		// Config version doesn't need to do anything else
 		return;
@@ -478,7 +478,7 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 				}
 
 				// print the message out
-				renderPrintf(m->msg.x, m->y, config, "%s", m->msg.text.c_str());
+				renderPrintf(m->msg.x, m->y, 1.0, config, "%s", m->msg.text.c_str());
 			}
 		}
 	}
@@ -660,7 +660,7 @@ void hud_add_msg_to_scrollback(const char *text, int source, int t)
 
 	// determine the length of the sender's name for underlining
 	if (ptr) {
-		gr_get_string_size(&w, nullptr, buf, (ptr - buf));
+		gr_get_string_size(&w, nullptr, buf, 1.0f, (ptr - buf));
 	}
 
 	// create the new node for the vector
@@ -862,7 +862,7 @@ void hud_initialize_scrollback_lines()
 
 			int width = 0;
 			int height = 0;
-			gr_get_string_size(&width, &height, node_msg.text.c_str(), node_msg.text.length());
+			gr_get_string_size(&width, &height, node_msg.text.c_str(), 1.0f, node_msg.text.length());
 
 			int max_width = Hud_mission_log_list2_coords[gr_screen.res][2];
 			if (width > max_width) {

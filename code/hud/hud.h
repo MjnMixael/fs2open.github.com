@@ -347,11 +347,11 @@ public:
 	void renderBitmapColor(int frame, int x, int y);
 	void renderBitmapUv(int frame, int x, int y, int w, int h, float u0, float v0, float u1, float v1);
 	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false);
-	void renderString(int x, int y, const char *str, bool config = false);
-	void renderString(int x, int y, int gauge_id, const char *str, bool config = false);
+	void renderString(int x, int y, const char *str, float scale = 1.0f, bool config = false);
+	void renderString(int x, int y, int gauge_id, const char *str, float scale = 1.0f, bool config = false);
 	void renderStringAlignCenter(int x, int y, int area_width, const char *s);
-	void renderPrintf(int x, int y, bool config, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(4, 5);
-	void renderPrintfWithGauge(int x, int y, int gauge_id, bool config, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(5, 6);
+	void renderPrintf(int x, int y, float scale, bool config, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(4, 5);
+	void renderPrintfWithGauge(int x, int y, int gauge_id, float scale, bool config, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(5, 6);
 	void renderLine(int x1, int y1, int x2, int y2);
 	void renderGradientLine(int x1, int y1, int x2, int y2);
 	void renderRect(int x, int y, int w, int h);
