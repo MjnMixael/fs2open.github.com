@@ -485,70 +485,95 @@ void HudGauge::setGaugeColor(int bright_index, bool config)
 	int alpha;
 
 	if (config) {
-		if (HC_select_all || (HC_gauge_selected == gauge_config)) {
-			//bright_index = HUD_C_BRIGHT;
-			hud_config_get_sliders_color(gauge_color);
-		}
-	}
-
-	// if we're drawing it as bright
-	if(bright_index != HUD_C_NONE){
-		switch(bright_index){
-		case HUD_C_DIM:
-			alpha = HUD_high_contrast ? HUD_NEW_ALPHA_DIM_HI : HUD_NEW_ALPHA_DIM;
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-			break;
-
-		case HUD_C_NORMAL:
-			alpha = HUD_high_contrast ? HUD_NEW_ALPHA_NORMAL_HI : HUD_NEW_ALPHA_NORMAL;
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-			break;
-
-		case HUD_C_BRIGHT:
-			alpha = HUD_high_contrast ? HUD_NEW_ALPHA_BRIGHT_HI : HUD_NEW_ALPHA_BRIGHT;
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-			break;
-
-		// intensity
-		default: 
-			Assert((bright_index >= 0) && (bright_index < HUD_NUM_COLOR_LEVELS));
-			if(bright_index < 0){
-				bright_index = 0;
-			}
-			if(bright_index >= HUD_NUM_COLOR_LEVELS){
-				bright_index = HUD_NUM_COLOR_LEVELS - 1;
+		color* use_color;
+		use_color = &HUD_config.clr[gauge_config];
+		
+		if (hud_config_show_flag_is_set(gauge_config)) {
+			// Eventually we should allow custom gauges to use IFF colors maybe? Then we can unhardcode this
+			// and rely on the gauge data itself. But for now only specific gauges use iff and that's hard coded here
+			if (HC_gauge_regions[gr_screen.res][gauge_config].use_iff) {
+				// Ditto for target tagging color
+				if (HC_gauge_regions[gr_screen.res][gauge_config].color == 1) {
+					use_color = iff_get_color(IFF_COLOR_TAGGED, 0);
+				} else {
+					use_color = &Color_bright_red;
+				}
 			}
 
-			// alpha = 255 - (255 / (bright_index + 1));
-			// alpha = (int)((float)alpha * 1.5f);
-			int level = 255 / (HUD_NUM_COLOR_LEVELS);
-			alpha = level * bright_index;
-			if(alpha > 255){
+			if ((HC_gauge_selected == gauge_config) || HC_select_all) {
 				alpha = 255;
+			} else if (HC_gauge_hot == gauge_config) {
+				alpha = 200;
+			} else {
+				alpha = 150;
 			}
-			if(alpha < 0){
-				alpha = 0;
-			}
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-			break;
+			gr_init_alphacolor(use_color, use_color->red, use_color->green, use_color->blue, alpha);
+			gr_set_color_fast(use_color);
+		} else {
+			// if its off, make it dark gray
+			gr_init_alphacolor(use_color, 127, 127, 127, 64);
+			gr_set_color_fast(use_color);
 		}
 	} else {
-		switch(maybeFlashSexp()) {
-		case 0:
-			alpha = HUD_high_contrast ? HUD_NEW_ALPHA_DIM_HI : HUD_NEW_ALPHA_DIM;
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-			break;
-		case 1:			
-			alpha = HUD_high_contrast ? HUD_NEW_ALPHA_BRIGHT_HI : HUD_NEW_ALPHA_BRIGHT;
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-			break;
-		default:
-			alpha = HUD_high_contrast ? HUD_NEW_ALPHA_NORMAL_HI : HUD_NEW_ALPHA_NORMAL;
-			gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
-		}
-	}
+		// if we're drawing it as bright
+		if (bright_index != HUD_C_NONE) {
+			switch (bright_index) {
+			case HUD_C_DIM:
+				alpha = HUD_high_contrast ? HUD_NEW_ALPHA_DIM_HI : HUD_NEW_ALPHA_DIM;
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+				break;
 
-	gr_set_color_fast(&gauge_color);	
+			case HUD_C_NORMAL:
+				alpha = HUD_high_contrast ? HUD_NEW_ALPHA_NORMAL_HI : HUD_NEW_ALPHA_NORMAL;
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+				break;
+
+			case HUD_C_BRIGHT:
+				alpha = HUD_high_contrast ? HUD_NEW_ALPHA_BRIGHT_HI : HUD_NEW_ALPHA_BRIGHT;
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+				break;
+
+			// intensity
+			default:
+				Assert((bright_index >= 0) && (bright_index < HUD_NUM_COLOR_LEVELS));
+				if (bright_index < 0) {
+					bright_index = 0;
+				}
+				if (bright_index >= HUD_NUM_COLOR_LEVELS) {
+					bright_index = HUD_NUM_COLOR_LEVELS - 1;
+				}
+
+				// alpha = 255 - (255 / (bright_index + 1));
+				// alpha = (int)((float)alpha * 1.5f);
+				int level = 255 / (HUD_NUM_COLOR_LEVELS);
+				alpha = level * bright_index;
+				if (alpha > 255) {
+					alpha = 255;
+				}
+				if (alpha < 0) {
+					alpha = 0;
+				}
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+				break;
+			}
+		} else {
+			switch (maybeFlashSexp()) {
+			case 0:
+				alpha = HUD_high_contrast ? HUD_NEW_ALPHA_DIM_HI : HUD_NEW_ALPHA_DIM;
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+				break;
+			case 1:
+				alpha = HUD_high_contrast ? HUD_NEW_ALPHA_BRIGHT_HI : HUD_NEW_ALPHA_BRIGHT;
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+				break;
+			default:
+				alpha = HUD_high_contrast ? HUD_NEW_ALPHA_NORMAL_HI : HUD_NEW_ALPHA_NORMAL;
+				gr_init_alphacolor(&gauge_color, gauge_color.red, gauge_color.green, gauge_color.blue, alpha);
+			}
+		}
+
+		gr_set_color_fast(&gauge_color);
+	}
 }
 
 bool HudGauge::isCustom() const
