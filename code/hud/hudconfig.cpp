@@ -937,9 +937,11 @@ void hud_config_render_gauges(bool API_Access)
 		HC_gauge_config_coords[gr_screen.res][2],
 		HC_gauge_config_coords[gr_screen.res][3]);
 	//Temporary.. render specific gauges so I can get them converted one by one
-	default_hud_gauges[0]->render(0, true);
-	default_hud_gauges[25]->render(0, true);
-	default_hud_gauges[26]->render(0, true);
+	default_hud_gauges[0]->render(0, true); // Message output
+	default_hud_gauges[1]->render(0, true); // Training message (not rendered)
+	default_hud_gauges[2]->render(0, true); // Support dock timer
+	default_hud_gauges[25]->render(0, true); // Throttle
+	default_hud_gauges[26]->render(0, true); // Threat
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {

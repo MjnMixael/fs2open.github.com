@@ -1093,13 +1093,18 @@ void HudGaugeTrainingMessages::pageIn()
 /**
  * Displays (renders) the training message to the screen
  */
-void HudGaugeTrainingMessages::render(float  /*frametime*/, bool config)
+void HudGaugeTrainingMessages::render(float /*frametime*/, bool config)
 {
-	const char *str;
+	const char* str;
 	char buf[256];
 	int i, z, x, y, height, mode, count;
 
-	if (Training_failure){
+	if (Training_failure) {
+		return;
+	}
+
+	// Training messages don't get rendered in Config (for now?)
+	if (config){
 		return;
 	}
 

@@ -450,39 +450,37 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 		// Ideally this doesn't eventually happen every single frame. Hmm.
         int bmw;
 		int bmh;
-		gr_get_string_size(&bmw, &bmh, "This is an example message on the HUD for the HUD config menu");
+		SCP_string msg = "Terran Fighter: HUD Message Display"; // XSTR this?
+		gr_get_string_size(&bmw, &bmh, msg.c_str());
 		hud_config_set_mouse_coords(gauge_config, x, x + bmw, y, y + bmh);
+		setGaugeColor(HUD_C_NONE, config);
+		renderPrintf(x, y, config, "%s", msg.c_str());
+
+		// Config version doesn't need to do anything else
+		return;
 	}
 
-	// Config version doesn't need any clipping because we only render a single example line
-	if (!config) {
-		// dependant on max_width, max_lines, and line_height
-		setClip(x, y, static_cast<int>(Window_width * scale), static_cast<int>(Window_height * scale) + 2);
-	}
+	// dependant on max_width, max_lines, and line_height
+	setClip(x, y, static_cast<int>(Window_width * scale), static_cast<int>(Window_height * scale) + 2);
 
 	//Since setClip already sets makes drawing local, further renderings mustn't additionally slew
 	bool doSlew = reticle_follow;
 	reticle_follow = false;
 
-	if (!config) {
-		for (SCP_vector<Hud_display_info>::iterator m = active_messages.begin(); m != active_messages.end(); ++m) {
-			if (!timestamp_elapsed(m->total_life)) {
-				if (!(Player->flags & PLAYER_FLAGS_MSG_MODE) || !Hidden_by_comms_menu) {
-					// set the appropriate color
-					if (m->msg.source) {
-						setGaugeColor(HUD_C_BRIGHT);
-					} else {
-						setGaugeColor();
-					}
-
-					// print the message out
-					renderPrintf(m->msg.x, m->y, config, "%s", m->msg.text.c_str());
+	for (SCP_vector<Hud_display_info>::iterator m = active_messages.begin(); m != active_messages.end(); ++m) {
+		if (!timestamp_elapsed(m->total_life)) {
+			if (!(Player->flags & PLAYER_FLAGS_MSG_MODE) || !Hidden_by_comms_menu) {
+				// set the appropriate color
+				if (m->msg.source) {
+					setGaugeColor(HUD_C_BRIGHT);
+				} else {
+					setGaugeColor();
 				}
+
+				// print the message out
+				renderPrintf(m->msg.x, m->y, config, "%s", m->msg.text.c_str());
 			}
 		}
-	} else {
-		setGaugeColor(HUD_C_NONE, config);
-		renderPrintf(x, y, config, "%s", "This is an example message on the HUD for the HUD config menu");
 	}
 
 	reticle_follow = doSlew;
