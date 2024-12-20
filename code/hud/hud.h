@@ -337,7 +337,7 @@ public:
 	void resetCockpitTarget();
 	
 	void setFont();
-	void setGaugeColor(int bright_index = HUD_C_NONE);
+	void setGaugeColor(int bright_index = HUD_C_NONE, bool config = false);
 	void setGaugeCoords(int _x, int _y);
 	void setGaugeFrame(int frame_offset);
 

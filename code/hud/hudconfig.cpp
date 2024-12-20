@@ -19,6 +19,7 @@
 #include "hud/hudobserver.h"
 #include "iff_defs/iff_defs.h"
 #include "io/key.h"
+#include "io/mouse.h"
 #include "parse/parselo.h"
 #include "playerman/player.h"
 #include "popup/popup.h"
@@ -180,7 +181,7 @@ int HUD_default_popup_mask2 =
 	0											// kills gauge
 };
 
-int HC_select_all = 0;
+bool HC_select_all = false;
 
 //////////////////////////////////////////////////////////////////////////////
 // Module Globals
@@ -628,6 +629,13 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 	HC_gauge_coords.clear();
 	HC_gauge_coords.resize(NUM_HUD_GAUGES);
 
+	// Clear the mouse coords array
+	for (int count = 0; count < NUM_HUD_GAUGES; ++count) {
+		for (int j = 0; j < 5; ++j) {
+			HC_gauge_mouse_coords[count][j] = -1;
+		}
+	}
+
 	if (w < 0 || h < 0) {
 		HC_gauge_scale = 1.0f; //Unused after this big upgrade?
 		hud_config_init_dimensions(HC_gauge_config_coords[gr_screen.res][0],
@@ -637,14 +645,6 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 	} else {
 
 		hud_config_init_dimensions(x, x + w, y, y + h);
-
-		// Clear the mouse coords array
-		for (int count = 0; count < NUM_HUD_GAUGES; ++count) {
-			for (int j = 0; j < 5; ++j) {
-				HC_gauge_mouse_coords[count][j] = -1;
-			}
-		}
-		//Rest may be unused after the big upgrade
 
 		float sw = 0; // will be highest w value
 
@@ -819,7 +819,7 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 		HC_gauge_hot = -1;
 		HC_gauge_selected = -1;
 
-		HC_select_all = 0;
+		HC_select_all = false;
 
 		strcpy_s(HC_fname, "");
 	}
@@ -890,12 +890,14 @@ void hud_config_popup_flag_clear(int i)
 void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2) {
 	int values[4] = {x1, x2, y1, y2};
 	for (int i = 0; i < 4; ++i) {
-		HC_gauge_mouse_coords[1][i] = values[i];
+		HC_gauge_mouse_coords[gauge_config][i] = values[i];
 	}
 
 	//temporary stuff to show boxes
 	color clr = gr_screen.current_color;
-	gr_set_color(255, 255, 255);
+	color thisColor;
+	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
+	gr_set_color_fast(&thisColor);
 	hud_config_draw_box(x1, x2, y1, y2);
 	gr_set_color_fast(&clr);
 }
@@ -1005,12 +1007,68 @@ void hud_config_init(bool API_Access, int x, int y, int w, int h)
  * @brief check mouse position against all ui buttons using the ui mask
  *
  */
-void hud_config_check_regions()
+void hud_config_check_regions(int mx, int my)
 {
 	int			i;
 	UI_BUTTON	*b;
 
 	for ( i=0; i<NUM_HUD_GAUGES; i++ ) {
+		// Eventually we can just always check my mouse region.. but for now let's add this here for testing
+		if (HC_gauge_mouse_coords[i][0] >= 0) {
+			// Add checks here for the new mouse coords
+			if (mx < HC_gauge_mouse_coords[i][0])
+				continue;
+			if (mx > HC_gauge_mouse_coords[i][1])
+				continue;
+			if (my < HC_gauge_mouse_coords[i][2])
+				continue;
+			if (my > HC_gauge_mouse_coords[i][3])
+				continue;
+			// if we've got here, must be a hit
+			HC_gauge_hot = i;
+
+			if (HC_gauge_hot >= 0 && mouse_down(MOUSE_LEFT_BUTTON)) {
+				gamesnd_play_iface(InterfaceSounds::USER_SELECT);
+				HC_gauge_selected = i;
+
+				// turn off select all
+				hud_config_select_all_toggle(0);	
+
+				// maybe setup rgb sliders
+				if (HC_gauge_regions[gr_screen.res][i].use_iff) {
+					HC_color_sliders[HCS_RED].hide();
+					HC_color_sliders[HCS_GREEN].hide();
+					HC_color_sliders[HCS_BLUE].hide();
+					HC_color_sliders[HCS_ALPHA].hide();
+
+					HC_color_sliders[HCS_RED].disable();
+					HC_color_sliders[HCS_GREEN].disable();
+					HC_color_sliders[HCS_BLUE].disable();
+					HC_color_sliders[HCS_ALPHA].disable();
+				} else {
+					HC_color_sliders[HCS_RED].enable();
+					HC_color_sliders[HCS_GREEN].enable();
+					HC_color_sliders[HCS_BLUE].enable();
+					HC_color_sliders[HCS_ALPHA].enable();
+
+					HC_color_sliders[HCS_RED].unhide();
+					HC_color_sliders[HCS_GREEN].unhide();
+					HC_color_sliders[HCS_BLUE].unhide();
+					HC_color_sliders[HCS_ALPHA].unhide();
+
+					HC_color_sliders[HCS_RED].force_currentItem(HCS_CONV(HUD_config.clr[i].red));
+					HC_color_sliders[HCS_GREEN].force_currentItem(HCS_CONV(HUD_config.clr[i].green));
+					HC_color_sliders[HCS_BLUE].force_currentItem(HCS_CONV(HUD_config.clr[i].blue));
+					HC_color_sliders[HCS_ALPHA].force_currentItem(HCS_CONV(HUD_config.clr[i].alpha));
+				}
+
+				// recalc alpha slider
+				hud_config_recalc_alpha_slider();
+				mouse_flush();
+			}
+			break;
+		}
+
 		b = &HC_gauge_regions[gr_screen.res][i].button;
 
 		// check for mouse over gauges
@@ -1069,7 +1127,21 @@ void hud_config_check_regions_by_mouse(int mx, int my)
 		HC_gauge_region *bi = &HC_gauge_regions[gr_screen.res][i];
 		int iw = 0;
 		int ih = 0;
-		if (bi->bitmap > 0) {
+		// Need a better test for this but for now this works
+		if (HC_gauge_mouse_coords[i][0] >= 0) {
+			// Add checks here for the new mouse coords
+			if (mx < HC_gauge_mouse_coords[i][0])
+				continue;
+			if (mx > HC_gauge_mouse_coords[i][1])
+				continue;
+			if (my < HC_gauge_mouse_coords[i][2])
+				continue;
+			if (my > HC_gauge_mouse_coords[i][3])
+				continue;
+			// if we've got here, must be a hit
+			HC_gauge_hot = i;
+			break;
+		}else if (bi->bitmap > 0) {
 			bm_get_info(bi->bitmap, &iw, &ih, nullptr);
 			iw = (int)(iw * HC_gauge_scale);
 			ih = (int)(ih * HC_gauge_scale);
@@ -1581,8 +1653,10 @@ void hud_config_do_frame(float /*frametime*/, bool API_Access, int mx, int my)
 
 		k = HC_ui_window.process();
 
+		mouse_get_pos_unscaled(&mx, &my);
+
 		hud_config_handle_keypresses(k);
-		hud_config_check_regions();
+		hud_config_check_regions(mx, my);
 		hud_config_check_buttons();
 		hud_config_update_brightness();
 
@@ -1620,6 +1694,9 @@ void hud_config_do_frame(float /*frametime*/, bool API_Access, int mx, int my)
 	}
 
 	hud_config_render_gauges(API_Access);
+
+	SCP_string coords = std::to_string(mx) + ", " + std::to_string(my);
+	gr_string(50, 50, coords.c_str());
 
 	if (!API_Access) {
 		hud_config_render_special_bitmaps();
@@ -1934,6 +2011,15 @@ void hud_config_blue_slider()
 	hud_config_recalc_alpha_slider();
 }
 
+void hud_config_get_sliders_color(color& clr) {
+	int r = HCS_CONV(HC_color_sliders[HCS_RED].get_currentItem());
+	int g = HCS_CONV(HC_color_sliders[HCS_GREEN].get_currentItem());
+	int b = HCS_CONV(HC_color_sliders[HCS_BLUE].get_currentItem());
+	int a = HCS_CONV(HC_color_sliders[HCS_ALPHA].get_currentItem());
+
+	gr_init_alphacolor(&clr, r, g, b, a);
+}
+
 void hud_config_process_colors()
 {	
 }
@@ -1956,7 +2042,7 @@ void hud_config_delete_preset(SCP_string filename)
 	hud_config_preset_init();
 }
 
-void hud_config_select_all_toggle(int toggle, bool API_Access)
+void hud_config_select_all_toggle(bool toggle, bool API_Access)
 {	
 	int r, g, b, a;
 
@@ -1967,7 +2053,7 @@ void hud_config_select_all_toggle(int toggle, bool API_Access)
 			hud_config_set_button_state();
 		}
 
-		HC_select_all = 0;
+		HC_select_all = false;
 	} else {
 		// synch stuff up
 		hud_config_synch_ui(API_Access);
@@ -2013,6 +2099,6 @@ void hud_config_select_all_toggle(int toggle, bool API_Access)
 			hud_config_button_disable(HCB_POPUP);
 		}
 
-		HC_select_all = 1;
+		HC_select_all = true;
 	}
 }

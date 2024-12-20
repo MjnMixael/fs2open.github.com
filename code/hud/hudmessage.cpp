@@ -481,7 +481,7 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 			}
 		}
 	} else {
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 		renderPrintf(x, y, config, "%s", "This is an example message on the HUD for the HUD config menu");
 	}
 

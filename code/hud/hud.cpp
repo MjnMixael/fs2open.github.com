@@ -480,9 +480,16 @@ void HudGauge::setFont()
 	font::set_font(font_num);
 }
 
-void HudGauge::setGaugeColor(int bright_index)
+void HudGauge::setGaugeColor(int bright_index, bool config)
 {
 	int alpha;
+
+	if (config) {
+		if (HC_select_all || (HC_gauge_selected == gauge_config)) {
+			//bright_index = HUD_C_BRIGHT;
+			hud_config_get_sliders_color(gauge_color);
+		}
+	}
 
 	// if we're drawing it as bright
 	if(bright_index != HUD_C_NONE){

@@ -102,7 +102,7 @@ extern struct HC_gauge_region HC_gauge_regions[GR_NUM_RESOLUTIONS][NUM_HUD_GAUGE
 
 extern int HC_gauge_hot;
 extern int HC_gauge_selected;
-extern int HC_select_all;
+extern bool HC_select_all;
 extern float HC_gauge_scale;
 extern int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
 extern int HC_gauge_mouse_coords[NUM_HUD_GAUGES][4];
@@ -139,10 +139,10 @@ void hud_config_close(bool API_Access = false);
 /*!
  * @brief toggles selecting of all gauges for color modification
  * 
- * param[in] toggle			1 to toggle on, 0 for off
+ * param[bool] toggle			true to toggle on, false for off
  * param[in] API_Access		whether or not this method has been called from the lua api
  */
-void hud_config_select_all_toggle(int toggle, bool API_Access = false);
+void hud_config_select_all_toggle(bool toggle, bool API_Access = false);
 
 /*!
  * @brief init the list of preset files found by cfile
@@ -217,6 +217,11 @@ void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, in
  * @brief save gauge coords during rendering time so hud config can check if the mouse is hovering over the gauge
  */
 void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2);
+
+/*!
+ * @brief Get the current color that the sliders are set to in the hud config menu
+ */
+void hud_config_get_sliders_color(color& clr);
 
 // TEMPORARY FUNCTION
 void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode = GR_RESIZE_MENU);

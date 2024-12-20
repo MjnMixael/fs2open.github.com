@@ -711,7 +711,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		desired_y_pos = y + static_cast<int>(Bottom_offset_y * scale) - static_cast<int>(throttle_aburn_h * scale) - static_cast<int>(throttle_h * scale); 
 	}
 
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 	
 	if(Show_background) {
 		renderThrottleBackground(y_end, config);
@@ -964,7 +964,6 @@ void HudGaugeThreatIndicator::pageIn()
 
 void HudGaugeThreatIndicator::render(float  /*frametime*/, bool config)
 {
-	setGaugeColor();
 
 	int x = position[0];
 	int y = position[1];
@@ -978,6 +977,8 @@ void HudGaugeThreatIndicator::render(float  /*frametime*/, bool config)
 		bm_get_info(threat_arc.first_frame + 1, &bmw, &bmh);
 		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	if (threat_arc.first_frame >= 0)
 		renderBitmap(threat_arc.first_frame+1, x, y, scale, config);
