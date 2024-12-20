@@ -1697,8 +1697,9 @@ void hud_config_do_frame(float /*frametime*/, bool API_Access, int mx, int my)
 
 	hud_config_render_gauges(API_Access);
 
-	SCP_string coords = std::to_string(mx) + ", " + std::to_string(my);
-	gr_string(50, 50, coords.c_str());
+	// delete me
+	//SCP_string coords = std::to_string(mx) + ", " + std::to_string(my);
+	//gr_string(50, 50, coords.c_str());
 
 	if (!API_Access) {
 		hud_config_render_special_bitmaps();
