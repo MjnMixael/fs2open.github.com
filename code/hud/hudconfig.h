@@ -105,6 +105,7 @@ extern int HC_gauge_selected;
 extern int HC_select_all;
 extern float HC_gauge_scale;
 extern int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
+extern int HC_gauge_mouse_coords[NUM_HUD_GAUGES][4];
 
 const char* HC_gauge_descriptions(int n);
 
@@ -211,6 +212,14 @@ void hud_config_color_save(const char* name);
 * so that other offsets and positions can be multiplied in turn
 */
 void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
+
+/*!
+ * @brief save gauge coords during rendering time so hud config can check if the mouse is hovering over the gauge
+ */
+void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2);
+
+// TEMPORARY FUNCTION
+void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode = GR_RESIZE_MENU);
 
 #endif
 
