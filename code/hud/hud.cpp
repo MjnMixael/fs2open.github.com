@@ -849,12 +849,12 @@ void HudGauge::renderString(int x, int y, int gauge_id, const char *str, float s
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderStringAlignCenter(int x, int y, int area_width, const char *s)
+void HudGauge::renderStringAlignCenter(int x, int y, int area_width, const char *s, float scale, bool config)
 {
 	int w, h;
 
-	gr_get_string_size(&w, &h, s);
-	renderString(x + ((area_width - w) / 2), y, s);
+	gr_get_string_size(&w, &h, s, scale);
+	renderString(x + ((area_width - w) / 2), y, s, scale, config);
 }
 
 void HudGauge::renderPrintf(int x, int y, float scale, bool config, const char* format, ...)
@@ -3686,24 +3686,43 @@ bool HudGaugeObjectiveNotify::maybeFlashNotify(bool flash_fast)
 
 void HudGaugeObjectiveNotify::render(float /*frametime*/, bool config)
 {
-	renderSubspace();
-	renderRedAlert();
-	renderObjective();
+	renderSubspace(config);
+	renderRedAlert(config);
+	renderObjective(config);
 }
 
-void HudGaugeObjectiveNotify::renderSubspace()
+void HudGaugeObjectiveNotify::renderSubspace(bool config)
 {
 	int w, h;
 	int warp_aborted = 0;
 
-	if ( (Player->control_mode != PCM_WARPOUT_STAGE1) && (Player->control_mode != PCM_WARPOUT_STAGE2) && (Player->control_mode != PCM_WARPOUT_STAGE3) 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	// Skip this in config mode because we default to
+	// rendering the objective display instead
+	// but provide full config and scaling support here
+	// for completeness in case we make it configurable
+	// for some reason
+	if (config) {
+		return;
+		/* hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Objective_display_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));*/
+	}
+
+	if (!config && (Player->control_mode != PCM_WARPOUT_STAGE1) && (Player->control_mode != PCM_WARPOUT_STAGE2) && (Player->control_mode != PCM_WARPOUT_STAGE3) 
 		&& (Sexp_hud_display_warpout <= 0) ) {
 		if ( !timestamp_elapsed(HUD_abort_subspace_timer) ) {
 			warp_aborted = 1;
 		}
 	}
 
-	if ( !hud_subspace_notify_active() ) {
+	if (!config && !hud_subspace_notify_active() ) {
 		return;
 	}
 
@@ -3713,29 +3732,52 @@ void HudGaugeObjectiveNotify::renderSubspace()
 
 	// Blit the background	
 	setGaugeColor();
-	renderBitmap(Objective_display_gauge.first_frame, position[0], position[1]);
+	renderBitmap(Objective_display_gauge.first_frame, x, y, scale, config);
 
-	startFlashNotify();
-	maybeFlashNotify() ? setGaugeColor(HUD_C_BRIGHT) : setGaugeColor();
+	if (!config) {
+		startFlashNotify();
+		maybeFlashNotify() ? setGaugeColor(HUD_C_BRIGHT) : setGaugeColor();
+	} else {
+		setGaugeColor(HUD_C_NONE, config);
+	}
 
 	bm_get_info(Objective_display_gauge.first_frame, &w, &h);
 
-	renderStringAlignCenter(position[0], position[1] + Subspace_text_offset_y, w, XSTR( "subspace drive", 233));
+	renderStringAlignCenter(x, y + static_cast<int>(Subspace_text_offset_y * scale), static_cast<int>(w * scale), XSTR( "subspace drive", 233), scale, config);
 	if ( warp_aborted ) {
-		renderStringAlignCenter(position[0], position[1] + Subspace_text_val_offset_y, w, XSTR( "aborted", 225));
+		renderStringAlignCenter(x, y + static_cast<int>(Subspace_text_val_offset_y * scale), static_cast<int>(w * scale), XSTR("aborted", 225), scale, config);
 	} else {
-		renderStringAlignCenter(position[0], position[1] + Subspace_text_val_offset_y, w, XSTR( "engaged", 234));
+		renderStringAlignCenter(x, y + static_cast<int>(Subspace_text_val_offset_y * scale), static_cast<int>(w * scale), XSTR("engaged", 234), scale, config);
 	}
 }
 
 /**
  * @todo Play a sound?
  */
-void HudGaugeObjectiveNotify::renderRedAlert()
+void HudGaugeObjectiveNotify::renderRedAlert(bool config)
 {
 	int w, h;
 
-	if ( !red_alert_in_progress() ) {
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	// Skip this in config mode because we default to
+	// rendering the objective display instead
+	// but provide full config and scaling support here
+	// for completeness in case we make it configurable
+	// for some reason
+	if (config) {
+		return;
+		/*hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Objective_display_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));*/
+	}
+
+	if (!config && !red_alert_in_progress() ) {
 		return;
 	}
 
@@ -3743,38 +3785,53 @@ void HudGaugeObjectiveNotify::renderRedAlert()
 		return;
 	}
 
-	if ( hud_subspace_notify_active() ) {
+	if (!config && hud_subspace_notify_active() ) {
 		return;
 	}
 
-	if ( hud_objective_notify_active() ) {
+	if (!config && hud_objective_notify_active() ) {
 		return;
 	}
 
 	// Blit the background
 	gr_set_color_fast(&Color_red);		// Color box red, because it's an emergency
 
-	renderBitmap(Objective_display_gauge.first_frame, position[0], position[1]);
+	renderBitmap(Objective_display_gauge.first_frame, x, y, scale, config);
 
-	startFlashNotify();
-	if(maybeFlashNotify()) {
-		gr_set_color_fast(&Color_red);
-	} else {
-		gr_set_color_fast(&Color_bright_red);
+	if (!config) {
+		startFlashNotify();
+		if (maybeFlashNotify()) {
+			gr_set_color_fast(&Color_red);
+		} else {
+			gr_set_color_fast(&Color_bright_red);
+		}
 	}
 
 	bm_get_info(Objective_display_gauge.first_frame, &w, &h);
 
-	renderStringAlignCenter(position[0], position[1] + Red_text_offset_y, w, XSTR( "downloading new", 235));
-	renderStringAlignCenter(position[0], position[1] + Red_text_val_offset_y, w, XSTR( "orders...", 236));
+	renderStringAlignCenter(x, y + static_cast<int>(Red_text_offset_y * scale), static_cast<int>(w * scale), XSTR( "downloading new", 235), scale, config);
+	renderStringAlignCenter(x, y + static_cast<int>(Red_text_val_offset_y * scale), static_cast<int>(w * scale), XSTR( "orders...", 236), scale, config);
 
 	// TODO: play a sound?
 }
 
-void HudGaugeObjectiveNotify::renderObjective()
+void HudGaugeObjectiveNotify::renderObjective(bool config)
 {
 	int w, h;
 	char buf[128];
+
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Objective_display_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
 
 	if ( timestamp_elapsed(Objective_display.display_timer) ) {
 		return;
@@ -3789,53 +3846,66 @@ void HudGaugeObjectiveNotify::renderObjective()
 	}
 	
 	// Blit the background
-	setGaugeColor();
-	renderBitmap(Objective_display_gauge.first_frame, position[0], position[1]);	
+	setGaugeColor(HUD_C_NONE, config);
+	renderBitmap(Objective_display_gauge.first_frame, x, y, scale, config);	
 
-	startFlashNotify();
-	if(maybeFlashNotify()){
-		setGaugeColor(HUD_C_BRIGHT);
-	} else {
-		setGaugeColor();
+	if (!config) {
+		startFlashNotify();
+		if (maybeFlashNotify()) {
+			setGaugeColor(HUD_C_BRIGHT);
+		} else {
+			setGaugeColor();
+		}
 	}
 
 	bm_get_info(Objective_display_gauge.first_frame, &w, &h);
 
+	int goal_type = Objective_display.goal_type;
+	int goal_status = Objective_display.goal_status;
+	int goal_nresolved = Objective_display.goal_nresolved;
+	int goal_ntotal = Objective_display.goal_ntotal;
+	if (config) {
+		goal_type = 1;
+		goal_status = 1;
+		goal_nresolved = 1;
+		goal_ntotal = 3;
+	}
+
 	// Draw the correct goal type
-	switch(Objective_display.goal_type) {
+	switch(goal_type) {
 	case PRIMARY_GOAL:
-		renderStringAlignCenter(position[0], position[1] + Objective_text_offset_y, w, XSTR( "primary objective", 237));
+		renderStringAlignCenter(x, y + static_cast<int>(Objective_text_offset_y * scale), static_cast<int>(w * scale), XSTR( "primary objective", 237), scale, config);
 		break;
 	case SECONDARY_GOAL:
-		renderStringAlignCenter(position[0], position[1] + Objective_text_offset_y, w, XSTR( "secondary objective", 238));
+		renderStringAlignCenter(x, y + static_cast<int>(Objective_text_offset_y * scale), static_cast<int>(w * scale), XSTR( "secondary objective", 238), scale, config);
 		break;
 	case BONUS_GOAL:
-		renderStringAlignCenter(position[0], position[1] + Objective_text_offset_y, w, XSTR( "bonus objective", 239));
+		renderStringAlignCenter(x, y + static_cast<int>(Objective_text_offset_y * scale), static_cast<int>(w * scale), XSTR( "bonus objective", 239), scale, config);
 		break;
 	}
 
 	// Show the status
-	switch(Objective_display.goal_type) {
+	switch(goal_type) {
 	case PRIMARY_GOAL:
 	case SECONDARY_GOAL:
-		switch(Objective_display.goal_status) {
+		switch(goal_status) {
 		case GOAL_FAILED:
-			sprintf(buf, XSTR( "failed (%d/%d)", 240), Objective_display.goal_nresolved, Objective_display.goal_ntotal);
-			renderStringAlignCenter(position[0], position[1] + Objective_text_val_offset_y, w, buf);
+			sprintf(buf, XSTR( "failed (%d/%d)", 240), goal_nresolved, goal_ntotal);
+			renderStringAlignCenter(x, y + static_cast<int>(Objective_text_val_offset_y * scale), static_cast<int>(w * scale), buf, scale, config);
 			break;
 		default:
-			sprintf(buf, XSTR( "complete (%d/%d)", 241), Objective_display.goal_nresolved, Objective_display.goal_ntotal);
-			renderStringAlignCenter(position[0], position[1] + Objective_text_val_offset_y, w, buf);
+			sprintf(buf, XSTR( "complete (%d/%d)", 241), goal_nresolved, goal_ntotal);
+			renderStringAlignCenter(x, y + static_cast<int>(Objective_text_val_offset_y * scale), static_cast<int>(w * scale), buf, scale, config);
 			break;
 		}		
 		break;
 	case BONUS_GOAL:
-		switch(Objective_display.goal_status) {
+		switch(goal_status) {
 		case GOAL_FAILED:
-			renderStringAlignCenter(position[0], position[1] + Objective_text_val_offset_y, w, XSTR( "failed", 242));
+			renderStringAlignCenter(x, y + static_cast<int>(Objective_text_val_offset_y * scale), static_cast<int>(w * scale), XSTR( "failed", 242), scale, config);
 			break;
 		default:
-			renderStringAlignCenter(position[0], position[1] + Objective_text_val_offset_y, w, XSTR( "complete", 226));
+			renderStringAlignCenter(x, y + static_cast<int>(Objective_text_val_offset_y * scale), static_cast<int>(w * scale), XSTR( "complete", 226), scale, config);
 			break;
 		}		
 		break;

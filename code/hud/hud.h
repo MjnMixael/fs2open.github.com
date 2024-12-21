@@ -349,7 +349,7 @@ public:
 	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false);
 	void renderString(int x, int y, const char *str, float scale = 1.0f, bool config = false);
 	void renderString(int x, int y, int gauge_id, const char *str, float scale = 1.0f, bool config = false);
-	void renderStringAlignCenter(int x, int y, int area_width, const char *s);
+	void renderStringAlignCenter(int x, int y, int area_width, const char *s, float scale = 1.0f, bool config = false);
 	void renderPrintf(int x, int y, float scale, bool config, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(4, 5);
 	void renderPrintfWithGauge(int x, int y, int gauge_id, float scale, bool config, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(5, 6);
 	void renderLine(int x1, int y1, int x2, int y2);
@@ -464,9 +464,9 @@ public:
 	void render(float frametime, bool config = false) override;
 	void startFlashNotify(int duration = 1400);
 	bool maybeFlashNotify(bool flash_fast = false);
-	void renderObjective();
-	void renderRedAlert();
-	void renderSubspace();
+	void renderObjective(bool config);
+	void renderRedAlert(bool config);
+	void renderSubspace(bool config);
 	void pageIn() override;
 	void initialize() override;
 };
