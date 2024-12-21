@@ -79,8 +79,8 @@ public:
 	void pageIn() override;
 	void initialize() override;
 	void render(float frametime, bool config = false) override;
-	void renderBackground(int num_wings_to_draw);
-	void renderDots(int wing_index, int screen_index, int num_wings_to_draw);
+	void renderBackground(int num_wings_to_draw, bool config);
+	void renderDots(int wing_index, int screen_index, int num_wings_to_draw, bool config);
 	void initFlash();
 	bool maybeFlashStatus(int wing_index, int wing_pos);
 };

@@ -11,6 +11,7 @@
 
 #include "globalincs/alphacolors.h"
 #include "globalincs/linklist.h"
+#include "hud/hudconfig.h"
 #include "hud/hudtargetbox.h"
 #include "hud/hudwingmanstatus.h"
 #include "iff_defs/iff_defs.h"
@@ -334,7 +335,7 @@ void HudGaugeWingmanStatus::initUseExpandedColors(bool useexpandedcolors)
 }
 
 
-void HudGaugeWingmanStatus::renderBackground(int num_wings_to_draw)
+void HudGaugeWingmanStatus::renderBackground(int num_wings_to_draw, bool config)
 {
 	int sx, sy, header_x, header_y, bitmap;
 
@@ -343,18 +344,27 @@ void HudGaugeWingmanStatus::renderBackground(int num_wings_to_draw)
 		return;
 	}
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Mouse coords are set at the end because we need to account for N wings here
+	}
+
 	if((num_wings_to_draw > 2) && (grow_mode == GROW_LEFT)) {
 		// make some room for the spacers
-		sx = position[0] - (num_wings_to_draw - 2)*wing_width; 
+		sx = x - (num_wings_to_draw - 2) * static_cast<int>(wing_width * scale); 
 	} else {
-		sx = position[0];
+		sx = x;
 	}
-	sy = position[1];
+	sy = y;
 
 	bitmap = Wingman_status_left.first_frame;
 
 	if ( bitmap > -1 ) {
-		renderBitmap(bitmap, sx, sy);
+		renderBitmap(bitmap, sx, sy, scale, config);
 	}
 	
 	//Tell renderDots() where to start
@@ -363,47 +373,56 @@ void HudGaugeWingmanStatus::renderBackground(int num_wings_to_draw)
 
 	// write "wingmen" on gauge
 	if (fixed_header_position) {
-		header_x = position[0] + header_offsets[0];
-		header_y = position[1] + header_offsets[1];
+		header_x = x + static_cast<int>(header_offsets[0] * scale);
+		header_y = y + static_cast<int>(header_offsets[1] * scale);
 	} else {
-		header_x = sx + header_offsets[0];
-		header_y = sy + header_offsets[1];
+		header_x = sx + static_cast<int>(header_offsets[0] * scale);
+		header_y = sy + static_cast<int>(header_offsets[1] * scale);
 	}
-	renderString(header_x, header_y, XSTR( "wingmen", 352));
+	renderString(header_x, header_y, XSTR( "wingmen", 352), scale, config);
 
 	// bring us to the end of the left portion so we can draw the last or middle bits depending on how many wings we have to draw
 	if ( grow_mode == GROW_DOWN ) {
-		sy += left_frame_end_x;
+		sy += static_cast<int>(left_frame_end_x * scale);
 	} else {
-		sx += left_frame_end_x;
+		sx += static_cast<int>(left_frame_end_x * scale);
 	}
 
 	bitmap = Wingman_status_middle.first_frame;
 
 	if ( grow_mode == GROW_DOWN ) {
 		for ( int i = 0; i < num_wings_to_draw; i++ ) {
-			renderBitmap(bitmap, sx, sy);
-			sy += wing_width;
+			renderBitmap(bitmap, sx, sy, scale, config);
+			sy += static_cast<int>(wing_width * scale);
 		}
 
-		sy += right_frame_start_offset;
+		sy += static_cast<int>(right_frame_start_offset * scale);
 	} else {
 		if(num_wings_to_draw > 2 && bitmap >= 0) {
 			for(int i = 0; i < num_wings_to_draw - 2; i++){
-				renderBitmap(bitmap, sx, sy);
-				sx += wing_width;
+				renderBitmap(bitmap, sx, sy, scale, config);
+				sx += static_cast<int>(wing_width * scale);
 			}
 		}
 
-		sx += right_frame_start_offset;
+		sx += static_cast<int>(right_frame_start_offset * scale);
 	}
 
 	bitmap = Wingman_status_right.first_frame;
-	if (bitmap >= 0)
-		renderBitmap(bitmap, sx, sy);
+	if (bitmap >= 0) {
+		renderBitmap(bitmap, sx, sy, scale, config);
+	}
+
+	if (config) {
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Wingman_status_right.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, actual_origin[0], sx + static_cast<int>(bmw * scale), actual_origin[1], sy + static_cast<int>(bmh * scale));
+	}
 }
 
-void HudGaugeWingmanStatus::renderDots(int wing_index, int screen_index, int num_wings_to_draw)
+void HudGaugeWingmanStatus::renderDots(int wing_index, int screen_index, int num_wings_to_draw, bool config)
 {
 
 	if ( Wingman_status_dots.first_frame < 0 ) {
@@ -412,15 +431,24 @@ void HudGaugeWingmanStatus::renderDots(int wing_index, int screen_index, int num
 
 	int i, sx, sy, is_bright = -1;
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
+
+	// Note actual_origin[] scales earlier in renderBackground()
 	if(num_wings_to_draw == 1) {
-		sx = position[0] + single_wing_offsets[0];
-		sy = position[1] + single_wing_offsets[1];
+		sx = x + static_cast<int>(single_wing_offsets[0] * scale);
+		sy = y + static_cast<int>(single_wing_offsets[1] * scale);
 	} else if ( grow_mode == GROW_DOWN ) {
-		sx = actual_origin[0] + multiple_wing_offsets[0]; // wing_width = 35
-		sy = actual_origin[1] + multiple_wing_offsets[1] + screen_index*wing_width;
+		sx = actual_origin[0] + static_cast<int>(multiple_wing_offsets[0] * scale); // wing_width = 35
+		sy = actual_origin[1] + static_cast<int>(multiple_wing_offsets[1] * scale) + screen_index * static_cast<int>(wing_width * scale);
 	} else {
-		sx = actual_origin[0] + multiple_wing_offsets[0] + (screen_index - 1)*wing_width; // wing_width = 35
-		sy = actual_origin[1] + multiple_wing_offsets[1];
+		sx = actual_origin[0] + static_cast<int>(multiple_wing_offsets[0] * scale) + (screen_index - 1) * static_cast<int>(wing_width * scale); // wing_width = 35
+		sy = actual_origin[1] + static_cast<int>(multiple_wing_offsets[1] * scale);
 	}
 
 
@@ -429,98 +457,104 @@ void HudGaugeWingmanStatus::renderDots(int wing_index, int screen_index, int num
 
 	for ( i = 0; i < MAX_SHIPS_PER_WING; i++ ) {
 
-		if ( maybeFlashStatus(wing_index, i) ) {
+		if (!config && maybeFlashStatus(wing_index, i) ) {
 			is_bright=1;
 		} else {
 			is_bright=0;
 		}
 
-		switch( HUD_wingman_status[wing_index].status[i] ) {
+		if (!config) {
+			switch (HUD_wingman_status[wing_index].status[i]) {
 
-		case HUD_WINGMAN_STATUS_ALIVE:
+			case HUD_WINGMAN_STATUS_ALIVE:
+				frame_num = 0;
+				// set colors depending on HUD table option --wookieejedi
+				if (use_expanded_colors) {
+					// use expanded colors
+					if (HUD_wingman_status[wing_index].hull[i] > 0.67f) {
+						// green > 2/3 health
+						gr_set_color_fast(is_bright ? &Color_bright_green : &Color_green);
+					} else if (HUD_wingman_status[wing_index].hull[i] > 0.34f) {
+						// yellow 2/3 - > 1/3 health
+						gr_set_color_fast(is_bright ? &Color_bright_yellow : &Color_yellow);
+					} else {
+						// red <= 1/3 health
+						gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
+					}
+				} else {
+					// use default colors
+					if (HUD_wingman_status[wing_index].hull[i] > 0.5f) {
+						// use gauge color
+						setGaugeColor(is_bright ? HUD_C_BRIGHT : HUD_C_NORMAL);
+					} else {
+						gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
+					}
+				}
+				break;
+
+			case HUD_WINGMAN_STATUS_DEAD:
+				gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
+				frame_num = 1;
+				break;
+
+			case HUD_WINGMAN_STATUS_NOT_HERE:
+				setGaugeColor(is_bright ? HUD_C_BRIGHT : HUD_C_NORMAL);
+				frame_num = 1;
+				break;
+
+			default:
+				bitmap = -1;
+				frame_num = -1;
+				break;
+
+			} // end swtich
+		// Config mode
+		} else {
+			setGaugeColor(HUD_C_NORMAL, config);
 			frame_num = 0;
-			// set colors depending on HUD table option --wookieejedi
-			if (use_expanded_colors) {
-				// use expanded colors
-				if (HUD_wingman_status[wing_index].hull[i] > 0.67f) {
-					// green > 2/3 health
-					gr_set_color_fast(is_bright ? &Color_bright_green : &Color_green);
-				} else if (HUD_wingman_status[wing_index].hull[i] > 0.34f) {
-					// yellow 2/3 - > 1/3 health
-					gr_set_color_fast(is_bright ? &Color_bright_yellow : &Color_yellow);
-				} else {
-					// red <= 1/3 health
-					gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
-				}
-			} else {
-				// use default colors
-				if (HUD_wingman_status[wing_index].hull[i] > 0.5f) {
-					// use gauge color
-					setGaugeColor(is_bright ? HUD_C_BRIGHT : HUD_C_NORMAL);
-				} else {
-					gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
-				}
-			}
-			break;
-
-		case HUD_WINGMAN_STATUS_DEAD:
-			gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
-			frame_num = 1;
-			break;
-
-		case HUD_WINGMAN_STATUS_NOT_HERE:
-			setGaugeColor(is_bright ? HUD_C_BRIGHT : HUD_C_NORMAL);
-			frame_num = 1;
-			break;
-
-		default:
-			bitmap = -1;
-			frame_num = -1;
-			break;
-
-		}	// end swtich
+		}
 
 		// draw dot if there is a status to draw
 		if (frame_num > -1) {
 			// use wingmen dot animation if present, otherwise use default --wookieejedi
-			if (HUD_wingman_status[wing_index].dot_anim_override[i] >= 0) {
+			if (!config && HUD_wingman_status[wing_index].dot_anim_override[i] >= 0) {
 				bitmap = HUD_wingman_status[wing_index].dot_anim_override[i];
 			} else {
 				bitmap = Wingman_status_dots.first_frame;
 			}
 
 			if (bitmap > -1) {
-				renderBitmap(bitmap + frame_num, sx + wingmate_offsets[i][0], sy + wingmate_offsets[i][1]);
+				renderBitmap(bitmap + frame_num, sx + static_cast<int>(wingmate_offsets[i][0] * scale), sy + static_cast<int>(wingmate_offsets[i][1] * scale), scale, config);
 			}
 		}
 	}
 
 	// draw wing name
-	sx += wing_name_offsets[0];
-	sy += wing_name_offsets[1];
+	sx += static_cast<int>(wing_name_offsets[0] * scale);
+	sy += static_cast<int>(wing_name_offsets[1] * scale);
 	
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	// check if using full names or default abbreviations before rendering text
 	char wingstr[NAME_LENGTH];
 
 	if (use_full_wingnames) {
 		// wookieejedi - use full wing name with unaltered capitalization
-		strcpy_s(wingstr, Squadron_wing_names[wing_index]);
+		strcpy_s(wingstr, config ? HC_wingam_gauge_status_names[wing_index] : Squadron_wing_names[wing_index]);
 	} else {
 		// Goober5000 - get the lowercase abbreviation
 		char abbrev[4];
-		abbrev[0] = SCP_tolower(Squadron_wing_names[wing_index][0]);
-		abbrev[1] = SCP_tolower(Squadron_wing_names[wing_index][1]);
-		abbrev[2] = SCP_tolower(Squadron_wing_names[wing_index][2]);
+		abbrev[0] = SCP_tolower(config ? HC_wingam_gauge_status_names[wing_index][0] : Squadron_wing_names[wing_index][0]);
+		abbrev[1] = SCP_tolower(config ? HC_wingam_gauge_status_names[wing_index][1] : Squadron_wing_names[wing_index][1]);
+		abbrev[2] = SCP_tolower(config ? HC_wingam_gauge_status_names[wing_index][2] : Squadron_wing_names[wing_index][2]);
 		abbrev[3] = '\0';
 		strncpy(wingstr, abbrev, 4);
 	}
 
 	// Goober5000 - center it (round the offset rather than truncate it)
 	int wingstr_width;
-	gr_get_string_size(&wingstr_width, nullptr, wingstr);
-	renderString(sx - (int)std::lround((float)wingstr_width / 2.0f), sy, wingstr);
+	gr_get_string_size(&wingstr_width, nullptr, wingstr, scale);
+	renderString(sx - (int)std::lround((float)wingstr_width / 2.0f), sy, wingstr, scale, config);
 
 }
 
@@ -560,29 +594,36 @@ void HudGaugeWingmanStatus::render(float  /*frametime*/, bool config)
 {
 	int i, count, num_wings_to_draw = 0;
 
-	for (i = 0; i < MAX_SQUADRON_WINGS; i++) {
-		if ( (HUD_wingman_status[i].used > 0) && (HUD_wingman_status[i].ignore == 0) ) {
-			num_wings_to_draw++;
+	if (!config) {
+		for (i = 0; i < MAX_SQUADRON_WINGS; i++) {
+			if ((HUD_wingman_status[i].used > 0) && (HUD_wingman_status[i].ignore == 0)) {
+				num_wings_to_draw++;
+			}
 		}
+	} else {
+		num_wings_to_draw = 5;
 	}
 
-	if ( !hud_wingman_status_wingmen_exist(num_wings_to_draw) ) {
+	if (!config && !hud_wingman_status_wingmen_exist(num_wings_to_draw) ) {
 		return;
 	}
 
 	// hud_set_default_color();
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	// blit the background frames
-	renderBackground(num_wings_to_draw);
+	renderBackground(num_wings_to_draw, config);
 
 	count = 0;
 	for (i = 0; i < MAX_SQUADRON_WINGS; i++) {
-		if ( (HUD_wingman_status[i].used <= 0) || (HUD_wingman_status[i].ignore == 1) ) {
+		if (!config && (HUD_wingman_status[i].used <= 0) || (HUD_wingman_status[i].ignore == 1) ) {
 			continue;
 		}
 
-		renderDots(i, count, num_wings_to_draw);
+		if (config && i >= num_wings_to_draw)
+			continue;
+
+		renderDots(i, count, num_wings_to_draw, config);
 		count++;
 	}
 }

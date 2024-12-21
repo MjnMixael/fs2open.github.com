@@ -317,6 +317,9 @@ int HC_gauge_description_coords[GR_NUM_RESOLUTIONS][3] = {
 	}
 };
 
+// Maybe let mods define these eventually? I dunno how much FOTG might care about HUD Config showing mod appropriate wing names?
+char HC_wingam_gauge_status_names[MAX_SQUADRON_WINGS][32] = {"Alpha", "Beta", "Gamma", "Delta", "Epsilon"};
+
 const char *HC_gauge_descriptions(int n)
 {
 	switch(n)	{
@@ -940,7 +943,8 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[0]->render(0, true); // Message output
 	default_hud_gauges[1]->render(0, true); // Training message (not rendered)
 	default_hud_gauges[2]->render(0, true); // Support dock timer
-	default_hud_gauges[3]->render(0, true); // Support dock timer
+	default_hud_gauges[3]->render(0, true); // Damage gauge
+	default_hud_gauges[4]->render(0, true); // Wingman status
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 
