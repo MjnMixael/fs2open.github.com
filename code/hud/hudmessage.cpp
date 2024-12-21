@@ -1201,6 +1201,36 @@ void HudGaugeTalkingHead::render(float frametime, bool config)
 		return;
 	}
 
+	if (config) {
+		int x = position[0];
+		int y = position[1];
+		float scale = 1.0;
+
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Head_frame.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+
+		// Talking head is complex enough that we can do all the config rendering right here and exit early
+		setGaugeColor(HUD_C_NONE, config);
+		renderBitmap(Head_frame.first_frame, x, y, scale, config); // head ani border
+		renderString(x + static_cast<int>(Header_offsets[0] * scale), y + static_cast<int>(Header_offsets[1] * scale), XSTR("message", 217), scale, config); // title
+		// Ideally this would be defined somewhere, maybe in hud_gauges.tbl?
+		HC_talking_head_frame = bm_load_animation("head-cm4b.ani");
+		bm_page_in_aabitmap(HC_talking_head_frame);
+		if (HC_talking_head_frame != -1) {
+			// This isn't *exactly* how heads are drawn on the HUD, but it's close enough for the Config UI
+			renderBitmap(HC_talking_head_frame,
+				x + static_cast<int>(Anim_offsets[0] * scale),
+				y + static_cast<int>(Anim_offsets[1] * scale),
+				scale,
+				config);
+		}
+		return;
+	}
+
 	if(msg_id != -1) {
 
 		// Get our message data. Current max is 2 so this shouldn't be much of a performance hit

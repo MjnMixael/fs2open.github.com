@@ -319,6 +319,7 @@ int HC_gauge_description_coords[GR_NUM_RESOLUTIONS][3] = {
 
 // Maybe let mods define these eventually? I dunno how much FOTG might care about HUD Config showing mod appropriate wing names?
 char HC_wingam_gauge_status_names[MAX_SQUADRON_WINGS][32] = {"Alpha", "Beta", "Gamma", "Delta", "Epsilon"};
+int HC_talking_head_frame = -1;
 
 const char *HC_gauge_descriptions(int n)
 {
@@ -948,6 +949,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[5]->render(0, true); // Auto speed
 	default_hud_gauges[6]->render(0, true); // Auto target
 	default_hud_gauges[7]->render(0, true); // Countermeasures
+	default_hud_gauges[8]->render(0, true); // Talking head
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 
@@ -1754,6 +1756,9 @@ void hud_config_close(bool API_Access)
 			bm_release(HC_background_bitmap_mask);
 		}
 	}
+
+	bm_unload(HC_talking_head_frame);
+	HC_talking_head_frame = -1;
 
 	HUD_config_inited = 0;
 }

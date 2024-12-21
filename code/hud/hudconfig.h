@@ -107,6 +107,7 @@ extern float HC_gauge_scale;
 extern int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
 extern int HC_gauge_mouse_coords[NUM_HUD_GAUGES][4];
 extern char HC_wingam_gauge_status_names[MAX_SQUADRON_WINGS][32];
+extern int HC_talking_head_frame;
 
 const char* HC_gauge_descriptions(int n);
 
