@@ -940,6 +940,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[0]->render(0, true); // Message output
 	default_hud_gauges[1]->render(0, true); // Training message (not rendered)
 	default_hud_gauges[2]->render(0, true); // Support dock timer
+	default_hud_gauges[3]->render(0, true); // Support dock timer
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 

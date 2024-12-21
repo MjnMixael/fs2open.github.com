@@ -2203,7 +2203,7 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 {
 	model_subsystem	*psub;
 	ship_subsys			*pss;
-	int					screen_integrity, num, best_str, best_index;
+	int					screen_integrity, best_str, best_index;
 	float					strength, shield, integrity;
 	hud_subsys_damage	hud_subsys_list[SUBSYSTEM_MAX];	
 
@@ -2211,65 +2211,82 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		return;
 	}
 
-	if ( (The_mission.game_type & MISSION_TYPE_TRAINING) && Training_message_visible ){
-		return;
+	if (!config) {
+		if ((The_mission.game_type & MISSION_TYPE_TRAINING) && Training_message_visible) {
+			return;
+		}
+
+		if (timestamp_elapsed(Damage_flash_timer)) {
+			Damage_flash_timer = timestamp(DAMAGE_FLASH_TIME);
+			Damage_flash_bright = !Damage_flash_bright;
+		}
 	}
 
-	if ( timestamp_elapsed(Damage_flash_timer) ) {
-		Damage_flash_timer = timestamp(DAMAGE_FLASH_TIME);
-		Damage_flash_bright = !Damage_flash_bright;
-	}
-
-	num = 0;
-	for ( pss = GET_FIRST(&Player_ship->subsys_list); pss !=END_OF_LIST(&Player_ship->subsys_list); pss = GET_NEXT(pss) ) {
-		psub = pss->system_info;
-		strength = ship_get_subsystem_strength(Player_ship, psub->type);
-		if ( always_display || strength < 1 ) {
-			// display the actual health of this specific subsystem --wookieejedi
-			if (pss->max_hits > 0) {
-				// get percentage if this subsystem has hitpoints to begin with
-				screen_integrity = fl2i((pss->current_hits / pss->max_hits) * 100);
-			} else {
-				// subsystems with no starting hitpoints can never be damaged, so they are always full health
-				screen_integrity = 1;
-			}
-			if ( screen_integrity == 0 ) {
-				if ( strength > 0 ) {
+	int num = 0;
+	if (!config) {
+		for (pss = GET_FIRST(&Player_ship->subsys_list); pss != END_OF_LIST(&Player_ship->subsys_list);
+			 pss = GET_NEXT(pss)) {
+			psub = pss->system_info;
+			strength = ship_get_subsystem_strength(Player_ship, psub->type);
+			if (always_display || strength < 1) {
+				// display the actual health of this specific subsystem --wookieejedi
+				if (pss->max_hits > 0) {
+					// get percentage if this subsystem has hitpoints to begin with
+					screen_integrity = fl2i((pss->current_hits / pss->max_hits) * 100);
+				} else {
+					// subsystems with no starting hitpoints can never be damaged, so they are always full health
 					screen_integrity = 1;
 				}
-			}
+				if (screen_integrity == 0) {
+					if (strength > 0) {
+						screen_integrity = 1;
+					}
+				}
 
-			if (strlen(psub->alt_dmg_sub_name))
-				hud_subsys_list[num].name = psub->alt_dmg_sub_name;
-			else {
-				hud_subsys_list[num].name = ship_subsys_get_name(pss);
-			}
+				if (strlen(psub->alt_dmg_sub_name))
+					hud_subsys_list[num].name = psub->alt_dmg_sub_name;
+				else {
+					hud_subsys_list[num].name = ship_subsys_get_name(pss);
+				}
 
-			hud_subsys_list[num].str  = screen_integrity;
-			hud_subsys_list[num].type = psub->type;
-			num++;
+				hud_subsys_list[num].str = screen_integrity;
+				hud_subsys_list[num].type = psub->type;
+				num++;
 
-			if ( strength < Pl_hud_subsys_info[psub->type].last_str ) {
-				Pl_hud_subsys_info[psub->type].flash_duration_timestamp = timestamp(SUBSYS_DAMAGE_FLASH_DURATION);
-			}
-			Pl_hud_subsys_info[psub->type].last_str = strength;
+				if (strength < Pl_hud_subsys_info[psub->type].last_str) {
+					Pl_hud_subsys_info[psub->type].flash_duration_timestamp = timestamp(SUBSYS_DAMAGE_FLASH_DURATION);
+				}
+				Pl_hud_subsys_info[psub->type].last_str = strength;
 
-			// Don't display more than the max number of damaged subsystems.
-			if (num >= SUBSYSTEM_MAX)
-			{
-				break;
+				// Don't display more than the max number of damaged subsystems.
+				if (num >= SUBSYSTEM_MAX) {
+					break;
+				}
 			}
 		}
+	}
+
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(damage_top.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 	// Build a list of damage values to display and then actually display them in a second pass
 	// This allows to hide the gauge when there is no damage
 	SCP_vector<DamageInfo> info_lines;
 
-	auto sx = position[0] + subsys_integ_start_offsets[0];
-	auto sy = position[1] + subsys_integ_start_offsets[1];
-	auto bx = position[0];
-	auto by = position[1] + middle_frame_start_offset_y;
+	auto sx = x + static_cast<int>(subsys_integ_start_offsets[0] * scale);
+	auto sy = y + static_cast<int>(subsys_integ_start_offsets[1] * scale);
+	auto bx = x;
+	auto by = y + static_cast<int>(middle_frame_start_offset_y * scale);
 
 	int type;
 	for ( int i = 0; i < num; i++ ) {
@@ -2337,7 +2354,7 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		int w, h;
 		gr_get_string_size(&w, &h, buf);
 
-		info.value_x = position[0] + subsys_integ_val_offset_x - w;
+		info.value_x = x + subsys_integ_val_offset_x - w;
 		info.value_y = sy;
 		info.strength = best_str;
 
@@ -2355,13 +2372,16 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		}
 	}
 
-	hud_get_target_strength(Player_obj, &shield, &integrity);
-	screen_integrity = fl2i(integrity*100);
+	screen_integrity = 100;
+	if (!config) {
+		hud_get_target_strength(Player_obj, &shield, &integrity);
+		screen_integrity = fl2i(integrity * 100);
+	}
 
 	// Show hull integrity if it's below 100% or if a subsystem is damaged
 	// The second case is just to make the display look complete
 	// The third case is there to make the gauge appear only if needed if the right option is set
-	if ( always_display || screen_integrity < 100 || !info_lines.empty() ) {
+	if ( config || always_display || screen_integrity < 100 || !info_lines.empty() ) {
 		DamageInfo info;
 
 		info.name = XSTR( "Hull Integrity", 220);
@@ -2376,17 +2396,17 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		hud_num_make_mono(buf, font_num);
 
 		int w, h;
-		gr_get_string_size(&w, &h, buf);
+		gr_get_string_size(&w, &h, buf, scale);
 
 		if ( screen_integrity < 30 ) {
 			info.color_override = &Color_red;
 		}
 
-		info.name_x = position[0] + hull_integ_offsets[0];
-		info.name_y = position[1] + hull_integ_offsets[1];
+		info.name_x = x + static_cast<int>(hull_integ_offsets[0] * scale);
+		info.name_y = y + static_cast<int>(hull_integ_offsets[1] * scale);
 
-		info.value_x = position[0] + hull_integ_val_offset_x - w;
-		info.value_y = position[1] + hull_integ_offsets[1];
+		info.value_x = x + static_cast<int>(hull_integ_val_offset_x * scale) - w;
+		info.value_y = y + static_cast<int>(hull_integ_offsets[1] * scale);
 
 		// Insert at the top since hull is always first
 		info_lines.insert(info_lines.begin(), info);
@@ -2397,18 +2417,18 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		return;
 	}
 
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	// Draw the top of the damage pop-up
-	renderBitmap(damage_top.first_frame, position[0], position[1]);
-	renderString(position[0] + header_offsets[0], position[1] + header_offsets[1], XSTR( "damage", 218));
+	renderBitmap(damage_top.first_frame, x, y, scale, config);
+	renderString(x + static_cast<int>(header_offsets[0] * scale), y + static_cast<int>(header_offsets[1] * scale), XSTR( "damage", 218), scale, config);
 
 	// These variables keep track of where the background was drawn last so we can draw the bottom correctly
-	int last_bx = position[0];
-	int last_by = position[1] + middle_frame_start_offset_y;
+	int last_bx = x;
+	int last_by = y + static_cast<int>(middle_frame_start_offset_y * scale);
 	for (auto& line : info_lines) {
 		if (line.draw_background) {
-			renderBitmap(damage_middle.first_frame, line.background_x, line.background_y);
+			renderBitmap(damage_middle.first_frame, line.background_x, line.background_y, scale, config);
 			last_bx = line.background_x;
 			last_by = line.background_y + line_h; // Add line_h here so that the footer is properly aligned
 		}
@@ -2423,14 +2443,14 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 			setGaugeColor(line.bright_index);
 		}
 
-		renderString(line.name_x, line.name_y, line.name.c_str());
-		renderString(line.value_x, line.value_y, buf);
+		renderString(line.name_x, line.name_y, line.name.c_str(), scale, config);
+		renderString(line.value_x, line.value_y, buf, scale, config);
 
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 	}
 
-	setGaugeColor();
-	renderBitmap(damage_bottom.first_frame, last_bx, last_by + bottom_bg_offset);
+	setGaugeColor(HUD_C_NONE, config);
+	renderBitmap(damage_bottom.first_frame, last_bx, last_by + static_cast<int>(bottom_bg_offset * scale), scale, config);
 }
 
 /** 
@@ -3046,11 +3066,11 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 	int	show_time, w, h;
 	char	outstr[64];
 
+	if (background.first_frame < 0)
+		return;
+
 	// Config should always render this gauge
 	if (!config) {
-		if (background.first_frame < 0)
-			return;
-
 		if ( !Hud_support_view_active ) {
 			return;
 		}
