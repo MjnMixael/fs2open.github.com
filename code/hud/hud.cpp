@@ -2792,27 +2792,45 @@ void HudGaugeLag::render(float /*frametime*/, bool config)
 {
 	int lag_status;
 
-	if( !(Game_mode & GM_MULTIPLAYER) ){
+	if(!config && !(Game_mode & GM_MULTIPLAYER) ){
 		return;
 	}
 
 	if ( Netlag_icon.first_frame == -1 ) {
-		Int3();
 		return;
 	}
 
-	lag_status = multi_query_lag_status();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Netlag_icon.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	if (!config) {
+		lag_status = multi_query_lag_status();
+	} else {
+		lag_status = 0;
+	}
 
 	switch(lag_status) {
 	case 0:
 		// Draw the net lag icon flashing
-		startFlashLag();
-		if(maybeFlashLag()){
+		if (!config) {
+			startFlashLag();
+		}
+		if(!config && maybeFlashLag()){
 			setGaugeColor(HUD_C_BRIGHT);
 		} else {
-			setGaugeColor();
+			setGaugeColor(HUD_C_NONE, config);
 		}
-		renderBitmap(Netlag_icon.first_frame, position[0], position[1]);
+		renderBitmap(Netlag_icon.first_frame, x, y, scale, config);
 		break;
 	case 1:
 		// Draw the disconnected icon flashing fast
@@ -2821,7 +2839,7 @@ void HudGaugeLag::render(float /*frametime*/, bool config)
 		} else {
 			setGaugeColor();
 		}
-		renderBitmap(Netlag_icon.first_frame+1, position[0], position[1]);
+		renderBitmap(Netlag_icon.first_frame+1, x, y, scale, config);
 		break;
 	default:
 		// Nothing to draw
