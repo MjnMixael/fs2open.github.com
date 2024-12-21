@@ -58,7 +58,7 @@ public:
 	HudGaugeShield();
 	HudGaugeShield(int _gauge_object, int _gauge_config);
 	void render(float frametime, bool config = false) override;
-	void showShields(const object *objp, int mode);
+	void showShields(const object *objp, int mode, bool config);
 	int maybeFlashShield(int target_index, int shield_offset);
 	void renderShieldIcon(coord2d coords[6]);
 };
