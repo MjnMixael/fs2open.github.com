@@ -2662,68 +2662,96 @@ bool HudGaugeSquadMessage::canRender() const
 
 void HudGaugeSquadMessage::render(float  /*frametime*/, bool config)
 {
-	char *title;
+	const char *title;
 	int bx, by, sx, sy, i, nitems, none_valid, messaging_allowed;
 
 	title = Squad_msg_title;
+	if (config) {
+		title = XSTR("Message What", 316);
+	}
+
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
 
 	// setup color/font info 
 	// hud_set_default_color();
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	// draw top of frame
 	if ( Mbox_gauge[0].first_frame >= 0 ) {
-		renderBitmap(Mbox_gauge[0].first_frame, position[0], position[1]);
+		renderBitmap(Mbox_gauge[0].first_frame, x, y, scale, config);
 	}
 
 	// hud_set_bright_color();
-	setGaugeColor(HUD_C_BRIGHT);
+	setGaugeColor(HUD_C_BRIGHT, config);
 	if ( title ) {
-		renderString(position[0] + Header_offsets[0], position[1] + Header_offsets[1], title);
+		renderString(x + Header_offsets[0], y + static_cast<int>(Header_offsets[1] * scale), title, scale, config);
 	}
 
-	if ( Num_menu_items < MAX_MENU_DISPLAY )
-		nitems = Num_menu_items;
-	else {
-		if ( First_menu_item == 0 )					// First_menu_item == 0 means first page of items
-			nitems = MAX_MENU_DISPLAY;
-		else if ( (Num_menu_items - First_menu_item) <= MAX_MENU_DISPLAY )	// check if remaining items fit on one page
-			nitems = Num_menu_items - First_menu_item;
+	if (!config) {
+		if (Num_menu_items < MAX_MENU_DISPLAY)
+			nitems = Num_menu_items;
 		else {
-			nitems = MAX_MENU_DISPLAY;
+			if (First_menu_item == 0) // First_menu_item == 0 means first page of items
+				nitems = MAX_MENU_DISPLAY;
+			else if ((Num_menu_items - First_menu_item) <= MAX_MENU_DISPLAY) // check if remaining items fit on one page
+				nitems = Num_menu_items - First_menu_item;
+			else {
+				nitems = MAX_MENU_DISPLAY;
+			}
 		}
+	} else {
+		nitems = 6;
 	}
 
-	sx = position[0] + Item_start_offsets[0];
-	sy = position[1] + Item_start_offsets[1];
-	bx = position[0];	// global x-offset where bitmap gets drawn
-	by = position[1] + Middle_frame_start_offset_y;		// global y-offset where bitmap gets drawn
+	sx = x + static_cast<int>(Item_start_offsets[0] * scale);
+	sy = y + static_cast<int>(Item_start_offsets[1] * scale);
+	bx = x;	// global x-offset where bitmap gets drawn
+	by = y + static_cast<int>(Middle_frame_start_offset_y * scale);		// global y-offset where bitmap gets drawn
 
 	none_valid = 1;		// variable to tell us whether all items in the menu are valid or not
 
 	// use another variable to tell us whether we can message or not.
 	messaging_allowed = 1;
 
-	if ( (Game_mode & GM_MULTIPLAYER) && !multi_can_message(Net_player) ){
+	if (!config && (Game_mode & GM_MULTIPLAYER) && !multi_can_message(Net_player) ){
 		messaging_allowed = 0;
 	}
 
 	for ( i = 0; i < nitems; i++ ) {
 		int item_num;
-		const char *text = MsgItems[First_menu_item+i].text.c_str();
+		const char *text;
+
+		if (!config) {
+			text = MsgItems[First_menu_item + 1].text.c_str();
+		} else {
+			const char* temp_comm_order_types[] = {XSTR("Ships", 293),
+				XSTR("Wings", 294),
+				XSTR("All Fighters", 295),
+				XSTR("Reinforcements", 296),
+				XSTR("Rearm/Repair Subsys", 297),
+				XSTR("Abort Rearm", 298)
+			};
+			text = temp_comm_order_types[i];
+		}
 
 		// blit the background
 		// hud_set_default_color();
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 		if ( Mbox_gauge[1].first_frame >= 0 ) {
-			renderBitmap(Mbox_gauge[1].first_frame, bx, by);
+			renderBitmap(Mbox_gauge[1].first_frame, bx, by, scale, config);
 		}
-		by += Item_h;
+		by += static_cast<int>(Item_h * scale);
 
 		// set the text color
-		if ( MsgItems[First_menu_item+i].active ) {
+		if (!config && MsgItems[First_menu_item+i].active ) {
 			// hud_set_bright_color();
-			setGaugeColor(HUD_C_BRIGHT);
+			setGaugeColor(HUD_C_BRIGHT, config);
 		} else {
 			/*
 			dim_index = MIN(5, HUD_color_alpha - 2);
@@ -2733,64 +2761,74 @@ void HudGaugeSquadMessage::render(float  /*frametime*/, bool config)
 			gr_set_color_fast(&HUD_color_defaults[dim_index]);
 			*/
 
-			setGaugeColor(HUD_C_DIM);
+			setGaugeColor(HUD_C_DIM, config);
 		}
 
 		// first do the number
 		item_num = (i+1) % MAX_MENU_DISPLAY;
-		renderPrintfWithGauge(sx, sy, EG_SQ1 + i, 1.0f, config, NOX("%1d."), item_num);
+		renderPrintfWithGauge(sx, sy, EG_SQ1 + i, scale, config, NOX("%1d."), item_num);
 
 		// then the text
-		renderString(sx + Item_offset_x, sy, EG_SQ1 + i, text);
+		renderString(sx + static_cast<int>(Item_offset_x * scale), sy, EG_SQ1 + i, text, scale, config);
 
-		sy += Item_h;
+		sy += static_cast<int>(Item_h * scale);
 
 		// if we have at least one item active, then set the variable so we don't display any
 		// message about no active items
-		if ( MsgItems[First_menu_item+i].active )
+		if (config || MsgItems[First_menu_item+i].active )
 			none_valid = 0;
 	}
 
 	// maybe draw an extra line in to make room for [pgdn], or for the 'no active items'
 	// display
-	if ( !messaging_allowed || none_valid || ((First_menu_item + nitems) < Num_menu_items) || (Msg_shortcut_command != -1) ) {
+	if (!config && (!messaging_allowed || none_valid || ((First_menu_item + nitems) < Num_menu_items) || (Msg_shortcut_command != -1))) {
 		// blit the background
 		// hud_set_default_color();
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 		if ( Mbox_gauge[1].first_frame >= 0 ) {		
-			renderBitmap(Mbox_gauge[1].first_frame, bx, by);
+			renderBitmap(Mbox_gauge[1].first_frame, bx, by, scale, config);
 		}
-		by += Item_h;
+		by += static_cast<int>(Item_h * scale);
 	}
 
 	// draw the bottom of the frame
 	// hud_set_default_color();
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 	if ( Mbox_gauge[2].first_frame >= 0 ) {
 	
-		renderBitmap(Mbox_gauge[2].first_frame, bx, by + bottom_bg_offset);
+		renderBitmap(Mbox_gauge[2].first_frame, bx, by + static_cast<int>(bottom_bg_offset * scale), scale, config);
 	}
 
 	// determine if we should put the text "[more]" at top or bottom to indicate you can page up or down
-	startFlashPageScroll();
-	maybeFlashPageScroll();
+	if (!config) {
+		startFlashPageScroll();
+		maybeFlashPageScroll();
+	}
 	if ( First_menu_item > 0 ) {
-		renderPrintf(position[0] + Pgup_offsets[0], position[1] + Pgup_offsets[1], 1.0, config, "%s", XSTR( "[pgup]", 312) );
+		renderPrintf(x + static_cast<int>(Pgup_offsets[0] * scale), y + static_cast<int>(Pgup_offsets[1] * scale), scale, config, "%s", XSTR( "[pgup]", 312) );
 	}
 
 	if ( (First_menu_item + nitems) < Num_menu_items ) {
-		renderPrintf(position[0] + Pgdn_offsets[0], position[1] + Pgdn_offsets[1], 1.0, config, "%s", XSTR( "[pgdn]", 313));
+		renderPrintf(x + static_cast<int>(Pgdn_offsets[0] * scale), y + static_cast<int>(Pgdn_offsets[1] * scale), scale, config, "%s", XSTR( "[pgdn]", 313));
 	}
 
 	if ( messaging_allowed ) {
 		if ( none_valid ){
-			renderPrintf( sx, by - Item_h + 2, 1.0, config, "%s", XSTR( "No valid items", 314));
-		} else if (Msg_shortcut_command != -1){
-			renderPrintf( sx, by - Item_h + 2, 1.0, config, "%s", comm_order_get_text(Msg_shortcut_command));
+			renderPrintf( sx, by - static_cast<int>(Item_h * scale) + 2, scale, config, "%s", XSTR( "No valid items", 314));
+		} else if (!config && Msg_shortcut_command != -1){
+			renderPrintf( sx, by - static_cast<int>(Item_h * scale) + 2, scale, config, "%s", comm_order_get_text(Msg_shortcut_command));
 		}
 	} else {
 		// if this player is not allowed to message, then display message saying so
-		renderPrintf( sx, by - Item_h + 2, 1.0, config, "%s", XSTR( "Not allowed to message", 315));
+		renderPrintf( sx, by - static_cast<int>(Item_h * scale) + 2, scale, config, "%s", XSTR( "Not allowed to message", 315));
+	}
+
+	if (config) {
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Mbox_gauge[2].first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, bx + static_cast<int>(bmw * scale), y, by + static_cast<int>((bmh + bottom_bg_offset) * scale));
 	}
 
 }
