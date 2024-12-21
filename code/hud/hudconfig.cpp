@@ -951,6 +951,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[7]->render(0, true); // Countermeasures
 	default_hud_gauges[8]->render(0, true); // Talking head
 	default_hud_gauges[9]->render(0, true); // Directives
+	default_hud_gauges[10]->render(0, true); // Weapons
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 

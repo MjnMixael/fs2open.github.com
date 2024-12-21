@@ -6210,37 +6210,51 @@ void HudGaugeWeapons::pageIn()
 
 void HudGaugeWeapons::render(float /*frametime*/, bool config)
 {
-	ship_weapon	*sw;
+	ship_weapon	*sw = nullptr;
 	int			np, ns;		// np == num primary, ns == num secondary
 
-	if(Player_obj->type == OBJ_OBSERVER)
+	if(!config && Player_obj->type == OBJ_OBSERVER)
 		return;
 
-	Assert(Player_obj->type == OBJ_SHIP);
-	Assert(Player_obj->instance >= 0 && Player_obj->instance < MAX_SHIPS);
+	if (!config) {
+		Assert(Player_obj->type == OBJ_SHIP);
+		Assert(Player_obj->instance >= 0 && Player_obj->instance < MAX_SHIPS);
 
-	sw = &Ships[Player_obj->instance].weapons;
-	np = sw->num_primary_banks;
-	ns = sw->num_secondary_banks;
+		sw = &Ships[Player_obj->instance].weapons;
+		np = sw->num_primary_banks;
+		ns = sw->num_secondary_banks;
+	} else {
+		np = MAX_SHIP_PRIMARY_BANKS;
+		ns = MAX_SHIP_SECONDARY_BANKS;
+	}
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Mouse coords are set at the end because we need to account for N directives here
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	// draw top of primary display
 	if (primary_top[ballistic_hud_index].first_frame >= 0)
-		renderBitmap(primary_top[ballistic_hud_index].first_frame, position[0] + top_offset_x[ballistic_hud_index], position[1]);
+		renderBitmap(primary_top[ballistic_hud_index].first_frame, x + static_cast<int>(top_offset_x[ballistic_hud_index] * scale), y, scale, config);
 
 	// render the header of this gauge
-	renderString(position[0] + Weapon_header_offsets[ballistic_hud_index][0], position[1] + Weapon_header_offsets[ballistic_hud_index][1], EG_WEAPON_TITLE, XSTR( "weapons", 328));
+	renderString(x + static_cast<int>(Weapon_header_offsets[ballistic_hud_index][0] * scale), y + static_cast<int>(Weapon_header_offsets[ballistic_hud_index][1] * scale), EG_WEAPON_TITLE, XSTR( "weapons", 328), scale, config);
 
-	const char *weapon_name;
+	const char* weapon_name = "";
 	char	ammo_str[32];
 	int		i, w, h;
-	int y = position[1] + top_primary_h;
-	int name_y = position[1] + pname_start_offset_y;
+	int ty = y + static_cast<int>(top_primary_h * scale);
+	int name_y = y + static_cast<int>(pname_start_offset_y * scale);
 
 	// render primaries
 	for(i = 0; i < np; i++) {
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 
 		// choose which background to draw for additional primaries.
 		// Note, we don't draw a background for the first primary.
@@ -6248,145 +6262,195 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 		if(i == 1) {
 			// used to draw the second primary weapon background
 			if (primary_middle[ballistic_hud_index].first_frame >= 0)
-				renderBitmap(primary_middle[ballistic_hud_index].first_frame, position[0] + frame_offset_x[ballistic_hud_index], y);
+				renderBitmap(primary_middle[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index] * scale), ty, scale, config);
 		} else if(i != 0) {
 			// used to draw the the third, fourth, fifth, etc...
 			if(primary_last[ballistic_hud_index].first_frame >= 0)
-				renderBitmap(primary_last[ballistic_hud_index].first_frame, position[0] + frame_offset_x[ballistic_hud_index], y);
+				renderBitmap(primary_last[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index]* scale), ty, scale, config);
 		}
 
-		weapon_name = Weapon_info[sw->primary_bank_weapons[i]].get_display_name();
+		weapon_info* wip = nullptr;
+
+		if (!config) {
+			wip = &Weapon_info[sw->primary_bank_weapons[i]];
+			weapon_name = wip->get_display_name();
+		} else {
+			// In config mode let's get the first 3 player allowed primaries
+			int match_count = 0;
+			for (auto weapon : Weapon_info) {
+				if (weapon.subtype == WP_LASER && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
+					if (match_count == i) {
+						wip = &weapon;
+						weapon_name = wip->get_display_name();
+						break;
+					}
+					match_count++;
+				}
+			}
+			// Just in case
+			if (wip == nullptr) {
+				weapon_name = "Primary weapon";
+			}
+		}
 
 		// maybe modify name here to fit
 
 		// do we need to flash the text?
 		if (HudGauge::maybeFlashSexp() == i ) {
-			setGaugeColor(HUD_C_BRIGHT);
-		} else {
+			setGaugeColor(HUD_C_BRIGHT, config);
+		} else if (!config) {
 			maybeFlashWeapon(i);
 		}
 
 		// indicate if this is linked or currently armed
-		if ( ((sw->current_primary_bank == i) && !(Player_ship->flags[Ship::Ship_Flags::Primary_linked])) || ((Player_ship->flags[Ship::Ship_Flags::Primary_linked]) && !(Weapon_info[sw->primary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::Nolink]))) {
-			renderPrintfWithGauge(position[0] + Weapon_plink_offset_x, name_y, EG_NULL, 1.0f, config, "%c", Weapon_link_icon);
+		if (config || ((sw->current_primary_bank == i) && !(Player_ship->flags[Ship::Ship_Flags::Primary_linked])) || ((Player_ship->flags[Ship::Ship_Flags::Primary_linked]) && !(Weapon_info[sw->primary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::Nolink]))) {
+			renderPrintfWithGauge(x + static_cast<int>(Weapon_plink_offset_x * scale), name_y, EG_NULL, scale, config, "%c", Weapon_link_icon);
 		}
 
 		// either render this primary's image or its name
-		if(Weapon_info[sw->primary_bank_weapons[0]].hud_image_index != -1) {
-			renderBitmap(Weapon_info[sw->primary_bank_weapons[i]].hud_image_index, position[0] + Weapon_pname_offset_x, name_y);
+		if(wip != nullptr && wip->hud_image_index != -1) {
+			renderBitmap(wip->hud_image_index, x + static_cast<int>(Weapon_pname_offset_x * scale), name_y, scale, config);
 		} else {
-			renderPrintfWithGauge(position[0] + Weapon_pname_offset_x, name_y, EG_WEAPON_P2, 1.0f, config, "%s", weapon_name);
+			renderPrintfWithGauge(x + static_cast<int>(Weapon_pname_offset_x * scale), name_y, EG_WEAPON_P2, scale, config, "%s", weapon_name);
 		}
 
 		// if this is a ballistic primary with ammo, render the ammo count
-		if (Weapon_info[sw->primary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::Ballistic]) {
+		if (wip != nullptr && wip->wi_flags[Weapon::Info_Flags::Ballistic]) {
 			// print out the ammo right justified
-			sprintf(ammo_str, "%d", sw->primary_bank_ammo[i]);
+			sprintf(ammo_str, "%d", config ? 100 : sw->primary_bank_ammo[i]);
 
 			hud_num_make_mono(ammo_str, font_num);
-			gr_get_string_size(&w, &h, ammo_str);
+			gr_get_string_size(&w, &h, ammo_str, scale);
 
-			renderString(position[0] + Weapon_pammo_offset_x - w, name_y, EG_NULL, ammo_str);
+			renderString(x + static_cast<int>(Weapon_pammo_offset_x * scale) - w, name_y, EG_NULL, ammo_str, scale, config);
 		}
 
 		if(i != 0) {
-			y += primary_text_h;
+			ty += static_cast<int>(primary_text_h * scale);
 		}
-		name_y += primary_text_h;
+		name_y += static_cast<int>(primary_text_h * scale);
 	}
 
-	weapon_info	*wip;
-
 	if ( HudGauge::maybeFlashSexp() == i ) {
-		setGaugeColor(HUD_C_BRIGHT);
+		setGaugeColor(HUD_C_BRIGHT, config);
 	}
 
 	if (secondary_top[ballistic_hud_index].first_frame >= 0)
-		renderBitmap(secondary_top[ballistic_hud_index].first_frame, position[0] + frame_offset_x[ballistic_hud_index], y);
-	name_y = y + sname_start_offset_y;
-	y += top_secondary_h;
+		renderBitmap(secondary_top[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index] * scale), ty, scale, config);
+	name_y = ty + static_cast<int>(sname_start_offset_y * scale);
+	ty += static_cast<int>(top_secondary_h * scale);
 
 	for(i = 0; i < ns; i++)
 	{
-		setGaugeColor();
-		wip = &Weapon_info[sw->secondary_bank_weapons[i]];
-
-		if(i!=0 && secondary_middle[ballistic_hud_index].first_frame >= 0) {
-			renderBitmap(secondary_middle[ballistic_hud_index].first_frame, position[0] + frame_offset_x[ballistic_hud_index], y);
+		setGaugeColor(HUD_C_NONE, config);
+		weapon_info* wip = nullptr;
+		if (!config) {
+			wip = &Weapon_info[sw->secondary_bank_weapons[i]];
+		} else {
+			// In config mode let's get the first 3 player allowed primaries
+			int match_count = 0;
+			for (auto weapon : Weapon_info) {
+				if (weapon.subtype == WP_MISSILE && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
+					if (match_count == i) {
+						wip = &weapon;
+						break;
+					}
+					match_count++;
+				}
+			}
 		}
 
-		maybeFlashWeapon(np+i);
+		if(i!=0 && secondary_middle[ballistic_hud_index].first_frame >= 0) {
+			renderBitmap(secondary_middle[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index] * scale), ty, scale, config);
+		}
 
-		if (wip->has_display_name()) {
+		if (!config) {
+			maybeFlashWeapon(np + i);
+		}
+
+		if (wip != nullptr && wip->has_display_name()) {
 			// Do not apply the cluster bomb hack if we have an alternate name to make translating that name possible
 			weapon_name = wip->get_display_name();
 		} else {
 			// HACK - make Cluster Bomb fit on the HUD.
-			if(!stricmp(wip->name,"cluster bomb")){
+			if(wip != nullptr && !stricmp(wip->name,"cluster bomb")){
 				weapon_name = NOX("Cluster");
 			} else {
-				weapon_name = wip->get_display_name();
+				if (wip != nullptr) {
+					weapon_name = wip->get_display_name();
+				} else {
+					// Just in case
+					weapon_name = "Secondary weapon";
+				}
 			}
 		}
 
-		if ( sw->current_secondary_bank == i ) {
+		if ((config && i == 0) || (!config && sw->current_secondary_bank == i)) {
 			// show that this is the current secondary armed
-			renderPrintfWithGauge(position[0] + Weapon_sunlinked_offset_x, name_y, EG_NULL, 1.0f, config, "%c", Weapon_link_icon);
+			renderPrintfWithGauge(x + static_cast<int>(Weapon_sunlinked_offset_x * scale), name_y, EG_NULL, scale, config, "%c", Weapon_link_icon);
 
 			// indicate if this is linked
 			// don't draw the link indicator if the fire can't be fired link.
 			// the link flag is ignored rather than cleared so the player can cycle past a no-doublefire weapon without the setting being cleared
-			if ( Player_ship->flags[Ship::Ship_Flags::Secondary_dual_fire] && !wip->wi_flags[Weapon::Info_Flags::No_doublefire] &&
+			if (!config && Player_ship->flags[Ship::Ship_Flags::Secondary_dual_fire] && !wip->wi_flags[Weapon::Info_Flags::No_doublefire] &&
 					!The_mission.ai_profile->flags[AI::Profile_Flags::Disable_player_secondary_doublefire] ) {
-				renderPrintfWithGauge(position[0] + Weapon_slinked_offset_x, name_y, EG_NULL, 1.0f, config, "%c", Weapon_link_icon);
+				renderPrintfWithGauge(x + static_cast<int>(Weapon_slinked_offset_x * scale), name_y, EG_NULL, scale, config, "%c", Weapon_link_icon);
 			}
 
 			// show secondary weapon's image or print its name
-			if(wip->hud_image_index != -1) {
-				renderBitmap(wip->hud_image_index, position[0] + Weapon_sname_offset_x, name_y);
+			if(wip != nullptr && wip->hud_image_index != -1) {
+				renderBitmap(wip->hud_image_index, x + static_cast<int>(Weapon_sname_offset_x * scale), name_y, scale, config);
 			} else {
-				renderString(position[0] + Weapon_sname_offset_x, name_y, i ? EG_WEAPON_S1 : EG_WEAPON_S2, weapon_name);
+				renderString(x + static_cast<int>(Weapon_sname_offset_x * scale), name_y, i ? EG_WEAPON_S1 : EG_WEAPON_S2, weapon_name, scale, config);
 			}
 
 			// show the cooldown time
-			if ((sw->current_secondary_bank >= 0) && ship_secondary_has_ammo(sw, i)) {
+			if (!config && (sw->current_secondary_bank >= 0) && ship_secondary_has_ammo(sw, i)) {
 				int ms_till_fire = timestamp_until(sw->next_secondary_fire_stamp[sw->current_secondary_bank]);
 				if ( (ms_till_fire >= 500) && ((wip->fire_wait >= 1 ) || (ms_till_fire > wip->fire_wait*1000)) ) {
-					renderPrintfWithGauge(position[0] + Weapon_sreload_offset_x, name_y, EG_NULL, 1.0f, config, "%d", (int)std::lround(ms_till_fire/1000.0f));
+					renderPrintfWithGauge(x + static_cast<int>(Weapon_sreload_offset_x * scale), name_y, EG_NULL, scale, config, "%d", (int)std::lround(ms_till_fire/1000.0f));
 				}
 			}
 		} else {
 			// just print the weapon's name since this isn't armed
-			renderString(position[0] + Weapon_sname_offset_x, name_y, i ? EG_WEAPON_S1 : EG_WEAPON_S2, weapon_name);
+			renderString(x + static_cast<int>(Weapon_sname_offset_x * scale), name_y, i ? EG_WEAPON_S1 : EG_WEAPON_S2, weapon_name, scale, config);
 		}
 
-		if (!Weapon_info[sw->secondary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::SecondaryNoAmmo]) {
+		if (!config && !Weapon_info[sw->secondary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::SecondaryNoAmmo]) {
 			int ammo=sw->secondary_bank_ammo[i];
 
 			// print out the ammo right justified
 			sprintf(ammo_str, "%d", ammo);
 			hud_num_make_mono(ammo_str, font_num);
-			gr_get_string_size(&w, &h, ammo_str);
+			gr_get_string_size(&w, &h, ammo_str, scale);
 
-			renderString(position[0] + Weapon_sammo_offset_x - w, name_y, EG_NULL, ammo_str);
+			renderString(x + static_cast<int>(Weapon_sammo_offset_x * scale) - w, name_y, EG_NULL, ammo_str, scale, config);
 		}
 
 		if(i != 0) {
-			y += secondary_text_h;
+			ty += static_cast<int>(secondary_text_h * scale);
 		}
-		name_y += secondary_text_h;
+		name_y += static_cast<int>(secondary_text_h * scale);
 	}
 
 	// a bit lonely here with no secondaries so just print "<none>"
 	if(ns==0)
 	{
-		renderString(position[0] + Weapon_pname_offset_x, name_y, EG_WEAPON_S1, XSTR( "<none>", 329));
+		renderString(x + static_cast<int>(Weapon_pname_offset_x * scale), name_y, EG_WEAPON_S1, XSTR( "<none>", 329), scale, config);
 	}
 
-	y -= 0;
+	ty -= 0;
 	// finish drawing the background
 	if (secondary_bottom[ballistic_hud_index].first_frame >= 0)
-		renderBitmap(secondary_bottom[ballistic_hud_index].first_frame, position[0] + frame_offset_x[ballistic_hud_index], y);
+		renderBitmap(secondary_bottom[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index] * scale), ty, scale, config);
+
+	if (config) {
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(secondary_bottom[ballistic_hud_index].first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>((bmw + frame_offset_x[ballistic_hud_index]) * scale), y, ty + static_cast<int>(bmh * scale));
+	}
 }
 
 void hud_update_weapon_flash()
