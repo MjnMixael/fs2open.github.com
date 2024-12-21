@@ -1001,15 +1001,10 @@ void HudGaugeThreatIndicator::renderLaserThreat(bool config)
 
 	int x = position[0];
 	int y = position[1];
-	int ox = Laser_warn_offsets[0];
-	int oy = Laser_warn_offsets[1];
 	float scale = 1.0f;
 
 	if (config) {
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
-		//hud_config_convert_coords(Laser_warn_offsets[0], Laser_warn_offsets[1], base_w, base_h, ox, oy, scale);
-		ox = static_cast<int>(Laser_warn_offsets[0] * scale);
-		oy = static_cast<int>(Laser_warn_offsets[1] * scale);
 	}
 
 	if ( Player->threat_flags & THREAT_DUMBFIRE ) {
@@ -1025,7 +1020,7 @@ void HudGaugeThreatIndicator::renderLaserThreat(bool config)
 		frame_offset = 0;
 	}
 
-	renderBitmap(laser_warn.first_frame + frame_offset, x + ox, y + oy, scale, config);
+	renderBitmap(laser_warn.first_frame + frame_offset, x + static_cast<int>(Laser_warn_offsets[0] * scale), y + static_cast<int>(Laser_warn_offsets[1] * scale), scale, config);
 }
 
 void HudGaugeThreatIndicator::renderLockThreat(bool config)
@@ -1042,15 +1037,10 @@ void HudGaugeThreatIndicator::renderLockThreat(bool config)
 
 	int x = position[0];
 	int y = position[1];
-	int ox = Lock_warn_offsets[0];
-	int oy = Lock_warn_offsets[1];
 	float scale = 1.0f;
 
 	if (config) {
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
-		//hud_config_convert_coords(Lock_warn_offsets[0], Lock_warn_offsets[1], base_w, base_h, ox, oy, scale);
-		ox = static_cast<int>(Lock_warn_offsets[0] * scale);
-		oy = static_cast<int>(Lock_warn_offsets[1] * scale);
 	}
 
 	if ( Player->threat_flags & (THREAT_LOCK | THREAT_ATTEMPT_LOCK) ) {
@@ -1070,7 +1060,7 @@ void HudGaugeThreatIndicator::renderLockThreat(bool config)
 		frame_offset = 0;
 	}
 
-	renderBitmap(lock_warn.first_frame+frame_offset, x + ox, y + oy, scale, config);
+	renderBitmap(lock_warn.first_frame+frame_offset, x + static_cast<int>(Lock_warn_offsets[0] * scale), y + static_cast<int>(Lock_warn_offsets[1] * scale), scale, config);
 }
 
 HudGaugeWeaponLinking::HudGaugeWeaponLinking():

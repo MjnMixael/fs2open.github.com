@@ -524,7 +524,7 @@ static void gr_string_old(float sx,
 	int resize_mode,
 	float scaleMultiplier)
 {
-	GR_DEBUG_SCOPE("Render VFNT string with scaling");
+	GR_DEBUG_SCOPE("Render VFNT string");
 
 	int letter;
 	float x = sx; // Keep the starting X position unscaled
@@ -629,16 +629,16 @@ static void gr_string_old(float sx,
 		x2 = x1 + wc;
 		y2 = y1 + hc;
 
-		// Resize screen positions
-		if (do_resize) {
-			gr_resize_screen_posf(&x1, &y1, NULL, NULL, resize_mode);
-			gr_resize_screen_posf(&x2, &y2, NULL, NULL, resize_mode);
-		}
-
 		// Check clipping
 		if ((x1 >= clip_right) || (x2 <= clip_left) || (y1 >= clip_bottom) || (y2 <= clip_top)) {
 			x += raw_spacing * scale_factor; // Skip rendering but advance x for spacing
 			continue;
+		}
+
+		// Resize screen positions
+		if (do_resize) {
+			gr_resize_screen_posf(&x1, &y1, NULL, NULL, resize_mode);
+			gr_resize_screen_posf(&x2, &y2, NULL, NULL, resize_mode);
 		}
 
 		// Add vertices for the character
