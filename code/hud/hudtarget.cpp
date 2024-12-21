@@ -5593,24 +5593,38 @@ void HudGaugeCmeasures::render(float /*frametime*/, bool config)
 		return;	// failed to load coutermeasure gauge background
 	}
 
-	ship_info *sip = &Ship_info[Player_ship->ship_info_index];
-	if(sip->cmeasure_max < 0 || sip->cmeasure_type < 0){
-		return;
+	if (!config) {
+		if (!Player_ship) {
+			return; // player ship doesn't exist?
+		}
+		ship_info* sip = &Ship_info[Player_ship->ship_info_index];
+		if (sip->cmeasure_max < 0 || sip->cmeasure_type < 0) {
+			return;
+		}
+	}
+
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Cmeasure_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 	// hud_set_default_color();
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	// blit the background
-	renderBitmap(Cmeasure_gauge.first_frame, position[0], position[1]);
+	renderBitmap(Cmeasure_gauge.first_frame, x, y, scale, config);
 
 	// blit text
-	renderString(position[0] + Cm_text_offsets[0], position[1] + Cm_text_offsets[1], XSTR( "cm.", 327));
-	if ( !Player_ship ) {
-		Int3();	// player ship doesn't exist?
-		return;
-	}
-	renderPrintf(position[0] + Cm_text_val_offsets[0], position[1] + Cm_text_val_offsets[1], 1.0, config, NOX("%02d"), Player_ship->cmeasure_count);
+	renderString(x + static_cast<int>(Cm_text_offsets[0] * scale), y + static_cast<int>(Cm_text_offsets[1] * scale), XSTR( "cm.", 327), scale, config);
+	renderPrintf(x + static_cast<int>(Cm_text_val_offsets[0] * scale), y + static_cast<int>(Cm_text_val_offsets[1] * scale), scale, config, NOX("%02d"), config ? 0 : Player_ship->cmeasure_count);
 }
 
 HudGaugeAfterburner::HudGaugeAfterburner():
