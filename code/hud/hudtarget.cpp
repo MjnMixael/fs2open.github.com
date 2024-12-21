@@ -6265,8 +6265,12 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 				renderBitmap(primary_middle[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index] * scale), ty, scale, config);
 		} else if(i != 0) {
 			// used to draw the the third, fourth, fifth, etc...
-			if(primary_last[ballistic_hud_index].first_frame >= 0)
-				renderBitmap(primary_last[ballistic_hud_index].first_frame, x + static_cast<int>(frame_offset_x[ballistic_hud_index]* scale), ty, scale, config);
+			int p_last = primary_last[ballistic_hud_index].first_frame;
+			// retail doesn't seem to have primary_last defined? So we can probably sneak in the secondary middle for now. This needs further investigation
+			if (config && p_last < 0) {
+				p_last = secondary_middle[ballistic_hud_index].first_frame;
+			}
+				renderBitmap(p_last, x + static_cast<int>(frame_offset_x[ballistic_hud_index]* scale), ty, scale, config);
 		}
 
 		weapon_info* wip = nullptr;
