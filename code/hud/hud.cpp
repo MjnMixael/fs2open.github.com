@@ -2264,6 +2264,20 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 				}
 			}
 		}
+	// Fill the box with dummy data
+	} else {
+		hud_subsys_list[0].name = "Communications";
+		hud_subsys_list[0].str = 75;
+		hud_subsys_list[0].type = SUBSYSTEM_COMMUNICATION;
+
+		hud_subsys_list[1].name = "Engine";
+		hud_subsys_list[1].str = 50;
+		hud_subsys_list[1].type = SUBSYSTEM_ENGINE;
+
+		hud_subsys_list[2].name = "Weapons";
+		hud_subsys_list[2].str = 25;
+		hud_subsys_list[2].type = SUBSYSTEM_WEAPONS;
+		num = 3;
 	}
 
 	int x = position[0];
@@ -2304,7 +2318,7 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		info.background_y = by;
 
 		type = hud_subsys_list[best_index].type;
-		if ( !timestamp_elapsed( Pl_hud_subsys_info[type].flash_duration_timestamp ) ) {
+		if (!config && !timestamp_elapsed( Pl_hud_subsys_info[type].flash_duration_timestamp ) ) {
 			if ( timestamp_elapsed(next_flash) ) {
 				flash_status = !flash_status;
 				next_flash = timestamp(SUBSYS_DAMAGE_FLASH_INTERVAL);
@@ -2347,17 +2361,17 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		hud_num_make_mono(buf, font_num);
 
 		int w, h;
-		gr_get_string_size(&w, &h, buf);
+		gr_get_string_size(&w, &h, buf, scale);
 
-		info.value_x = x + subsys_integ_val_offset_x - w;
+		info.value_x = x + static_cast<int>(subsys_integ_val_offset_x * scale) - w;
 		info.value_y = sy;
 		info.strength = best_str;
 
 		info.name_x = sx;
 		info.name_y = sy;
 
-		by += line_h;
-		sy += line_h;
+		by += static_cast<int>(line_h * scale);
+		sy += static_cast<int>(line_h * scale);
 
 		info_lines.push_back(info);
 
@@ -2425,7 +2439,7 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 		if (line.draw_background) {
 			renderBitmap(damage_middle.first_frame, line.background_x, line.background_y, scale, config);
 			last_bx = line.background_x;
-			last_by = line.background_y + line_h; // Add line_h here so that the footer is properly aligned
+			last_by = line.background_y + static_cast<int>(line_h * scale); // Add line_h here so that the footer is properly aligned
 		}
 
 		char buf[128];

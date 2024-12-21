@@ -510,8 +510,56 @@ void HudGaugeWingmanStatus::renderDots(int wing_index, int screen_index, int num
 			} // end swtich
 		// Config mode
 		} else {
-			setGaugeColor(HUD_C_NORMAL, config);
-			frame_num = 0;
+			switch (wing_index) {
+			// Dead example
+			case 1:
+				gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
+				frame_num = 1;
+				break;
+			// Exited example
+			case 2:
+				setGaugeColor(is_bright ? HUD_C_BRIGHT : HUD_C_NORMAL, config);
+				frame_num = 1;
+				break;
+			// Alive example
+			default:
+				if (use_expanded_colors) {
+					switch (i) {
+					// yellow
+					case 1:
+					case 3:
+						gr_set_color_fast(is_bright ? &Color_bright_yellow : &Color_yellow);
+						break;
+					// red
+					case 2:
+					case 5:
+						gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
+						break;
+					// green
+					default:
+						gr_set_color_fast(is_bright ? &Color_bright_green : &Color_green);
+						break;
+					}					
+				} else {
+					setGaugeColor(HUD_C_NORMAL, config);
+					switch (i) {
+					// dying
+					case 1:
+					case 3:
+					case 5:
+						gr_set_color_fast(is_bright ? &Color_bright_red : &Color_red);
+						break;
+					// normal
+					default:
+						setGaugeColor(HUD_C_NORMAL, config);
+						break;
+					}
+				}
+				
+				frame_num = 0;
+				break;
+			}
+			
 		}
 
 		// draw dot if there is a status to draw
