@@ -897,12 +897,12 @@ void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y
 	}
 
 	//temporary stuff to show boxes
-	/*color clr = gr_screen.current_color;
+	color clr = gr_screen.current_color;
 	color thisColor;
 	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
 	gr_set_color_fast(&thisColor);
 	hud_config_draw_box(x1, x2, y1, y2);
-	gr_set_color_fast(&clr);*/
+	gr_set_color_fast(&clr);
 }
 
 void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale)
@@ -945,6 +945,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[2]->render(0, true); // Support dock timer
 	default_hud_gauges[3]->render(0, true); // Damage gauge
 	default_hud_gauges[4]->render(0, true); // Wingman status
+	default_hud_gauges[5]->render(0, true); // Auto speed
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 

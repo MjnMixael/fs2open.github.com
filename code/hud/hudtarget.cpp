@@ -4960,21 +4960,34 @@ void HudGaugeAutoSpeed::initOffColor(int r, int g, int b, int a)
 
 void HudGaugeAutoSpeed::render(float /*frametime*/, bool config)
 {
-	if (Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
+	if (!config && Player_ship->flags[Ship::Ship_Flags::Primitive_sensors])
 		return;
 
 	int frame_offset;
 
-	if ( Players[Player_num].flags & PLAYER_FLAGS_AUTO_MATCH_SPEED ) {
+	if (!config && Players[Player_num].flags & PLAYER_FLAGS_AUTO_MATCH_SPEED ) {
 		frame_offset = 3;
 	} else {
 		frame_offset = 2;
 	}
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Toggle_frame.first_frame + frame_offset, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	if (Toggle_frame.first_frame + frame_offset >= 0)
-		renderBitmap(Toggle_frame.first_frame+frame_offset, position[0], position[1]);
+		renderBitmap(Toggle_frame.first_frame+frame_offset, x, y, scale, config);
 
 	// draw the text on top
 	if (frame_offset == 3) {
@@ -4986,8 +4999,8 @@ void HudGaugeAutoSpeed::render(float /*frametime*/, bool config)
 	} else if ( Use_off_color ) {
 		gr_set_color_fast(&Off_color);
 	}
-	renderString(position[0] + Auto_text_offsets[0], position[1] + Auto_text_offsets[1], XSTR("auto", 1463));
-	renderString(position[0] + Speed_text_offsets[0], position[1] + Speed_text_offsets[1], XSTR("speed", 1464));
+	renderString(x + static_cast<int>(Auto_text_offsets[0] * scale), y + static_cast<int>(Auto_text_offsets[1] * scale), XSTR("auto", 1463), scale, config);
+	renderString(x + static_cast<int>(Speed_text_offsets[0] * scale), y + static_cast<int>(Speed_text_offsets[1] * scale), XSTR("speed", 1464), scale, config);
 }
 
 void HudGaugeAutoSpeed::pageIn()
