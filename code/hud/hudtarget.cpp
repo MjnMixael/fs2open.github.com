@@ -6281,7 +6281,7 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 		} else {
 			// In config mode let's get the first 3 player allowed primaries
 			int match_count = 0;
-			for (auto weapon : Weapon_info) {
+			for (weapon_info &weapon : Weapon_info) {
 				if (weapon.subtype == WP_LASER && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
 					if (match_count == i) {
 						wip = &weapon;
@@ -6353,7 +6353,7 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 		} else {
 			// In config mode let's get the first 3 player allowed primaries
 			int match_count = 0;
-			for (auto weapon : Weapon_info) {
+			for (weapon_info &weapon : Weapon_info) {
 				if (weapon.subtype == WP_MISSILE && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
 					if (match_count == i) {
 						wip = &weapon;
