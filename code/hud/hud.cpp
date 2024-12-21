@@ -2272,11 +2272,6 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
-		// Ideally this doesn't eventually happen every single frame. Hmm.
-		int bmw;
-		int bmh;
-		bm_get_info(damage_top.first_frame, &bmw, &bmh);
-		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 	// Build a list of damage values to display and then actually display them in a second pass
@@ -2451,6 +2446,15 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 
 	setGaugeColor(HUD_C_NONE, config);
 	renderBitmap(damage_bottom.first_frame, last_bx, last_by + static_cast<int>(bottom_bg_offset * scale), scale, config);
+
+	if (config) {
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(damage_top.first_frame, &bmw, nullptr);
+		bm_get_info(damage_bottom.first_frame, nullptr, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, last_by + static_cast<int>((bottom_bg_offset + bmh) * scale));
+	}
 }
 
 /** 
