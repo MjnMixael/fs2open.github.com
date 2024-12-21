@@ -238,48 +238,77 @@ void HudGaugeDirectives::pageIn()
 void HudGaugeDirectives::render(float  /*frametime*/, bool config)
 {
 	char buf[256], *second_line;
-	int i, x, y, z, end, offset, bx, by;
+	int i, ox, oy, z, end, offset, bx, by;
 	TIMESTAMP t;
 	color *c;
 
 	Training_obj_num_display_lines = 0;
 
-	if (!Training_obj_num_lines){
+	if (!config && !Training_obj_num_lines){
 		return;
 	}
 
 	offset = 0;
-	end = Training_obj_num_lines;
+	end = config ? 4 : Training_obj_num_lines;
 	if (end > Max_directives) {
 		end = Max_directives;
 		offset = Training_obj_num_lines - end;
 	}
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Mouse coords are set at the end because we need to account for N directives here
+	}
+
 	// draw top of objective display
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	if (directives_top.first_frame >= 0)
-		renderBitmap(directives_top.first_frame, position[0], position[1]);
+		renderBitmap(directives_top.first_frame, x, y, scale, config);
 
 	// print out title
-	renderPrintfWithGauge(position[0] + header_offsets[0], position[1] + header_offsets[1], EG_OBJ_TITLE, 1.0f, config, "%s", XSTR( "directives", 422));
+	renderPrintfWithGauge(x + static_cast<int>(header_offsets[0] * scale), y + static_cast<int>(header_offsets[1] * scale), EG_OBJ_TITLE, scale, config, "%s", XSTR( "directives", 422));
 
-	bx = position[0];
-	by = position[1] + middle_frame_offset_y;
+	bx = x;
+	by = y + static_cast<int>(middle_frame_offset_y * scale);
 
 	for (i=0; i<end; i++) {
-		x = position[0] + text_start_offsets[0];
-		y = position[1] + text_start_offsets[1] + Training_obj_num_display_lines * text_h;
+		ox = x + static_cast<int>(text_start_offsets[0] * scale);
+		oy = y + static_cast<int>(text_start_offsets[1] * scale) + Training_obj_num_display_lines * static_cast<int>(text_h * scale);
 		z = TRAINING_OBJ_LINES_MASK(i + offset);
 
 		int line_x_offset = 0;
 
 		c = &Color_normal;
-		if (Training_obj_lines[i + offset] & TRAINING_OBJ_LINES_KEY) {
-			SCP_string temp_buf = message_translate_tokens(Mission_events[z].objective_key_text.c_str());  // remap keys
+		if (!config && Training_obj_lines[i + offset] & TRAINING_OBJ_LINES_KEY) {
+			SCP_string temp_buf = message_translate_tokens(Mission_events[z].objective_key_text.c_str()); // remap keys
 			strcpy_s(buf, temp_buf.c_str());
 			c = &Color_bright_green;
-			line_x_offset = key_line_x_offset;
+			line_x_offset = static_cast<int>(key_line_x_offset * scale);
+		} else if (config){
+			switch (i) {
+			case 0:
+				strcpy_s(buf, "Destroy Enemies");
+				c = &Color_bright_white;
+				break;
+			case 1:
+				strcpy_s(buf, "Target hostile fighters");
+				c = &Color_bright_green;
+				line_x_offset = static_cast<int>(key_line_x_offset * scale);
+				break;
+			case 2:
+				strcpy_s(buf, "Protect Friendlies");
+				c = &Color_bright_red;
+				break;
+			case 3:
+				strcpy_s(buf, "Escort Cruiser");
+				c = &Color_bright_blue;
+				break;
+			}
 		} else {
 			strcpy_s(buf, Mission_events[z].objective_text.c_str());
 			if (Mission_events[z].count){
@@ -323,7 +352,7 @@ void HudGaugeDirectives::render(float  /*frametime*/, bool config)
 		}
 
 		// maybe split the directives line
-		second_line = split_str_once(buf, max_line_width);
+		second_line = split_str_once(buf, static_cast<int>(max_line_width * scale), scale);
 
 		// if we are unable to split the line, just print it once
 		if (second_line == buf) {
@@ -331,42 +360,50 @@ void HudGaugeDirectives::render(float  /*frametime*/, bool config)
 		}
 
 		// blit the background frames
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 
 		if (directives_middle.first_frame >= 0)
-			renderBitmap(directives_middle.first_frame, bx, by);
+			renderBitmap(directives_middle.first_frame, bx, by, scale, config);
 		
-		by += text_h;
+		by += static_cast<int>(text_h * scale);
 
 		if ( second_line ) {
 
 			if (directives_middle.first_frame >= 0)
-				renderBitmap(directives_middle.first_frame, bx, by);
+				renderBitmap(directives_middle.first_frame, bx, by, scale, config);
 			
-			by += text_h;
+			by += static_cast<int>(text_h * scale);
 		}
 
 		// blit the text
 		gr_set_color_fast(c);
 		
-		renderString(x + line_x_offset, y, EG_OBJ1 + i, buf);
+		renderString(ox + line_x_offset, oy, EG_OBJ1 + i, buf, scale, config);
 		
 		Training_obj_num_display_lines++;
 
 		if ( second_line ) {
-			y = position[1] + text_start_offsets[1] + Training_obj_num_display_lines * text_h;
+			oy = y + static_cast<int>(text_start_offsets[1] * scale) + Training_obj_num_display_lines * static_cast<int>(text_h * scale);
 			
-			renderString(x+12, y, EG_OBJ1 + i + 1, second_line);
+			renderString(ox+12, oy, EG_OBJ1 + i + 1, second_line, scale, config);
 			
 			Training_obj_num_display_lines++;
 		}
 	}
 
 	// draw the bottom of objective display
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	if (directives_bottom.first_frame >= 0)
-		renderBitmap(directives_bottom.first_frame, bx, by + bottom_bg_offset);
+		renderBitmap(directives_bottom.first_frame, bx, by + static_cast<int>(bottom_bg_offset * scale), scale, config);
+
+	if (config) {
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(directives_bottom.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, bx + static_cast<int>(bmw * scale), y, by + static_cast<int>(bmh * scale));
+	}
 }
 
 /**

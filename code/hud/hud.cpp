@@ -833,10 +833,10 @@ void HudGauge::renderString(int x, int y, int gauge_id, const char *str, float s
 	if ( gauge_id > -2 ) {
 		if (HUD_shadows) {
 			gr_set_color_fast(&Color_black);
-			emp_hud_string(x + nx + 1, y + ny + 1, gauge_id, str, resize);
+			emp_hud_string(x + nx + 1, y + ny + 1, gauge_id, str, resize, scale);
 			gr_set_color_fast(&gauge_color);
 		}
-		emp_hud_string(x + nx, y + ny, gauge_id, str, resize);
+		emp_hud_string(x + nx, y + ny, gauge_id, str, resize, scale);
 	} else {
 		if (HUD_shadows) {
 			gr_set_color_fast(&Color_black);
