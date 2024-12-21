@@ -934,17 +934,21 @@ void HudGaugeShieldMini::initBitmaps(const char *fname)
 
 void HudGaugeShieldMini::render(float  /*frametime*/, bool config)
 {
-	if (Player_ai->target_objnum == -1)
-		return;
+	object* targetp = nullptr;
 
-	object *targetp = &Objects[Player_ai->target_objnum];
-	
-	// check to see if there is even a current target
-	if ( targetp == &obj_used_list ) {
-		return;
+	if (!config) {
+		if (Player_ai->target_objnum == -1)
+			return;
+
+		targetp = &Objects[Player_ai->target_objnum];
+
+		// check to see if there is even a current target
+		if (targetp == &obj_used_list) {
+			return;
+		}
 	}
 
-	showMiniShields(targetp);
+	showMiniShields(targetp, config);
 }
 
 void HudGaugeShieldMini::pageIn()
@@ -953,81 +957,100 @@ void HudGaugeShieldMini::pageIn()
 }
 
 // Draw the miniature shield icon that is drawn near the reticle
-void HudGaugeShieldMini::showMiniShields(const object *objp)
+void HudGaugeShieldMini::showMiniShields(const object *objp, bool config)
 {
 	if (Shield_mini_gauge.first_frame < 0)
 		return;
 
-	float			max_shield;
-	int			hud_color_index, range, frame_offset;
-	int			sx, sy, i;
-
-	if ( objp->type != OBJ_SHIP ) {
+	if (!config && objp->type != OBJ_SHIP ) {
 		return;
 	}
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
 
-	sx = position[0];
-	sy = position[1];
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Shield_mini_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	// draw the ship first
-	maybeFlashShield(SHIELD_HIT_TARGET, Shield_hit_data[SHIELD_HIT_TARGET].hull_hit_index);
-	showIntegrity(get_hull_pct(objp));
+	if (!config) {
+		maybeFlashShield(SHIELD_HIT_TARGET, Shield_hit_data[SHIELD_HIT_TARGET].hull_hit_index);
+	}
+	showIntegrity(config ? 1.0f : get_hull_pct(objp), config);
 
 	// draw the four quadrants
 	// Draw shield quadrants at one of NUM_SHIELD_LEVELS
-	max_shield = shield_get_max_quad(objp);
+	float max_shield;
+	if (!config) {
+		max_shield = shield_get_max_quad(objp);
+	} else {
+		max_shield = 100.0f;
+	}
 
-	for ( i = 0; i < objp->n_quadrants; i++ ) {
+	int n_quadrants = config ? DEFAULT_SHIELD_SECTIONS : objp->n_quadrants;
 
-		if ( objp->flags[Object::Object_Flags::No_shields] ) {
+	for (int i = 0; i < n_quadrants; i++) {
+
+		if (!config && objp->flags[Object::Object_Flags::No_shields] ) {
 			break;
 		}
 
 		int num;
-		if (!(Ship_info[Ships[objp->instance].ship_info_index].flags[Ship::Info_Flags::Model_point_shields]))
+		if (!config && !(Ship_info[Ships[objp->instance].ship_info_index].flags[Ship::Info_Flags::Model_point_shields]))
 			num = Quadrant_xlate[i];
 		else
 			num = i;
 
-		if (objp->shield_quadrant[num] < 0.1f ) {
+		if (!config && objp->shield_quadrant[num] < 0.1f ) {
 			continue;
 		}
 
-		if ( maybeFlashShield(SHIELD_HIT_TARGET, i) ) {
+		int frame_offset;
+		if (!config && maybeFlashShield(SHIELD_HIT_TARGET, i) ) {
 			frame_offset = i+objp->n_quadrants;
 		} else {
 			frame_offset = i;
 		}
-				
-		range = HUD_color_alpha;
-		hud_color_index = (int)std::lround((objp->shield_quadrant[num] / max_shield) * range);
-		Assert(hud_color_index >= 0 && hud_color_index <= range);
-	
-		if ( hud_color_index < 0 ) {
-			hud_color_index = 0;
-		}
-		if ( hud_color_index >= HUD_NUM_COLOR_LEVELS ) {
-			hud_color_index = HUD_NUM_COLOR_LEVELS - 1;
+		
+		int hud_color_index = HUD_C_NONE;
+		if (!config) {
+			int range = HUD_color_alpha;
+			hud_color_index = (int)std::lround((objp->shield_quadrant[num] / max_shield) * range);
+			Assert(hud_color_index >= 0 && hud_color_index <= range);
+
+			if (hud_color_index < 0) {
+				hud_color_index = 0;
+			}
+			if (hud_color_index >= HUD_NUM_COLOR_LEVELS) {
+				hud_color_index = HUD_NUM_COLOR_LEVELS - 1;
+			}
 		}
 
-		if ( maybeFlashSexp() == 1) {
+		if (!config && maybeFlashSexp() == 1) {
 			// hud_set_bright_color();
 			setGaugeColor(HUD_C_BRIGHT);
 		} else {
 			// gr_set_color_fast(&HUD_color_defaults[hud_color_index]);
-			setGaugeColor(hud_color_index);
-		}					 
+			setGaugeColor(hud_color_index, config);
+		}	 
 
 		if (frame_offset < Shield_mini_gauge.num_frames)
-			renderBitmap(Shield_mini_gauge.first_frame + frame_offset, sx, sy);		
+			renderBitmap(Shield_mini_gauge.first_frame + frame_offset, x, y, scale, config);		
 	}
 	
 	// hud_set_default_color();
 }
 
-void HudGaugeShieldMini::showIntegrity(float p_target_integrity)
+void HudGaugeShieldMini::showIntegrity(float p_target_integrity, bool config)
 {
 	char	text_integrity[64];
 	int	numeric_integrity;
@@ -1058,15 +1081,26 @@ void HudGaugeShieldMini::showIntegrity(float p_target_integrity)
 		}
 	}
 
-	final_pos[0] += position[0];
-	final_pos[1] += position[1];
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
+
+	final_pos[0] = static_cast<int>(final_pos[0] * scale);
+	final_pos[1] = static_cast<int>(final_pos[1] * scale);
+
+	final_pos[0] += x;
+	final_pos[1] += y;
 
 	sprintf(text_integrity, "%d", numeric_integrity);
 	if ( numeric_integrity < 100 ) {
 		hud_num_make_mono(text_integrity, font_num);
 	}	
 
-	renderString(final_pos[0], final_pos[1], text_integrity);
+	renderString(final_pos[0], final_pos[1], text_integrity, scale, config);
 }
 
 int HudGaugeShieldMini::maybeFlashShield(int target_index, int shield_offset)

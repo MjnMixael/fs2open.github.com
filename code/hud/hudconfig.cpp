@@ -955,6 +955,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[11]->render(0, true); // Objective Notify
 	default_hud_gauges[12]->render(0, true); // Squad message (comm board)
 	default_hud_gauges[13]->render(0, true); // Lag
+	default_hud_gauges[14]->render(0, true); //
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 
