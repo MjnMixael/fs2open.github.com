@@ -1575,66 +1575,86 @@ void HudGaugeExtraTargetData::render(float  /*frametime*/, bool config)
 	int not_training;
 	int extra_data_shown=0;
 
-	if(!canRender())
+	if(!config && !canRender())
 		return;
 
-	if ( Player_ai->target_objnum == -1)
+	if (!config && Player_ai->target_objnum == -1)
 		return;
 	
-	if ( Target_static_playing ) 
+	if (!config && Target_static_playing ) 
 		return;
 
-	object	*target_objp;
-	target_objp = &Objects[Player_ai->target_objnum];
+	object	*target_objp = nullptr;
+	ship* target_shipp = nullptr;
 
-	// only render if this the current target is type OBJ_SHIP
-	if(target_objp->type != OBJ_SHIP)
-		return;
+	if (!config) {
+		target_objp = &Objects[Player_ai->target_objnum];
 
-	ship* target_shipp	= &Ships[target_objp->instance];
+		// only render if this the current target is type OBJ_SHIP
+		if (target_objp->type != OBJ_SHIP)
+			return;
 
-	setGaugeColor();
+		target_shipp = &Ships[target_objp->instance];
+	}
+
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(bracket.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(order_max_w * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	not_training = !(The_mission.game_type & MISSION_TYPE_TRAINING);
-	if ( not_training) {
+	if (config || not_training) {
 		// Print out current orders if the targeted ship is friendly
 		// AL 12-26-97: only show orders and time to target for friendly ships
 		// Backslash: actually let's consult the IFF table.  Maybe we want to show orders for certain teams, or hide orders for friendlies
-		if (	((Player_ship->team == target_shipp->team) ||
+		if (config || (((Player_ship->team == target_shipp->team) ||
 					((Iff_info[target_shipp->team].flags & IFFF_ORDERS_SHOWN) && !(Iff_info[target_shipp->team].flags & IFFF_ORDERS_HIDDEN)))
-				&& Ship_info[target_shipp->ship_info_index].is_flyable() ) {
+				&& Ship_info[target_shipp->ship_info_index].is_flyable()) ) {
 			extra_data_shown = 1;
-			auto orders = ship_return_orders(target_shipp);
+			SCP_string orders;
+			if (!config) {
+				orders = ship_return_orders(target_shipp);
+			}
 			if (!orders.empty()) {
 				char outstr[256];
 				strcpy_s(outstr, orders.c_str());
-				font::force_fit_string(outstr, 255, order_max_w);
+				font::force_fit_string(outstr, 255, static_cast<int>(order_max_w * scale));
 				orders = outstr;
 				has_orders = 1;
 			} else {
 				orders = XSTR("no orders", 337);
 			}
 
-			renderString(position[0] + order_offsets[0], position[1] + order_offsets[1], EG_TBOX_EXTRA1, orders.c_str());
+			renderString(x + static_cast<int>(order_offsets[0] * scale), y + static_cast<int>(order_offsets[1] * scale), EG_TBOX_EXTRA1, orders.c_str(), scale, config);
 		}
 
-		if ( has_orders ) {
+		if (!config && has_orders ) {
 			char outstr[256];
 			strcpy_s(outstr, XSTR( "time to: ", 338));
 			if ( ship_return_time_to_goal(tmpbuf, target_shipp) ) {
 				strcat_s(outstr, tmpbuf);
 				
-				renderString(position[0] + time_offsets[0], position[1] + time_offsets[1], EG_TBOX_EXTRA2, outstr);				
+				renderString(x + static_cast<int>(time_offsets[0] * scale), y + static_cast<int>(time_offsets[1] * scale), EG_TBOX_EXTRA2, outstr, scale, config);				
 			}
 		}
 	}
 
-	if (Player_ai->last_target != Player_ai->target_objnum) {
+	if (!config && Player_ai->last_target != Player_ai->target_objnum) {
 		endFlashDock();
 	}
 
 	// Print out dock status
-	if ( object_is_docked(target_objp) )
+	if (!config && object_is_docked(target_objp) )
 	{
 		startFlashDock(2000);
 		// count the objects directly docked to me
@@ -1652,15 +1672,15 @@ void HudGaugeExtraTargetData::render(float  /*frametime*/, bool config)
 			sprintf(outstr, XSTR("Docked: %d objects", 1623), dock_count);
 		}
 
-		font::force_fit_string(outstr, 255, dock_max_w);
+		font::force_fit_string(outstr, 255, static_cast<int>(dock_max_w * scale));
 		maybeFlashDock();
 			
-		renderString(position[0] + dock_offsets[0], position[1] + dock_offsets[1], EG_TBOX_EXTRA3, outstr);			
+		renderString(x + static_cast<int>(dock_offsets[0] * scale), y + static_cast<int>(dock_offsets[1] * scale), EG_TBOX_EXTRA3, outstr, scale, config);			
 		extra_data_shown=1;
 	}
 
 	if ( extra_data_shown && bracket.first_frame >= 0) {
-		renderBitmap(bracket.first_frame, position[0] + bracket_offsets[0], position[1] + bracket_offsets[1]);		
+		renderBitmap(bracket.first_frame, x + static_cast<int>(bracket_offsets[0] * scale), y + static_cast<int>(bracket_offsets[1] * scale), scale, config);		
 	}
 }
 
