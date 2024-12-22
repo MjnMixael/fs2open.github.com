@@ -1857,31 +1857,47 @@ void HudGaugeMissionTime::pageIn()
 
 void HudGaugeMissionTime::render(float /*frametime*/, bool config)
 {
-	float mission_time, time_comp;
-	int minutes=0;
-	int seconds=0;
+	float mission_time = 0.0f;
+	float time_comp;
+	int minutes = 0;
+	int seconds = 0;
 	
-	mission_time = f2fl(Missiontime) + (float)The_mission.HUD_timer_padding;  // convert to seconds
+	if (!config) {
+		mission_time = f2fl(Missiontime) + static_cast<float>(The_mission.HUD_timer_padding); // convert to seconds
+	}
 	
-	minutes=(int)(mission_time/60);
-	seconds=(int)mission_time%60;
+	minutes = static_cast<int>(mission_time / 60);
+	seconds = static_cast<int>(mission_time) % 60;
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(time_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	// blit background frame
 	if ( time_gauge.first_frame >= 0 ) {
-		renderBitmap(time_gauge.first_frame, position[0], position[1]);				
+		renderBitmap(time_gauge.first_frame, x, y, scale, config);				
 	}
 
 	// print out mission time in MM:SS format
-	renderPrintf(position[0] + time_text_offsets[0], position[1] + time_text_offsets[1], 1.0, config, NOX("%02d:%02d"), minutes, seconds);
+	renderPrintf(x + static_cast<int>(time_text_offsets[0] * scale), y + static_cast<int>(time_text_offsets[1] * scale), scale, config, NOX("%02d:%02d"), minutes, seconds);
 
 	// display time compression as xN
 	time_comp = f2fl(Game_time_compression);
 	if ( time_comp < 1 ) {
-		renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], 1.0, config, /*XSTR( "x%.1f", 215), time_comp)*/ NOX("%.2f"), time_comp);
+		renderPrintf(x + static_cast<int>(time_val_offsets[0] * scale), y + static_cast<int>(time_val_offsets[1] * scale), scale, config, /*XSTR( "x%.1f", 215), time_comp)*/ NOX("%.2f"), time_comp);
 	} else {
-		renderPrintf(position[0] + time_val_offsets[0], position[1] + time_val_offsets[1], 1.0, config, XSTR( "x%.0f", 216), time_comp);
+		renderPrintf(x + static_cast<int>(time_val_offsets[0] * scale), y + static_cast<int>(time_val_offsets[1] * scale), scale, config, XSTR( "x%.0f", 216), time_comp);
 	}
 }
 
