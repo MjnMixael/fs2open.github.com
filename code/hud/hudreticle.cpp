@@ -638,31 +638,28 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		return;
 	}
 
-	float	desired_speed, max_speed, current_speed, absolute_speed, absolute_displayed_speed, max_displayed_speed, percent_max, percent_aburn_max;
-	int	desired_y_pos, y_end;
-
 	ship_info	*sip = nullptr;
 	if (!config) {
 		sip = &Ship_info[Player_ship->ship_info_index];
 	}
 
-	current_speed = config ? 50 : Player_obj->phys_info.fspeed;
+	float current_speed = config ? 50 : Player_obj->phys_info.fspeed;
 	if ( current_speed < 0.0f){
 		current_speed = 0.0f;
 	}
 
-	max_speed = config ? 100 : Player_obj->phys_info.max_vel.xyz.z;
+	float max_speed = config ? 100 : Player_obj->phys_info.max_vel.xyz.z;
 	if ( max_speed <= 0 ) {
 		max_speed = sip->max_vel.xyz.z;
 	}
 
-	absolute_speed = config ? 50 : Player_obj->phys_info.speed;
+	float absolute_speed = config ? 50 : Player_obj->phys_info.speed;
 
 	// scale by distance modifier from hud_guages.tbl for display purposes
-	absolute_displayed_speed = absolute_speed * Hud_speed_multiplier;
-	max_displayed_speed = max_speed * Hud_speed_multiplier;
+	float absolute_displayed_speed = absolute_speed * Hud_speed_multiplier;
+	float max_displayed_speed = max_speed * Hud_speed_multiplier;
 
-	desired_speed = config ? 100 : Player->ci.forward * max_speed;
+	float desired_speed = config ? 100 : Player->ci.forward * max_speed;
 	if ( desired_speed < 0.0f ){		// so ships that go backwards don't force the indicators below where they can go
 		desired_speed = 0.0f;
 	}
@@ -680,15 +677,15 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
-	desired_y_pos = y + static_cast<int>(Bottom_offset_y * scale) - (int)std::lround(static_cast<int>(throttle_h * scale) * desired_speed / max_speed) - 1;
+	int desired_y_pos = y + static_cast<int>(Bottom_offset_y * scale) - static_cast<int>(std::lround(static_cast<int>(throttle_h * scale) * desired_speed / max_speed)) - 1;
+	int desired_y_pos_unscaled = position[1] + Bottom_offset_y - static_cast<int>(std::lround(throttle_h * desired_speed / max_speed)) - 1;
 
-	if (max_speed <= 0) {
-		percent_max = 0.0f;
-	} else {
+	float percent_max = 0.0f;
+	if (max_speed > 0) {
 		percent_max = current_speed / max_speed;
 	}
 
-	percent_aburn_max = 0.0f;
+	float percent_aburn_max = 0.0f;
 	if ( percent_max > 1 ) {
 		percent_max = 1.0f;
 		percent_aburn_max = (current_speed - max_speed) / (Player_obj->phys_info.afterburner_max_vel.xyz.z - max_speed);
@@ -700,21 +697,24 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		}
 	}
 
-	y_end = y + static_cast<int>(Bottom_offset_y * scale) - (int)std::lround(static_cast<int>(throttle_h * scale) * percent_max);
+	int y_end = y + static_cast<int>(Bottom_offset_y * scale) - static_cast<int>(std::lround(static_cast<int>(throttle_h * scale) * percent_max));
+	int y_end_unscaled = position[1] + Bottom_offset_y - static_cast<int>(std::lround(throttle_h * percent_max));
 	if ( percent_aburn_max > 0 ) {
-		y_end -= (int)std::lround(percent_aburn_max * static_cast<int>(throttle_aburn_h * scale));
+		y_end -= static_cast<int>(std::lround(percent_aburn_max * static_cast<int>(throttle_aburn_h * scale)));
+		y_end_unscaled -= static_cast<int>(std::lround(percent_aburn_max * throttle_aburn_h));
 	}
 
 	if ( !config && Player_obj->phys_info.flags & PF_AFTERBURNER_ON ) {
 		// default value is 240 when afterburner is on. 
 		//I'm assuming that this value is basically Bottom_offset_y - throttle_aburn_h - throttle_h
-		desired_y_pos = y + static_cast<int>(Bottom_offset_y * scale) - static_cast<int>(throttle_aburn_h * scale) - static_cast<int>(throttle_h * scale); 
+		desired_y_pos = y + static_cast<int>(Bottom_offset_y * scale) - static_cast<int>(throttle_aburn_h * scale) - static_cast<int>(throttle_h * scale);
+		desired_y_pos_unscaled = position[1] + Bottom_offset_y - throttle_aburn_h - throttle_h;
 	}
 
 	setGaugeColor(HUD_C_NONE, config);
 	
 	if(Show_background) {
-		renderThrottleBackground(y_end, config);
+		renderThrottleBackground(y_end_unscaled, config);
 	} else {
 		renderBitmap(throttle_frames.first_frame, x, y, scale, config);			
 	}
@@ -722,7 +722,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	// draw throttle speed number
 	//hud_render_throttle_speed(current_speed, y_end);
 	// Absolute speed, not forward speed, for hud speed reticle - fixes the guage for sliding -- kazan
-	renderThrottleSpeed(absolute_displayed_speed, y_end, config);
+	renderThrottleSpeed(absolute_displayed_speed, y_end_unscaled, y_end, config);
 
 	// draw target speed if necessary
 	if (!config && Show_target_speed ) {
@@ -740,35 +740,30 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		}
 
 		hud_num_make_mono(buf, font_num);
-		gr_get_string_size(&w, &h, buf);
+		gr_get_string_size(&w, &h, buf, scale);
 
-		renderString(x + Target_speed_offsets[0] - w, y + Target_speed_offsets[1], buf);
+		renderString(x + static_cast<int>(Target_speed_offsets[0] * scale) - w, y + static_cast<int>(Target_speed_offsets[1] * scale), buf, scale, config);
 	}
 
 	// draw the "desired speed" bar on the throttle
-	renderThrottleLine(desired_y_pos, config);
+	renderThrottleLine(desired_y_pos_unscaled, desired_y_pos, config);
 
 	// draw left arc (the bright portion of the throttle gauge)
-	renderThrottleForeground(y_end, config);
+	renderThrottleForeground(y_end_unscaled, y_end, config);
 
-	if (!config && Show_max_speed ) {
-		renderPrintf(x + Max_speed_offsets[0], y + Max_speed_offsets[1], 1.0, config, "%d", (int)std::lround(max_displayed_speed));
+	if (Show_max_speed ) {
+		renderPrintf(x + static_cast<int>(Max_speed_offsets[0] * scale), y + static_cast<int>(Max_speed_offsets[1] * scale), scale, config, "%d", (int)std::lround(max_displayed_speed));
 	}
 	
-	if (!config && Show_min_speed ) {
-		renderPrintf(x + Zero_speed_offsets[0], y + Zero_speed_offsets[1], 1.0, config, "%s", XSTR("0", 292));
+	if (Show_min_speed ) {
+		renderPrintf(x + static_cast<int>(Zero_speed_offsets[0] * scale), y + static_cast<int>(Zero_speed_offsets[1] * scale), scale, config, "%s", XSTR("0", 292));
 	}
 }
 
-void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool config)
+void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_unscaled, int y_scaled, bool config)
 {
 	char buf[32];
 	int sx, sy, x_pos, y_pos, w, h;
-
-	//setGaugeColor();
-	sprintf(buf, "%d", (int)std::lround(current_speed));
-	hud_num_make_mono(buf, font_num);
-	gr_get_string_size(&w, &h, buf);
 
 	int x = position[0];
 	int y = position[1];
@@ -778,16 +773,21 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool 
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
+	//setGaugeColor();
+	sprintf(buf, "%d", (int)std::lround(current_speed));
+	hud_num_make_mono(buf, font_num);
+	gr_get_string_size(&w, &h, buf, scale);
+
 	if (orbit ) {
 		// y_end is the y-coordinate of the current throttle setting, calc x-coordinate for edge of 
 		// circle (x^2 + y^2 = r^2)
-		y_pos = y + static_cast<int>(Orbit_center_offsets[1] * scale) - y_end;
+		y_pos = y + static_cast<int>(Orbit_center_offsets[1] * scale) - y_scaled;
 		x_pos = (int)sqrt(double(static_cast<int>(orbit_radius * scale) * static_cast<int>(orbit_radius * scale) - y_pos * y_pos));
 		x_pos = x + static_cast<int>(Orbit_center_offsets[0] * scale) - x_pos;
 
 		// draw current speed at (x_pos, y_end);
 		sx = x_pos - w - 2;
-		sy = fl2i(y_end - h/2.0f + 1.5);
+		sy = fl2i(y_scaled - h / 2.0f + 1.5);
 	} else {
 		sx = y + static_cast<int>(Orbit_center_offsets[0] * scale) - w;
 		sy = x + static_cast<int>(Orbit_center_offsets[1] * scale);
@@ -799,7 +799,7 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool 
 		auto glide_str = XSTR("GLIDE", 1668);
 
 		if ( Use_custom_glide ) {
-			renderString(x + Glide_offsets[0], y + Glide_offsets[1], glide_str);
+			renderString(x + static_cast<int>(Glide_offsets[0] * scale), y + static_cast<int>(Glide_offsets[1] * scale), glide_str, scale, config);
 		} else {
 			int offset;
 			if ( current_speed <= 9.5 ) {
@@ -810,11 +810,11 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool 
 				offset = -13;
 			}
 
-			renderString(sx+offset, sy + h, glide_str);
+			renderString(sx+offset, sy + h, glide_str, scale, config);
 		}
-	} else if (!config && Players[Player_num].flags & PLAYER_FLAGS_MATCH_TARGET ) {
+	} else if (config || Players[Player_num].flags & PLAYER_FLAGS_MATCH_TARGET ) {
 		if ( Use_custom_match_speed ) {
-			renderMatchSpeedIcon(x + static_cast<int>(Match_speed_offsets[0] * scale), y + static_cast<int>(Match_speed_offsets[1] * scale));
+			renderMatchSpeedIcon(x + static_cast<int>(Match_speed_offsets[0] * scale), y + static_cast<int>(Match_speed_offsets[1] * scale), scale, config);
 		} else {
 			int offset;
 			if ( current_speed <= 9.5 ) {
@@ -823,12 +823,12 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_end, bool 
 				offset = 3;
 			}
 
-			renderMatchSpeedIcon(sx+offset, sy + h);
+			renderMatchSpeedIcon(sx+offset, sy + h, scale, config);
 		}
 	}
 }
 
-void HudGaugeThrottle::renderThrottleLine(int y_line, bool config)
+void HudGaugeThrottle::renderThrottleLine(int y_unscaled, int y_scaled, bool config)
 {
 	// hud_set_bright_color();
 	//setGaugeColor(HUD_C_BRIGHT);
@@ -841,15 +841,26 @@ void HudGaugeThrottle::renderThrottleLine(int y_line, bool config)
 		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
+	int height = 1;
+
+	// If we scale down then the line can become invisible
+	// so let's proportionally scale up the line height
+	if (scale < 1.0f) {
+		float min_height = 1.0f / scale;
+		height = static_cast<int>(min_height / scale);
+	}
+
 	renderBitmapEx(throttle_frames.first_frame+3, 
-		x, y_line, 
-		static_cast<int>(throttle_w * scale),
-		1, 
+		x, y_scaled, 
+		throttle_w,
+		height, 
 		0, 
-		y_line-y, scale, config);
+		y_unscaled - position[1], //Explicitly unscaled
+		scale,
+		config);
 }
 
-void HudGaugeThrottle::renderThrottleForeground(int y_end, bool config)
+void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int y_scaled, bool config)
 {
 	int w,h;
 
@@ -865,12 +876,20 @@ void HudGaugeThrottle::renderThrottleForeground(int y_end, bool config)
 
 	bm_get_info(throttle_frames.first_frame+1,&w,&h);
 
-	if ( y_end < (position[1] + h - 1) ) {		
-		renderBitmapEx(throttle_frames.first_frame + 2, x, y_end, w, h - (y_end - y), 0, y_end - y, scale, config);
+	if (y_unscaled < (x + static_cast<int>(h * scale) - 1)) {		
+		renderBitmapEx(throttle_frames.first_frame + 2,
+			x,
+			y_scaled,
+			w,
+			h - (y_unscaled - position[1]), // Explicitly unscaled
+			0,
+			y_unscaled - position[1], // Explicitly unscaled
+			scale,
+			config);
 	}
 }
 
-void HudGaugeThrottle::renderThrottleBackground(int y_end, bool config)
+void HudGaugeThrottle::renderThrottleBackground(int y_unscaled, bool config)
 {
 	int w,h;
 
@@ -886,26 +905,34 @@ void HudGaugeThrottle::renderThrottleBackground(int y_end, bool config)
 
 	bm_get_info( throttle_frames.first_frame+1,&w,&h);
 
-	if ( y_end > position[1] ) {
-		renderBitmapEx(throttle_frames.first_frame+1, x, y, w, y_end-y+1, 0, 0, scale, config);		
+	if (y_unscaled > position[1]) {
+		renderBitmapEx(throttle_frames.first_frame + 1,
+			x,
+			y,
+			w,
+			y_unscaled - position[1] + 1, // Explicitly unscaled
+			0,
+			0,
+			scale,
+			config);	
 	}
 }
 
-void HudGaugeThrottle::renderMatchSpeedIcon(int x, int y)
+void HudGaugeThrottle::renderMatchSpeedIcon(int x, int y, float scale, bool config)
 {
 	if (Match_speed_draw_background)
 	{
 		// One pixel boundary
-		renderRect(x, y, Match_speed_icon_width + 2, gr_get_font_height() + 2);
+		renderRect(x, y, static_cast<int>(Match_speed_icon_width * scale) + 2, static_cast<int>(gr_get_font_height() * scale) + 2);
 		
 		gr_set_color_fast(&Color_black);
-		renderPrintf(x + 1, y + 1, 1.0, false, "%c", Match_speed_icon);
+		renderPrintf(x + 1, y + 1, scale, config, "%c", Match_speed_icon);
 
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 	}
 	else
 	{
-		renderPrintf(x, y, 1.0, false, "%c", Match_speed_icon);
+		renderPrintf(x, y, scale, config, "%c", Match_speed_icon);
 	}
 }
 

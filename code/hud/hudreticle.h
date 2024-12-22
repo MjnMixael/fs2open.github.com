@@ -107,11 +107,11 @@ public:
 	void initBitmaps(char *fname);
 
 	void render(float frametime, bool config = false) override;
-	void renderThrottleSpeed(float current_speed, int y_end, bool config);
-	void renderThrottleLine(int y, bool config);
-	void renderThrottleForeground(int y_end, bool config);
-	void renderThrottleBackground(int y_end, bool config);
-	void renderMatchSpeedIcon(int x, int y);
+	void renderThrottleSpeed(float current_speed, int y_unscaled, int y_scaled, bool config);
+	void renderThrottleLine(int y_unscaled, int y_scaled, bool config);
+	void renderThrottleForeground(int y_unscaled, int y_scaled, bool config);
+	void renderThrottleBackground(int y_unscaled, bool config);
+	void renderMatchSpeedIcon(int x, int y, float scale, bool config);
 
 	void pageIn() override;
 };

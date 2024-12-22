@@ -598,11 +598,13 @@ void HudGaugeShield::showShields(const object *objp, int mode, bool config)
 
 	setGaugeColor(HUD_C_NONE, config);
 
-	std::unique_ptr<hud_frames> sgp = nullptr;
+	std::shared_ptr<hud_frames> sgp = nullptr;
 	// load in shield frames if not already loaded
 	if (sip->shield_icon_index != 255) {
 		if (!config) {
-			sgp.reset(&Shield_gauges.at(sip->shield_icon_index));
+			sgp = std::shared_ptr<hud_frames>(&Shield_gauges.at(sip->shield_icon_index), [](hud_frames*) {
+				/* Do nothing, managed externally */
+			});
 		} else {
 			sgp = std::make_unique<hud_frames>();
 			sgp->first_frame = -1;

@@ -530,7 +530,7 @@ void HudGaugeTargetBox::renderTargetIntegrity(int disabled,int force_obj_num, bo
 		}
 	}
 
-	clip_h = fl2i((1 - config ? 100 : Pl_target_integrity) * static_cast<int>(integrity_bar_h * scale));
+	clip_h = fl2i((1 - (config ? 1.0 : Pl_target_integrity)) * integrity_bar_h);
 
 	int status = Current_ts;
 	if (config) {
@@ -566,16 +566,16 @@ void HudGaugeTargetBox::renderTargetIntegrity(int disabled,int force_obj_num, bo
 	
 	if ( clip_h > 0 ) {
 		// draw the dark portion
-		renderBitmapEx(Integrity_bar.first_frame, x + static_cast<int>(Integrity_bar_offsets[0] * scale), y + static_cast<int>(Integrity_bar_offsets[1] * scale), static_cast<int>(w * scale), clip_h,0,0, scale, config);		
+		renderBitmapEx(Integrity_bar.first_frame, x + static_cast<int>(Integrity_bar_offsets[0] * scale), y + static_cast<int>(Integrity_bar_offsets[1] * scale), w, clip_h,0,0, scale, config);		
 	}
 
-	if (clip_h <= static_cast<int>(integrity_bar_h * scale)) {
+	if (clip_h <= integrity_bar_h) {
 		// draw the bright portion
 		renderBitmapEx(Integrity_bar.first_frame + 1,
 			x + static_cast<int>(Integrity_bar_offsets[0] * scale),
-			y + static_cast<int>(Integrity_bar_offsets[1] * scale) + clip_h,
-			static_cast<int>(w * scale),
-			static_cast<int>(h * scale) - clip_h,
+			y + static_cast<int>(Integrity_bar_offsets[1] * scale) + static_cast<int>(clip_h * scale),
+			w,
+			h - clip_h,
 			0,
 			clip_h,
 			scale,

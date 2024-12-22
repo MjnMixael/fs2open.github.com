@@ -963,6 +963,7 @@ void HudGauge::renderBitmap(int frame, int x, int y, float scale, bool config)
 	renderBitmap(x, y, scale, config);
 }
 
+// Note that w, h, sx, and sy whould be unscaled values!
 void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale, bool config)
 {
 	int nx = 0, ny = 0; 
