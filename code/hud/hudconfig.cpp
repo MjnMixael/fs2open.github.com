@@ -958,7 +958,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[14]->render(0, true); // Mini Shields
 	default_hud_gauges[15]->render(0, true); // Player Shields
 	default_hud_gauges[16]->render(0, true); // Target Shields
-	//default_hud_gauges[17]->render(0, true); // 
+	default_hud_gauges[17]->render(0, true); // Escort list
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 

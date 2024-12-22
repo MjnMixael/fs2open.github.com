@@ -70,7 +70,7 @@ public:
 	int setGaugeColorEscort(int index, int team);
 	void render(float frametime, bool config = false) override;
 	void pageIn() override;
-	void renderIcon(int x, int y, int index);
+	void renderIcon(int x, int y, int index, float scale, bool config);
 	void renderIconDogfight(int x, int y, int index);
 };
 
