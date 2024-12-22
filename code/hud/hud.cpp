@@ -885,7 +885,7 @@ void HudGauge::renderPrintfWithGauge(int x, int y, int gauge_id, float scale, bo
 	renderString(x, y, gauge_id, tmp, scale, config);
 }
 
-void HudGauge::renderBitmapColor(int frame, int x, int y)
+void HudGauge::renderBitmapColor(int frame, int x, int y, float scale, bool config)
 {
 	int nx = 0, ny = 0;
 
@@ -895,23 +895,29 @@ void HudGauge::renderBitmapColor(int frame, int x, int y)
 
 	emp_hud_jitter(&x, &y);
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
+	int resize = GR_RESIZE_FULL;
 
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
 	gr_set_bitmap(frame);
-	gr_bitmap(x + nx, y + ny);
+	gr_bitmap(x + nx, y + ny, resize, scale);
 	gr_reset_screen_scale();
 }
 
@@ -943,27 +949,6 @@ void HudGauge::renderBitmap(int x, int y, float scale, bool config)
 			}
 		}
 	} else {
-		// Configuration mode: Scale to HC_gauge_config_coords
-		//int hc_x1 = HC_gauge_config_coords[gr_screen.res][0];
-		//int hc_x2 = HC_gauge_config_coords[gr_screen.res][1];
-		//int hc_y1 = HC_gauge_config_coords[gr_screen.res][2];
-		//int hc_y2 = HC_gauge_config_coords[gr_screen.res][3];
-
-		//int hc_width = hc_x2 - hc_x1-200;
-		//int hc_height = hc_y2 - hc_y1-200;
-
-		// Set scaling for the configuration menu
-		//gr_set_screen_scale(hc_width, hc_height, -1, -1, gr_screen.max_w, gr_screen.max_h, hc_width, hc_height, true);
-
-		// Adjust the position to configuration space
-		//nx = x + hc_x1; // Start from the configuration area's top-left corner
-		//ny = y + hc_y1;
-		//hud_config_convert_coords(x, y, base_w, base_h, nx, ny, ns);
-
-		// Adjust x and y to ensure x + nx = desired_final_nx
-		//x = 0;
-		//y = 0;
-
 		resize = GR_RESIZE_MENU;
 	}
 	

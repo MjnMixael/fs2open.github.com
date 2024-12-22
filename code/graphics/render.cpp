@@ -245,6 +245,7 @@ void gr_aabitmap(int x, int y, int resize_mode, bool mirror, float scale_factor)
 					   &gr_screen.current_color,
 					   scale_factor);
 }
+// The scaling here is not done correctly. Fix me!
 void gr_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode, bool mirror, float scale_factor) {
     if (gr_screen.mode == GR_STUB) {
         return;

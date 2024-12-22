@@ -344,7 +344,7 @@ public:
 	// rendering functions
 	void renderBitmap(int x, int y, float scale = 1.0f, bool config = false);
 	void renderBitmap(int frame, int x, int y, float scale = 1.0f, bool config = false);
-	void renderBitmapColor(int frame, int x, int y);
+	void renderBitmapColor(int frame, int x, int y, float scale = 1.0f, bool config = false);
 	void renderBitmapUv(int frame, int x, int y, int w, int h, float u0, float v0, float u1, float v1);
 	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false);
 	void renderString(int x, int y, const char *str, float scale = 1.0f, bool config = false);
