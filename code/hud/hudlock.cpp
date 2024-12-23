@@ -287,8 +287,23 @@ void HudGaugeLock::render(float frametime, bool config)
 	vertex lock_point;
 	int sx, sy;
 
-	// This gauge does not accept config settings so we don't have to render it there!
+	float scale = 1.0;
+
+	// This gauge does not accept config settings so we don't have to render it right now.
+	// That may change in the future, in which case the code below can be restored.
 	if (config) {
+		// The coords don't really get converted here but we still get scale based on the screen size which we need
+		int x = 0;
+		int y = 0;
+		hud_config_convert_coords(0, 0, base_w, base_h, x, y, scale);
+
+		// int w;
+		// int h;
+		// Will need actual coords for the below if we activate this gauge in config
+		// hud_config_set_mouse_coords(gauge_config, x, x + w, y, y + h);
+
+		// setGaugeColor(HUD_C_NONE, config);
+
 		return;
 	}
 
@@ -341,12 +356,12 @@ void HudGaugeLock::render(float frametime, bool config)
 			gr_unsize_screen_pos(&sx, &sy);
 		}
 
-		Lock_gauge.sx = sx - Lock_gauge_half_w;
-		Lock_gauge.sy = sy - Lock_gauge_half_h;
+		Lock_gauge.sx = sx - fl2i(Lock_gauge_half_w * scale);
+		Lock_gauge.sy = sy - fl2i(Lock_gauge_half_h * scale);
 		if( current_lock->locked ){
 			current_lock->lock_gauge_time_elapsed = 0.0f;
 			Lock_gauge.time_elapsed = current_lock->lock_gauge_time_elapsed;
-			hud_anim_render(&Lock_gauge, 0.0f, 1);
+			hud_anim_render(&Lock_gauge, 0.0f, 1, 1, 0, 0, GR_RESIZE_FULL, false, scale);
 		} else {
 			// manually track the animation time, since we may have more than one lock
 			current_lock->lock_gauge_time_elapsed += frametime;
@@ -355,7 +370,7 @@ void HudGaugeLock::render(float frametime, bool config)
 			}
 			Lock_gauge.time_elapsed = current_lock->lock_gauge_time_elapsed;
 
-			hud_anim_render(&Lock_gauge, 0.0f, 1);
+			hud_anim_render(&Lock_gauge, 0.0f, 1, 1, 0, 0, GR_RESIZE_FULL, false, scale);
 		}
 	}
 
