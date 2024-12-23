@@ -164,7 +164,7 @@ void			hud_keyed_targets_clear();
 // Code to draw filled triangles
 void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3, bool config = false);
 // Code to draw empty triangles.
-void hud_tri_empty(float x1,float y1,float x2,float y2,float x3,float y3);
+void hud_tri_empty(float x1,float y1,float x2,float y2,float x3,float y3, bool config = false);
 
 float hud_find_target_distance( object *targetee, object *targeter );
 float hud_find_target_distance( object *targetee, const vec3d *targeter_pos );
@@ -515,8 +515,8 @@ public:
 	void initTriBase(float length);
 	void initTriHeight(float h);
 	void render(float frametime, bool config = false) override;
-	void renderTriangle(vec3d *hostile_pos, int aspect_flag, int show_interior, int split_tri);
-	void renderTriangleMissileTail(float ang, float xpos, float ypos, float cur_dist, int draw_solid, int draw_inside);
+	void renderTriangle(vec3d *hostile_pos, int aspect_flag, int show_interior, int split_tri, bool config);
+	void renderTriangleMissileTail(float ang, float xpos, float ypos, float cur_dist, int draw_solid, int draw_inside, bool config);
 };
 
 class HudGaugeHostileTriangle: public HudGaugeReticleTriangle

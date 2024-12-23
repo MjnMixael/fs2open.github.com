@@ -321,6 +321,8 @@ int HC_gauge_description_coords[GR_NUM_RESOLUTIONS][3] = {
 char HC_wingam_gauge_status_names[MAX_SQUADRON_WINGS][32] = {"Alpha", "Beta", "Gamma", "Delta", "Epsilon"};
 int HC_talking_head_frame = -1;
 
+int HC_config_test[2] = {0, 0};
+
 const char *HC_gauge_descriptions(int n)
 {
 	switch(n)	{
@@ -931,6 +933,16 @@ void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, in
 	outY = HC_gauge_coordinates[2] + static_cast<int>(y * outScale);
 }
 
+void hud_config_get_scale(int baseW, int baseH, float& outScale)
+{
+	// Determine the scaling factor
+	float scaleX = static_cast<float>(HC_gauge_coordinates[4]) / baseW;
+	float scaleY = static_cast<float>(HC_gauge_coordinates[5]) / baseH;
+
+	// Use the smallest scale factor
+	outScale = std::min(scaleX, scaleY);
+}
+
 void hud_config_convert_coords(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale)
 {
 	// Determine the scaling factor
@@ -1002,6 +1014,9 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[33]->render(0, true); // Offscreen
 	default_hud_gauges[34]->render(0, true); // Brackets
 	default_hud_gauges[35]->render(0, true); // Orientation Tee
+	default_hud_gauges[36]->render(0, true); // Hostile triangle
+	default_hud_gauges[37]->render(0, true); // Target Triangle
+	default_hud_gauges[38]->render(0, true); //
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {
@@ -1361,6 +1376,18 @@ void hud_config_handle_keypresses(int k)
 	case KEY_TAB:
 		gamesnd_play_iface(InterfaceSounds::USER_SELECT);
 		hud_cycle_gauge_status();
+		break;
+	case KEY_UP:
+		HC_config_test[0] += 1;
+		break;
+	case KEY_DOWN:
+		HC_config_test[0] -= 1;
+		break;
+	case KEY_LEFT:
+		HC_config_test[1] -= 1;
+		break;
+	case KEY_RIGHT:
+		HC_config_test[1] += 1;
 		break;
 	}
 }

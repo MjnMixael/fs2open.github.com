@@ -2906,11 +2906,15 @@ void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3, bool config)
 }
 
 
-void hud_tri_empty(float x1,float y1,float x2,float y2,float x3,float y3)
+void hud_tri_empty(float x1,float y1,float x2,float y2,float x3,float y3, bool config)
 {
- 	gr_line(fl2i(x1),fl2i(y1),fl2i(x2),fl2i(y2));
- 	gr_line(fl2i(x2),fl2i(y2),fl2i(x3),fl2i(y3));
- 	gr_line(fl2i(x3),fl2i(y3),fl2i(x1),fl2i(y1));
+	int resize = GR_RESIZE_FULL;
+	if (config) {
+		resize = GR_RESIZE_MENU;
+	}
+	gr_line(fl2i(x1), fl2i(y1), fl2i(x2), fl2i(y2), resize);
+	gr_line(fl2i(x2), fl2i(y2), fl2i(x3), fl2i(y3), resize);
+	gr_line(fl2i(x3), fl2i(y3), fl2i(x1), fl2i(y1), resize);
 }
 
 HudGaugeReticleTriangle::HudGaugeReticleTriangle():
@@ -2944,7 +2948,7 @@ void HudGaugeReticleTriangle::render(float /*frametime*/, bool config) {
 }
 
 // Render a missile warning triangle that has a tail on it to indicate distance
-void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, float ypos, float cur_dist, int draw_solid, int draw_inside)
+void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, float ypos, float cur_dist, int draw_solid, int draw_inside, bool config)
 {
 	float x1=0.0f;
 	float x2=0.0f;
@@ -2955,7 +2959,12 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 
 	float sin_ang, cos_ang, tail_len;
 
-	float max_tail_len=20.0f;
+	float scale = 1.0f;
+	if (config) {
+		hud_config_get_scale(base_w, base_h, scale);
+	}
+
+	float max_tail_len = 20.0f * scale;
 
 	sin_ang=sinf(ang);
 	cos_ang=cosf(ang);
@@ -2969,13 +2978,13 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 	}
 
 	if ( draw_inside ) {
-		x1 = xpos - Target_triangle_base * -sin_ang;
-		y1 = ypos + Target_triangle_base * cos_ang;
-		x2 = xpos + Target_triangle_base * -sin_ang;
-		y2 = ypos - Target_triangle_base * cos_ang;
+		x1 = xpos - (Target_triangle_base * scale) * -sin_ang;
+		y1 = ypos + (Target_triangle_base * scale) * cos_ang;
+		x2 = xpos + (Target_triangle_base * scale) * -sin_ang;
+		y2 = ypos - (Target_triangle_base * scale) * cos_ang;
 
-		xpos -= Target_triangle_height * cos_ang;
-		ypos += Target_triangle_height * sin_ang;
+		xpos -= (Target_triangle_base * scale) * cos_ang;
+		ypos += (Target_triangle_base * scale) * sin_ang;
 
 		if ( tail_len > 0 ) {
 			xtail = xpos - tail_len * cos_ang;
@@ -2983,13 +2992,13 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 		}
 
 	} else {
-		x1 = xpos - Target_triangle_base * -sin_ang;
-		y1 = ypos + Target_triangle_base * cos_ang;
-		x2 = xpos + Target_triangle_base * -sin_ang;
-		y2 = ypos - Target_triangle_base * cos_ang;
+		x1 = xpos - (Target_triangle_base * scale) * -sin_ang;
+		y1 = ypos + (Target_triangle_base * scale) * cos_ang;
+		x2 = xpos + (Target_triangle_base * scale) * -sin_ang;
+		y2 = ypos - (Target_triangle_base * scale) * cos_ang;
 
-		xpos += Target_triangle_height * cos_ang;
-		ypos -= Target_triangle_height * sin_ang;
+		xpos += (Target_triangle_base * scale) * cos_ang;
+		ypos -= (Target_triangle_base * scale) * sin_ang;
 
 		if ( tail_len > 0 ) {
 			xtail = xpos + tail_len * cos_ang;
@@ -2997,16 +3006,27 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 		}
 	}
 
-	gr_set_screen_scale(base_w, base_h);
+	if (!config) {
+		gr_set_screen_scale(base_w, base_h);
+	}
 	if (draw_solid) {
-		hud_tri(xpos,ypos,x1,y1,x2,y2);
+		hud_tri(xpos,ypos,x1,y1,x2,y2, config);
 	} else {
-		hud_tri_empty(xpos,ypos,x1,y1,x2,y2);
+		hud_tri_empty(xpos,ypos,x1,y1,x2,y2, config);
 	}
 
 	// draw the tail indicating length
 	if ( tail_len > 0 ) {
-		gr_line(fl2i(xpos), fl2i(ypos), fl2i(xtail), fl2i(ytail));
+		gr_line(fl2i(xpos), fl2i(ypos), fl2i(xtail), fl2i(ytail), config ? GR_RESIZE_MENU : GR_RESIZE_FULL);
+	}
+
+	if (config) {
+		float min_x = std::min({xpos, x1, x2});
+		float max_x = std::max({xpos, x1, x2});
+		float min_y = std::min({ypos, y1, y2});
+		float max_y = std::max({ypos, y1, y2});
+
+		hud_config_set_mouse_coords(gauge_config, fl2i(min_x), fl2i(max_x), fl2i(min_y), fl2i(max_y));
 	}
 	gr_reset_screen_scale();
 }
@@ -3015,7 +3035,7 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 //	Must be inside a g3_start_frame().
 //	If aspect_flag !0, then render filled, indicating aspect lock.
 // If show_interior !0, then point inwards to positions inside reticle
-void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag, int show_interior, int split_tri)
+void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag, int show_interior, int split_tri, bool config)
 {
 	vertex	hostile_vertex;
 	float		ang;
@@ -3023,30 +3043,51 @@ void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag
 	int		draw_inside=0;
 	int tablePosX, tablePosY;
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
+
+	int scaled_radius = fl2i(Radius * scale);
+
 	// determine if the given object is within the targeting reticle
 	// (which means the triangle is not drawn)
 
-	cur_dist = vm_vec_dist_quick(&Player_obj->pos, hostile_pos);
+	cur_dist = config ? 50.0f : vm_vec_dist_quick(&Player_obj->pos, hostile_pos);
 
-	g3_rotate_vertex(&hostile_vertex, hostile_pos);
-	g3_project_vertex(&hostile_vertex);
+	if (!config) {
+		g3_rotate_vertex(&hostile_vertex, hostile_pos);
+		g3_project_vertex(&hostile_vertex);
+	} else {
+		// In config mode, use the precomputed simulated position
+		hostile_vertex.screen.xyw.x = hostile_pos->xyz.x;
+		hostile_vertex.screen.xyw.y = hostile_pos->xyz.y;
+		hostile_vertex.screen.xyw.w = 1.0f;
+		hostile_vertex.codes = 0;
+		hostile_vertex.flags = 0;
+	}
 
 	if (reticle_follow) {
-		int nx = HUD_nose_x;
-		int ny = HUD_nose_y;
+		int nx = fl2i(HUD_nose_x * scale);
+		int ny = fl2i(HUD_nose_y * scale);
 
-		gr_resize_screen_pos(&nx, &ny);
-		gr_set_screen_scale(base_w, base_h);
-		gr_unsize_screen_pos(&nx, &ny);
-		gr_reset_screen_scale();
+		if (!config) {
+			gr_resize_screen_pos(&nx, &ny);
+			gr_set_screen_scale(base_w, base_h);
+			gr_unsize_screen_pos(&nx, &ny);
+			gr_reset_screen_scale();
+		}
 
-		tablePosX = position[0] + nx;
-		tablePosY = position[1] + ny;
+		tablePosX = x + nx;
+		tablePosY = y + ny;
 	}
 	else {
 		//Technically not non-slewing, but keeps old behaviour
-		tablePosX = position[0] + fl2i(HUD_nose_x);
-		tablePosY = position[1] + fl2i(HUD_nose_y);
+		tablePosX = x + fl2i(HUD_nose_x * scale);
+		tablePosY = y + fl2i(HUD_nose_y * scale);
 	}								   
 
 	if (hostile_vertex.codes == 0)  { // on screen
@@ -3058,12 +3099,14 @@ void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag
 			projected_x = fl2i(hostile_vertex.screen.xyw.x);
 			projected_y = fl2i(hostile_vertex.screen.xyw.y);
 
-			unsize(&projected_x, &projected_y);
+			if (!config) {
+				unsize(&projected_x, &projected_y);
+			}
 
 			mag_squared = (projected_x - tablePosX) * (projected_x - tablePosX) +
 							  (projected_y - tablePosY) * (projected_y - tablePosY);
 
-			if ( mag_squared < Radius*Radius ) {
+			if (mag_squared < scaled_radius * scaled_radius) {
 				if ( show_interior ) {
 					draw_inside=1;
 				} else {
@@ -3074,23 +3117,25 @@ void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag
 	}
 
 	// even if the screen position overflowed, it will still be pointing in the correct direction
-	unsize( &hostile_vertex.screen.xyw.x, &hostile_vertex.screen.xyw.y );
+	if (!config) {
+		unsize(&hostile_vertex.screen.xyw.x, &hostile_vertex.screen.xyw.y);
+	}
 
 	ang = atan2(-(hostile_vertex.screen.xyw.y - tablePosY), hostile_vertex.screen.xyw.x - tablePosX);
 	sin_ang=sinf(ang);
 	cos_ang=cosf(ang);
 
 	if ( draw_inside ) {
-		xpos = tablePosX + cos_ang*(Radius-7);
-		ypos = tablePosY - sin_ang*(Radius-7);
+		xpos = tablePosX + cos_ang * (scaled_radius - 7);
+		ypos = tablePosY - sin_ang * (scaled_radius - 7);
 	} else {
-		xpos = tablePosX + cos_ang*(Radius+4);
-		ypos = tablePosY - sin_ang*(Radius+4);
+		xpos = tablePosX + cos_ang * (scaled_radius + 4);
+		ypos = tablePosY - sin_ang * (scaled_radius + 4);
 	}
 
 	if ( split_tri ) {
 		// renderTriangleMissileSplit(ang, xpos, ypos, cur_dist, aspect_flag, draw_inside);
-		renderTriangleMissileTail(ang, xpos, ypos, cur_dist, aspect_flag, draw_inside);
+		renderTriangleMissileTail(ang, xpos, ypos, cur_dist, aspect_flag, draw_inside, config);
 	} else {
 		float x1=0.0f;
 		float x2=0.0f;
@@ -3098,32 +3143,43 @@ void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag
 		float y2=0.0f;
 
 		if ( draw_inside ) {
-			x1 = xpos - Target_triangle_base * -sin_ang;
-			y1 = ypos + Target_triangle_base * cos_ang;
-			x2 = xpos + Target_triangle_base * -sin_ang;
-			y2 = ypos - Target_triangle_base * cos_ang;
+			x1 = xpos - (Target_triangle_base * scale) * -sin_ang;
+			y1 = ypos + (Target_triangle_base * scale) * cos_ang;
+			x2 = xpos + (Target_triangle_base * scale) * -sin_ang;
+			y2 = ypos - (Target_triangle_base * scale) * cos_ang;
 
-			xpos -= Target_triangle_height * cos_ang;
-			ypos += Target_triangle_height * sin_ang;
+			xpos -= (Target_triangle_base * scale) * cos_ang;
+			ypos += (Target_triangle_base * scale) * sin_ang;
 
 		} else {
-			x1 = xpos - Target_triangle_base * -sin_ang;
-			y1 = ypos + Target_triangle_base * cos_ang;
-			x2 = xpos + Target_triangle_base * -sin_ang;
-			y2 = ypos - Target_triangle_base * cos_ang;
+			x1 = xpos - (Target_triangle_base * scale) * -sin_ang;
+			y1 = ypos + (Target_triangle_base * scale) * cos_ang;
+			x2 = xpos + (Target_triangle_base * scale) * -sin_ang;
+			y2 = ypos - (Target_triangle_base * scale) * cos_ang;
 
-			xpos += Target_triangle_height * cos_ang;
-			ypos -= Target_triangle_height * sin_ang;
+			xpos += (Target_triangle_base * scale) * cos_ang;
+			ypos -= (Target_triangle_base * scale) * sin_ang;
 		}
 
 		//renderPrintf(position[0], position[1], "%d", fl2i((360*ang)/(2*PI)));
-		gr_set_screen_scale(base_w, base_h);
+		if (!config) {
+			gr_set_screen_scale(base_w, base_h);
+		}
 		if (aspect_flag) {
-			hud_tri(xpos,ypos,x1,y1,x2,y2);
+			hud_tri(xpos,ypos,x1,y1,x2,y2, config);
 		} else {
-			hud_tri_empty(xpos,ypos,x1,y1,x2,y2);
+			hud_tri_empty(xpos,ypos,x1,y1,x2,y2, config);
 		}
 		gr_reset_screen_scale();
+
+		if (config) {
+			float min_x = std::min({xpos, x1, x2});
+			float max_x = std::max({xpos, x1, x2});
+			float min_y = std::min({ypos, y1, y2});
+			float max_y = std::max({ypos, y1, y2});
+
+			hud_config_set_mouse_coords(gauge_config, fl2i(min_x), fl2i(max_x), fl2i(min_y), fl2i(max_y));
+		}
 	}
 }
 
@@ -3194,6 +3250,17 @@ HudGaugeReticleTriangle(HUD_OBJECT_MISSILE_TRI, HUD_MISSILE_WARNING_ARROW)
 
 void HudGaugeMissileTriangles::render(float /*frametime*/, bool config)
 {
+	if (config) {
+		vec3d pos;
+		pos.xyz.x = 0;
+		pos.xyz.y = 850;
+		pos.xyz.z = 100.0f;
+
+		setGaugeColor(HUD_C_NONE, config);
+		renderTriangle(&pos, 1, 1, 1, config);
+		return;
+	}
+	
 	object		*A;
 	missile_obj	*mo;
 	weapon		*wp;
@@ -3214,7 +3281,7 @@ void HudGaugeMissileTriangles::render(float /*frametime*/, bool config)
 		wp = &Weapons[A->instance];
 
 		if (wp->homing_object == Player_obj) {
-			renderTriangle(&A->pos, Weapon_info[wp->weapon_info_index].is_locked_homing(), 1, 1);
+			renderTriangle(&A->pos, Weapon_info[wp->weapon_info_index].is_locked_homing(), 1, 1, config);
 		}
 	}
 
@@ -3712,6 +3779,17 @@ HudGaugeReticleTriangle(HUD_OBJECT_HOSTILE_TRI, HUD_HOSTILE_TRIANGLE)
 
 void HudGaugeHostileTriangle::render(float /*frametime*/, bool config)
 {
+	if (config) {
+		vec3d pos;
+		pos.xyz.x = 0;
+		pos.xyz.y = 1200;
+		pos.xyz.z = 100.0f;
+
+		setGaugeColor(HUD_C_NONE, config);
+		renderTriangle(&pos, 0, 1, 0, config);
+		return;
+	}
+
 	if (hostile_obj && maybeFlashSexp() != 1) {
 		bool in_frame = g3_in_frame() > 0;
 		if(!in_frame)
@@ -3719,7 +3797,7 @@ void HudGaugeHostileTriangle::render(float /*frametime*/, bool config)
 
 		// hud_set_iff_color( TEAM_HOSTILE, 1 );	//	Note: This should really be TEAM_HOSTILE, not opposite of Player_ship->team.
 		hud_set_iff_color( hostile_obj, 1 );
-		renderTriangle(&hostile_obj->pos, 0, 1, 0);
+		renderTriangle(&hostile_obj->pos, 0, 1, 0, config);
 
 		if(!in_frame)
 			g3_end_frame();
@@ -4719,6 +4797,17 @@ HudGaugeReticleTriangle(HUD_OBJECT_TARGET_TRI, HUD_TARGET_TRIANGLE)
 
 void HudGaugeTargetTriangle::render(float /*frametime*/, bool config)
 {
+	if (config) {
+		vec3d pos;
+		pos.xyz.x = 800;
+		pos.xyz.y = 0;
+		pos.xyz.z = 100.0f;
+
+		setGaugeColor(HUD_C_NONE, config);
+		renderTriangle(&pos, 1, 1, 0, config);
+		return;
+	}
+	
 	if ( Player_ai->target_objnum == -1)
 		return;
 
@@ -4733,7 +4822,7 @@ void HudGaugeTargetTriangle::render(float /*frametime*/, bool config)
 	if (!Player->target_is_dying && maybeFlashSexp() != 1) {
 
 		hud_set_iff_color(targetp, 1);
-		renderTriangle(&targetp->pos, 1, 0, 0);
+		renderTriangle(&targetp->pos, 1, 0, 0, config);
 	}
 
 	if(!in_frame)
@@ -7060,8 +7149,8 @@ void HudGaugeOffscreen::renderOffscreenIndicator(vec2d *coords, int dir, float d
 		hud_tri(x3,y3,x2,y2,x1,y1, config);
 		hud_tri(x4,y4,x5,y5,x6,y6, config);
 	} else {
-		hud_tri_empty(x3,y3,x2,y2,x1,y1);
-		hud_tri_empty(x4,y4,x5,y5,x6,y6);
+		hud_tri_empty(x3,y3,x2,y2,x1,y1, config);
+		hud_tri_empty(x4,y4,x5,y5,x6,y6, config);
 	}
 
 	if (dir == 0 || dir == 3){

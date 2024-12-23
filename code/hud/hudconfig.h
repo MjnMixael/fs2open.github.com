@@ -54,6 +54,7 @@ extern int HUD_config_default_flags;
 extern int HUD_config_default_flags2;
 
 extern const int HC_gauge_config_coords[GR_NUM_RESOLUTIONS][4];
+extern int HC_config_test[2];
 
 /**
  * @brief Contains core HUD configuration data
@@ -214,6 +215,11 @@ void hud_config_color_save(const char* name);
 * so that other offsets and positions can be multiplied in turn
 */
 void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
+
+/*!
+ * @brief same as hud_config_covert_coords but only returns the scale and doesn't convert any coords
+ */
+void hud_config_get_scale(int baseW, int baseH, float& outScale);
 
 /*!
  * @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return
