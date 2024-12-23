@@ -162,7 +162,7 @@ void			hud_prune_hotkeys();
 void			hud_keyed_targets_clear();
 
 // Code to draw filled triangles
-void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3);
+void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3, bool config = false);
 // Code to draw empty triangles.
 void hud_tri_empty(float x1,float y1,float x2,float y2,float x3,float y3);
 
@@ -558,7 +558,7 @@ public:
 	void initTriHeight(float length);
 	void render(float frametime, bool config = false) override;
 	void calculatePosition(vertex* target_point, vec3d *tpos, vec2d *outcoords, int *dir, float *half_triangle_sep);
-	void renderOffscreenIndicator(vec2d *coords, int dir, float distance, float half_triangle_sep, bool draw_solid = true);
+	void renderOffscreenIndicator(vec2d *coords, int dir, float distance, float half_triangle_sep, bool draw_solid = true, bool config = false);
 	void pageIn() override;
 };
 

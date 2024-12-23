@@ -931,6 +931,20 @@ void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, in
 	outY = HC_gauge_coordinates[2] + static_cast<int>(y * outScale);
 }
 
+void hud_config_convert_coords(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale)
+{
+	// Determine the scaling factor
+	float scaleX = static_cast<float>(HC_gauge_coordinates[4]) / baseW;
+	float scaleY = static_cast<float>(HC_gauge_coordinates[5]) / baseH;
+
+	// Use the smallest scale factor
+	outScale = std::min(scaleX, scaleY);
+
+	// Apply scaling and offset
+	outX = HC_gauge_coordinates[0] + x * outScale;
+	outY = HC_gauge_coordinates[2] + y * outScale;
+}
+
 void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode)
 {
 	gr_line(x1, y1, x1, y2, resize_mode); // Left vertical line
@@ -985,7 +999,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[30]->render(0, true); // Multi voice status - no settings
 	default_hud_gauges[31]->render(0, true); // Multi ping - no settings
 	default_hud_gauges[32]->render(0, true); // Supernove - no settings
-	//default_hud_gauges[33]->render(0, true); // Offscreen
+	default_hud_gauges[33]->render(0, true); // Offscreen
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {

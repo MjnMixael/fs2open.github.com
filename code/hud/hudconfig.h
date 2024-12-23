@@ -216,6 +216,12 @@ void hud_config_color_save(const char* name);
 void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
 
 /*!
+ * @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return
+ * the smaller scale value used so that other offsets and positions can be multiplied in turn
+ */
+void hud_config_convert_coords(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale);
+
+/*!
  * @brief save gauge coords during rendering time so hud config can check if the mouse is hovering over the gauge
  */
 void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2);

@@ -2788,7 +2788,7 @@ void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_obj
 	renderLine(fl2i(x1),fl2i(y1),fl2i(x2),fl2i(y2));	// part of T pointing towards center
 }
 
-void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3)
+void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3, bool config)
 {
 	int i;
 
@@ -2852,8 +2852,13 @@ void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3)
 	verts[2].b = (ubyte)gr_screen.current_color.blue;
 	verts[2].a = (ubyte)gr_screen.current_color.alpha;
 
-	for (i=0; i<3; i++)
-		gr_resize_screen_posf(&verts[i].screen.xyw.x, &verts[i].screen.xyw.y);
+	for (i = 0; i < 3; i++) {
+		gr_resize_screen_posf(&verts[i].screen.xyw.x,
+			&verts[i].screen.xyw.y,
+			0,
+			0,
+			config ? GR_RESIZE_MENU : GR_RESIZE_FULL);
+	}
 
 	//uint saved_mode = gr_zbuffer_get();
 	//int cull = gr_set_cull(0);
@@ -6692,6 +6697,19 @@ void HudGaugeOffscreen::pageIn()
 
 void HudGaugeOffscreen::render(float /*frametime*/, bool config)
 {
+	if (config) {
+
+		setGaugeColor(HUD_C_NONE, config);
+
+		// Set dummy coordinates
+		vec2d coords;
+		coords.x = 1050;
+		coords.y = 0;
+
+		renderOffscreenIndicator(&coords, 2, 242, 7, true, config);
+		return;
+	}
+	
 	// don't show offscreen indicator if we're warping out.
 	if ( Player->control_mode != PCM_NORMAL ) {
 		return;
@@ -6897,7 +6915,7 @@ void HudGaugeOffscreen::calculatePosition(vertex* target_point, vec3d *tpos, vec
 		g3_end_frame();
 }
 
-void HudGaugeOffscreen::renderOffscreenIndicator(vec2d *coords, int dir, float distance, float half_triangle_sep, bool draw_solid)
+void HudGaugeOffscreen::renderOffscreenIndicator(vec2d *coords, int dir, float distance, float half_triangle_sep, bool draw_solid, bool config)
 {
 	float xpos, ypos;
 	float displayed_distance;
@@ -6925,87 +6943,105 @@ void HudGaugeOffscreen::renderOffscreenIndicator(vec2d *coords, int dir, float d
 	if(!in_frame)
 		g3_start_frame(0);
 
-	gr_set_screen_scale(base_w, base_h);
-
-	if (displayed_distance > 0.0f) {
-		sprintf(buf, "%d", (int)std::lround(displayed_distance));
-		hud_num_make_mono(buf, font_num);
-		gr_get_string_size(&w, &h, buf);
-	} else {
-		buf[0] = 0;
+	if (!config) {
+		gr_set_screen_scale(base_w, base_h);
 	}
+
+	int resize = GR_RESIZE_FULL;
 
 	xpos = coords->x;
 	ypos = coords->y;
 
+	float scale = 1.0f;
+	if (config) {
+		hud_config_convert_coords(xpos, ypos, base_w, base_h, xpos, ypos, scale);
+		resize = GR_RESIZE_MENU;
+	}
+
+	if (displayed_distance > 0.0f) {
+		sprintf(buf, "%d", (int)std::lround(displayed_distance));
+		hud_num_make_mono(buf, font_num);
+		gr_get_string_size(&w, &h, buf, scale);
+	} else {
+		buf[0] = 0;
+	}
+
+	// Right
 	if (dir == 0) {
 		x1 = x4 = (xpos+2);
 
-		x2 = x3 = x5 = x6 = x1 - Offscreen_tri_height;
+		x2 = x3 = x5 = x6 = x1 - (Offscreen_tri_height * scale);
 		y1 = y2 = ypos - half_triangle_sep;
-		y3 = y2 - Offscreen_tri_base;
+		y3 = y2 - (Offscreen_tri_base * scale);
 
 		y4 = y5 = ypos + half_triangle_sep;
-		y6 = y5 + Offscreen_tri_base;
+		y6 = y5 + (Offscreen_tri_base * scale);
 
 		if ( buf[0] ) {
-			gr_string( fl2i(xpos - w - 10), (int)std::lround(ypos - h/2.0f), buf);
+			gr_string(fl2i(xpos - w - 10), (int)std::lround(ypos - h / 2.0f), buf, resize, scale);
 		}
+	// Left
 	} else if (dir == 1) {
 		x1 = x4 = (xpos-1);
 
-		x2 = x3 = x5 = x6 = x1 + Offscreen_tri_height;
+		x2 = x3 = x5 = x6 = x1 + (Offscreen_tri_height * scale);
 		y1 = y2 = ypos - half_triangle_sep;
-		y3 = y2 - Offscreen_tri_base;
+		y3 = y2 - (Offscreen_tri_base * scale);
 
 		y4 = y5 = ypos + half_triangle_sep;
-		y6 = y5 + Offscreen_tri_base;
+		y6 = y5 + (Offscreen_tri_base * scale);
 
 		if ( buf[0] ) {
-			gr_string(fl2i(xpos + 10), (int)std::lround(ypos - h/2.0f), buf);
+			gr_string(fl2i(xpos + 10), (int)std::lround(ypos - h / 2.0f), buf, resize, scale);
 		}
+	// Top
 	} else if (dir == 2) {
 		y1 = y4 = (ypos-1);
 
-		y2 = y3 = y5 = y6 = y1 + Offscreen_tri_height;
+		y2 = y3 = y5 = y6 = y1 + (Offscreen_tri_height * scale);
 		x1 = x2 = xpos - half_triangle_sep;
-		x3 = x2 - Offscreen_tri_base;
+		x3 = x2 - (Offscreen_tri_base * scale);
 
 		x4 = x5 = xpos + half_triangle_sep;
-		x6 = x5 + Offscreen_tri_base;
+		x6 = x5 + (Offscreen_tri_base * scale);
 
 		if ( buf[0] ) {
-			gr_string((int)std::lround(xpos - w/2.0f), fl2i(ypos+10), buf);
+			gr_string((int)std::lround(xpos - w / 2.0f), fl2i(ypos + 10), buf, resize, scale);
 		}
+	// Bottom
 	} else if (dir == 3) {
 		y1 = y4 = (ypos+2);
 
-		y2 = y3 = y5 = y6 = y1 - Offscreen_tri_height;
+		y2 = y3 = y5 = y6 = y1 - (Offscreen_tri_height * scale);
 		x1 = x2 = xpos - half_triangle_sep;
-		x3 = x2 - Offscreen_tri_base;
+		x3 = x2 - (Offscreen_tri_base * scale);
 
 		x4 = x5 = xpos + half_triangle_sep;
-		x6 = x5 + Offscreen_tri_base;
+		x6 = x5 + (Offscreen_tri_base * scale);
 
 		if ( buf[0] ) {
-			gr_string((int)std::lround(xpos - w/2.0f), fl2i(ypos-h-10), buf);
+			gr_string((int)std::lround(xpos - w / 2.0f), fl2i(ypos - h - 10), buf, resize, scale);
 		}
 	}
 
 	if (draw_solid) {
-		hud_tri(x3,y3,x2,y2,x1,y1);
-		hud_tri(x4,y4,x5,y5,x6,y6);
+		hud_tri(x3,y3,x2,y2,x1,y1, config);
+		hud_tri(x4,y4,x5,y5,x6,y6, config);
 	} else {
 		hud_tri_empty(x3,y3,x2,y2,x1,y1);
 		hud_tri_empty(x4,y4,x5,y5,x6,y6);
 	}
 
 	if (dir == 0 || dir == 3){
-		gr_line(fl2i(x2),fl2i(y2),fl2i(x5),fl2i(y5));
+		gr_line(fl2i(x2),fl2i(y2),fl2i(x5),fl2i(y5), resize);
 	} else if (dir == 1) {
-		gr_line(fl2i(x2-1),fl2i(y2),fl2i(x5-1),fl2i(y5));
+		gr_line(fl2i(x2 - 1), fl2i(y2), fl2i(x5 - 1), fl2i(y5), resize);
 	} else {
-		gr_line(fl2i(x2),fl2i(y2-1),fl2i(x5),fl2i(y5-1));
+		gr_line(fl2i(x2), fl2i(y2 - 1), fl2i(x5), fl2i(y5 - 1), resize);
+	}
+
+	if (config) {
+		hud_config_set_mouse_coords(gauge_config, fl2i(xpos - w), fl2i(xpos + w), fl2i(ypos), fl2i(ypos + h * 2.0f));
 	}
 
 	gr_reset_screen_scale();
