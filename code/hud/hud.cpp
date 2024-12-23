@@ -2759,25 +2759,43 @@ void HudGaugeKills::render(float /*frametime*/, bool config)
 		return;
 	}
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Kills_gauge.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	// Draw background
-	renderBitmap(Kills_gauge.first_frame, position[0], position[1]);	
-	renderString(position[0] + text_offsets[0], position[1] + text_offsets[1], XSTR( "kills:", 223));
+	renderBitmap(Kills_gauge.first_frame, x, y, scale, config);	
+	renderString(x + fl2i(text_offsets[0] * scale), y + fl2i(text_offsets[1] * scale), XSTR( "kills:", 223), scale, config);
 
 	// Display how many kills the player has so far
 	char num_kills_string[32];
 	int	w,h;
 
-	if ( !Player ) {
-		Int3();
-		return;
+	if (!config) {
+		Assertion(Player, "Player is invalid. Cannot get kill count.");
+		sprintf(num_kills_string, "%d", Player->stats.m_kill_count_ok);
+	} else {
+		sprintf(num_kills_string, "%d", 1000);
 	}
 
-	sprintf(num_kills_string, "%d", Player->stats.m_kill_count_ok);
-
-	gr_get_string_size(&w, &h, num_kills_string);
-	renderString(position[0]+text_value_offsets[0]-w, position[1]+text_value_offsets[1], num_kills_string);
+	
+	gr_get_string_size(&w, &h, num_kills_string, scale);
+	renderString(x + fl2i(text_value_offsets[0] * scale) - w,
+		y + fl2i(text_value_offsets[1] * scale),
+		num_kills_string,
+		scale,
+		config);
 }
 
 HudGaugeLag::HudGaugeLag():

@@ -1015,8 +1015,9 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[34]->render(0, true); // Brackets
 	default_hud_gauges[35]->render(0, true); // Orientation Tee
 	default_hud_gauges[36]->render(0, true); // Hostile triangle
-	default_hud_gauges[37]->render(0, true); // Target Triangle
-	default_hud_gauges[38]->render(0, true); //
+	default_hud_gauges[37]->render(0, true); // Target triangle
+	default_hud_gauges[38]->render(0, true); // Incoming missile
+	default_hud_gauges[39]->render(0, true); // Kills
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {
