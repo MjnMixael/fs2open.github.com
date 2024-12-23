@@ -917,7 +917,7 @@ void HudGauge::renderBitmapColor(int frame, int x, int y, float scale, bool conf
 	}
 
 	gr_set_bitmap(frame);
-	gr_bitmap(x + nx, y + ny, resize, scale);
+	gr_bitmap(x + nx, y + ny, resize, false, scale);
 	gr_reset_screen_scale();
 }
 
@@ -2590,7 +2590,7 @@ int hud_anim_render(hud_anim *ha, float frametime, int draw_alpha, int loop, int
 		if ( draw_alpha ){
 			gr_aabitmap(ha->sx, ha->sy, resize_mode, mirror, scale_factor);
 		} else {
-			gr_bitmap(ha->sx, ha->sy, resize_mode);
+			gr_bitmap(ha->sx, ha->sy, resize_mode, mirror, scale_factor);
 		}
 	}
 
