@@ -449,6 +449,7 @@ void HudGaugeEscort::renderIcon(int x, int y, int index, float scale, bool confi
 	}
 
 	// show ship integrity
+	integrity = 0.0f;
 	if (!config) {
 		hud_get_target_strength(objp, &shields, &integrity);
 		screen_integrity = (int)std::lround(integrity * 100);

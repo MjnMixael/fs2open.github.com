@@ -775,6 +775,17 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 
 		HC_color_sliders[HCS_ALPHA].create(&HC_ui_window, HC_slider_coords[gr_screen.res][HCS_ALPHA][0], HC_slider_coords[gr_screen.res][HCS_ALPHA][1], HC_slider_coords[gr_screen.res][HCS_ALPHA][2], HC_slider_coords[gr_screen.res][HCS_ALPHA][3],
 											255, HC_slider_fname[gr_screen.res], hud_config_alpha_slider_up, hud_config_alpha_slider_down, NULL);
+
+		// now disable them until the player clicks on something
+		HC_color_sliders[HCS_RED].hide();
+		HC_color_sliders[HCS_GREEN].hide();
+		HC_color_sliders[HCS_BLUE].hide();
+		HC_color_sliders[HCS_ALPHA].hide();
+
+		HC_color_sliders[HCS_RED].disable();
+		HC_color_sliders[HCS_GREEN].disable();
+		HC_color_sliders[HCS_BLUE].disable();
+		HC_color_sliders[HCS_ALPHA].disable();
 	}
 	
 	hud_config_preset_init();
@@ -974,7 +985,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[30]->render(0, true); // Multi voice status - no settings
 	default_hud_gauges[31]->render(0, true); // Multi ping - no settings
 	default_hud_gauges[32]->render(0, true); // Supernove - no settings
-	default_hud_gauges[33]->render(0, true); // Offscreen
+	//default_hud_gauges[33]->render(0, true); // Offscreen
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {
@@ -1038,6 +1049,24 @@ void hud_config_init(bool API_Access, int x, int y, int w, int h)
 	HUD_config_inited = 1;
 }
 
+bool hud_config_check_mouse_in_hud_area(int mx, int my)
+{
+	if (mx < HC_gauge_config_coords[gr_screen.res][0]) {
+		return false;
+	}
+	if (mx > HC_gauge_config_coords[gr_screen.res][1]) {
+		return false;
+	}
+	if (my < HC_gauge_config_coords[gr_screen.res][2]) {
+		return false;
+	}
+	if (my > HC_gauge_config_coords[gr_screen.res][3]) {
+		return false;
+	}
+
+	return true;
+}
+
 /*!
  * @brief check mouse position against all ui buttons using the ui mask
  *
@@ -1047,8 +1076,25 @@ void hud_config_check_regions(int mx, int my)
 	int			i;
 	UI_BUTTON	*b;
 
+	if (hud_config_check_mouse_in_hud_area(mx, my)) {
+		HC_gauge_hot = -2;
+	}
+
+	if (HC_gauge_hot == -2 && mouse_down(MOUSE_LEFT_BUTTON)) {
+		HC_gauge_selected = -1;
+		HC_color_sliders[HCS_RED].hide();
+		HC_color_sliders[HCS_GREEN].hide();
+		HC_color_sliders[HCS_BLUE].hide();
+		HC_color_sliders[HCS_ALPHA].hide();
+
+		HC_color_sliders[HCS_RED].disable();
+		HC_color_sliders[HCS_GREEN].disable();
+		HC_color_sliders[HCS_BLUE].disable();
+		HC_color_sliders[HCS_ALPHA].disable();
+	}
+
 	for ( i=0; i<NUM_HUD_GAUGES; i++ ) {
-		// Eventually we can just always check my mouse region.. but for now let's add this here for testing
+		// Eventually we can just always check by mouse region.. but for now let's add this here for testing
 		if (HC_gauge_mouse_coords[i][0] >= 0) {
 			// Add checks here for the new mouse coords
 			if (mx < HC_gauge_mouse_coords[i][0])
