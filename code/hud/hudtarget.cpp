@@ -3021,10 +3021,10 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 	}
 
 	if (config) {
-		float min_x = std::min({xpos, x1, x2});
-		float max_x = std::max({xpos, x1, x2});
-		float min_y = std::min({ypos, y1, y2});
-		float max_y = std::max({ypos, y1, y2});
+		float min_x = std::min({xpos, x1, x2, xtail});
+		float max_x = std::max({xpos, x1, x2, xtail});
+		float min_y = std::min({ypos, y1, y2, ytail});
+		float max_y = std::max({ypos, y1, y2, ytail});
 
 		hud_config_set_mouse_coords(gauge_config, fl2i(min_x), fl2i(max_x), fl2i(min_y), fl2i(max_y));
 	}
@@ -3253,7 +3253,7 @@ void HudGaugeMissileTriangles::render(float /*frametime*/, bool config)
 	if (config) {
 		vec3d pos;
 		pos.xyz.x = 0;
-		pos.xyz.y = 850;
+		pos.xyz.y = 1100;
 		pos.xyz.z = 100.0f;
 
 		setGaugeColor(HUD_C_NONE, config);
@@ -3782,7 +3782,7 @@ void HudGaugeHostileTriangle::render(float /*frametime*/, bool config)
 	if (config) {
 		vec3d pos;
 		pos.xyz.x = 0;
-		pos.xyz.y = 1200;
+		pos.xyz.y = 1500;
 		pos.xyz.z = 100.0f;
 
 		setGaugeColor(HUD_C_NONE, config);

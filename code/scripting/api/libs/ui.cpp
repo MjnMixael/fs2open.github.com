@@ -2381,7 +2381,7 @@ ADE_FUNC(initHudConfig,
 	int y = 0;
 	int w = 0;
 	int h = 0;
-	ade_get_args(L, "|iii", &x, &y, &w, &h);
+	ade_get_args(L, "|iiii", &x, &y, &w, &h);
 
 	hud_config_init(true, x, y, w, h);
 

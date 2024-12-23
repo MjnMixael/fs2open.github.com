@@ -915,7 +915,7 @@ void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y
 	color thisColor;
 	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
 	gr_set_color_fast(&thisColor);
-	hud_config_draw_box(x1, x2, y1, y2);
+	//hud_config_draw_box(x1, x2, y1, y2);
 	gr_set_color_fast(&clr);
 }
 
@@ -930,7 +930,7 @@ void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, i
 	color thisColor;
 	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
 	gr_set_color_fast(&thisColor);
-	hud_config_draw_box(x1, x2, y1, y2);
+	//hud_config_draw_box(x1, x2, y1, y2);
 	gr_set_color_fast(&clr);
 }
 
