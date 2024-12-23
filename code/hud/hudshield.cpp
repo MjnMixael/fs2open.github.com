@@ -628,7 +628,7 @@ void HudGaugeShield::showShields(const object *objp, int mode, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Mouse coords are set at the end because we need to account for N directives here
 	}
 
@@ -1051,7 +1051,7 @@ void HudGaugeShieldMini::showMiniShields(const object *objp, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -1166,7 +1166,7 @@ void HudGaugeShieldMini::showIntegrity(float p_target_integrity, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	final_pos[0] = static_cast<int>(final_pos[0] * scale);

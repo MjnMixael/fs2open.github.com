@@ -295,7 +295,7 @@ void HudGaugeLock::render(float frametime, bool config)
 		// The coords don't really get converted here but we still get scale based on the screen size which we need
 		int x = 0;
 		int y = 0;
-		hud_config_convert_coords(0, 0, base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(0, 0, base_w, base_h, x, y, scale);
 
 		// int w;
 		// int h;

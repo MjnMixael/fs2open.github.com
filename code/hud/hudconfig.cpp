@@ -919,18 +919,31 @@ void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y
 	gr_set_color_fast(&clr);
 }
 
-void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale)
+void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, int y2) {
+	HC_gauge_mouse_coords[gauge_config][0] = std::min(HC_gauge_mouse_coords[gauge_config][0], x1);
+	HC_gauge_mouse_coords[gauge_config][2] = std::min(HC_gauge_mouse_coords[gauge_config][2], y1);
+	HC_gauge_mouse_coords[gauge_config][1] = std::max(HC_gauge_mouse_coords[gauge_config][1], x2);
+	HC_gauge_mouse_coords[gauge_config][3] = std::max(HC_gauge_mouse_coords[gauge_config][3], y2);
+
+	// temporary stuff to show boxes
+	color clr = gr_screen.current_color;
+	color thisColor;
+	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
+	gr_set_color_fast(&thisColor);
+	hud_config_draw_box(x1, x2, y1, y2);
+	gr_set_color_fast(&clr);
+}
+
+void hud_config_convert_coords(int x, int y, float scale, int& outX, int& outY)
 {
-	// Determine the scaling factor
-	float scaleX = static_cast<float>(HC_gauge_coordinates[4]) / baseW;
-	float scaleY = static_cast<float>(HC_gauge_coordinates[5]) / baseH;
+	outX = HC_gauge_coordinates[0] + static_cast<int>(x * scale);
+	outY = HC_gauge_coordinates[2] + static_cast<int>(y * scale);
+}
 
-	// Use the smallest scale factor
-	outScale = std::min(scaleX, scaleY);
-
-	// Apply scaling and offset
-	outX = HC_gauge_coordinates[0] + static_cast<int>(x * outScale);
-	outY = HC_gauge_coordinates[2] + static_cast<int>(y * outScale);
+void hud_config_convert_coords(float x, float y, float scale, float& outX, float& outY)
+{
+	outX = HC_gauge_coordinates[0] + x * scale;
+	outY = HC_gauge_coordinates[2] + y * scale;
 }
 
 void hud_config_get_scale(int baseW, int baseH, float& outScale)
@@ -943,18 +956,16 @@ void hud_config_get_scale(int baseW, int baseH, float& outScale)
 	outScale = std::min(scaleX, scaleY);
 }
 
-void hud_config_convert_coords(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale)
+void hud_config_convert_coord_sys(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale)
 {
-	// Determine the scaling factor
-	float scaleX = static_cast<float>(HC_gauge_coordinates[4]) / baseW;
-	float scaleY = static_cast<float>(HC_gauge_coordinates[5]) / baseH;
+	hud_config_get_scale(baseW, baseH, outScale);
+	hud_config_convert_coords(x, y, outScale, outX, outY);
+}
 
-	// Use the smallest scale factor
-	outScale = std::min(scaleX, scaleY);
-
-	// Apply scaling and offset
-	outX = HC_gauge_coordinates[0] + x * outScale;
-	outY = HC_gauge_coordinates[2] + y * outScale;
+void hud_config_convert_coord_sys(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale)
+{
+	hud_config_get_scale(baseW, baseH, outScale);
+	hud_config_convert_coords(x, y, outScale, outX, outY);
 }
 
 void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode)
@@ -1018,6 +1029,9 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[37]->render(0, true); // Target triangle
 	default_hud_gauges[38]->render(0, true); // Incoming missile
 	default_hud_gauges[39]->render(0, true); // Kills
+	default_hud_gauges[40]->render(0, true); // Fixed messages - no settings
+	default_hud_gauges[41]->render(0, true); // ETS
+	default_hud_gauges[42]->render(0, true); // Radar
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {

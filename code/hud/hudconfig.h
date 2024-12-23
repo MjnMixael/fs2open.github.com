@@ -211,26 +211,42 @@ void hud_config_color_load(const char *name);
 void hud_config_color_save(const char* name);
 
 /*!
-* @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return the smaller scale value used
-* so that other offsets and positions can be multiplied in turn
-*/
-void hud_config_convert_coords(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
-
-/*!
  * @brief same as hud_config_covert_coords but only returns the scale and doesn't convert any coords
  */
 void hud_config_get_scale(int baseW, int baseH, float& outScale);
 
 /*!
+ * @brief converts a set of coordinates to HUD Config's rendering coordinates
+ */
+void hud_config_convert_coords(int x, int y, float scale, int& outX, int& outY);
+
+/*!
+ * @brief converts a set of coordinates to HUD Config's rendering coordinates
+ */
+void hud_config_convert_coords(float x, float y, float scale, float& outX, float& outY);
+
+/*!
+* @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return the smaller scale value used
+* so that other offsets and positions can be multiplied in turn
+*/
+void hud_config_convert_coord_sys(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
+
+/*!
  * @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return
  * the smaller scale value used so that other offsets and positions can be multiplied in turn
  */
-void hud_config_convert_coords(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale);
+void hud_config_convert_coord_sys(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale);
 
 /*!
  * @brief save gauge coords during rendering time so hud config can check if the mouse is hovering over the gauge
  */
 void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2);
+
+/*!
+ * @brief save gauge coords during rendering time so hud config can check if the mouse is hovering over the gauge
+ * @brief this one is specific to the ETS gauge's individual rendering method
+ */
+void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, int y2);
 
 /*!
  * @brief Get the current color that the sliders are set to in the hud config menu

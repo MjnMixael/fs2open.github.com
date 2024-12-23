@@ -261,7 +261,7 @@ void HudGaugeReticle::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -686,7 +686,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -787,7 +787,7 @@ void HudGaugeThrottle::renderThrottleSpeed(float current_speed, int y_unscaled, 
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	//setGaugeColor();
@@ -855,7 +855,7 @@ void HudGaugeThrottle::renderThrottleLine(int y_unscaled, int y_scaled, bool con
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	int height = 1;
@@ -888,7 +888,7 @@ void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int y_scaled, bo
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	bm_get_info(throttle_frames.first_frame+1,&w,&h);
@@ -917,7 +917,7 @@ void HudGaugeThrottle::renderThrottleBackground(int y_unscaled, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	bm_get_info( throttle_frames.first_frame+1,&w,&h);
@@ -1014,7 +1014,7 @@ void HudGaugeThreatIndicator::render(float  /*frametime*/, bool config)
 	float scale = 1.0f;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
         // Ideally this doesn't eventually happen every single frame. Hmm.
         int bmw;
 		int bmh;
@@ -1048,7 +1048,7 @@ void HudGaugeThreatIndicator::renderLaserThreat(bool config)
 	float scale = 1.0f;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	if ( Player->threat_flags & THREAT_DUMBFIRE ) {
@@ -1084,7 +1084,7 @@ void HudGaugeThreatIndicator::renderLockThreat(bool config)
 	float scale = 1.0f;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	if ( Player->threat_flags & (THREAT_LOCK | THREAT_ATTEMPT_LOCK) ) {

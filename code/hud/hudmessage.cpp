@@ -446,7 +446,7 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
         int bmw;
 		int bmh;
@@ -1206,7 +1206,7 @@ void HudGaugeTalkingHead::render(float frametime, bool config)
 		int y = position[1];
 		float scale = 1.0;
 
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -1389,17 +1389,37 @@ void HudGaugeFixedMessages::render(float  /*frametime*/, bool config) {
 	HUD_ft	*hp;
 
 	hp = &HUD_fixed_text[0];
+	const char* message = config ? "This is a fixed message" : hp->text;
 
-	if (!timestamp_elapsed(hp->end_time)) {
-		gr_set_color((hp->color >> 16) & 0xff, (hp->color >> 8) & 0xff, hp->color & 0xff);
-		
-		if (center_text) {
-			int w = 0;
-			gr_get_string_size(&w, nullptr, hp->text);
-			renderString(position[0] - (w / 2), position[1], hp->text);
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	int w = 0;
+	int h = 0;
+	if (config) {
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+	}
+
+	gr_get_string_size(&w, &h, message, scale);
+
+	if (config) {
+		// This gauge uses the same settings as the message output gauge right now.
+		// That may change in the future, in which case the code below can be restored.
+		return;
+		//hud_config_set_mouse_coords(gauge_config, x - fl2i(w * scale), x + fl2i(w * scale), y, y + fl2i(h * scale));
+	}
+
+	if (config || !timestamp_elapsed(hp->end_time)) {
+		if (!config) {
+			gr_set_color((hp->color >> 16) & 0xff, (hp->color >> 8) & 0xff, hp->color & 0xff);
 		} else {
-			renderString(position[0], position[1], hp->text);
+			setGaugeColor(HUD_C_NONE, config);
 		}
+
+		int render_x = center_text ? x - (w / 2) : x;
+		
+		renderString(render_x, y, message, scale, config);
 		//renderString(0x8000, MSG_WINDOW_Y_START + MSG_WINDOW_HEIGHT + 8, hp->text);
 	}
 }

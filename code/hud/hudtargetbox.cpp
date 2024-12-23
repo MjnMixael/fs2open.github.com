@@ -399,7 +399,7 @@ void HudGaugeTargetBox::render(float frametime, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -493,7 +493,7 @@ void HudGaugeTargetBox::renderTargetForeground(bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 	
 	if (Monitor_frame.first_frame + 1 >= 0)
@@ -516,7 +516,7 @@ void HudGaugeTargetBox::renderTargetIntegrity(int disabled,int force_obj_num, bo
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	if (!config && disabled ) {
@@ -1602,7 +1602,7 @@ void HudGaugeExtraTargetData::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -1746,7 +1746,7 @@ void HudGaugeTargetBox::renderTargetShipInfo(object *target_objp, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	if (!config) {
@@ -2119,7 +2119,7 @@ void HudGaugeTargetBox::showTargetData(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	setGaugeColor(HUD_C_NONE, config);

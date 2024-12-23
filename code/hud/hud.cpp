@@ -1885,7 +1885,7 @@ void HudGaugeMissionTime::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -2312,7 +2312,7 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	// Build a list of damage values to display and then actually display them in a second pass
@@ -2695,7 +2695,7 @@ void HudGaugeTextWarnings::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	int w, h;
@@ -2764,7 +2764,7 @@ void HudGaugeKills::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -2862,7 +2862,7 @@ void HudGaugeLag::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -3188,7 +3188,7 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(w * scale), y, y + static_cast<int>(h * scale));
 	}
@@ -3782,7 +3782,7 @@ void HudGaugeObjectiveNotify::renderSubspace(bool config)
 	// for some reason
 	if (config) {
 		return;
-		/* hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		/* hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -3844,7 +3844,7 @@ void HudGaugeObjectiveNotify::renderRedAlert(bool config)
 	// for some reason
 	if (config) {
 		return;
-		/*hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		/*hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -3900,7 +3900,7 @@ void HudGaugeObjectiveNotify::renderObjective(bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -4289,7 +4289,7 @@ void HudGaugeMultiMsg::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	// if there is valid multiplayer message text to be displayed
@@ -4325,7 +4325,7 @@ void HudGaugeVoiceStatus::render(float /*frametime*/, bool config)
 	// This gauge uses the same settings as the message output gauge right now.
 	// That may change in the future, in which case the code below can be restored.
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 
 		//int w;
 		//int h;
@@ -4385,7 +4385,7 @@ void HudGaugePing::render(float /*frametime*/, bool config)
 	// This gauge uses the same settings as the message output gauge right now.
 	// That may change in the future, in which case the code below can be restored.
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 
 		// int w;
 		// int h;
@@ -4438,7 +4438,7 @@ void HudGaugeSupernova::render(float /*frametime*/, bool config)
 	// This gauge uses the same settings as the warnings gauge right now.
 	// That may change in the future, in which case the code below can be restored.
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 
 		// SCP_string txt = XSTR("Supernova Warning: %.2f s", 1639);
 		// if (Lcl_pl) {

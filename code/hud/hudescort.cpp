@@ -254,7 +254,7 @@ void HudGaugeEscort::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
 		// Mouse coords are set at the end because we need to account for N directives here
 	}
 
