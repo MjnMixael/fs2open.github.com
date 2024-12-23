@@ -256,11 +256,28 @@ void HudGaugeReticle::render(float  /*frametime*/, bool config)
 		return;
 	}
 
-	ship_info *sip = &Ship_info[Player_ship->ship_info_index];
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(crosshair.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	ship_info* sip = nullptr;
+	if (!config) {
+		sip = &Ship_info[Player_ship->ship_info_index];
+	}
+
 	int bitmap_size_x, bitmap_size_y;
 	bm_get_info(crosshair.first_frame, &bitmap_size_x, &bitmap_size_y);
 
-	if (autoaim_frame_offset > 0 || sip->autoaim_lock_snd.isValid() || sip->autoaim_lost_snd.isValid()) {
+	if (!config && (autoaim_frame_offset > 0 || sip->autoaim_lock_snd.isValid() || sip->autoaim_lost_snd.isValid())) {
 		ship *shipp = &Ships[Objects[Player->objnum].instance];
 		ship_weapon *swp = &shipp->weapons;
 		ai_info *aip = &Ai_info[shipp->ai_index];
@@ -286,7 +303,7 @@ void HudGaugeReticle::render(float  /*frametime*/, bool config)
 		}
 	}
 
-	setGaugeColor(HUD_C_BRIGHT);
+	setGaugeColor(HUD_C_BRIGHT, config);
 
 	// the typical reticle indicating the direction of shooting
 	int shoot_reticle = 0;
@@ -296,54 +313,54 @@ void HudGaugeReticle::render(float  /*frametime*/, bool config)
 		shoot_reticle = crosshair.first_frame;
 
 	// a secondary 'reticle' for distinguishing the flight cursor from the above
-	int flight_reticle = flight_cursor_frame_offset >= 0 ? crosshair.first_frame + flight_cursor_frame_offset : -1;
+	int flight_reticle = fl2i(flight_cursor_frame_offset * scale) >= 0 ? crosshair.first_frame + fl2i(flight_cursor_frame_offset * scale) : -1;
 
 	int mobile_reticle = flight_reticle;
 	int fixed_reticle = shoot_reticle;
 	// depending on the parameters of the ship the 'mobile' reticle may be the one indicating the shoot direction
-	if (sip->aims_at_flight_cursor) {
+	if (!config && sip->aims_at_flight_cursor) {
 		mobile_reticle = shoot_reticle;
 		fixed_reticle = flight_reticle;
 	}
 
 
 	if (fixed_reticle == shoot_reticle)
-		setGaugeColor(HUD_C_BRIGHT);
+		setGaugeColor(HUD_C_BRIGHT, config);
 	else
-		setGaugeColor(HUD_C_NORMAL);
+		setGaugeColor(HUD_C_NORMAL, config);
 
 	if (fixed_reticle >= 0) {
 		if (HUD_shadows) {
 			gr_set_color_fast(&Color_black);
 
 			// Render the shadow twice to increase visibility
-			renderBitmap(fixed_reticle, position[0] + 1, position[1] + 1);
-			renderBitmap(fixed_reticle, position[0] + 1, position[1] + 1);
+			renderBitmap(fixed_reticle, x + 1, y + 1, scale, config);
+			renderBitmap(fixed_reticle, x + 1, y + 1, scale, config);
 			gr_set_color_fast(&gauge_color);
 		}
 
-		renderBitmap(fixed_reticle, position[0], position[1]);
+		renderBitmap(fixed_reticle, x, y, scale, config);
 	} else {
-		renderCircle(fl2i(base_w * 0.5f), fl2i(base_h * 0.5f), fl2i(base_h * 0.03f), false);
+		renderCircle(fl2i(base_w * 0.5f), fl2i(base_h * 0.5f), fl2i(base_h * 0.03f), false, config);
 	}
 
-	if (Player_flight_mode == FlightMode::FlightCursor || sip->aims_at_flight_cursor) {
+	if (!config && (Player_flight_mode == FlightMode::FlightCursor || sip->aims_at_flight_cursor)) {
 		if (mobile_reticle == shoot_reticle)
-			setGaugeColor(HUD_C_BRIGHT);
+			setGaugeColor(HUD_C_BRIGHT, config);
 		else
-			setGaugeColor(HUD_C_NORMAL);
+			setGaugeColor(HUD_C_NORMAL, config);
 
-		int x = fl2i(Player_flight_cursor_offset.screen.xyw.x + 0.5f);
-		int y = fl2i(Player_flight_cursor_offset.screen.xyw.y + 0.5f);
+		int cx = fl2i(Player_flight_cursor_offset.screen.xyw.x + 0.5f);
+		int cy = fl2i(Player_flight_cursor_offset.screen.xyw.y + 0.5f);
 		unsize(&x, &y);
 		if (mobile_reticle >= 0)
-			renderBitmap(mobile_reticle, fl2i(x - base_w * 0.5f) + position[0], fl2i(y - base_h * 0.5f) + position[1]);
+			renderBitmap(mobile_reticle, fl2i(cx - base_w * 0.5f) + x, fl2i(cy - base_h * 0.5f) + y, scale, config);
 		else {
-			renderCircle(x, y, fl2i(base_h * 0.03f), false);
+			renderCircle(cx, cy, fl2i(base_h * 0.03f), false, config);
 		}
 	}
 
-	if (firepoint_display) {
+	if (!config && firepoint_display) {
 		fp.clear();
 		getFirepointStatus();
 		
@@ -351,15 +368,15 @@ void HudGaugeReticle::render(float  /*frametime*/, bool config)
 
 			for (SCP_vector<firepoint>::iterator fpi = fp.begin(); fpi != fp.end(); ++fpi) {
 				if (fpi->active == 2)
-					setGaugeColor(HUD_C_BRIGHT);
+					setGaugeColor(HUD_C_BRIGHT, config);
 				else if (fpi->active == 1)
-					setGaugeColor(HUD_C_NORMAL);
+					setGaugeColor(HUD_C_NORMAL, config);
 				else
-					setGaugeColor(HUD_C_DIM);
+					setGaugeColor(HUD_C_DIM, config);
 
-				int centerX = position[0] + (bitmap_size_x / 2);
-				int centerY = position[1] + (bitmap_size_y / 2);
-				renderCircle((int) (centerX + (fpi->xy.x * firepoint_scale_x)), (int) (centerY + (fpi->xy.y * firepoint_scale_y)), firepoint_size);
+				int centerX = x + (bitmap_size_x / 2);
+				int centerY = y + (bitmap_size_y / 2);
+				renderCircle((int) (centerX + (fpi->xy.x * firepoint_scale_x)), (int) (centerY + (fpi->xy.y * firepoint_scale_y)), firepoint_size, config);
 			}
 		}
 	}
@@ -923,7 +940,7 @@ void HudGaugeThrottle::renderMatchSpeedIcon(int x, int y, float scale, bool conf
 	if (Match_speed_draw_background)
 	{
 		// One pixel boundary
-		renderRect(x, y, static_cast<int>(Match_speed_icon_width * scale) + 2, static_cast<int>(gr_get_font_height() * scale) + 2);
+		renderRect(x, y, static_cast<int>(Match_speed_icon_width * scale) + 2, static_cast<int>(gr_get_font_height() * scale) + 2, config);
 		
 		gr_set_color_fast(&Color_black);
 		renderPrintf(x + 1, y + 1, scale, config, "%c", Match_speed_icon);

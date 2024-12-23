@@ -5827,7 +5827,7 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 
 		//Draw background
 		setGaugeColor(HUD_C_DIM, config);
-		renderRect(currentx, currenty, max_w, static_cast<int>(10 * scale));
+		renderRect(currentx, currenty, max_w, static_cast<int>(10 * scale), config);
 
 		//Draw gauge bar
 		setGaugeColor(HUD_C_NORMAL, config);
@@ -5836,7 +5836,7 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 		{
 			setGaugeColor(HUD_C_BRIGHT, config);
 			for(by = 0; by < 10; by++) {
-				renderGradientLine(currentx, currenty + by, currentx + fl2i(remaining), currenty + by);
+				renderGradientLine(currentx, currenty + by, currentx + fl2i(remaining), currenty + by, config);
 			}
 		}
 		currenty += static_cast<int>(12 * scale);
@@ -5892,7 +5892,7 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 
 			//Draw the background for the gauge
 			setGaugeColor(HUD_C_DIM, config);
-			renderRect(currentx, currenty, max_w, static_cast<int>(10 * scale));
+			renderRect(currentx, currenty, max_w, static_cast<int>(10 * scale), config);
 
 			//Reset to normal brightness
 			setGaugeColor(HUD_C_NORMAL, config);
@@ -5900,7 +5900,7 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 			//Draw the bar graph
 			remaining = (max_w - 4) * config ? 1.0f : static_cast<float>(Player_ship->weapons.primary_bank_ammo[bx] / Player_ship->weapons.primary_bank_start_ammo[bx]);
 			if(remaining > 0) {
-				renderRect(currentx + 2, currenty + 2, fl2i(remaining), static_cast<int>(6 * scale));
+				renderRect(currentx + 2, currenty + 2, fl2i(remaining), static_cast<int>(6 * scale), config);
 			}
 			//Increment for next 'line'
 			currenty += static_cast<int>(12 * scale);

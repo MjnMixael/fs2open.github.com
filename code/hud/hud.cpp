@@ -1002,97 +1002,122 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderLine(int x1, int y1, int x2, int y2)
+void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool config)
 {
 	int nx = 0, ny = 0;
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
+	int resize = GR_RESIZE_FULL;
 
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
-	gr_line(x1+nx, y1+ny, x2+nx, y2+ny);
+	gr_line(x1 + nx, y1 + ny, x2 + nx, y2 + ny, resize);
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2)
+void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2, bool config)
 {
 	int nx = 0, ny = 0;
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if(reticle_follow) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
+	int resize = GR_RESIZE_FULL;
 
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
-	gr_gradient(x1+nx, y1+ny, x2+nx, y2+ny);
+	gr_gradient(x1 + nx, y1 + ny, x2 + nx, y2 + ny, resize);
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderRect(int x, int y, int w, int h)
+void HudGauge::renderRect(int x, int y, int w, int h, bool config)
 {
 	int nx = 0, ny = 0;
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
+	int resize = GR_RESIZE_FULL;
 
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
 
-	gr_rect(x+nx, y+ny, w, h);
+	gr_rect(x + nx, y + ny, w, h, resize);
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderCircle(int x, int y, int diameter, bool filled) 
+void HudGauge::renderCircle(int x, int y, int diameter, bool filled, bool config) 
 {
 	int nx = 0, ny = 0;
 
-	if ( gr_screen.rendering_to_texture != -1 ) {
-		gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
-	} else {
-		if ( reticle_follow ) {
-			nx = HUD_nose_x;
-			ny = HUD_nose_y;
-
-			gr_resize_screen_pos(&nx, &ny);
-			gr_set_screen_scale(base_w, base_h);
-			gr_unsize_screen_pos(&nx, &ny);
+	int resize = GR_RESIZE_FULL;
+	
+	if (!config) {
+		if (gr_screen.rendering_to_texture != -1) {
+			gr_set_screen_scale(canvas_w, canvas_h, -1, -1, target_w, target_h, target_w, target_h, true);
 		} else {
-			gr_set_screen_scale(base_w, base_h);
+			if (reticle_follow) {
+				nx = HUD_nose_x;
+				ny = HUD_nose_y;
+
+				gr_resize_screen_pos(&nx, &ny);
+				gr_set_screen_scale(base_w, base_h);
+				gr_unsize_screen_pos(&nx, &ny);
+			} else {
+				gr_set_screen_scale(base_w, base_h);
+			}
 		}
+	} else {
+		resize = GR_RESIZE_MENU;
 	}
+
 	if (filled) {
-		gr_circle(x + nx, y + ny, diameter);
+		gr_circle(x + nx, y + ny, diameter, resize);
 	} else {
-		gr_unfilled_circle(x + nx, y + ny, diameter);
+		gr_unfilled_circle(x + nx, y + ny, diameter, resize);
 	}
 	
 	gr_reset_screen_scale();
@@ -2661,26 +2686,38 @@ int HudGaugeTextWarnings::maybeTextFlash()
 void HudGaugeTextWarnings::render(float  /*frametime*/, bool config)
 {
 	// note: Hud_text_flash globally allocated, address can't be NULL
-	if ( timestamp_elapsed(Hud_text_flash_timer) || Hud_text_flash[0] == '\0' ) {
+	if ( !config && (timestamp_elapsed(Hud_text_flash_timer) || Hud_text_flash[0] == '\0') ) {
 		return;
+	}
+
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
 	}
 
 	int w, h;
 
 	// string size
-	gr_get_string_size(&w, &h, Hud_text_flash);
+	gr_get_string_size(&w, &h, config ? XSTR("Collision", 1431) : Hud_text_flash, scale);
+
+	if (config) {
+		hud_config_set_mouse_coords(gauge_config, fl2i(i2fl(x) - (i2fl(w) / 2.0f) - 1.0f), x + fl2i(i2fl(w) / 2.0f) + 2, y - 1, y + h + 1);
+	}
 
 	// set color
-	if(maybeTextFlash()){
-		setGaugeColor(HUD_C_DIM);
+	if(!config && maybeTextFlash()){
+		setGaugeColor(HUD_C_DIM, config);
 		
 		// draw the box	
-		renderRect( (int)( (float)position[0] - (float)w / 2.0f - 1.0f), (int)((float)position[1] - 1.0f), w + 2, h + 1);
+		renderRect(fl2i(i2fl(x) - (i2fl(w) / 2.0f) - 1.0f), y - 1, w + 2, h + 1, config);
 	}
 
 	// string
-	setGaugeColor(HUD_C_BRIGHT);
-	renderString(fl2i((float)position[0] - ((float)w / 2.0f)), position[1], Hud_text_flash);
+	setGaugeColor(HUD_C_BRIGHT, config);
+	renderString(fl2i(i2fl(x) - (i2fl(w) / 2.0f)), y, config ? XSTR("Collision", 1431) : Hud_text_flash, scale, config);
 }
 
 HudGaugeKills::HudGaugeKills():
