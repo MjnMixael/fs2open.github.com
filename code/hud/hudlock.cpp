@@ -287,6 +287,11 @@ void HudGaugeLock::render(float frametime, bool config)
 	vertex lock_point;
 	int sx, sy;
 
+	// This gauge does not accept config settings so we don't have to render it there!
+	if (config) {
+		return;
+	}
+
 	// check to see if there are any missile to fire.. we don't want to show the 
 	// lock indicator if there are missiles to fire.
 	if ( !ship_secondary_bank_has_ammo(Player_obj->instance) ) {

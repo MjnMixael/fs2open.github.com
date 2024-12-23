@@ -4266,10 +4266,30 @@ void HudGaugeMultiMsg::render(float /*frametime*/, bool config)
 	// clear the text
 	memset(txt,0,MULTI_MSG_MAX_TEXT_LEN+20);
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
+
 	// if there is valid multiplayer message text to be displayed
-	if(multi_msg_message_text(txt)){
-		gr_set_color_fast(&Color_normal);
-		renderString(position[0], position[1], txt);
+	if(config || multi_msg_message_text(txt)){
+		if (!config) {
+			gr_set_color_fast(&Color_normal);
+		} else {
+			// This gauge uses the same settings as the message output gauge right now.
+			// That may change in the future, in which case the code below can be restored.
+			/*strcpy(txt, "This is a multiplayer message");
+			int w;
+			int h;
+			gr_get_string_size(&w, &h, txt, scale);
+			hud_config_set_mouse_coords(gauge_config, x, x + w, y, y + h);
+
+			setGaugeColor(HUD_C_NONE, config);*/
+		}
+		renderString(x, y, txt, scale, config);
 	}
 }
 
@@ -4280,6 +4300,26 @@ HudGauge(HUD_OBJECT_VOICE_STATUS, HUD_MESSAGE_LINES, false, true, VM_EXTERNAL | 
 
 void HudGaugeVoiceStatus::render(float /*frametime*/, bool config)
 {
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+	
+	// This gauge uses the same settings as the message output gauge right now.
+	// That may change in the future, in which case the code below can be restored.
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+
+		//int w;
+		//int h;
+		//gr_get_string_size(&w, &h, XSTR("[playing voice]", 245), scale);
+		//hud_config_set_mouse_coords(gauge_config, x, x + w, y, y + h);
+
+		//setGaugeColor(HUD_C_NONE, config);
+
+		//renderString(x, y, XSTR("[playing voice]", 245), scale, config);
+		//return;
+	}
+	
 	if(!(Game_mode & GM_MULTIPLAYER)){
 		return;
 	}
@@ -4289,17 +4329,17 @@ void HudGaugeVoiceStatus::render(float /*frametime*/, bool config)
 	// the player has been denied the voice token
 	case MULTI_VOICE_STATUS_DENIED:
 		// show a red indicator or something
-		renderString(position[0], position[1], XSTR( "[voice denied]", 243));
+		renderString(x, y, XSTR("[voice denied]", 243), scale, config);
 		break;
 
 	// the player is currently recording
 	case MULTI_VOICE_STATUS_RECORDING:
-		renderString(position[0], position[1], XSTR( "[recording voice]", 244));
+		renderString(x, y, XSTR("[recording voice]", 244), scale, config);
 		break;
 		
 	// the player is current playing back voice from someone
 	case MULTI_VOICE_STATUS_PLAYING:
-		renderString(position[0], position[1], XSTR( "[playing voice]", 245));
+		renderString(x, y, XSTR("[playing voice]", 245), scale, config);
 		break;
 
 	// nothing voice related is happening on my machine
@@ -4320,6 +4360,26 @@ HudGauge(HUD_OBJECT_PING, HUD_LAG_GAUGE, false, false, 0, 255, 255, 255)
  */
 void HudGaugePing::render(float /*frametime*/, bool config)
 {
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	// This gauge uses the same settings as the message output gauge right now.
+	// That may change in the future, in which case the code below can be restored.
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+
+		// int w;
+		// int h;
+		// gr_get_string_size(&w, &h, XSTR("> 1 sec",628)", 245), scale);
+		// hud_config_set_mouse_coords(gauge_config, x, x + w, y, y + h);
+
+		// setGaugeColor(HUD_C_NONE, config);
+
+		// renderString(x, y, XSTR("> 1 sec",628)", 245), scale, config);
+		// return;
+	}
+	
 	// If we shouldn't be displaying a ping time, return here
 	if(!multi_show_ingame_ping()){
 		return;
@@ -4341,7 +4401,7 @@ void HudGaugePing::render(float /*frametime*/, bool config)
 
 			// Blit the string out
 			hud_set_default_color();
-			renderString(position[0], position[1], ping_str);
+			renderString(x, y, ping_str, scale, config);
 		}
 	}
 }
@@ -4353,6 +4413,31 @@ HudGauge(HUD_OBJECT_SUPERNOVA, HUD_DIRECTIVES_VIEW, false, false, 0, 255, 255, 2
 
 void HudGaugeSupernova::render(float /*frametime*/, bool config)
 {
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	// This gauge uses the same settings as the warnings gauge right now.
+	// That may change in the future, in which case the code below can be restored.
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+
+		// SCP_string txt = XSTR("Supernova Warning: %.2f s", 1639);
+		// if (Lcl_pl) {
+			// txt = "Wybuch supernowej: %.2f s";
+		// }
+
+		// int w;
+		// int h;
+		// gr_get_string_size(&w, &h, txt.c_str(), 245), scale);
+		// hud_config_set_mouse_coords(gauge_config, x, x + w, y, y + h);
+
+		// setGaugeColor(HUD_C_NONE, config);
+
+		// renderPrintf(x, y, scale, config, txt.c_str(), time_left);
+		// return;
+	}
+
 	if (!supernova_active()) {
 		return;
 	}
@@ -4361,9 +4446,9 @@ void HudGaugeSupernova::render(float /*frametime*/, bool config)
 
 	gr_set_color_fast(&Color_bright_red);
 	if (Lcl_pl) {
-		renderPrintf(position[0], position[1], 1.0, config, "Wybuch supernowej: %.2f s", time_left);
+		renderPrintf(x, y, scale, config, "Wybuch supernowej: %.2f s", time_left);
 	} else {
-		renderPrintf(position[0], position[1], 1.0, config, XSTR("Supernova Warning: %.2f s", 1639), time_left);
+		renderPrintf(x, y, scale, config, XSTR("Supernova Warning: %.2f s", 1639), time_left);
 	}
 }
 

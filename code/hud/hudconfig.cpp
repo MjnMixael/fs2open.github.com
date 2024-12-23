@@ -969,6 +969,12 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 	default_hud_gauges[27]->render(0, true); // Lead indicator
+	default_hud_gauges[28]->render(0, true); // Homing Missile Lock - no settings
+	default_hud_gauges[29]->render(0, true); // Multi message entry - no settings
+	default_hud_gauges[30]->render(0, true); // Multi voice status - no settings
+	default_hud_gauges[31]->render(0, true); // Multi ping - no settings
+	default_hud_gauges[32]->render(0, true); // Supernove - no settings
+	default_hud_gauges[33]->render(0, true); // Offscreen
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {
