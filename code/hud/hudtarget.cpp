@@ -5656,30 +5656,47 @@ void HudGaugeAfterburner::render(float /*frametime*/, bool config)
 		return;
 	}
 
-	Assert(Player_ship);
-	if ( !(Ship_info[Player_ship->ship_info_index].flags[Ship::Info_Flags::Afterburner]) ) {
-		// Goober5000 - instead of drawing an empty burner gauge, don't draw the gauge at all
-		return;
+	if (!config) {
+		Assert(Player_ship);
+		if (!(Ship_info[Player_ship->ship_info_index].flags[Ship::Info_Flags::Afterburner])) {
+			// Goober5000 - instead of drawing an empty burner gauge, don't draw the gauge at all
+			return;
+		} else {
+			percent_left = Player_ship->afterburner_fuel / Ship_info[Player_ship->ship_info_index].afterburner_fuel_capacity;
+		}
 	} else {
-		percent_left = Player_ship->afterburner_fuel/Ship_info[Player_ship->ship_info_index].afterburner_fuel_capacity;
+		percent_left = 1.0f;
 	}
 
 	if ( percent_left > 1 ) {
 		percent_left = 1.0f;
 	}
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Energy_bar.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
 	clip_h = (int)std::lround((1.0f - percent_left) * Energy_h);
 
 	bm_get_info(Energy_bar.first_frame,&w,&h);
 
-	setGaugeColor();
+	setGaugeColor(HUD_C_NONE, config);
 
 	if ( clip_h > 0) {
-		renderBitmapEx(Energy_bar.first_frame, position[0], position[1],w,clip_h,0,0);
+		renderBitmapEx(Energy_bar.first_frame, x, y,w,clip_h,0,0, scale, config);
 	}
 
 	if ( clip_h <= Energy_h ) {
-		renderBitmapEx(Energy_bar.first_frame+1, position[0], position[1] + clip_h,w,h-clip_h,0,clip_h);
+		renderBitmapEx(Energy_bar.first_frame+1, x, y + static_cast<int>(clip_h * scale),w,h-clip_h,0,clip_h, scale, config);
 	}
 }
 
@@ -5758,15 +5775,15 @@ void HudGaugeWeaponEnergy::pageIn()
 
 void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 {
-	int x;
+	int bx;
 	bool use_new_gauge = false;
 
 	// Goober5000 - only check for the new gauge in case of command line + a ballistic-capable ship
-	if (Cmdline_ballistic_gauge)
+	if (!config && Cmdline_ballistic_gauge)
 	{
-		for (x = 0; x < Player_ship->weapons.num_primary_banks; ++x)
+		for (bx = 0; bx < Player_ship->weapons.num_primary_banks; ++bx)
 		{
-			if (Weapon_info[Player_ship->weapons.primary_bank_weapons[x]].wi_flags[Weapon::Info_Flags::Ballistic])
+			if (Weapon_info[Player_ship->weapons.primary_bank_weapons[bx]].wi_flags[Weapon::Info_Flags::Ballistic])
 			{
 				use_new_gauge = true;
 				break;
@@ -5774,82 +5791,119 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 		}
 	}
 
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(Energy_bar.first_frame+2, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
 	if(use_new_gauge)
 	{
 		int currentx, currenty, line_height;
-		int y;
-		int max_w = 100;
+		int by;
+		int max_w = static_cast<int>(100 * scale);
 		float remaining;
-		currentx = position[0] + 10;
-		currenty = position[1];
-		line_height = gr_get_font_height() + 1;
+		currentx = x + static_cast<int>(10 * scale);
+		currenty = y;
+		line_height = static_cast<int>(gr_get_font_height() * scale) + 1;
 		if(gr_screen.max_w_unscaled == 640) {
-			max_w = 60;
+			max_w = static_cast<int>(60 * scale);
 		}
 
 		//*****ENERGY GAUGE
-		if(Weapon_info[Player_ship->weapons.current_primary_bank].energy_consumed > 0.0f)
-			setGaugeColor(HUD_C_BRIGHT);
+		if(!config && Weapon_info[Player_ship->weapons.current_primary_bank].energy_consumed > 0.0f)
+			setGaugeColor(HUD_C_BRIGHT, config);
 
 		//Draw name
-		renderString(currentx, currenty, XSTR("Energy", 1616));
+		renderString(currentx, currenty, XSTR("Energy", 1616), scale, config);
 		currenty += line_height;
 
 		//Draw background
-		setGaugeColor(HUD_C_DIM);
-		renderRect(currentx, currenty, max_w, 10);
+		setGaugeColor(HUD_C_DIM, config);
+		renderRect(currentx, currenty, max_w, static_cast<int>(10 * scale));
 
 		//Draw gauge bar
-		setGaugeColor(HUD_C_NORMAL);
-		remaining = max_w * ((float)Player_ship->weapon_energy/(float)Ship_info[Player_ship->ship_info_index].max_weapon_reserve);
+		setGaugeColor(HUD_C_NORMAL, config);
+		remaining = config ? static_cast<float>(max_w) : static_cast<float>(max_w * static_cast<int>(Player_ship->weapon_energy/Ship_info[Player_ship->ship_info_index].max_weapon_reserve));
 		if(remaining > 0)
 		{
-			setGaugeColor(HUD_C_BRIGHT);
-			for(y = 0; y < 10; y++) {
-				renderGradientLine(currentx, currenty + y, currentx + fl2i(remaining), currenty + y);
+			setGaugeColor(HUD_C_BRIGHT, config);
+			for(by = 0; by < 10; by++) {
+				renderGradientLine(currentx, currenty + by, currentx + fl2i(remaining), currenty + by);
 			}
 		}
-		currenty += 12;
+		currenty += static_cast<int>(12 * scale);
 
 		char shortened_name[NAME_LENGTH];
 		//*****BALLISTIC GAUGES
-		for(x = 0; x < Player_ship->weapons.num_primary_banks; x++)
+		int num_primaries = config ? MAX_SHIP_PRIMARY_BANKS : Player_ship->weapons.num_primary_banks;
+		for (bx = 0; bx < num_primaries; bx++)
 		{
-			//Skip all pure-energy weapons
-			if(!(Weapon_info[Player_ship->weapons.primary_bank_weapons[x]].wi_flags[Weapon::Info_Flags::Ballistic]))
-				continue;
+			if (!config){
+				//Skip all pure-energy weapons
+				if(!(Weapon_info[Player_ship->weapons.primary_bank_weapons[bx]].wi_flags[Weapon::Info_Flags::Ballistic]))
+					continue;
+			}
 
 			//Draw the weapon bright or normal depending if it's active or not.
-			if(x == Player_ship->weapons.current_primary_bank || (Player_ship->flags[Ship::Ship_Flags::Primary_linked])) {
-				setGaugeColor(HUD_C_BRIGHT);
+			if(!config && (bx == Player_ship->weapons.current_primary_bank || (Player_ship->flags[Ship::Ship_Flags::Primary_linked]))) {
+				setGaugeColor(HUD_C_BRIGHT, config);
 			} else {
-				setGaugeColor(HUD_C_NORMAL);
+				setGaugeColor(HUD_C_NORMAL, config);
+			}
+			SCP_string weapon_name = "";
+			if (!config) {
+				weapon_name = Weapon_info[Player_ship->weapons.primary_bank_weapons[bx]].get_display_name();
+			} else {
+				// In config mode let's get the first 3 player allowed primaries
+				int match_count = 0;
+				bool found = false;
+				for (weapon_info& weapon : Weapon_info) {
+					if (weapon.subtype == WP_LASER && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
+						if (match_count == bx) {
+							weapon_name = weapon.get_display_name();
+							found = true;
+							break;
+						}
+						match_count++;
+					}
+				}
+				if (!found) {
+					weapon_name = "primary weapon";
+				}
 			}
 			if(gr_screen.max_w_unscaled == 640) {
-				strcpy_s(shortened_name, Weapon_info[Player_ship->weapons.primary_bank_weapons[x]].get_display_name());
-				font::force_fit_string(shortened_name, NAME_LENGTH, 55);
-				renderString(currentx, currenty, shortened_name);
+				strcpy_s(shortened_name, weapon_name.c_str());
+				font::force_fit_string(shortened_name, NAME_LENGTH, static_cast<int>(55 * scale), scale);
+				renderString(currentx, currenty, shortened_name, scale, config);
 			} else {
-				renderString(currentx, currenty, Weapon_info[Player_ship->weapons.primary_bank_weapons[x]].get_display_name());
+				renderString(currentx, currenty, weapon_name.c_str(), scale, config);
 			}
 
 			//Next 'line'
 			currenty += line_height;
 
 			//Draw the background for the gauge
-			setGaugeColor(HUD_C_DIM);
-			renderRect(currentx, currenty, max_w, 10);
+			setGaugeColor(HUD_C_DIM, config);
+			renderRect(currentx, currenty, max_w, static_cast<int>(10 * scale));
 
 			//Reset to normal brightness
-			setGaugeColor(HUD_C_NORMAL);
+			setGaugeColor(HUD_C_NORMAL, config);
 
 			//Draw the bar graph
-			remaining = (max_w - 4) * ((float) Player_ship->weapons.primary_bank_ammo[x] / (float) Player_ship->weapons.primary_bank_start_ammo[x]);
+			remaining = (max_w - 4) * config ? 1.0f : static_cast<float>(Player_ship->weapons.primary_bank_ammo[bx] / Player_ship->weapons.primary_bank_start_ammo[bx]);
 			if(remaining > 0) {
-				renderRect(currentx + 2, currenty + 2, fl2i(remaining), 6);
+				renderRect(currentx + 2, currenty + 2, fl2i(remaining), static_cast<int>(6 * scale));
 			}
 			//Increment for next 'line'
-			currenty += 12;
+			currenty += static_cast<int>(12 * scale);
 		}
 	}
 	else
@@ -5858,57 +5912,62 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 		int ballistic_ammo = 0;
 		int max_ballistic_ammo = 0;
 		int	clip_h, w, h, i;
-		weapon_info *wip;
-		ship_weapon *sw;
+		ship_weapon *sw = nullptr;
 
 		if ( Energy_bar.first_frame < 0 ) {
 			return;
 		}
 
-		if ( Player_ship->weapons.num_primary_banks <= 0 ) {
-			return;
-		}
+		if (!config) {
 
-		sw = &Player_ship->weapons;
+			if (Player_ship->weapons.num_primary_banks <= 0) {
+				return;
+			}
 
-		// show ballistic ammunition in energy gauge if need be
-		if ( Show_ballistic ) {
-			if ( Player_ship->flags[Ship::Ship_Flags::Primary_linked] ) {
+			sw = &Player_ship->weapons;
 
-				// go through all ballistic primaries and add up their ammunition totals and max capacities
-				for ( i = 0; i < sw->num_primary_banks; i++ ) {
+			// show ballistic ammunition in energy gauge if need be
+			if (Show_ballistic) {
+				if (Player_ship->flags[Ship::Ship_Flags::Primary_linked]) {
 
-					// skip all pure-energy weapons
-					if( ! ( Weapon_info[sw->primary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::Ballistic] ) ) {
-						continue;
+					// go through all ballistic primaries and add up their ammunition totals and max capacities
+					for (i = 0; i < sw->num_primary_banks; i++) {
+
+						// skip all pure-energy weapons
+						if (!(Weapon_info[sw->primary_bank_weapons[i]].wi_flags[Weapon::Info_Flags::Ballistic])) {
+							continue;
+						}
+
+						ballistic_ammo += sw->primary_bank_ammo[i];
+						max_ballistic_ammo += sw->primary_bank_start_ammo[i];
 					}
+				} else {
+					ballistic_ammo = sw->primary_bank_ammo[sw->current_primary_bank];
+					max_ballistic_ammo = sw->primary_bank_start_ammo[sw->current_primary_bank];
+				}
 
-					ballistic_ammo += sw->primary_bank_ammo[i];
-					max_ballistic_ammo += sw->primary_bank_start_ammo[i];
+				if (max_ballistic_ammo > 0) {
+					percent_left = i2fl(ballistic_ammo) / i2fl(max_ballistic_ammo);
+				} else {
+					percent_left = 1.0f;
 				}
 			} else {
-				ballistic_ammo = sw->primary_bank_ammo[sw->current_primary_bank];
-				max_ballistic_ammo = sw->primary_bank_start_ammo[sw->current_primary_bank];
-			}
+				// also leave if no energy can be stored for weapons - Goober5000
+				if (!ship_has_energy_weapons(Player_ship))
+					return;
 
-			if (max_ballistic_ammo > 0) {
-				percent_left = i2fl(ballistic_ammo) / i2fl(max_ballistic_ammo);
-			} else {
-				percent_left = 1.0f;
+				percent_left = Player_ship->weapon_energy / Ship_info[Player_ship->ship_info_index].max_weapon_reserve;
+				if (percent_left > 1) {
+					percent_left = 1.0f;
+				}
 			}
 		} else {
-			// also leave if no energy can be stored for weapons - Goober5000
-			if (!ship_has_energy_weapons(Player_ship))
-				return;
-
-			percent_left = Player_ship->weapon_energy/Ship_info[Player_ship->ship_info_index].max_weapon_reserve;
-			if ( percent_left > 1 )
-			{
-				percent_left = 1.0f;
-			}
+			// Dummy data for config
+			percent_left = 1.0f;
+			ballistic_ammo = 100;
 		}
 
-		clip_h = (int)std::lround((1.0f - percent_left) * Wenergy_h);
+		clip_h = static_cast<int>(std::lround((1.0f - percent_left) * Wenergy_h));
 
 		if ( percent_left <= 0.3 || Show_ballistic || Always_show_text ) {
 			char buf[10];
@@ -5917,7 +5976,7 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 			if ( percent_left < 0.1 ) {
 				gr_set_color_fast(&Color_bright_red);
 			} else {
-				setGaugeColor();
+				setGaugeColor(HUD_C_NONE, config);
 			}
 
 			if ( Show_ballistic ) {
@@ -5933,57 +5992,98 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 			hud_num_make_mono(buf, font_num);
 
 			if ( Text_alignment == HudAlignment::RIGHT ) {
-				gr_get_string_size(&w, &h, buf);
+				gr_get_string_size(&w, &h, buf, scale);
 				delta_x = -w;
 			}
 
-			renderString(position[0] + Wenergy_text_offsets[0] + delta_x, position[1] + Wenergy_text_offsets[1] + delta_y, buf);
+			renderString(x + static_cast<int>(Wenergy_text_offsets[0] + delta_x * scale), y + static_cast<int>(Wenergy_text_offsets[1] + delta_y * scale), buf, scale, config);
 		}
 
-		setGaugeColor();
+		setGaugeColor(HUD_C_NONE, config);
 
 		// list currently armed primary banks if we have to
 		if ( Show_armed ) {
-			if ( Player_ship->flags[Ship::Ship_Flags::Primary_linked] ) {
+			if (config || Player_ship->flags[Ship::Ship_Flags::Primary_linked] ) {
 				// show all primary banks
-				for ( i = 0; i < Player_ship->weapons.num_primary_banks; i++ ) {
-					wip = &Weapon_info[sw->primary_bank_weapons[i]];
-					auto weapon_name = wip->get_display_name();
+				int num_banks = config ? MAX_SHIP_PRIMARY_BANKS : Player_ship->weapons.num_primary_banks;
+				for ( i = 0; i < num_banks; i++ ) {
+					weapon_info* wip = nullptr;
+					SCP_string weapon_name;
+
+					if (!config) {
+						wip = &Weapon_info[sw->primary_bank_weapons[i]];
+					} else {
+						// In config mode let's get the first 3 player allowed primaries
+						int match_count = 0;
+						for (weapon_info& weapon : Weapon_info) {
+							if (weapon.subtype == WP_LASER && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
+								if (match_count == i) {
+									wip = &weapon;
+									break;
+								}
+								match_count++;
+							}
+						}
+					}
+
+					// Just in case
+					if (wip == nullptr) {
+						weapon_name = "Primary weapon";
+					} else {
+						weapon_name = wip->get_display_name();
+					}
 
 					if ( Armed_alignment == HudAlignment::RIGHT ) {
-						gr_get_string_size(&w, &h, weapon_name);
+						gr_get_string_size(&w, &h, weapon_name.c_str(), scale);
 					} else {
 						w = 0;
 					}
 
-					renderString(position[0] + Armed_name_offsets[0] - w, position[1] + Armed_name_offsets[1] + Armed_name_h * i, weapon_name);
+					renderString(x + static_cast<int>(Armed_name_offsets[0] * scale) - w, y + static_cast<int>(Armed_name_offsets[1] + Armed_name_h * scale) * i, weapon_name.c_str(), scale, config);
 				}
 			} else {
 				// just show the current armed bank
-				i = Player_ship->weapons.current_primary_bank;
-				wip = &Weapon_info[sw->primary_bank_weapons[i]];
-				auto weapon_name = wip->get_display_name();
+				weapon_info* wip = nullptr;
+				SCP_string weapon_name;
+				
+				if (!config) {
+					wip = &Weapon_info[sw->primary_bank_weapons[Player_ship->weapons.current_primary_bank]];
+				} else {
+					// In config just get the first weapon
+					for (weapon_info& weapon : Weapon_info) {
+						if (weapon.subtype == WP_LASER && weapon.wi_flags[Weapon::Info_Flags::Player_allowed]) {
+							wip = &weapon;
+							break;
+						}
+					}
+				}
+
+				// Just in case
+				if (wip == nullptr) {
+					weapon_name = "Primary weapon";
+				} else {
+					weapon_name = wip->get_display_name();
+				}
 
 				if ( Armed_alignment == HudAlignment::RIGHT ) {
-					gr_get_string_size(&w, &h, weapon_name);
+					gr_get_string_size(&w, &h, weapon_name.c_str(), scale);
 				} else {
 					w = 0;
 				}
 
-				renderString(position[0] + Armed_name_offsets[0] - w, position[1] + Armed_name_offsets[1], weapon_name);
+				renderString(x + static_cast<int>(Armed_name_offsets[0] * scale) - w, y + static_cast<int>(Armed_name_offsets[1] * scale), weapon_name.c_str(), scale, config);
 			}
 		}
 
 		// maybe flash the energy bar
-		for ( i = 0; i < sw->num_primary_banks + sw->num_secondary_banks; i++ )
-		{
-			if ( !timestamp_elapsed(Weapon_flash_info.flash_duration[i]) && Weapon_flash_info.flash_energy[i])
-			{
-				if ( Weapon_flash_info.is_bright & (1<<i) )
-				{
-					// hud_set_bright_color();
-					setGaugeColor(HUD_C_BRIGHT);
-					break;
+		if (!config) {
+			for (i = 0; i < sw->num_primary_banks + sw->num_secondary_banks; i++) {
+				if (!timestamp_elapsed(Weapon_flash_info.flash_duration[i]) && Weapon_flash_info.flash_energy[i]) {
+					if (Weapon_flash_info.is_bright & (1 << i)) {
+						// hud_set_bright_color();
+						setGaugeColor(HUD_C_BRIGHT, config);
+						break;
+					}
 				}
 			}
 		}
@@ -5991,11 +6091,11 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 		bm_get_info(Energy_bar.first_frame+2,&w,&h);
 
 		if ( clip_h > 0 ) {
-			renderBitmapEx(Energy_bar.first_frame+2, position[0], position[1], w,clip_h,0,0);
+			renderBitmapEx(Energy_bar.first_frame+2, x, y, w,clip_h,0,0, scale, config);
 		}
 
 		if ( clip_h <= Wenergy_h ) {
-			renderBitmapEx(Energy_bar.first_frame+3, position[0], position[1] + clip_h, w,h-clip_h,0,clip_h);
+			renderBitmapEx(Energy_bar.first_frame+3, x, y + static_cast<int>(clip_h * scale), w,h-clip_h,0,clip_h, scale, config);
 		}
 
 		// hud_set_default_color();

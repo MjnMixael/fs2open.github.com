@@ -962,6 +962,8 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[18]->render(0, true); // Mission time
 	default_hud_gauges[19]->render(0, true); // Target box
 	default_hud_gauges[20]->render(0, true); // Extra target data
+	default_hud_gauges[21]->render(0, true); // Afterburner energy
+	default_hud_gauges[22]->render(0, true); // Weapon energy
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
 
