@@ -1000,6 +1000,8 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[31]->render(0, true); // Multi ping - no settings
 	default_hud_gauges[32]->render(0, true); // Supernove - no settings
 	default_hud_gauges[33]->render(0, true); // Offscreen
+	default_hud_gauges[34]->render(0, true); // Brackets
+	default_hud_gauges[35]->render(0, true); // Orientation Tee
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {

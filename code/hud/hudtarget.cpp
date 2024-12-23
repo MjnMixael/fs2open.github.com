@@ -2739,13 +2739,18 @@ void hud_target_subsystem_in_reticle()
 
 //	On entry:
 //		color set
-void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_objp, matrix *from_orientp)
+void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_objp, matrix *from_orientp, bool config)
 {
 	float		dot_product;
 	vec3d	target_to_obj;
 	float		x1,y1,x2,y2,x3,y3,x4,y4;
 
-	vm_vec_sub(&target_to_obj, &from_objp->pos, &to_objp->pos);
+	if (!config) {
+		vm_vec_sub(&target_to_obj, &from_objp->pos, &to_objp->pos);
+	} else {
+		// Position the example T at roughly 10-o-clock
+		target_to_obj = {-0.5f, 0.866f, 0.0f};
+	}
 
 	vm_vec_normalize(&target_to_obj);
 
@@ -2754,9 +2759,13 @@ void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_obj
 	// 0 - vectors are perpendicular
 	// 1 - vectors are collinear and in the same direction (target is facing player)
 	// -1 - vectors are collinear and in the opposite direction (target is facing away from player)
-	dot_product = vm_vec_dot(&from_orientp->vec.fvec, &target_to_obj);
+	if (!config) {
+		dot_product = vm_vec_dot(&from_orientp->vec.fvec, &target_to_obj);
+	} else {
+		dot_product = -0.5f;
+	}
 
-	if (vm_vec_dot(&from_orientp->vec.rvec, &target_to_obj) >= 0) {
+	if (config || vm_vec_dot(&from_orientp->vec.rvec, &target_to_obj) >= 0) {
 		if (dot_product >= 0){
 			dot_product = -PI_2*dot_product + PI;
 		} else {
@@ -2766,26 +2775,43 @@ void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_obj
 		dot_product *= PI_2; //(range is now -PI/2 => PI/2)
 	}
 
-	y1 = sinf(dot_product) * (Radius - T_OFFSET_FROM_CIRCLE);
-	x1 = cosf(dot_product) * (Radius - T_OFFSET_FROM_CIRCLE);
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
 
-	y1 += position[1];
-	x1 += position[0];
+	if (config) {
+		hud_config_convert_coords(position[0], position[1], base_w, base_h, x, y, scale);
+	}
 
-	y2 = sinf(dot_product) * (Radius - T_OFFSET_FROM_CIRCLE - T_LENGTH);
-	x2 = cosf(dot_product) * (Radius - T_OFFSET_FROM_CIRCLE - T_LENGTH);
+	y1 = sinf(dot_product) * fl2i((Radius - T_OFFSET_FROM_CIRCLE) * scale);
+	x1 = cosf(dot_product) * fl2i((Radius - T_OFFSET_FROM_CIRCLE) * scale);
 
-	y2 += position[1];
-	x2 += position[0];
+	y1 += y;
+	x1 += x;
 
-	x3 = x1 - T_BASE_LENGTH * sinf(dot_product);
-	y3 = y1 + T_BASE_LENGTH * cosf(dot_product);
-	x4 = x1 + T_BASE_LENGTH * sinf(dot_product);
-	y4 = y1 - T_BASE_LENGTH * cosf(dot_product);
+	y2 = sinf(dot_product) * fl2i((Radius - T_OFFSET_FROM_CIRCLE - T_LENGTH) * scale);
+	x2 = cosf(dot_product) * fl2i((Radius - T_OFFSET_FROM_CIRCLE - T_LENGTH) * scale);
+
+	y2 += y;
+	x2 += x;
+
+	x3 = x1 - (T_BASE_LENGTH * scale) * sinf(dot_product);
+	y3 = y1 + (T_BASE_LENGTH * scale) * cosf(dot_product);
+	x4 = x1 + (T_BASE_LENGTH * scale) * sinf(dot_product);
+	y4 = y1 - (T_BASE_LENGTH * scale) * cosf(dot_product);
+
+	if (config) {
+		float x_min = std::min({x1, x2, x3, x4});
+		float x_max = std::max({x1, x2, x3, x4});
+		float y_min = std::min({y1, y2, y3, y4});
+		float y_max = std::max({y1, y2, y3, y4});
+
+		hud_config_set_mouse_coords(gauge_config, fl2i(x_min), fl2i(x_max), fl2i(y_min), fl2i(y_max));
+	}
 
 	// HACK! Should be antialiased!
-	renderLine(fl2i(x3),fl2i(y3),fl2i(x4),fl2i(y4));	// bottom of T
-	renderLine(fl2i(x1),fl2i(y1),fl2i(x2),fl2i(y2));	// part of T pointing towards center
+	renderLine(fl2i(x3),fl2i(y3),fl2i(x4),fl2i(y4), config);	// bottom of T
+	renderLine(fl2i(x1),fl2i(y1),fl2i(x2),fl2i(y2), config);	// part of T pointing towards center
 }
 
 void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3, bool config)
@@ -3217,6 +3243,12 @@ void HudGaugeOrientationTee::pageIn()
 // the target is facing 90 away from the player.
 void HudGaugeOrientationTee::render(float /*frametime*/, bool config)
 {
+	if (config) {
+		setGaugeColor(HUD_C_NONE, config);
+		renderOrientation(nullptr, nullptr, nullptr, config);
+		return;
+	}
+	
 	object* targetp;
 
 	if (Player_ai->target_objnum == -1 || Player->target_is_dying)

@@ -357,6 +357,11 @@ void HudGaugeBrackets::initBitmaps(char *fname)
 
 void HudGaugeBrackets::render(float  /*frametime*/, bool config)
 {
+	// Brackets are do not support config settings
+	if (config) {
+		return;
+	}
+	
 	// don't display brackets if we're warping out.
 	if ( Player->control_mode != PCM_NORMAL ) {
 		return;

@@ -498,7 +498,7 @@ public:
 	HudGaugeOrientationTee();
 	void initRadius(int length);
 	void render(float frametime, bool config = false) override;
-	void renderOrientation(object *from_objp, object *to_objp, matrix *from_orientp);
+	void renderOrientation(object *from_objp, object *to_objp, matrix *from_orientp, bool config = false);
 	void pageIn() override;
 };
 
