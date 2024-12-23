@@ -572,9 +572,9 @@ public:
 	void initHalfSize(float w, float h);
 	void initBitmaps(char *fname);
 	void render(float frametime, bool config = false) override;
-	void renderIndicator(int frame_offset, object *targetp, vec3d *lead_target_pos);
-	void renderLeadCurrentTarget();
-	void renderLeadQuick(vec3d *target_pos, object *targetp);
+	void renderIndicator(int frame_offset, object *targetp, vec3d *lead_target_pos, bool config);
+	void renderLeadCurrentTarget(bool config);
+	void renderLeadQuick(vec3d *target_pos, object *targetp, bool config);
 	int pickFrame(float prange, float srange, float dist_to_target);
 	void pageIn() override;
 };

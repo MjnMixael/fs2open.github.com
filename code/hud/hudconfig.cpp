@@ -968,6 +968,7 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[24]->render(0, true); // Reticle
 	default_hud_gauges[25]->render(0, true); // Throttle
 	default_hud_gauges[26]->render(0, true); // Threat
+	default_hud_gauges[27]->render(0, true); // Lead indicator
 
 	//Temporary example of how to iterate over all default gauges. Saved for posterity
 	/*for (auto& gauge : default_hud_gauges) {

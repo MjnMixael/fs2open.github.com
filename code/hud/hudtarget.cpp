@@ -3900,7 +3900,7 @@ int HudGaugeLeadIndicator::pickFrame(float prange, float srange, float dist_to_t
 
 void HudGaugeLeadIndicator::render(float /*frametime*/, bool config)
 {
-	if(Player->target_is_dying) {
+	if(!config && Player->target_is_dying) {
 		return;
 	}
 
@@ -3909,7 +3909,7 @@ void HudGaugeLeadIndicator::render(float /*frametime*/, bool config)
 		g3_start_frame(0);
 
 	// first render the current target the player has selected.
-	renderLeadCurrentTarget();
+	renderLeadCurrentTarget(config);
 
 	// if extra targeting info is enabled, render lead indicators for objects in the target display list.
 	for(size_t i = 0; i < target_display_list.size(); i++) {
@@ -3924,7 +3924,7 @@ void HudGaugeLeadIndicator::render(float /*frametime*/, bool config)
 				hud_set_iff_color(target_display_list[i].objp, 1);
 			}
 
-			renderLeadQuick(&target_display_list[i].target_pos, target_display_list[i].objp);
+			renderLeadQuick(&target_display_list[i].target_pos, target_display_list[i].objp, config);
 		}
 	}
 
@@ -3932,36 +3932,57 @@ void HudGaugeLeadIndicator::render(float /*frametime*/, bool config)
 		g3_end_frame();
 }
 
-void HudGaugeLeadIndicator::renderIndicator(int frame_offset, object *targetp, vec3d *lead_target_pos)
+void HudGaugeLeadIndicator::renderIndicator(int frame_offset, object *targetp, vec3d *lead_target_pos, bool config)
 {
 	vertex lead_target_vertex;
 	int sx, sy;
 
 	g3_rotate_vertex(&lead_target_vertex, lead_target_pos);
 
-	if (lead_target_vertex.codes == 0) { // on screen
+	if (config || (lead_target_vertex.codes == 0)) { // on screen
 		g3_project_vertex(&lead_target_vertex);
 
-		if (!(lead_target_vertex.flags & PF_OVERFLOW)) {
-			if ( maybeFlashSexp() == 1 ) {
-				hud_set_iff_color(targetp, 0);
+		if (config || !(lead_target_vertex.flags & PF_OVERFLOW)) {
+			if (!config) {
+				if (maybeFlashSexp() == 1) {
+					hud_set_iff_color(targetp, 0);
+				} else {
+					hud_set_iff_color(targetp, 1);
+				}
 			} else {
-				hud_set_iff_color(targetp, 1);
+				setGaugeColor(HUD_C_NONE, config);
 			}
 
 			if ( Lead_indicator_gauge.first_frame + frame_offset >= 0 ) {
-				sx = fl2i(lead_target_vertex.screen.xyw.x);
-				sy = fl2i(lead_target_vertex.screen.xyw.y);
+				// In config, ballpark getting it in the upper right area but probably
+				// add a table setting to define where this goes in config mode
+				sx = config ? (base_w / 2) + 200 : fl2i(lead_target_vertex.screen.xyw.x);
+				sy = config ? (base_h / 2) - 200 : fl2i(lead_target_vertex.screen.xyw.y);
 
-				unsize(&sx, &sy);
-				renderBitmap(Lead_indicator_gauge.first_frame + frame_offset, fl2i(sx - Lead_indicator_half[0]),  fl2i(sy - Lead_indicator_half[1]));
+				int x = sx;
+				int y = sy;
+				float scale = 1.0;
+
+				if (config) {
+					hud_config_convert_coords(sx, sy, base_w, base_h, x, y, scale);
+					// Ideally this doesn't eventually happen every single frame. Hmm.
+					int bmw;
+					int bmh;
+					bm_get_info(Lead_indicator_gauge.first_frame + frame_offset, &bmw, &bmh);
+					int mx = fl2i(x - i2fl(Lead_indicator_half[0] * scale));
+					int my = fl2i(y - i2fl(Lead_indicator_half[1] * scale));
+					hud_config_set_mouse_coords(gauge_config, mx, mx + fl2i(bmw * scale), my, my + fl2i(bmh * scale));
+				} else {
+					unsize(&x, &y);
+				}
+				renderBitmap(Lead_indicator_gauge.first_frame + frame_offset, fl2i(x - i2fl(Lead_indicator_half[0] * scale)),  fl2i(y - i2fl(Lead_indicator_half[1] * scale)), scale, config);
 			}
 		}
 	}
 }
 
 // HudGaugeLeadIndicator::renderTargetLead() determine where to draw the lead target box and display it
-void HudGaugeLeadIndicator::renderLeadCurrentTarget()
+void HudGaugeLeadIndicator::renderLeadCurrentTarget(bool config)
 {
 	vec3d		target_pos;
 	vec3d		lead_target_pos;
@@ -3972,6 +3993,15 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 	float		dist_to_target, prange, srange;
 	int			bank_to_fire;
 	int			frame_offset = -1;
+
+	// In config mode we don't really care all about the below right now, just render the indicator
+	// I've left the code dive into this function in case we have newer lead behavior in the future
+	// that we may want to replicate on the config UI.
+	if (config) {
+		lead_target_pos = vmd_zero_vector;
+		renderIndicator(1, nullptr, &lead_target_pos, config);
+		return;
+	}
 
 	if (Player_ai->target_objnum == -1)
 		return;
@@ -3992,7 +4022,7 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 
 	// If the target is out of range, then draw the correct frame for the lead indicator
 	if ( Lead_indicator_gauge.first_frame == -1 ) {
-		Int3();
+		//Int3(); no frame? Just return. We don't need to int3 here probably.
 		return;
 	}
 
@@ -4072,7 +4102,7 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 
 			if (frame_offset >= 0) {
 				if (Lead_indicator_behavior == leadIndicatorBehavior::MULTIPLE) {
-					renderIndicator(frame_offset, targetp, &lead_target_pos);
+					renderIndicator(frame_offset, targetp, &lead_target_pos, config);
 				}
 				else if (Lead_indicator_behavior == leadIndicatorBehavior::AVERAGE) {
 					vm_vec_add2(&averaged_lead_pos, &lead_target_pos);
@@ -4082,7 +4112,7 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 		}
 		if (average_instances > 0 && Lead_indicator_behavior == leadIndicatorBehavior::AVERAGE) {
 			averaged_lead_pos = averaged_lead_pos/i2fl(average_instances);
-			renderIndicator(frame_offset, targetp, &averaged_lead_pos);
+			renderIndicator(frame_offset, targetp, &averaged_lead_pos, config);
 		
 		// This handles an edge case where secondary weapon indicators might not have been rendered, despite possibly being in range.
 		} else if ( frame_offset == -1) {
@@ -4104,7 +4134,7 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 		}
 
 		if (frame_offset >= 0) {
-			renderIndicator(frame_offset, targetp, &lead_target_pos);
+			renderIndicator(frame_offset, targetp, &lead_target_pos, config);
 		}
 	}
 	//Cyborg - this `else return;` would force the secondary indicator off if no primaries are available.
@@ -4135,7 +4165,7 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 			return;
 
 		if (hud_calculate_lead_pos(&Player_obj->pos, &lead_target_pos, &target_pos, targetp, wip, dist_to_target))
-			renderIndicator(0, targetp, &lead_target_pos);
+			renderIndicator(0, targetp, &lead_target_pos, config);
 	}
 }
 
@@ -4146,7 +4176,7 @@ void HudGaugeLeadIndicator::renderLeadCurrentTarget()
 // instead of the existing code (copied from above) that does some calculations and then is ignored ;-)
 // (Go look, what's it actually DO with source_pos?)
 // And also, something that could be called for multiple weapons, ITTS style.
-void HudGaugeLeadIndicator::renderLeadQuick(vec3d *target_world_pos, object *targetp)
+void HudGaugeLeadIndicator::renderLeadQuick(vec3d *target_world_pos, object *targetp, bool config)
 {
 	vec3d		source_pos;
 	vec3d		*rel_pos;
@@ -4218,7 +4248,7 @@ void HudGaugeLeadIndicator::renderLeadQuick(vec3d *target_world_pos, object *tar
 	}
 
 	hud_calculate_lead_pos(&source_pos , &lead_target_pos, target_world_pos, targetp, wip, dist_to_target, rel_pos);
-	renderIndicator(frame_offset, targetp, &lead_target_pos);
+	renderIndicator(frame_offset, targetp, &lead_target_pos, config);
 }
 
 HudGaugeLeadSight::HudGaugeLeadSight():
