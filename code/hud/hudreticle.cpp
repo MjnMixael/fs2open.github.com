@@ -1195,22 +1195,37 @@ void HudGaugeWeaponLinking::render(float  /*frametime*/, bool config)
 	int			gauge_index=0, frame_offset=0;
 	ship_weapon	*swp;
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(arc.first_frame, &bmw, &bmh);
+		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	if (arc.first_frame >= 0) {
-		renderBitmap(arc.first_frame+1, position[0], position[1]);
+		renderBitmap(arc.first_frame + 1, x, y, scale, config);
 	}
 
 	swp = &Player_ship->weapons;
 
-	switch( swp->num_primary_banks ) {
+	int num_primary_banks = config ? 2 : swp->num_primary_banks;
+
+	switch (num_primary_banks) {
 		case 0:
 			gauge_index = -1;
 			break;
 
 		case 1:
 			gauge_index = LINK_ONE_PRIMARY;
-			if ( Player_ship->weapons.current_primary_bank == -1 ) {
+			if (!config && Player_ship->weapons.current_primary_bank == -1 ) {
 				frame_offset = 0;	
 			} else {
 				frame_offset = 1;	
@@ -1219,10 +1234,10 @@ void HudGaugeWeaponLinking::render(float  /*frametime*/, bool config)
 
 		case 2:
 			gauge_index = LINK_TWO_PRIMARY;
-			if ( swp->current_primary_bank == -1 ) {
+			if (!config && swp->current_primary_bank == -1 ) {
 				frame_offset = 0;	
 			} else {
-				if ( Player_ship->flags[Ship::Ship_Flags::Primary_linked] ) {
+				if (config || Player_ship->flags[Ship::Ship_Flags::Primary_linked] ) {
 					frame_offset = 3;
 				} else {
 					if ( swp->current_primary_bank == 0 ) {
@@ -1242,11 +1257,11 @@ void HudGaugeWeaponLinking::render(float  /*frametime*/, bool config)
 	
 	if ( gauge_index != -1 ) {
 		if (weapon_linking_modes[gauge_index].first_frame >= 0) {
-			renderBitmap(weapon_linking_modes[gauge_index].first_frame+frame_offset, position[0] + Weapon_link_offsets[gauge_index][0], position[1] + Weapon_link_offsets[gauge_index][1]);
+			renderBitmap(weapon_linking_modes[gauge_index].first_frame+frame_offset, x + fl2i(Weapon_link_offsets[gauge_index][0] * scale), y + fl2i(Weapon_link_offsets[gauge_index][1] * scale), scale, config);
 		}
 	}
 
-	int num_banks = swp->num_secondary_banks;
+	int num_banks = config ? 3 : swp->num_secondary_banks;
 	if ( num_banks <= 0 ) {
 		num_banks = Ship_info[Player_ship->ship_info_index].num_secondary_banks;
 	}
@@ -1275,13 +1290,13 @@ void HudGaugeWeaponLinking::render(float  /*frametime*/, bool config)
 	}
 	
 	if ( gauge_index != -1 ) {
-		if ( swp->num_secondary_banks <= 0 ) {
+		if (config || swp->num_secondary_banks <= 0 ) {
 			frame_offset = 0;
 		} else {
 			frame_offset = swp->current_secondary_bank+1;
 		}
 		if (weapon_linking_modes[gauge_index].first_frame >= 0) {
-			renderBitmap(weapon_linking_modes[gauge_index].first_frame+frame_offset, position[0] + Weapon_link_offsets[gauge_index][0],  position[1] + Weapon_link_offsets[gauge_index][1]);
+			renderBitmap(weapon_linking_modes[gauge_index].first_frame+frame_offset, x + fl2i(Weapon_link_offsets[gauge_index][0] * scale),  y + fl2i(Weapon_link_offsets[gauge_index][1] * scale), scale, config);
 		}
 	}
 }

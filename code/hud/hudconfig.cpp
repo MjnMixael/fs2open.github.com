@@ -321,7 +321,10 @@ int HC_gauge_description_coords[GR_NUM_RESOLUTIONS][3] = {
 char HC_wingam_gauge_status_names[MAX_SQUADRON_WINGS][32] = {"Alpha", "Beta", "Gamma", "Delta", "Epsilon"};
 int HC_talking_head_frame = -1;
 
-int HC_config_test[2] = {0, 0};
+int HC_resize_mode = GR_RESIZE_MENU;
+
+SCP_vector<std::pair<size_t, SCP_string>> HC_available_huds;
+int HC_chosen_hud = -1;
 
 const char *HC_gauge_descriptions(int n)
 {
@@ -619,6 +622,31 @@ void hud_config_init_dimensions(int x1, int x2, int y1, int y2)
 	HC_gauge_coordinates[5] = menuHeight;
 }
 
+void hud_config_get_unique_huds()
+{
+	std::unordered_set<SCP_string> seenHuds; // Tracks HUDs we've already encountered
+
+	for (const auto& pair : Hud_parsed_ships) {
+		const auto& hudName = pair.first; // Extract the HUD name
+		if (seenHuds.find(hudName) == seenHuds.end()) {
+			// If this HUD hasn't been encountered, add it to the result
+			std::pair<size_t, SCP_string> newPair;
+			newPair.second = hudName;
+
+			// Get the ship index associated
+			for (size_t i = 0; i < Ship_info.size(); i++) {
+				if (!stricmp(Ship_info[i].name, pair.second.c_str())) {
+					newPair.first = i;
+					break;
+				}
+			}
+
+			HC_available_huds.push_back(newPair);
+			seenHuds.insert(hudName);
+		}
+	}
+}
+
 /*!
  * @brief init the UI components
  *
@@ -642,15 +670,22 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 		}
 	}
 
+	// Get any available unique huds ready
+	hud_config_get_unique_huds();
+
 	if (w < 0 || h < 0) {
 		HC_gauge_scale = 1.0f; //Unused after this big upgrade?
 		hud_config_init_dimensions(HC_gauge_config_coords[gr_screen.res][0],
 			HC_gauge_config_coords[gr_screen.res][1],
 			HC_gauge_config_coords[gr_screen.res][2],
 			HC_gauge_config_coords[gr_screen.res][3]);
+		HC_resize_mode = GR_RESIZE_MENU;
 	} else {
 
 		hud_config_init_dimensions(x, x + w, y, y + h);
+		if (API_Access) {
+			HC_resize_mode = GR_RESIZE_NONE;
+		}
 
 		float sw = 0; // will be highest w value
 
@@ -921,8 +956,8 @@ void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y
 
 void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, int y2) {
 	HC_gauge_mouse_coords[gauge_config][0] = std::min(HC_gauge_mouse_coords[gauge_config][0], x1);
-	HC_gauge_mouse_coords[gauge_config][2] = std::min(HC_gauge_mouse_coords[gauge_config][2], y1);
 	HC_gauge_mouse_coords[gauge_config][1] = std::max(HC_gauge_mouse_coords[gauge_config][1], x2);
+	HC_gauge_mouse_coords[gauge_config][2] = std::min(HC_gauge_mouse_coords[gauge_config][2], y1);
 	HC_gauge_mouse_coords[gauge_config][3] = std::max(HC_gauge_mouse_coords[gauge_config][3], y2);
 
 	// temporary stuff to show boxes
@@ -968,12 +1003,12 @@ void hud_config_convert_coord_sys(float x, float y, int baseW, int baseH, float&
 	hud_config_convert_coords(x, y, outScale, outX, outY);
 }
 
-void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode)
+void hud_config_draw_box(int x1, int x2, int y1, int y2)
 {
-	gr_line(x1, y1, x1, y2, resize_mode); // Left vertical line
-	gr_line(x1, y1, x2, y1, resize_mode); // Top horizontal line
-	gr_line(x2, y1, x2, y2, resize_mode); // Right vertical line
-	gr_line(x1, y2, x2, y2, resize_mode); // Bottom horizontal line
+	gr_line(x1, y1, x1, y2, HC_resize_mode); // Left vertical line
+	gr_line(x1, y1, x2, y1, HC_resize_mode); // Top horizontal line
+	gr_line(x2, y1, x2, y2, HC_resize_mode); // Right vertical line
+	gr_line(x1, y2, x2, y2, HC_resize_mode); // Bottom horizontal line
 }
 
 /*!
@@ -989,7 +1024,7 @@ void hud_config_render_gauges(bool API_Access)
 		//HC_gauge_config_coords[gr_screen.res][2],
 		//HC_gauge_config_coords[gr_screen.res][3]);
 	//Temporary.. render specific gauges so I can get them converted one by one
-	default_hud_gauges[0]->render(0, true); // Message output
+	/*default_hud_gauges[0]->render(0, true); // Message output
 	default_hud_gauges[1]->render(0, true); // Training message (not rendered)
 	default_hud_gauges[2]->render(0, true); // Support dock timer
 	default_hud_gauges[3]->render(0, true); // Damage gauge
@@ -1031,16 +1066,64 @@ void hud_config_render_gauges(bool API_Access)
 	default_hud_gauges[39]->render(0, true); // Kills
 	default_hud_gauges[40]->render(0, true); // Fixed messages - no settings
 	default_hud_gauges[41]->render(0, true); // ETS
-	default_hud_gauges[42]->render(0, true); // Radar
+	default_hud_gauges[42]->render(0, true); // Radar*/
 
-	//Temporary example of how to iterate over all default gauges. Saved for posterity
-	/*for (auto& gauge : default_hud_gauges) {
-		SCP_string name = gauge->getCustomGaugeName();
-		if (!name.empty() && all_gauges.count(name) == 0) {
-			head.add_data(name.c_str());
-			all_gauges.insert(std::move(name));
+	// How to render all gauges
+	// Check if this ship has its own HUD gauges.
+	SCP_string hud_name = "";
+	if (SCP_vector_inbounds(HC_available_huds, HC_chosen_hud)) {
+		ship_info* sip = &Ship_info[HC_available_huds[HC_chosen_hud].first];
+		size_t num_gauges = sip->hud_gauges.size();
+		hud_name = HC_available_huds[HC_chosen_hud].second;
+
+		for (int j = 0; j < num_gauges; j++) {
+			GR_DEBUG_SCOPE("Render HUD gauge");
+
+			// only preprocess gauges if we're not rendering to cockpit
+			//if (cockpit_display_num < 0) {
+				//sip->hud_gauges[j]->preprocess();
+			//}
+
+			//sip->hud_gauges[j]->onFrame(0);
+
+			//if (!sip->hud_gauges[j]->setupRenderCanvas(render_target)) {
+				//continue;
+			//}
+
+			//if (!sip->hud_gauges[j]->canRender()) {
+				//continue;
+			//}
+
+			//TRACE_SCOPE(tracing::RenderHUDGauge);
+
+			//sip->hud_gauges[j]->resetClip();
+			sip->hud_gauges[j]->setFont();
+			sip->hud_gauges[j]->render(0, true);
 		}
-	}*/
+	} else {
+		int num_gauges = static_cast<int>(default_hud_gauges.size());
+		hud_name = "Retail default hud";
+
+		for (int j = 0; j < num_gauges; j++) {
+			GR_DEBUG_SCOPE("Render HUD gauge");
+
+			//default_hud_gauges[j]->preprocess();
+
+			//default_hud_gauges[j]->onFrame(0);
+
+			//if (!default_hud_gauges[j]->canRender()) {
+				//continue;
+			//}
+
+			//TRACE_SCOPE(tracing::RenderHUDGauge);
+
+			//default_hud_gauges[j]->resetClip();
+			default_hud_gauges[j]->setFont();
+			default_hud_gauges[j]->render(0, true);
+		}
+	}
+
+	gr_string(HC_gauge_coordinates[0], HC_gauge_coordinates[3] + 10, hud_name.c_str());
 	
 	// This is the old code that rendered the fake gauge stand-ins
 	/*for (int i = 0; i < NUM_HUD_GAUGES; i++) {
@@ -1119,7 +1202,6 @@ bool hud_config_check_mouse_in_hud_area(int mx, int my)
  */
 void hud_config_check_regions(int mx, int my)
 {
-	int			i;
 	UI_BUTTON	*b;
 
 	if (hud_config_check_mouse_in_hud_area(mx, my)) {
@@ -1139,7 +1221,7 @@ void hud_config_check_regions(int mx, int my)
 		HC_color_sliders[HCS_ALPHA].disable();
 	}
 
-	for ( i=0; i<NUM_HUD_GAUGES; i++ ) {
+	for (int i = NUM_HUD_GAUGES - 1; i >= 0; i--) {
 		// Eventually we can just always check by mouse region.. but for now let's add this here for testing
 		if (HC_gauge_mouse_coords[i][0] >= 0) {
 			// Add checks here for the new mouse coords
@@ -1250,7 +1332,7 @@ void hud_config_check_regions(int mx, int my)
  */
 void hud_config_check_regions_by_mouse(int mx, int my)
 {
-	for (int i = 0; i < NUM_HUD_GAUGES; i++) {
+	for (int i = NUM_HUD_GAUGES - 1; i >= 0; i--) {
 		HC_gauge_region *bi = &HC_gauge_regions[gr_screen.res][i];
 		int iw = 0;
 		int ih = 0;
@@ -1392,17 +1474,19 @@ void hud_config_handle_keypresses(int k)
 		gamesnd_play_iface(InterfaceSounds::USER_SELECT);
 		hud_cycle_gauge_status();
 		break;
-	case KEY_UP:
-		HC_config_test[0] += 1;
-		break;
-	case KEY_DOWN:
-		HC_config_test[0] -= 1;
+	case KEY_RIGHT:
+		HC_chosen_hud++;
+		if (HC_chosen_hud >= HC_available_huds.size()) {
+			// Eventually a table setting will allow setting this to 0 or -1 depending
+			// on if the mod wants to display the default hud ever
+			HC_chosen_hud = -1;
+		}
 		break;
 	case KEY_LEFT:
-		HC_config_test[1] -= 1;
-		break;
-	case KEY_RIGHT:
-		HC_config_test[1] += 1;
+		HC_chosen_hud--;
+		if (HC_chosen_hud < -1) {
+			HC_chosen_hud = static_cast<int>(HC_available_huds.size()) - 1;
+		}
 		break;
 	}
 }
@@ -2183,6 +2267,29 @@ void hud_config_delete_preset(SCP_string filename)
 
 	// Reload the presets from file.
 	hud_config_preset_init();
+}
+
+void hud_config_select_none()
+{
+	HC_select_all = false;
+	HC_gauge_selected = -1;
+}
+
+void hud_config_select_hud(bool next)
+{
+	if (next) {
+		HC_chosen_hud++;
+		if (HC_chosen_hud >= HC_available_huds.size()) {
+			// Eventually a table setting will allow setting this to 0 or -1 depending
+			// on if the mod wants to display the default hud ever
+			HC_chosen_hud = -1;
+		}
+	} else {
+		HC_chosen_hud--;
+		if (HC_chosen_hud < -1) {
+			HC_chosen_hud = static_cast<int>(HC_available_huds.size()) - 1;
+		}
+	}
 }
 
 void hud_config_select_all_toggle(bool toggle, bool API_Access)

@@ -754,20 +754,34 @@ void HudGauge::render(float /*frametime*/, bool config)
 		return;
 	}
 
-	setGaugeColor();
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
+
+	if (config) {
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		// Ideally this doesn't eventually happen every single frame. Hmm.
+		int bmw;
+		int bmh;
+		bm_get_info(custom_frame.first_frame, &bmw, &bmh);
+		// Not handled by custom gauges yet!
+		//hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
+	}
+
+	setGaugeColor(HUD_C_NONE, config);
 
 	if( !custom_text.empty() ) {
 		char *text = new char[custom_text.size()+1];
 		strcpy(text, custom_text.c_str());
 
 		hud_num_make_mono(text, font_num);
-		renderString(position[0] + textoffset_x, position[1] + textoffset_y, text);
+		renderString(x + fl2i(textoffset_x * scale), y + fl2i(textoffset_y * scale), text, scale, config);
 
 		delete[] text;
 	}
 
 	if(custom_frame.first_frame > -1) {
-		renderBitmap(custom_frame.first_frame + custom_frame_offset, position[0], position[1]);
+		renderBitmap(custom_frame.first_frame + custom_frame_offset, x, y, scale, config);
 	}
 }
 
@@ -792,7 +806,7 @@ void HudGauge::renderString(int x, int y, const char *str, float scale, bool con
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	if (HUD_shadows) {
@@ -826,7 +840,7 @@ void HudGauge::renderString(int x, int y, int gauge_id, const char *str, float s
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 
@@ -913,7 +927,7 @@ void HudGauge::renderBitmapColor(int frame, int x, int y, float scale, bool conf
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	gr_set_bitmap(frame);
@@ -949,7 +963,7 @@ void HudGauge::renderBitmap(int x, int y, float scale, bool config)
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 	
 	gr_aabitmap(x + nx, y + ny, resize, false, scale);
@@ -994,7 +1008,7 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	gr_aabitmap_ex(x + nx, y + ny, w, h, sx, sy, resize, false, scale);
@@ -1024,7 +1038,7 @@ void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool config)
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	gr_line(x1 + nx, y1 + ny, x2 + nx, y2 + ny, resize);
@@ -1053,7 +1067,7 @@ void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2, bool config)
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	gr_gradient(x1 + nx, y1 + ny, x2 + nx, y2 + ny, resize);
@@ -1082,7 +1096,7 @@ void HudGauge::renderRect(int x, int y, int w, int h, bool config)
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	gr_rect(x + nx, y + ny, w, h, resize);
@@ -1111,7 +1125,7 @@ void HudGauge::renderCircle(int x, int y, int diameter, bool filled, bool config
 			}
 		}
 	} else {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	if (filled) {

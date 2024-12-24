@@ -54,7 +54,7 @@ extern int HUD_config_default_flags;
 extern int HUD_config_default_flags2;
 
 extern const int HC_gauge_config_coords[GR_NUM_RESOLUTIONS][4];
-extern int HC_config_test[2];
+extern int HC_resize_mode;
 
 /**
  * @brief Contains core HUD configuration data
@@ -146,6 +146,16 @@ void hud_config_close(bool API_Access = false);
  * param[in] API_Access		whether or not this method has been called from the lua api
  */
 void hud_config_select_all_toggle(bool toggle, bool API_Access = false);
+
+/*!
+ * @brief sets no gauges as selected
+ */
+void hud_config_select_none();
+
+/*!
+ * @brief sets no gauges as selected
+ */
+void hud_config_select_hud(bool next);
 
 /*!
  * @brief init the list of preset files found by cfile
@@ -254,7 +264,7 @@ void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, i
 void hud_config_get_sliders_color(color& clr);
 
 // TEMPORARY FUNCTION
-void hud_config_draw_box(int x1, int x2, int y1, int y2, int resize_mode = GR_RESIZE_MENU);
+void hud_config_draw_box(int x1, int x2, int y1, int y2);
 
 #endif
 

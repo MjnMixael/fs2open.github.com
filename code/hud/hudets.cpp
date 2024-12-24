@@ -1152,11 +1152,6 @@ void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
-		// Ideally this doesn't eventually happen every single frame. Hmm.
-		int bmw;
-		int bmh;
-		bm_get_info(Ets_bar.first_frame, &bmw, &bmh);
-		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 
@@ -1203,7 +1198,7 @@ void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 		int bmh;
 		bm_get_info(Ets_bar.first_frame, &bmw, &bmh);
 
-		hud_config_set_mouse_coords(gauge_config, rx, ry, rx + bmw, ry + (bmh * 2) +10);
+		hud_config_set_mouse_coords_ets(gauge_config, rx, rx + bmw, ry, ry + (bmh * 2) + 10);
 	}
 }
 
@@ -1229,11 +1224,6 @@ void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
-		// Ideally this doesn't eventually happen every single frame. Hmm.
-		int bmw;
-		int bmh;
-		bm_get_info(Ets_bar.first_frame, &bmw, &bmh);
-		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 
@@ -1280,7 +1270,7 @@ void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 		int bmh;
 		bm_get_info(Ets_bar.first_frame, &bmw, &bmh);
 
-		hud_config_set_mouse_coords(gauge_config, rx, ry, rx + bmw, ry + (bmh * 2) + 10);
+		hud_config_set_mouse_coords_ets(gauge_config, rx, rx + bmw, ry, ry + (bmh * 2) + 10);
 	}
 }
 
@@ -1306,11 +1296,6 @@ void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 
 	if (config) {
 		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
-		// Ideally this doesn't eventually happen every single frame. Hmm.
-		int bmw;
-		int bmh;
-		bm_get_info(Ets_bar.first_frame, &bmw, &bmh);
-		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(bmw * scale), y, y + static_cast<int>(bmh * scale));
 	}
 
 
@@ -1357,6 +1342,6 @@ void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 		int bmh;
 		bm_get_info(Ets_bar.first_frame, &bmw, &bmh);
 
-		hud_config_set_mouse_coords(gauge_config, rx, ry, rx + bmw, ry + (bmh * 2) + 10);
+		hud_config_set_mouse_coords_ets(gauge_config, rx, rx + bmw, ry, ry + (bmh * 2) + 10);
 	}
 }

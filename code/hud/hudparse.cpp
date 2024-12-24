@@ -618,7 +618,12 @@ void hud_positions_init()
 	// load missing retail gauges for the default and ship-specific HUDs
 	load_missing_retail_gauges();
 
-	Hud_parsed_ships.clear();
+	if (Hud_parsed_ships.size() > 0) {
+		// do nothing
+	}
+
+	// Keeping this around now for HUD config
+	//Hud_parsed_ships.clear();
 }
 
 void load_missing_retail_gauges()

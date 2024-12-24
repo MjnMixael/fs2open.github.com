@@ -569,11 +569,15 @@ void HudGaugeShield::showShields(const object *objp, int mode, bool config)
 		sp = &Ships[objp->instance];
 		sip = &Ship_info[sp->ship_info_index];
 	} else {
-		// This may be silly, but I feel like retail should use the Myrmidon and if that doesn't exist then get whatever we can find first.
-		for (ship_info& ship : Ship_info) {
-			if (!stricmp(ship.name, "gtf myrmidon") && (ship.shield_icon_index != 255 || (ship.flags[Ship::Info_Flags::Generate_hud_icon]))) {
-				sip = &ship;
-				break;
+		// This may be silly, but I feel like retail should use the Myrmidon and if that doesn't exist then get
+		// whatever we can find first.
+		if (Mod_title.empty()) {
+			for (ship_info& ship : Ship_info) {
+				if (!stricmp(ship.name, "gtf myrmidon") &&
+					(ship.shield_icon_index != 255 || (ship.flags[Ship::Info_Flags::Generate_hud_icon]))) {
+					sip = &ship;
+					break;
+				}
 			}
 		}
 		// Get the first ship with shields we can find

@@ -2444,6 +2444,38 @@ ADE_FUNC(selectAllGauges,
 	return ADE_RETURN_NIL;
 }
 
+ADE_FUNC(selectNoGauges,
+	l_UserInterface_HUDConfig,
+	nullptr,
+	"Sets no gauges as selected.",
+	nullptr,
+	nullptr)
+{
+	SCP_UNUSED(L);
+
+	hud_config_select_none();
+
+	return ADE_RETURN_NIL;
+}
+
+ADE_FUNC(selectNextHud, l_UserInterface_HUDConfig, nullptr, "Selects the next available HUD", nullptr, nullptr)
+{
+	SCP_UNUSED(L);
+
+	hud_config_select_hud(true);
+
+	return ADE_RETURN_NIL;
+}
+
+ADE_FUNC(selectPrevHud, l_UserInterface_HUDConfig, nullptr, "Selects the previous available HUD", nullptr, nullptr)
+{
+	SCP_UNUSED(L);
+
+	hud_config_select_hud(false);
+
+	return ADE_RETURN_NIL;
+}
+
 ADE_FUNC(setToDefault,
 	l_UserInterface_HUDConfig,
 	"string Filename",

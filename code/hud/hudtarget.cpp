@@ -2883,7 +2883,7 @@ void hud_tri(float x1,float y1,float x2,float y2,float x3,float y3, bool config)
 			&verts[i].screen.xyw.y,
 			0,
 			0,
-			config ? GR_RESIZE_MENU : GR_RESIZE_FULL);
+			config ? HC_resize_mode : GR_RESIZE_FULL);
 	}
 
 	//uint saved_mode = gr_zbuffer_get();
@@ -2910,7 +2910,7 @@ void hud_tri_empty(float x1,float y1,float x2,float y2,float x3,float y3, bool c
 {
 	int resize = GR_RESIZE_FULL;
 	if (config) {
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 	gr_line(fl2i(x1), fl2i(y1), fl2i(x2), fl2i(y2), resize);
 	gr_line(fl2i(x2), fl2i(y2), fl2i(x3), fl2i(y3), resize);
@@ -3017,7 +3017,7 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 
 	// draw the tail indicating length
 	if ( tail_len > 0 ) {
-		gr_line(fl2i(xpos), fl2i(ypos), fl2i(xtail), fl2i(ytail), config ? GR_RESIZE_MENU : GR_RESIZE_FULL);
+		gr_line(fl2i(xpos), fl2i(ypos), fl2i(xtail), fl2i(ytail), config ? HC_resize_mode : GR_RESIZE_FULL);
 	}
 
 	if (config) {
@@ -7076,7 +7076,7 @@ void HudGaugeOffscreen::renderOffscreenIndicator(vec2d *coords, int dir, float d
 	float scale = 1.0f;
 	if (config) {
 		hud_config_convert_coord_sys(xpos, ypos, base_w, base_h, xpos, ypos, scale);
-		resize = GR_RESIZE_MENU;
+		resize = HC_resize_mode;
 	}
 
 	if (displayed_distance > 0.0f) {
