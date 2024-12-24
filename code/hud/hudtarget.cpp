@@ -2745,14 +2745,13 @@ void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_obj
 	vec3d	target_to_obj;
 	float		x1,y1,x2,y2,x3,y3,x4,y4;
 
-	if (!config) {
-		vm_vec_sub(&target_to_obj, &from_objp->pos, &to_objp->pos);
-	} else {
-		// Position the example T at roughly 10-o-clock
-		target_to_obj = {-0.5f, 0.866f, 0.0f};
-	}
+	int x = position[0];
+	int y = position[1];
+	float scale = 1.0;
 
-	vm_vec_normalize(&target_to_obj);
+	if (config) {
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+	}
 
 	// calculate the dot product between the target_to_player vector and the targets forward vector
 	//
@@ -2760,27 +2759,45 @@ void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_obj
 	// 1 - vectors are collinear and in the same direction (target is facing player)
 	// -1 - vectors are collinear and in the opposite direction (target is facing away from player)
 	if (!config) {
+		vm_vec_sub(&target_to_obj, &from_objp->pos, &to_objp->pos);
+		vm_vec_normalize(&target_to_obj);
 		dot_product = vm_vec_dot(&from_orientp->vec.fvec, &target_to_obj);
-	} else {
-		dot_product = -0.5f;
-	}
 
-	if (config || vm_vec_dot(&from_orientp->vec.rvec, &target_to_obj) >= 0) {
-		if (dot_product >= 0){
-			dot_product = -PI_2*dot_product + PI;
+		if (vm_vec_dot(&from_orientp->vec.rvec, &target_to_obj) >= 0) {
+			if (dot_product >= 0) {
+				dot_product = -PI_2 * dot_product + PI;
+			} else {
+				dot_product = -PI_2 * dot_product - PI;
+			}
 		} else {
-			dot_product = -PI_2*dot_product - PI;
+			dot_product *= PI_2; //(range is now -PI/2 => PI/2)
 		}
 	} else {
-		dot_product *= PI_2; //(range is now -PI/2 => PI/2)
-	}
+		float angle = 300;
 
-	int x = position[0];
-	int y = position[1];
-	float scale = 1.0;
+		// Rotate the angle so that 0 is on top
+		angle -= 180.0f;
 
-	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
+
+		// Convert angle to radians
+		float angle_radians = angle * static_cast<float>(M_PI) / 180.0f;
+
+		// Simulate the dot product behavior for config mode
+		float cos_component = cosf(angle_radians); // Forward/backward projection
+		float sin_component = sinf(angle_radians); // Side projection
+
+		if (sin_component >= 0.0f) {
+			// Simulated target is on the right side
+			if (cos_component >= 0) {
+				dot_product = -PI_2 * cos_component + PI;
+			} else {
+				dot_product = -PI_2 * cos_component - PI;
+			}
+		} else {
+			// Simulated target is on the left side
+			dot_product = cos_component * PI_2;
+		}
 	}
 
 	y1 = sinf(dot_product) * fl2i((Radius - T_OFFSET_FROM_CIRCLE) * scale);
@@ -3126,11 +3143,11 @@ void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag
 	cos_ang=cosf(ang);
 
 	if ( draw_inside ) {
-		xpos = tablePosX + cos_ang * (scaled_radius - 7);
-		ypos = tablePosY - sin_ang * (scaled_radius - 7);
+		xpos = tablePosX + cos_ang * (scaled_radius - (7 * scale));
+		ypos = tablePosY - sin_ang * (scaled_radius - (7 * scale));
 	} else {
-		xpos = tablePosX + cos_ang * (scaled_radius + 4);
-		ypos = tablePosY - sin_ang * (scaled_radius + 4);
+		xpos = tablePosX + cos_ang * (scaled_radius + (4 * scale));
+		ypos = tablePosY - sin_ang * (scaled_radius + (4 * scale));
 	}
 
 	if ( split_tri ) {
@@ -3251,9 +3268,23 @@ HudGaugeReticleTriangle(HUD_OBJECT_MISSILE_TRI, HUD_MISSILE_WARNING_ARROW)
 void HudGaugeMissileTriangles::render(float /*frametime*/, bool config)
 {
 	if (config) {
+		float angle = 222.0f;		
+
+		int x;
+		int y;
+		float scale;
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+
+		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
+
+		auto pair = hud_config_calc_coords_from_angle(angle,
+			x + fl2i(HUD_nose_x * scale),
+			y + fl2i(HUD_nose_y * scale),
+			Radius * scale);
+
 		vec3d pos;
-		pos.xyz.x = 0;
-		pos.xyz.y = 1100;
+		pos.xyz.x = pair.first;
+		pos.xyz.y = pair.second;
 		pos.xyz.z = 100.0f;
 
 		setGaugeColor(HUD_C_NONE, config);
@@ -3780,9 +3811,23 @@ HudGaugeReticleTriangle(HUD_OBJECT_HOSTILE_TRI, HUD_HOSTILE_TRIANGLE)
 void HudGaugeHostileTriangle::render(float /*frametime*/, bool config)
 {
 	if (config) {
+		float angle = 210.0f;
+
+		int x;
+		int y;
+		float scale;
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+
+		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
+
+		auto pair = hud_config_calc_coords_from_angle(angle,
+			x + fl2i(HUD_nose_x * scale),
+			y + fl2i(HUD_nose_y * scale),
+			Radius * scale);
+
 		vec3d pos;
-		pos.xyz.x = 0;
-		pos.xyz.y = 1500;
+		pos.xyz.x = pair.first;
+		pos.xyz.y = pair.second;
 		pos.xyz.z = 100.0f;
 
 		setGaugeColor(HUD_C_NONE, config);
@@ -4084,8 +4129,42 @@ void HudGaugeLeadIndicator::renderIndicator(int frame_offset, object *targetp, v
 					int bmw;
 					int bmh;
 					bm_get_info(Lead_indicator_gauge.first_frame + frame_offset, &bmw, &bmh);
+
+					BoundingBox newBox = {x, x + fl2i(bmw * scale), y, y + fl2i(bmh * scale)};
+
+					// Adjust coordinates to avoid overlap
+					int step = 5;           // Step size for adjustment
+					int max_attempts = 100; // Limit to avoid infinite loops
+					int attempts = 0;
+
+					while (newBox.isOverlappingAny(HC_gauge_mouse_coords, newBox, gauge_config)) {
+						if (++attempts > max_attempts) {
+							break; // Safety net
+						}
+
+						// Increment coordinates
+						x += step;
+
+						int mx = fl2i(x - i2fl(Lead_indicator_half[0] * scale));
+						int my = fl2i(y - i2fl(Lead_indicator_half[1] * scale));
+
+						// Wrap around if out of bounds
+						if (mx + fl2i(bmw * scale) > base_w) {
+							x = 0; // Wrap to left edge
+							y += step;
+
+							if (my + fl2i(bmh * scale) > base_h) {
+								y = 0; // Wrap to top edge
+							}
+						}
+
+						// Update the bounding box with new coordinates
+						newBox = {x, x + fl2i(bmw * scale), y, y + fl2i(bmh * scale)};
+					}		
+
 					int mx = fl2i(x - i2fl(Lead_indicator_half[0] * scale));
 					int my = fl2i(y - i2fl(Lead_indicator_half[1] * scale));
+
 					hud_config_set_mouse_coords(gauge_config, mx, mx + fl2i(bmw * scale), my, my + fl2i(bmh * scale));
 				} else {
 					unsize(&x, &y);
@@ -4798,9 +4877,23 @@ HudGaugeReticleTriangle(HUD_OBJECT_TARGET_TRI, HUD_TARGET_TRIANGLE)
 void HudGaugeTargetTriangle::render(float /*frametime*/, bool config)
 {
 	if (config) {
+		float angle = 40.0f;
+
+		int x;
+		int y;
+		float scale;
+		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+
+		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
+
+		auto pair = hud_config_calc_coords_from_angle(angle,
+			x + fl2i(HUD_nose_x * scale),
+			y + fl2i(HUD_nose_y * scale),
+			Radius * scale);
+
 		vec3d pos;
-		pos.xyz.x = 800;
-		pos.xyz.y = 0;
+		pos.xyz.x = pair.first;
+		pos.xyz.y = pair.second;
 		pos.xyz.z = 100.0f;
 
 		setGaugeColor(HUD_C_NONE, config);

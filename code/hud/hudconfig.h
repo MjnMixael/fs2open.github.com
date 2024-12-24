@@ -95,6 +95,45 @@ struct HC_gauge_region
 	HC_gauge_region(const char *name, int x1, int y1, int h, int iff, int cp, int b, int nf, int cl) : filename(name), x(x1), y(y1), hotspot(h), use_iff(iff), can_popup(cp), bitmap(b), nframes(nf), color(cl){}
 };
 
+class BoundingBox {
+  public:
+	int x1, x2, y1, y2;
+
+	// Default constructor (initializes to invalid state)
+	BoundingBox() : x1(-1), x2(-1), y1(-1), y2(-1) {}
+
+	// Constructor
+	BoundingBox(int x1, int x2, int y1, int y2) : x1(x1), x2(x2), y1(y1), y2(y2) {}
+
+	bool BoundingBox::isOverlapping(const BoundingBox& other) const
+	{
+		return !(x2 < other.x1 || // Completely to the left
+				 x1 > other.x2 || // Completely to the right
+				 y2 < other.y1 || // Completely above
+				 y1 > other.y2);  // Completely below
+	}
+
+	// Check if the bounding box is valid (no negative coordinates)
+	bool isValid() const
+	{
+		return x1 >= 0 && x2 >= 0 && y1 >= 0 && y2 >= 0;
+	}
+
+	// Static function to check if any bounding box in an array overlaps with a new one
+	static bool isOverlappingAny(const BoundingBox mouse_coords[NUM_HUD_GAUGES], const BoundingBox& newBox, int self_index)
+	{
+		for (int i = 0; i < NUM_HUD_GAUGES; i++) {
+			if (i == self_index) {
+				continue;
+			}
+			if (mouse_coords[i].isValid() && mouse_coords[i].isOverlapping(newBox)) {
+				return true;
+			}
+		}
+		return false;
+	}
+};
+
 /*!
  * @brief Array of hud gauges to be displayed in the hud config ui and configured by the player
  * @note main definition in hudconfig.cpp
@@ -106,9 +145,11 @@ extern int HC_gauge_selected;
 extern bool HC_select_all;
 extern float HC_gauge_scale;
 extern int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
-extern int HC_gauge_mouse_coords[NUM_HUD_GAUGES][4];
+extern BoundingBox HC_gauge_mouse_coords[NUM_HUD_GAUGES];
 extern char HC_wingam_gauge_status_names[MAX_SQUADRON_WINGS][32];
 extern int HC_talking_head_frame;
+
+extern int HC_test[2];
 
 const char* HC_gauge_descriptions(int n);
 
@@ -262,6 +303,16 @@ void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, i
  * @brief Get the current color that the sliders are set to in the hud config menu
  */
 void hud_config_get_sliders_color(color& clr);
+
+/*!
+ * @brief Function to calculate screen coordinates based on angle. Used for radial positioning gauges
+ */
+std::pair<float, float> hud_config_calc_coords_from_angle(float angle_degrees, int centerX, int centerY, float radius);
+
+/*!
+* @brief try to find an angle with no overlapping mouse coordinates for target-related gauges
+*/
+void hud_config_find_valid_angle(int gauge_index, float& initial_angle, int centerX, int centerY, float radius);
 
 // TEMPORARY FUNCTION
 void hud_config_draw_box(int x1, int x2, int y1, int y2);

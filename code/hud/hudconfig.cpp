@@ -325,6 +325,7 @@ int HC_resize_mode = GR_RESIZE_MENU;
 
 SCP_vector<std::pair<size_t, SCP_string>> HC_available_huds;
 int HC_chosen_hud = -1;
+int HC_test[2] = { 0, 0 };
 
 const char *HC_gauge_descriptions(int n)
 {
@@ -529,7 +530,8 @@ int							HC_gauge_hot;			// mouse is over this gauge
 int							HC_gauge_selected;	// gauge is selected
 float						HC_gauge_scale; // scale used for drawing the hud gauges
 int HC_gauge_coordinates[6]; // x1, x2, y1, y2, w, h for gauge rendering
-int HC_gauge_mouse_coords[NUM_HUD_GAUGES][4];
+
+BoundingBox HC_gauge_mouse_coords[NUM_HUD_GAUGES];
 
 // HUD colors
 typedef struct hc_col {
@@ -665,9 +667,7 @@ void hud_config_init_ui(bool API_Access, int x, int y, int w, int h)
 
 	// Clear the mouse coords array
 	for (int count = 0; count < NUM_HUD_GAUGES; ++count) {
-		for (int j = 0; j < 5; ++j) {
-			HC_gauge_mouse_coords[count][j] = -1;
-		}
+		HC_gauge_mouse_coords[count] = {-1, -1, -1, -1};
 	}
 
 	// Get any available unique huds ready
@@ -940,10 +940,7 @@ void hud_config_popup_flag_clear(int i)
 }
 
 void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y2) {
-	int values[4] = {x1, x2, y1, y2};
-	for (int i = 0; i < 4; ++i) {
-		HC_gauge_mouse_coords[gauge_config][i] = values[i];
-	}
+	HC_gauge_mouse_coords[gauge_config] = {x1, x2, y1, y2};
 
 	//temporary stuff to show boxes
 	color clr = gr_screen.current_color;
@@ -955,10 +952,10 @@ void hud_config_set_mouse_coords(int gauge_config, int x1, int x2, int y1, int y
 }
 
 void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, int y2) {
-	HC_gauge_mouse_coords[gauge_config][0] = std::min(HC_gauge_mouse_coords[gauge_config][0], x1);
-	HC_gauge_mouse_coords[gauge_config][1] = std::max(HC_gauge_mouse_coords[gauge_config][1], x2);
-	HC_gauge_mouse_coords[gauge_config][2] = std::min(HC_gauge_mouse_coords[gauge_config][2], y1);
-	HC_gauge_mouse_coords[gauge_config][3] = std::max(HC_gauge_mouse_coords[gauge_config][3], y2);
+	HC_gauge_mouse_coords[gauge_config].x1 = std::min(HC_gauge_mouse_coords[gauge_config].x1, x1);
+	HC_gauge_mouse_coords[gauge_config].x2 = std::max(HC_gauge_mouse_coords[gauge_config].x2, x2);
+	HC_gauge_mouse_coords[gauge_config].y1 = std::min(HC_gauge_mouse_coords[gauge_config].y1, y1);
+	HC_gauge_mouse_coords[gauge_config].y2 = std::max(HC_gauge_mouse_coords[gauge_config].y2, y2);
 
 	// temporary stuff to show boxes
 	color clr = gr_screen.current_color;
@@ -966,6 +963,60 @@ void hud_config_set_mouse_coords_ets(int gauge_config, int x1, int x2, int y1, i
 	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
 	gr_set_color_fast(&thisColor);
 	//hud_config_draw_box(x1, x2, y1, y2);
+	gr_set_color_fast(&clr);
+}
+
+void hud_config_find_valid_angle(int gauge_index, float& initial_angle, int centerX, int centerY, float radius)
+{
+	const int max_iterations = 360; // Prevent infinite loops
+	float angle = initial_angle;
+	int x1, x2, y1, y2;
+
+	for (int i = 0; i < max_iterations; ++i) {
+		// Calculate coordinates for the current angle
+		auto [screenX, screenY] = hud_config_calc_coords_from_angle(angle, centerX, centerY, radius);
+		int boundingBoxSize = 10; // Guestimate
+		x1 = screenX - boundingBoxSize;
+		x2 = screenX + boundingBoxSize;
+		y1 = screenY - boundingBoxSize;
+		y2 = screenY + boundingBoxSize;
+
+		BoundingBox newBox = {x1, x2, y1, y2};
+
+		// Check for overlap
+		if (!newBox.isOverlappingAny(HC_gauge_mouse_coords, newBox, gauge_index)) {
+			initial_angle = angle;
+			return;
+		}
+
+		// Increment or decrement angle (adjust step size as needed)
+		angle += 10.0f; // Increment by 10 degrees
+		if (angle >= 360.0f) {
+			angle -= 360.0f;
+		}
+	}
+
+	// If no valid angle is found, return the initial angle (fallback)
+	return;
+}
+
+bool hud_config_set_mouse_coords_no_overlap(int gauge_config, int x1, int x2, int y1, int y2)
+{
+	BoundingBox newBox(x1, x2, y1, y2);
+
+	if (newBox.isOverlappingAny(HC_gauge_mouse_coords, newBox, gauge_config)) {
+		return false;
+	} else {
+		//HC_gauge_mouse_coords[gauge_config] = newBox;
+		return true;
+	}
+
+	// temporary stuff to show boxes
+	color clr = gr_screen.current_color;
+	color thisColor;
+	gr_init_alphacolor(&thisColor, 255, 255, 255, 80);
+	gr_set_color_fast(&thisColor);
+	// hud_config_draw_box(x1, x2, y1, y2);
 	gr_set_color_fast(&clr);
 }
 
@@ -1196,6 +1247,25 @@ bool hud_config_check_mouse_in_hud_area(int mx, int my)
 	return true;
 }
 
+std::pair<float, float> hud_config_calc_coords_from_angle(float angle_degrees, int centerX, int centerY, float radius)
+{
+	// Convert angle to radians, adjust so 0 degrees is at the top (12 o'clock)
+	float angle_radians = (angle_degrees + 90.0f) * static_cast<float>(M_PI) / 180.0f;
+
+	// Offset to ensure the arrow points outward
+	float adjusted_radius = radius + 4.0f;
+
+	// Calculate offsets based on the adjusted radius and angle
+	float xOffset = -cos(angle_radians) * adjusted_radius; // Negate to mirror direction
+	float yOffset = sin(angle_radians) * adjusted_radius;
+
+	// Map to screen coordinates (centerX and centerY represent the center of the circle)
+	float screenX = centerX + xOffset;
+	float screenY = centerY - yOffset;
+
+	return {screenX, screenY};
+}
+
 /*!
  * @brief check mouse position against all ui buttons using the ui mask
  *
@@ -1223,15 +1293,15 @@ void hud_config_check_regions(int mx, int my)
 
 	for (int i = NUM_HUD_GAUGES - 1; i >= 0; i--) {
 		// Eventually we can just always check by mouse region.. but for now let's add this here for testing
-		if (HC_gauge_mouse_coords[i][0] >= 0) {
+		if (HC_gauge_mouse_coords[i].x1 >= 0) {
 			// Add checks here for the new mouse coords
-			if (mx < HC_gauge_mouse_coords[i][0])
+			if (mx < HC_gauge_mouse_coords[i].x1)
 				continue;
-			if (mx > HC_gauge_mouse_coords[i][1])
+			if (mx > HC_gauge_mouse_coords[i].x2)
 				continue;
-			if (my < HC_gauge_mouse_coords[i][2])
+			if (my < HC_gauge_mouse_coords[i].y1)
 				continue;
-			if (my > HC_gauge_mouse_coords[i][3])
+			if (my > HC_gauge_mouse_coords[i].y2)
 				continue;
 			// if we've got here, must be a hit
 			HC_gauge_hot = i;
@@ -1337,15 +1407,15 @@ void hud_config_check_regions_by_mouse(int mx, int my)
 		int iw = 0;
 		int ih = 0;
 		// Need a better test for this but for now this works
-		if (HC_gauge_mouse_coords[i][0] >= 0) {
+		if (HC_gauge_mouse_coords[i].x1 >= 0) {
 			// Add checks here for the new mouse coords
-			if (mx < HC_gauge_mouse_coords[i][0])
+			if (mx < HC_gauge_mouse_coords[i].x1)
 				continue;
-			if (mx > HC_gauge_mouse_coords[i][1])
+			if (mx > HC_gauge_mouse_coords[i].x2)
 				continue;
-			if (my < HC_gauge_mouse_coords[i][2])
+			if (my < HC_gauge_mouse_coords[i].y1)
 				continue;
-			if (my > HC_gauge_mouse_coords[i][3])
+			if (my > HC_gauge_mouse_coords[i].y2)
 				continue;
 			// if we've got here, must be a hit
 			HC_gauge_hot = i;
@@ -1487,6 +1557,18 @@ void hud_config_handle_keypresses(int k)
 		if (HC_chosen_hud < -1) {
 			HC_chosen_hud = static_cast<int>(HC_available_huds.size()) - 1;
 		}
+		break;
+	case KEY_A:
+		HC_test[0]--;
+		break;
+	case KEY_D:
+		HC_test[0]++;
+		break;
+	case KEY_W:
+		HC_test[1]--;
+		break;
+	case KEY_S:
+		HC_test[1]++;
 		break;
 	}
 }
