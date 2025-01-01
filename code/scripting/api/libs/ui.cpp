@@ -133,13 +133,15 @@ ADE_FUNC(enableInput,
 	return ADE_RETURN_TRUE;
 }
 
-ADE_FUNC(disableInput, l_UserInterface, "", "Disables UI input", "boolean", "true if successful")
+ADE_FUNC(disableInput, l_UserInterface, nullptr, "Disables UI input", nullptr, "nothing")
 {
+	SCP_UNUSED(L);
+	
 	scpui::disableInput();
 	game_flush();
 	Main_hall_poll_key = true;
 
-	return ADE_RETURN_TRUE;
+	return ADE_RETURN_NIL;
 }
 
 ADE_VIRTVAR(ColorTags,
@@ -520,7 +522,7 @@ ADE_FUNC(listSquadImages, l_UserInterface_Barracks, nullptr, "Lists the names of
 	return ade_set_args(L, "t", &out);
 }
 
-ADE_FUNC(acceptPilot, l_UserInterface_Barracks, "player selection, boolean changeState", "Accept the given player as the current player. Set second argument to false to prevent returning to the mainhall",
+ADE_FUNC(acceptPilot, l_UserInterface_Barracks, "player selection, [boolean changeState]", "Accept the given player as the current player. Set second argument to false to prevent returning to the mainhall",
          "boolean", "true on success, false otherwise")
 {
 	player_h* plh;
