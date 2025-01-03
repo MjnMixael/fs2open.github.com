@@ -1,8 +1,12 @@
 #include "doc_html.h"
 #include "utils/string_utils.h"
 
+#include <regex>
+
 namespace scripting {
 namespace {
+
+static SCP_vector<std::pair<SCP_string, SCP_string>> Hook_variables;
 
 void ade_output_type_link(FILE* fp, const ade_type_info& type_info)
 {
@@ -194,7 +198,7 @@ void outputFunction(FILE* fp, const DocumentationElement* el, const SCP_vector<c
 	if (funcEl) {
 		for (const auto& overload : funcEl->overloads) {
 			SCP_string functionName = el->name.empty() ? el->shortName : el->name;
-
+			
 			// Functions
 			if (functionName.rfind("__", 0) != 0) {
 				// Handle regular functions
@@ -243,6 +247,12 @@ void outputFunction(FILE* fp, const DocumentationElement* el, const SCP_vector<c
 				fputs("): ", fp);
 				ade_output_type_link(fp, funcEl->returnType);
 
+				if (!el->deprecationMessage.empty()) {
+					SCP_string escapedMessage = escapeNewlines(el->deprecationMessage);
+					SCP_string version = gameversion::format_version(el->deprecationVersion);
+					fprintf(fp, " DEPRECATED %s: %s -- ", version.c_str(), escapedMessage.c_str());
+				}
+
 				// Add description
 				if (!el->description.empty()) {
 					SCP_string escapedDescription = escapeNewlines(el->description);
@@ -270,6 +280,12 @@ void outputFunction(FILE* fp, const DocumentationElement* el, const SCP_vector<c
 				fputs("): ", fp);
 				ade_output_type_link(fp, funcEl->returnType);
 
+				if (!el->deprecationMessage.empty()) {
+					SCP_string escapedMessage = escapeNewlines(el->deprecationMessage);
+					SCP_string version = gameversion::format_version(el->deprecationVersion);
+					fprintf(fp, " DEPRECATED %s: %s -- ", version.c_str(), escapedMessage.c_str());
+				}
+
 				// Add description
 				if (!el->description.empty()) {
 					SCP_string escapedDescription = escapeNewlines(el->description);
@@ -293,12 +309,35 @@ void outputProperty(FILE* fp, const DocumentationElement* el, const SCP_vector<c
 
 		fprintf(fp, "\n--- @field %s ", propName.c_str());
 		ade_output_type_link(fp, propEl->getterType);
-		fprintf(fp, " %s", propEl->description.empty() ? "No description available." : propEl->description.c_str());
 
-		// Maybe remove the below
 		if (!propEl->returnDocumentation.empty()) {
 			fprintf(fp, " %s", propEl->returnDocumentation.c_str());
 		}
+
+		if (!el->deprecationMessage.empty()) {
+			SCP_string escapedMessage = escapeNewlines(el->deprecationMessage);
+			SCP_string version = gameversion::format_version(el->deprecationVersion);
+			fprintf(fp, " DEPRECATED %s: %s -- ", version.c_str(), escapedMessage.c_str());
+		}
+
+		fprintf(fp, " %s", propEl->description.empty() ? "No description available." : propEl->description.c_str());
+	}
+}
+
+void parseFunctionSignature(SCP_string& input)
+{
+	// Regular expression to match the input format
+	std::regex functionRegex(R"(function\((.*?)\s(\w+)\)\s->\s(.+))");
+	std::smatch match;
+
+	if (std::regex_match(input, match, functionRegex)) {
+		// Extract parameter types, parameter name, and return type
+		SCP_string paramTypes = match[1].str(); // e.g., "number | string | nil"
+		SCP_string paramName = match[2].str();  // e.g., "result"
+		SCP_string returnType = match[3].str(); // e.g., "nil"
+
+		// Format the output as desired
+		input =  "fun(" + paramName + ": " + paramTypes + "): " + returnType;
 	}
 }
 
@@ -310,7 +349,7 @@ void OutputElement(FILE* fp, const std::unique_ptr<DocumentationElement>& el, co
 	}
 
 	bool skip_this = false;
-
+	
 	if (!skip_this) {
 		switch (el->type) {
 		case ElementType::Library:
@@ -336,6 +375,17 @@ void OutputElement(FILE* fp, const std::unique_ptr<DocumentationElement>& el, co
 		SCP_vector<const DocumentationElement*> newParents(parents);
 		newParents.push_back(el.get());
 		OutputElement(fp, child, newParents);
+	}
+
+	// Hook variables has a special case
+	if (el->name == "HookVariables") {
+		for (const auto var : Hook_variables) {
+			SCP_string type = var.second;
+			if (type.find("function") != SCP_string::npos) {
+				parseFunctionSignature(type);
+			}
+			fprintf(fp, "\n--- @field %s? %s", var.first.c_str(), type.c_str());
+		}
 	}
 
 	// After processing all children, initialize the table if necessary
@@ -477,6 +527,27 @@ void output_luastub_doc(const ScriptingDocumentation& doc, const SCP_string& fil
 	}
 	fputs("\n", fp);*/
 
+	// Get all the hook variables to print and save them to the vector
+	for (const auto& action : doc.actions) {
+		if (!action.description.empty()) {
+			if (!action.parameters.empty()) {
+				for (const auto& param : action.parameters) {
+					// Check if an entry with the same name already exists
+					auto it = std::find_if(Hook_variables.begin(),
+						Hook_variables.end(),
+						[&param](const std::pair<std::string, std::string>& entry) {
+							return entry.first == param.name; // Compare the names
+						});
+
+					// Only add if not found
+					if (it == Hook_variables.end()) {
+						Hook_variables.push_back(std::make_pair(param.name, param.type.getIdentifier()));
+					}
+				}
+			}
+		}
+	}
+
 	OutputLuaMeta(fp, doc);
 
 	fputs("\n", fp);
@@ -495,6 +566,8 @@ void output_luastub_doc(const ScriptingDocumentation& doc, const SCP_string& fil
 	fputs("\n", fp);
 
 	fclose(fp);
+
+	Hook_variables.clear();
 }
 
 } // namespace scripting
