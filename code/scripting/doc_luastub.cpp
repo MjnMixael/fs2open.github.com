@@ -186,9 +186,17 @@ void outputClass(FILE* fp, const DocumentationElement* el, const SCP_vector<cons
 		escapedDescription = escapeNewlines(el->description);
 	}
 
-	fprintf(fp, "\n\n-- %s object: %s", el->name.c_str(), escapedDescription.c_str());
+	SCP_string parentClass;
+
+	// If the class can also access the members of the Object class
+	// This list may be incomplete
+	if (util::isStringOneOf(el->name, {"asteroid", "debris", "fireball", "ship", "waypoint", "weapon"})) {
+		parentClass = " : object";
+	}
+
+	fprintf(fp, "\n\n-- %s: %s", el->name.c_str(), escapedDescription.c_str());
 	fprintf(fp, "\n%s = {}", el->name.c_str());
-	fprintf(fp, "\n--- @class %s", el->name.c_str());
+	fprintf(fp, "\n--- @class %s%s", el->name.c_str(), parentClass.c_str());
 }
 
 // Function to output a Function/Operator
