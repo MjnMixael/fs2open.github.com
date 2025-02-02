@@ -63,7 +63,6 @@ void gr_bitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode = 
  * @param resize_mode The mode for translating the screen positions
  * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  * @param length The number of bytes in the string to render. -1 will render the whole string.
- * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  */
 void gr_string(float x, float y, const char* string, int resize_mode = GR_RESIZE_FULL, float scaleMultiplier = 1.0f, size_t length = std::string::npos);
 /**
@@ -74,7 +73,6 @@ void gr_string(float x, float y, const char* string, int resize_mode = GR_RESIZE
  * @param resize_mode The mode for translating the screen positions
  * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  * @param length The number of bytes in the string to render. -1 will render the whole string.
- * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  */
 inline void gr_string(int x, int y, const char* string, int resize_mode = GR_RESIZE_FULL, float scaleMultiplier = 1.0f, size_t length = std::string::npos)
 {
