@@ -96,6 +96,7 @@ extern const int Num_ai_flag_names;
 #define	MAX_ENEMY_DISTANCE	2500.0f		//	Maximum distance from which a ship will pursue an enemy.
 
 #define MAX_AI_GOALS	5
+#define AI_ACTIVE_GOAL_NONE		-1
 #define	AI_ACTIVE_GOAL_DYNAMIC	999
 
 typedef struct ai_class {
@@ -484,7 +485,7 @@ typedef struct {
 #define SUBSYS_PATH_DIST	500.0f
 
 // Friendly damage defines
-#define MAX_BURST_DAMAGE	20		// max damage that can be done in BURST_DURATION
+#define MAX_BURST_DAMAGE	20.0f		// max damage that can be done in BURST_DURATION
 #define BURST_DURATION		500	// decay time over which Player->damage_this_burst falls from MAX_BURST_DAMAGE to 0
 
 extern int Mission_all_attack;	//	!0 means all teams attack all teams.

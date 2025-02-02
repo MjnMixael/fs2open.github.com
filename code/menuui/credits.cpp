@@ -56,7 +56,7 @@ const char *fs2_open_credit_text =
 	"Hassan \"Karajorma\" Kazmi\n"
 	"Derek \"Kazan\" Meek\n"
 	"Nick \"phreak\" Iannetta\n"
-	"David \"EatThePath\" Gibson\n"
+	"Zoe \"EatThePath\" Gibson\n"
 	"Mike \"MjnMixael\" Nelson\n"
 	"argv[-1], Backslash, Baezon\n"
 	"CommanderDJ, Cyborg, DTP\n"
@@ -654,7 +654,7 @@ void credits_init()
 
 	for (iter = Credit_text_parts.begin(); iter != Credit_text_parts.end(); ++iter)
 	{
-		gr_get_string_size(NULL, &temp_h, iter->c_str(), 1.0f, iter->length());
+		gr_get_string_size(nullptr, &temp_h, iter->c_str(), 1.0f, iter->length());
 
 		h = h + temp_h;
 	}

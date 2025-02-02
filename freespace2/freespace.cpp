@@ -147,6 +147,7 @@
 #include "object/objectsnd.h"
 #include "object/waypoint.h"
 #include "observer/observer.h"
+#include "options/default_settings_table.h"
 #include "options/Ingame_Options.h"
 #include "options/Option.h"
 #include "options/OptionsManager.h"
@@ -1755,8 +1756,11 @@ void game_init()
 
 	mod_table_init();		// load in all the mod dependent settings
 
-	// This needs to be delayed until we know if the new options are actually going to be used
-	if (Using_in_game_options) {
+	// Must be run after mod table is parsed so we know the value of Using_in_game_options
+	// Must be run before everything else inits so we can init those with the correct
+	// default values or user preferences
+ 	if (Using_in_game_options) {
+		default_settings_init(); // load in current preferred default options values, if any
 		options::OptionsManager::instance()->loadInitialValues();
 	}
 
@@ -3123,7 +3127,7 @@ camid game_render_frame_setup()
 	static int last_Game_mode = 0;
 	static fov_t last_FOV = Sexp_fov;
 
-	bool fov_changed = ((Sexp_fov > 0.0f) && (!mpark::holds_alternative<float>(last_FOV) || mpark::get<float>(last_FOV) != Sexp_fov));
+	bool fov_changed = ((Sexp_fov > 0.0f) && (!std::holds_alternative<float>(last_FOV) || std::get<float>(last_FOV) != Sexp_fov));
 
 	//First, make sure we take into account 2D Missions.
 	//These replace the normal player in-cockpit view with a topdown view.
@@ -6707,7 +6711,7 @@ void game_spew_pof_info()
 	int counted = 0;
 	for(int idx=0; idx<num_files; idx++, counted++){
 		sprintf(str, "%s.pof", pof_list[idx]);
-		int model_num = model_load(str, 0, nullptr);
+		int model_num = model_load(str);
 		if(model_num >= 0){
 			polymodel *pm = model_get(model_num);
 
@@ -7377,7 +7381,7 @@ void Do_model_timings_test()
 
 	// Load them all
 	for (auto & sip : Ship_info) {
-		sip.model_num = model_load(sip.pof_file, 0, nullptr);
+		sip.model_num = model_load(sip.pof_file);
 
 		model_used[sip.model_num % MAX_POLYGON_MODELS]++;
 		model_id[sip.model_num % MAX_POLYGON_MODELS] = sip.model_num;

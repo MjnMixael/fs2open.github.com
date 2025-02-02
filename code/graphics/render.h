@@ -61,6 +61,7 @@ void gr_bitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode = 
  * @param y The y-coordinate
  * @param string The string to draw to the screen
  * @param resize_mode The mode for translating the screen positions
+ * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  * @param length The number of bytes in the string to render. -1 will render the whole string.
  * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  */
@@ -71,6 +72,7 @@ void gr_string(float x, float y, const char* string, int resize_mode = GR_RESIZE
  * @param y The y-coordinate
  * @param string The string to draw to the screen
  * @param resize_mode The mode for translating the screen positions
+ * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  * @param length The number of bytes in the string to render. -1 will render the whole string.
  * @param scaleMultiplier The scale to use to apply scaling in addition to user settings
  */

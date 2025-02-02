@@ -245,7 +245,6 @@ void gr_aabitmap(int x, int y, int resize_mode, bool mirror, float scale_factor)
 					   &gr_screen.current_color,
 					   scale_factor);
 }
-// The scaling here is not done correctly. Fix me!
 void gr_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode, bool mirror, float scale_factor) {
 	if (gr_screen.mode == GR_STUB) {
 		return;
@@ -261,15 +260,15 @@ void gr_aabitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode,
 	bm_get_info(gr_screen.current_bitmap, &bw, &bh);
 
 	if (scale_factor != 1.0f) {
-		bw = static_cast<int>(bw * scale_factor);
-		bh = static_cast<int>(bh * scale_factor);
+		bw = fl2i(bw * scale_factor);
+		bh = fl2i(bh * scale_factor);
 
-		// If we're scaling then we need to scale these to make sure the right and bottom clip plans are scaled as well
-		w = static_cast<int>(w * scale_factor);
-		h = static_cast<int>(h * scale_factor);
+		// If we're scaling then we need to scale these to make sure the right and bottom clip planes are scaled as well
+		w = fl2i(w * scale_factor);
+		h = fl2i(h * scale_factor);
 
-		sx = static_cast<int>(sx * scale_factor);
-		sy = static_cast<int>(sy * scale_factor);
+		sx = fl2i(sx * scale_factor);
+		sy = fl2i(sy * scale_factor);
 	}
 
 	int dx1 = x;
@@ -403,15 +402,15 @@ void gr_bitmap_ex(int x, int y, int w, int h, int sx, int sy, int resize_mode, b
 	bm_get_info(gr_screen.current_bitmap, &bw, &bh);
 
 	if (scale_factor != 1.0f) {
-		bw = static_cast<int>(bw * scale_factor);
-		bh = static_cast<int>(bh * scale_factor);
+		bw = fl2i(bw * scale_factor);
+		bh = fl2i(bh * scale_factor);
 
-		// If we're scaling then we need to scale these to make sure the right and bottom clip plans are scaled as well
-		w = static_cast<int>(w * scale_factor);
-		h = static_cast<int>(h * scale_factor);
+		// If we're scaling then we need to scale these to make sure the right and bottom clip planes are scaled as well
+		w = fl2i(w * scale_factor);
+		h = fl2i(h * scale_factor);
 
-		sx = static_cast<int>(sx * scale_factor);
-		sy = static_cast<int>(sy * scale_factor);
+		sx = fl2i(sx * scale_factor);
+		sy = fl2i(sy * scale_factor);
 	}
 
 	int dx1 = x;
@@ -539,19 +538,15 @@ static void gr_string_old(float sx,
 	const char* end,
 	font::font* fontData,
 	float height,
+	bool canAutoScale,
 	bool canScale,
 	int resize_mode,
 	float scaleMultiplier)
 {
 	GR_DEBUG_SCOPE("Render VFNT string");
 
-	int letter;
-	float x = sx; // Keep the starting X position unscaled
-	float y = sy; // Keep the starting Y position unscaled
-	bool do_resize;
-	float bw, bh;
-	float u0, u1, v0, v1;
-	float x1, x2, y1, y2;
+	float x = sx;
+	float y = sy;
 
 	material render_mat;
 	render_mat.set_blend_mode(ALPHA_BLEND_ALPHA_BLEND_ALPHA);
@@ -570,9 +565,10 @@ static void gr_string_old(float sx,
 
 	bm_get_info(fontData->bitmap_id, &ibw, &ibh);
 
-	bw = i2fl(ibw);
-	bh = i2fl(ibh);
+	float bw = i2fl(ibw);
+	float bh = i2fl(ibh);
 
+	bool do_resize;
 	if (resize_mode != GR_RESIZE_NONE && (gr_screen.custom_size || (gr_screen.rendering_to_texture != -1))) {
 		do_resize = true;
 	} else {
@@ -591,23 +587,29 @@ static void gr_string_old(float sx,
 
 	gr_set_2d_matrix();
 
-	float scale_factor = Font_Scale_Factor;
-	if (!canScale) {
-		scale_factor = 1.0f;
+	float scale_factor = (canScale && !Fred_running) ? get_font_scale_factor() : 1.0f;
+
+	if (canAutoScale && !Fred_running) {
+		float autoSizedFont = calculate_auto_font_size(height);
+
+		// Calculate the auto scale factor
+		float auto_scale_factor = autoSizedFont / height;
+		scale_factor *= auto_scale_factor;
 	}
 
 	scale_factor *= scaleMultiplier;
 
+	int letter;
 	while (s < end) {
 		// Handle line breaks
 		while (*s == '\n') {
 			s++;
-			y += height * scale_factor; // Scale line height
-			x = sx;              // Reset x position for new line
+			y += height * scale_factor;
+			x = sx;
 		}
 
 		if (*s == 0) {
-			break; // End of string
+			break;
 		}
 
 		// Get character width and spacing
@@ -616,49 +618,50 @@ static void gr_string_old(float sx,
 			(ubyte)s[0],
 			(ubyte)s[1],
 			&raw_width,
-			&raw_spacing); // Use unscaled values
+			&raw_spacing);
 		s++;
 
 		// Not in font, draw as space
 		if (letter < 0) {
-			x += raw_spacing * scale_factor; // Advance x for a space
+			x += raw_spacing * scale_factor;
 			continue;
 		}
 
-		// UV coordinates remain unchanged
+		// UV coordinates
 		int u = fontData->bm_u[letter];
 		int v = fontData->bm_v[letter];
 		float char_width = i2fl(raw_width);
 		float char_height = i2fl(height);
 
-		u0 = u / bw;
-		v0 = v / bh;
-		u1 = (u + char_width) / bw;
-		v1 = (v + char_height) / bh;
-
 		// Scale output dimensions and positions
-		float xc = x;                   // Keep the X position unscaled
-		float yc = y;                   // Keep the Y position unscaled
+		float xc = x; // Keep the X position unscaled
+		float yc = y; // Keep the Y position unscaled
 		float wc = char_width * scale_factor; // Scale width
 		float hc = char_height * scale_factor; // Scale height
 
-		// Apply offset logic
-		x1 = xc + ((do_resize) ? gr_screen.offset_x_unscaled : gr_screen.offset_x);
-		y1 = yc + ((do_resize) ? gr_screen.offset_y_unscaled : gr_screen.offset_y);
-		x2 = x1 + wc;
-		y2 = y1 + hc;
-
-		// Check clipping
-		if ((x1 >= clip_right) || (x2 <= clip_left) || (y1 >= clip_bottom) || (y2 <= clip_top)) {
-			x += raw_spacing * scale_factor; // Skip rendering but advance x for spacing
+		// Check if the character is completely out of bounds. This uses scaled width and height
+		if ((xc > clip_right) || ((xc + wc) < clip_left) || (yc > clip_bottom) || ((yc + hc) < clip_top)) {
+			x += raw_spacing * scale_factor;
 			continue;
 		}
+
+		// Apply offsets
+		float x1 = xc + ((do_resize) ? gr_screen.offset_x_unscaled : gr_screen.offset_x);
+		float y1 = yc + ((do_resize) ? gr_screen.offset_y_unscaled : gr_screen.offset_y);
+		float x2 = x1 + wc;
+		float y2 = y1 + hc;
 
 		// Resize screen positions
 		if (do_resize) {
 			gr_resize_screen_posf(&x1, &y1, NULL, NULL, resize_mode);
 			gr_resize_screen_posf(&x2, &y2, NULL, NULL, resize_mode);
 		}
+
+		// Get the character from the UV
+		float u0 = u / bw;
+		float v0 = v / bh;
+		float u1 = (u + char_width) / bw;
+		float v1 = (v + char_height) / bh;
 
 		// Add vertices for the character
 		String_render_buff[buffer_offset++] = {x1, y1, u0, v0};
@@ -791,7 +794,7 @@ void gr_string(float sx, float sy, const char* s, int resize_mode, float scaleMu
 		VFNTFont* fnt = static_cast<VFNTFont*>(currentFont);
 		fo::font* fontData = fnt->getFontData();
 
-		gr_string_old(sx, sy, s, s + length, fontData, fnt->getHeight(), currentFont->getScaleBehavior(), resize_mode, scaleMultiplier);
+		gr_string_old(sx, sy, s, s + length, fontData, fnt->getHeight(), currentFont->getAutoScaleBehavior(), currentFont->getScaleBehavior(), resize_mode, scaleMultiplier);
 	} else if (currentFont->getType() == NVG_FONT) {
 		GR_DEBUG_SCOPE("Render TTF string");
 
@@ -799,11 +802,7 @@ void gr_string(float sx, float sy, const char* s, int resize_mode, float scaleMu
 
 		auto nvgFont = static_cast<NVGFont*>(currentFont);
 
-		float scale_factor = Font_Scale_Factor;
-		if (!nvgFont->getScaleBehavior()) {
-			scale_factor = 1.0f;
-		}
-
+		float scale_factor = (nvgFont->getScaleBehavior() && !Fred_running) ? get_font_scale_factor() : 1.0f;
 		scale_factor *= scaleMultiplier;
 
 		float originalSize = nvgFont->getSize();
@@ -893,6 +892,7 @@ void gr_string(float sx, float sy, const char* s, int resize_mode, float scaleMu
 									  text + 1,
 									  nvgFont->getSpecialCharacterFont(),
 									  nvgFont->getHeight(),
+							          nvgFont->getAutoScaleBehavior(),
 									  nvgFont->getScaleBehavior(),
 									  resize_mode,
 									  scaleMultiplier);
@@ -1188,7 +1188,7 @@ void gr_2d_stop_buffer() {
 gr_buffer_handle gr_immediate_buffer_handle;
 static size_t immediate_buffer_offset = 0;
 static size_t immediate_buffer_size = 0;
-static const int IMMEDIATE_BUFFER_RESIZE_BLOCK_SIZE = 2048;
+static const size_t IMMEDIATE_BUFFER_RESIZE_BLOCK_SIZE = 2048;
 
 size_t gr_add_to_immediate_buffer(size_t size, void* data) {
 	if (gr_screen.mode == GR_STUB) {

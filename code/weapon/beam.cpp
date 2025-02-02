@@ -292,17 +292,8 @@ static void beam_set_state(weapon_info* wip, beam* bm, WeaponState state)
 	if ((map_entry != wip->state_effects.end()) && map_entry->second.isValid())
 	{
 		auto source = particle::ParticleManager::get()->createSource(map_entry->second);
-
-		object* objp = &Objects[bm->objnum];
-		source.moveToBeam(objp);
-		source.setWeaponState(bm->weapon_state);
-		// make a "fake" but still possibly useful velocity
-		vec3d vel;
-		vm_vec_normalized_dir(&vel, &bm->last_start, &bm->last_shot);
-		vel *= wip->max_speed;
-		source.setVelocity(&vel);
-
-		source.finish();
+		source->setHost(make_unique<EffectHostBeam>(&Objects[bm->objnum]));
+		source->finishCreation();
 	}
 }
 
@@ -1618,8 +1609,7 @@ void beam_generate_muzzle_particles(beam *b)
 		pinfo.attached_sig = 0;
 		pinfo.rad = wip->b_info.beam_particle_radius;
 		pinfo.reverse = 1;
-		pinfo.type = particle::PARTICLE_BITMAP;
-		pinfo.optional_data = wip->b_info.beam_particle_ani.first_frame;
+		pinfo.bitmap = wip->b_info.beam_particle_ani.first_frame;
 		particle::create(&pinfo);
 	}
 }
@@ -1671,7 +1661,10 @@ void beam_render_muzzle_glow(beam *b)
 
 	// don't show the muzzle glow for players in the cockpit unless show_ship_model is on, provided Render_player_mflash isn't on
 	bool in_cockpit_view = (Viewer_mode & (VM_EXTERNAL | VM_CHASE | VM_OTHER_SHIP | VM_WARP_CHASE)) == 0;
-	bool player_show_ship_model = b->objp == Player_obj && Ship_info[Ships[b->objp->instance].ship_info_index].flags[Ship::Info_Flags::Show_ship_model];
+	bool player_show_ship_model = (
+		b->objp == Player_obj  
+		&& Ship_info[Ships[b->objp->instance].ship_info_index].flags[Ship::Info_Flags::Show_ship_model] 
+		&& (!Show_ship_only_if_cockpits_enabled || Cockpit_active));
 	if ((b->flags & BF_IS_FIGHTER_BEAM) && (b->objp == Player_obj && !Render_player_mflash && in_cockpit_view && !player_show_ship_model)) {
 		return;
 	}
@@ -3259,7 +3252,7 @@ int beam_collide_ship(obj_pair *pair)
 			// do the hit effect
 			if (shield_collision) {
 				if (mc_shield.shield_hit_tri != -1) {
-					add_shield_point(OBJ_INDEX(ship_objp), mc_shield.shield_hit_tri, &mc_shield.hit_point);
+					add_shield_point(OBJ_INDEX(ship_objp), mc_shield.shield_hit_tri, &mc_shield.hit_point, bwi->shield_impact_effect_radius);
 				}
 			} else {
 				/* TODO */;
@@ -3942,40 +3935,27 @@ void beam_handle_collisions(beam *b)
 				vm_vec_unrotate(&worldNormal, &b->f_collisions[idx].cinfo.hit_normal, &Objects[target].orient);
 			}
 
+			vec3d fvec;
+			vm_vec_sub(&fvec, &b->last_shot, &b->last_start);
+
+			matrix beamOrientation;
+			vm_vector_2_matrix(&beamOrientation, &fvec);
+
 			if (wi->flash_impact_weapon_expl_effect.isValid()) {
 				auto particleSource = particle::ParticleManager::get()->createSource(wi->flash_impact_weapon_expl_effect);
-				particleSource.moveToObject(&Objects[target], &temp_local_pos);
-				particleSource.setOrientationNormal(&worldNormal);
-
-				vec3d fvec;
-				vm_vec_sub(&fvec, &b->last_shot, &b->last_start);
-
-				if (!IS_VEC_NULL(&fvec)) {
-					particleSource.setOrientationFromVec(&fvec);
-				}
-
-				particleSource.finish();
+				particleSource->setHost(make_unique<EffectHostObject>(&Objects[target], temp_local_pos, beamOrientation, false));
+				particleSource->setNormal(worldNormal);
+				particleSource->finishCreation();
 			}
 
 			if(do_expl){
 				auto particleSource = particle::ParticleManager::get()->createSource(wi->impact_weapon_expl_effect);
-				particleSource.moveToObject(&Objects[target], &temp_local_pos);
-				particleSource.setOrientationNormal(&worldNormal);
-
-				vec3d fvec;
-				vm_vec_sub(&fvec, &b->last_shot, &b->last_start);
-
-				if (!IS_VEC_NULL(&fvec)) {
-					particleSource.setOrientationFromVec(&fvec);
-				}
-
-				particleSource.finish();
+				particleSource->setHost(make_unique<EffectHostObject>(&Objects[target], temp_local_pos, beamOrientation, false));
+				particleSource->setNormal(worldNormal);
+				particleSource->finishCreation();
 			}
 
 			if (wi->piercing_impact_effect.isValid()) {
-				vec3d fvec;
-				vm_vec_sub(&fvec, &b->last_shot, &b->last_start);
-
 				if(!IS_VEC_NULL(&fvec)){
 					// get beam direction
 
@@ -4026,12 +4006,10 @@ void beam_handle_collisions(beam *b)
 						// stream of fire for big ships
 						if (width <= Objects[target].radius * BEAM_AREA_PERCENT) {
 							auto particleSource = particle::ParticleManager::get()->createSource(wi->piercing_impact_effect);
-							matrix fvec_orient;
-							vm_vector_2_matrix_norm(&fvec_orient, &fvec);
-							particleSource.moveTo(&b->f_collisions[idx].cinfo.hit_point_world, &fvec_orient);
-							particleSource.setOrientationNormal(&worldNormal);
 
-							particleSource.finish();
+							particleSource->setHost(make_unique<EffectHostObject>(&Objects[target], temp_local_pos, beamOrientation, false));
+							particleSource->setNormal(worldNormal);
+							particleSource->finishCreation();
 						}
 					}
 				}
@@ -4054,17 +4032,16 @@ void beam_handle_collisions(beam *b)
 						vm_vec_unrotate(&worldNormal, &b->f_collisions[idx].cinfo.hit_normal, &Objects[target].orient);
 					}
 
-					auto particleSource = particle::ParticleManager::get()->createSource(wi->impact_weapon_expl_effect);
 					vec3d fvec;
 					vm_vec_sub(&fvec, &b->last_shot, &b->last_start);
-					matrix fvec_orient = vmd_identity_matrix;
-					if (!IS_VEC_NULL(&fvec)) {
-						vm_vector_2_matrix_norm(&fvec_orient, &fvec);
-					}
-					particleSource.moveTo(&b->f_collisions[idx].cinfo.hit_point_world, &fvec_orient);
-					particleSource.setOrientationNormal(&worldNormal);
 
-					particleSource.finish();
+					matrix beamOrientation;
+					vm_vector_2_matrix(&beamOrientation, &fvec);
+
+					auto particleSource = particle::ParticleManager::get()->createSource(wi->impact_weapon_expl_effect);
+					particleSource->setHost(make_unique<EffectHostVector>(b->f_collisions[idx].cinfo.hit_point_world, beamOrientation, vmd_zero_vector));
+					particleSource->setNormal(worldNormal);
+					particleSource->finishCreation();
 				}
 			}
 		}
