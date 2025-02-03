@@ -473,7 +473,7 @@ void HudGaugeRadar::drawRange(bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	int range = config ? RR_INFINITY : HUD_config.rp_dist;

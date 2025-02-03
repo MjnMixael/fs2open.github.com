@@ -478,7 +478,7 @@ void HudGaugeRadarOrb::blitGauge(bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;

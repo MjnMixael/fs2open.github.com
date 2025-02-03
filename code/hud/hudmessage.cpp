@@ -446,7 +446,7 @@ void HudGaugeMessages::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
         int bmw;
 		int bmh;
@@ -1206,7 +1206,7 @@ void HudGaugeTalkingHead::render(float frametime, bool config)
 		int y = position[1];
 		float scale = 1.0;
 
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -1398,7 +1398,7 @@ void HudGaugeFixedMessages::render(float  /*frametime*/, bool config) {
 	int w = 0;
 	int h = 0;
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	gr_get_string_size(&w, &h, message, scale);

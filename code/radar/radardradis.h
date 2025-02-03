@@ -11,6 +11,7 @@
 
 #include "globalincs/pstypes.h"
 #include "radar/radarsetup.h"
+#include "gamesnd/gamesnd.h"
 
 class object;
 struct blip;

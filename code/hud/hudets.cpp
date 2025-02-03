@@ -1009,7 +1009,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 
@@ -1036,7 +1036,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int rx = Gauge_positions[initial_position++] + Letter_offsets[0];
 		int ry = position[1] + Letter_offsets[1]; // Explicitely use unconverted y here
 		if (config) {
-			hud_config_convert_coords(rx, ry, scale, rx, ry);
+			std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 		}
 		renderPrintf(rx, ry, scale, config, NOX("%c"), Letter);
 	}
@@ -1045,7 +1045,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int rx = Gauge_positions[initial_position++] + Letter_offsets[0];
 		int ry = position[1] + Letter_offsets[1]; // Explicitely use unconverted y here
 		if (config) {
-			hud_config_convert_coords(rx, ry, scale, rx, ry);
+			std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 		}
 		renderPrintf(rx, ry, scale, config, NOX("%c"), Letter);
 	}
@@ -1054,7 +1054,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int rx = Gauge_positions[initial_position++] + Letter_offsets[0];
 		int ry = position[1] + Letter_offsets[1]; // Explicitely use unconverted y here
 		if (config) {
-			hud_config_convert_coords(rx, ry, scale, rx, ry);
+			std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 		}
 		renderPrintf(rx, ry, scale, config, NOX("%c"), Letter);
 	}
@@ -1067,7 +1067,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int rx = Gauge_positions[initial_position++];
 		int ry = position[1];
 		if (config) {
-			hud_config_convert_coords(rx, ry, scale, rx, ry);
+			std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 		}
 		blitGauge(level, rx, ry, scale, config);
 	}
@@ -1077,7 +1077,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int rx = Gauge_positions[initial_position++];
 		int ry = position[1];
 		if (config) {
-			hud_config_convert_coords(rx, ry, scale, rx, ry);
+			std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 		}
 		blitGauge(level, rx, ry, scale, config);
 	}
@@ -1087,7 +1087,7 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int rx = Gauge_positions[initial_position++];
 		int ry = position[1];
 		if (config) {
-			hud_config_convert_coords(rx, ry, scale, rx, ry);
+			std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 		}
 		blitGauge(level, rx, ry, scale, config);
 	}
@@ -1102,8 +1102,8 @@ void HudGaugeEtsRetail::render(float  /*frametime*/, bool config)
 		int x2 = 0;
 		int y1 = 0;
 		int y2 = 0;
-		hud_config_convert_coords(Gauge_positions[0], position[1], scale, x1, y1);
-		hud_config_convert_coords(Gauge_positions[initial_position - 1] + bmw, position[1] + (bmh * 2) + 10, scale, x2, y2);
+		std::tie(x1, y1) = hud_config_convert_coords(Gauge_positions[0], position[1], scale);
+		std::tie(x2, y2) = hud_config_convert_coords(Gauge_positions[initial_position - 1] + bmw, position[1] + (bmh * 2) + 10, scale);
 
 		hud_config_set_mouse_coords(gauge_config, x1, x2, y1, y2);
 	}
@@ -1151,7 +1151,7 @@ void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 
@@ -1179,7 +1179,7 @@ void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 	int rx = position[0] + Letter_offsets[0];
 	int ry = position[1] + Letter_offsets[1];
 	if (config) {
-		hud_config_convert_coords(rx, ry, scale, rx, ry);
+		std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 	}
 	renderPrintf(rx, ry, scale, config, NOX("%c"), Letter);
 
@@ -1188,7 +1188,7 @@ void HudGaugeEtsWeapons::render(float  /*frametime*/, bool config)
 	rx = position[0];
 	ry = position[1];
 	if (config) {
-		hud_config_convert_coords(rx, ry, scale, rx, ry);
+		std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 	}
 	blitGauge(level, rx, ry, scale, config);
 
@@ -1223,7 +1223,7 @@ void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 
@@ -1251,7 +1251,7 @@ void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 	int rx = position[0] + Letter_offsets[0];
 	int ry = position[1] + Letter_offsets[1];
 	if (config) {
-		hud_config_convert_coords(rx, ry, scale, rx, ry);
+		std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 	}
 	renderPrintf(rx, ry, scale, config, NOX("%c"), Letter);
 
@@ -1260,7 +1260,7 @@ void HudGaugeEtsShields::render(float  /*frametime*/, bool config)
 	rx = position[0];
 	ry = position[1];
 	if (config) {
-		hud_config_convert_coords(rx, ry, scale, rx, ry);
+		std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 	}
 	blitGauge(level, rx, ry, scale, config);
 
@@ -1295,7 +1295,7 @@ void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 
@@ -1323,7 +1323,7 @@ void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 	int rx = position[0] + Letter_offsets[0];
 	int ry = position[1] + Letter_offsets[1];
 	if (config) {
-		hud_config_convert_coords(rx, ry, scale, rx, ry);
+		std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 	}
 	renderPrintf(rx, ry, scale, config, NOX("%c"), Letter);
 
@@ -1332,7 +1332,7 @@ void HudGaugeEtsEngines::render(float  /*frametime*/, bool config)
 	rx = position[0];
 	ry = position[1];
 	if (config) {
-		hud_config_convert_coords(rx, ry, scale, rx, ry);
+		std::tie(rx, ry) = hud_config_convert_coords(rx, ry, scale);
 	}
 	blitGauge(level, rx, ry, scale, config);
 

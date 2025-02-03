@@ -2750,7 +2750,7 @@ void HudGaugeOrientationTee::renderOrientation(object *from_objp, object *to_obj
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	// calculate the dot product between the target_to_player vector and the targets forward vector
@@ -2978,7 +2978,7 @@ void HudGaugeReticleTriangle::renderTriangleMissileTail(float ang, float xpos, f
 
 	float scale = 1.0f;
 	if (config) {
-		hud_config_get_scale(base_w, base_h, scale);
+		scale = hud_config_get_scale(base_w, base_h);
 	}
 
 	float max_tail_len = 20.0f * scale;
@@ -3065,7 +3065,7 @@ void HudGaugeReticleTriangle::renderTriangle(vec3d *hostile_pos, int aspect_flag
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	int scaled_radius = fl2i(Radius * scale);
@@ -3273,7 +3273,7 @@ void HudGaugeMissileTriangles::render(float /*frametime*/, bool config)
 		int x;
 		int y;
 		float scale;
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 
 		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
 
@@ -3816,7 +3816,7 @@ void HudGaugeHostileTriangle::render(float /*frametime*/, bool config)
 		int x;
 		int y;
 		float scale;
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 
 		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
 
@@ -4124,7 +4124,7 @@ void HudGaugeLeadIndicator::renderIndicator(int frame_offset, object *targetp, v
 				float scale = 1.0;
 
 				if (config) {
-					hud_config_convert_coord_sys(sx, sy, base_w, base_h, x, y, scale);
+					std::tie(x, y, scale) = hud_config_convert_coord_sys(sx, sy, base_w, base_h);
 					// Ideally this doesn't eventually happen every single frame. Hmm.
 					int bmw;
 					int bmh;
@@ -4882,7 +4882,7 @@ void HudGaugeTargetTriangle::render(float /*frametime*/, bool config)
 		int x;
 		int y;
 		float scale;
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 
 		hud_config_find_valid_angle(gauge_config, angle, x + fl2i(HUD_nose_x * scale), y + fl2i(HUD_nose_y * scale), Radius * scale);
 
@@ -5138,7 +5138,7 @@ void HudGaugeAutoTarget::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -5238,7 +5238,7 @@ void HudGaugeAutoSpeed::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -5857,7 +5857,7 @@ void HudGaugeCmeasures::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -5926,7 +5926,7 @@ void HudGaugeAfterburner::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -6045,7 +6045,7 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -6582,7 +6582,7 @@ void HudGaugeWeapons::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Mouse coords are set at the end because we need to account for N directives here
 	}
 
@@ -7168,7 +7168,7 @@ void HudGaugeOffscreen::renderOffscreenIndicator(vec2d *coords, int dir, float d
 
 	float scale = 1.0f;
 	if (config) {
-		hud_config_convert_coord_sys(xpos, ypos, base_w, base_h, xpos, ypos, scale);
+		std::tie(xpos, ypos, scale) = hud_config_convert_coord_sys(xpos, ypos, base_w, base_h);
 		resize = HC_resize_mode;
 	}
 

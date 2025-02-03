@@ -100,17 +100,17 @@ class BoundingBox {
 	int x1, x2, y1, y2;
 
 	// Default constructor (initializes to invalid state)
-	BoundingBox() : x1(-1), x2(-1), y1(-1), y2(-1) {}
+	constexpr BoundingBox() : x1(-1), x2(-1), y1(-1), y2(-1) {}
 
 	// Constructor
-	BoundingBox(int x1, int x2, int y1, int y2) : x1(x1), x2(x2), y1(y1), y2(y2) {}
+	constexpr BoundingBox(int nx1, int nx2, int ny1, int ny2) : x1(nx1), x2(nx2), y1(ny1), y2(ny2) {}
 
-	bool BoundingBox::isOverlapping(const BoundingBox& other) const
+	bool isOverlapping(const BoundingBox& other) const
 	{
-		return !(x2 < other.x1 || // Completely to the left
-				 x1 > other.x2 || // Completely to the right
-				 y2 < other.y1 || // Completely above
-				 y1 > other.y2);  // Completely below
+		return (x2 >= other.x1 && // Not completely to the left
+				x1 <= other.x2 && // Not completely to the right
+				y2 >= other.y1 && // Not completely above
+				y1 <= other.y2);  // Not completely below
 	}
 
 	// Check if the bounding box is valid (no negative coordinates)
@@ -264,29 +264,29 @@ void hud_config_color_save(const char* name);
 /*!
  * @brief same as hud_config_covert_coords but only returns the scale and doesn't convert any coords
  */
-void hud_config_get_scale(int baseW, int baseH, float& outScale);
+float hud_config_get_scale(int baseW, int baseH);
 
 /*!
  * @brief converts a set of coordinates to HUD Config's rendering coordinates
  */
-void hud_config_convert_coords(int x, int y, float scale, int& outX, int& outY);
+std::pair<int, int> hud_config_convert_coords(int x, int y, float scale);
 
 /*!
  * @brief converts a set of coordinates to HUD Config's rendering coordinates
  */
-void hud_config_convert_coords(float x, float y, float scale, float& outX, float& outY);
+std::pair<float, float> hud_config_convert_coords(float x, float y, float scale);
 
 /*!
 * @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return the smaller scale value used
 * so that other offsets and positions can be multiplied in turn
 */
-void hud_config_convert_coord_sys(int x, int y, int baseW, int baseH, int& outX, int& outY, float& outScale);
+std::tuple<int, int, float> hud_config_convert_coord_sys(int x, int y, int baseW, int baseH);
 
 /*!
  * @brief convert the given HUD gauge position coordinates to a set more appropriate for the HUD Config UI and return
  * the smaller scale value used so that other offsets and positions can be multiplied in turn
  */
-void hud_config_convert_coord_sys(float x, float y, int baseW, int baseH, float& outX, float& outY, float& outScale);
+std::tuple<float, float, float> hud_config_convert_coord_sys(float x, float y, int baseW, int baseH);
 
 /*!
  * @brief save gauge coords during rendering time so hud config can check if the mouse is hovering over the gauge

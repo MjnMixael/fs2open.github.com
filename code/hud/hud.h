@@ -342,20 +342,19 @@ public:
 	void setGaugeFrame(int frame_offset);
 
 	// rendering functions
-	void renderBitmap(int x, int y, float scale = 1.0f, bool config = false);
-	void renderBitmap(int frame, int x, int y, float scale = 1.0f, bool config = false);
-	void renderBitmapColor(int frame, int x, int y, float scale = 1.0f, bool config = false);
-	void renderBitmapUv(int frame, int x, int y, int w, int h, float u0, float v0, float u1, float v1);
-	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false);
+	void renderBitmap(int x, int y, float scale = 1.0f, bool config = false) const;
+	void renderBitmap(int frame, int x, int y, float scale = 1.0f, bool config = false) const;
+	void renderBitmapColor(int frame, int x, int y, float scale = 1.0f, bool config = false) const;
+	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false) const;
 	void renderString(int x, int y, const char *str, float scale = 1.0f, bool config = false);
 	void renderString(int x, int y, int gauge_id, const char *str, float scale = 1.0f, bool config = false);
 	void renderStringAlignCenter(int x, int y, int area_width, const char *s, float scale = 1.0f, bool config = false);
-	void renderPrintf(int x, int y, float scale, bool config, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(4, 5);
-	void renderPrintfWithGauge(int x, int y, int gauge_id, float scale, bool config, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(5, 6);
-	void renderLine(int x1, int y1, int x2, int y2, bool config = false);
-	void renderGradientLine(int x1, int y1, int x2, int y2, bool config = false);
-	void renderRect(int x, int y, int w, int h, bool config = false);
-	void renderCircle(int x, int y, int diameter, bool filled = true, bool config = false);
+	void renderPrintf(int x, int y, float scale, bool config, SCP_FORMAT_STRING const char* format, ...) SCP_FORMAT_STRING_ARGS(6, 7);
+	void renderPrintfWithGauge(int x, int y, int gauge_id, float scale, bool config, SCP_FORMAT_STRING const char* format, ...)  SCP_FORMAT_STRING_ARGS(7, 8);
+	void renderLine(int x1, int y1, int x2, int y2, bool config = false) const;
+	void renderGradientLine(int x1, int y1, int x2, int y2, bool config = false) const;
+	void renderRect(int x, int y, int w, int h, bool config = false) const;
+	void renderCircle(int x, int y, int diameter, bool filled = true, bool config = false) const;
 
 	void unsize(int *x, int *y);
 	void unsize(float *x, float *y);

@@ -759,7 +759,7 @@ void HudGauge::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -899,7 +899,7 @@ void HudGauge::renderPrintfWithGauge(int x, int y, int gauge_id, float scale, bo
 	renderString(x, y, gauge_id, tmp, scale, config);
 }
 
-void HudGauge::renderBitmapColor(int frame, int x, int y, float scale, bool config)
+void HudGauge::renderBitmapColor(int frame, int x, int y, float scale, bool config) const
 {
 	int nx = 0, ny = 0;
 
@@ -935,7 +935,7 @@ void HudGauge::renderBitmapColor(int frame, int x, int y, float scale, bool conf
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderBitmap(int x, int y, float scale, bool config)
+void HudGauge::renderBitmap(int x, int y, float scale, bool config) const
 {
 	int nx = 0, ny = 0;
 
@@ -971,14 +971,14 @@ void HudGauge::renderBitmap(int x, int y, float scale, bool config)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderBitmap(int frame, int x, int y, float scale, bool config)
+void HudGauge::renderBitmap(int frame, int x, int y, float scale, bool config) const
 {
 	gr_set_bitmap(frame);
 	renderBitmap(x, y, scale, config);
 }
 
 // Note that w, h, sx, and sy whould be unscaled values!
-void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale, bool config)
+void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale, bool config) const
 {
 	int nx = 0, ny = 0; 
 	
@@ -1016,7 +1016,7 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool config)
+void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool config) const
 {
 	int nx = 0, ny = 0;
 
@@ -1045,7 +1045,7 @@ void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool config)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2, bool config)
+void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2, bool config) const
 {
 	int nx = 0, ny = 0;
 
@@ -1074,7 +1074,7 @@ void HudGauge::renderGradientLine(int x1, int y1, int x2, int y2, bool config)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderRect(int x, int y, int w, int h, bool config)
+ void HudGauge::renderRect(int x, int y, int w, int h, bool config) const
 {
 	int nx = 0, ny = 0;
 
@@ -1103,7 +1103,7 @@ void HudGauge::renderRect(int x, int y, int w, int h, bool config)
 	gr_reset_screen_scale();
 }
 
-void HudGauge::renderCircle(int x, int y, int diameter, bool filled, bool config) 
+void HudGauge::renderCircle(int x, int y, int diameter, bool filled, bool config) const
 {
 	int nx = 0, ny = 0;
 
@@ -1899,7 +1899,7 @@ void HudGaugeMissionTime::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -2326,7 +2326,7 @@ void HudGaugeDamage::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	// Build a list of damage values to display and then actually display them in a second pass
@@ -2709,7 +2709,7 @@ void HudGaugeTextWarnings::render(float  /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	int w, h;
@@ -2778,7 +2778,7 @@ void HudGaugeKills::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -2876,7 +2876,7 @@ void HudGaugeLag::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -3202,7 +3202,7 @@ void HudGaugeSupport::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		hud_config_set_mouse_coords(gauge_config, x, x + static_cast<int>(w * scale), y, y + static_cast<int>(h * scale));
 	}
@@ -3796,7 +3796,7 @@ void HudGaugeObjectiveNotify::renderSubspace(bool config)
 	// for some reason
 	if (config) {
 		return;
-		/* hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		/* std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -3858,7 +3858,7 @@ void HudGaugeObjectiveNotify::renderRedAlert(bool config)
 	// for some reason
 	if (config) {
 		return;
-		/*hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		/* std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -3914,7 +3914,7 @@ void HudGaugeObjectiveNotify::renderObjective(bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Ideally this doesn't eventually happen every single frame. Hmm.
 		int bmw;
 		int bmh;
@@ -4303,7 +4303,7 @@ void HudGaugeMultiMsg::render(float /*frametime*/, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	// if there is valid multiplayer message text to be displayed
@@ -4339,7 +4339,7 @@ void HudGaugeVoiceStatus::render(float /*frametime*/, bool config)
 	// This gauge uses the same settings as the message output gauge right now.
 	// That may change in the future, in which case the code below can be restored.
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 
 		//int w;
 		//int h;
@@ -4399,7 +4399,7 @@ void HudGaugePing::render(float /*frametime*/, bool config)
 	// This gauge uses the same settings as the message output gauge right now.
 	// That may change in the future, in which case the code below can be restored.
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 
 		// int w;
 		// int h;
@@ -4452,7 +4452,7 @@ void HudGaugeSupernova::render(float /*frametime*/, bool config)
 	// This gauge uses the same settings as the warnings gauge right now.
 	// That may change in the future, in which case the code below can be restored.
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 
 		// SCP_string txt = XSTR("Supernova Warning: %.2f s", 1639);
 		// if (Lcl_pl) {

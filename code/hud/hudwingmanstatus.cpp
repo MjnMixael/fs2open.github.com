@@ -347,7 +347,7 @@ void HudGaugeWingmanStatus::renderBackground(int num_wings_to_draw, bool config)
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 		// Mouse coords are set at the end because we need to account for N wings here
 	}
 
@@ -434,7 +434,7 @@ void HudGaugeWingmanStatus::renderDots(int wing_index, int screen_index, int num
 	float scale = 1.0;
 
 	if (config) {
-		hud_config_convert_coord_sys(position[0], position[1], base_w, base_h, x, y, scale);
+		std::tie(x, y, scale) = hud_config_convert_coord_sys(position[0], position[1], base_w, base_h);
 	}
 
 	// Note actual_origin[] scales earlier in renderBackground()
