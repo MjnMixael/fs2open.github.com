@@ -913,31 +913,37 @@ void hud_config_record_color(int in_color)
 	HUD_color_blue = HC_colors[in_color].b;
 }
 
-// Set the HUD color
+// Set the HUD color to one of the color presets
 void hud_config_set_color(int in_color)
 {
 	hud_config_record_color(in_color);
 
 	HUD_init_hud_color_array();
 
-	// apply the color to all gauges
-	for(int idx=0; idx<NUM_HUD_GAUGES; idx++){
-		color clr;
-		gr_init_alphacolor(&clr, HC_colors[in_color].r, HC_colors[in_color].g, HC_colors[in_color].b, (HUD_color_alpha+1)*16);
-		SCP_string gauge = gauge_map.get_string_id_from_numeric_id(idx);
-		HUD_config.set_gauge_color(gauge, clr);
-	}
+	color clr;
+	gr_init_alphacolor(&clr, HC_colors[in_color].r, HC_colors[in_color].g, HC_colors[in_color].b, (HUD_color_alpha+1)*16);
+
+	// apply the color to all built-in gauges gauges
+	for(const auto& gauge_pair : HC_gauge_map){
+        const SCP_string& gauge_id = gauge_pair.first;
+        if (!gauge_id.empty()) {
+             HUD_config.set_gauge_color(gauge_id, clr);
+        }
+    }
 }
 
+// Set the HUD color when ALL GAUGES is selected in the HUD Config UI
 void hud_config_stuff_colors(int r, int g, int b)
 {
 	color clr;
 	gr_init_alphacolor(&clr, r, g, b, 255);
 
 	// apply the color to all gauges
-	for(int idx=0; idx<NUM_HUD_GAUGES; idx++){
-		SCP_string gauge = gauge_map.get_string_id_from_numeric_id(idx);
-		HUD_config.set_gauge_color(gauge, clr);
+	for (const auto& gauge_pair : HC_gauge_map) {
+		const SCP_string& gauge_id = gauge_pair.first;
+		if (!gauge_id.empty()) {
+			HUD_config.set_gauge_color(gauge_id, clr);
+		}
 	}
 }
 
@@ -1529,8 +1535,6 @@ void hud_config_close(bool API_Access)
 // hud_set_default_hud_config() will set the hud configuration to default values
 void hud_set_default_hud_config(player * /*p*/, const char* filename)
 {
-	int idx;
-
 	HUD_color_alpha = HUD_COLOR_ALPHA_DEFAULT;
 	HUD_config.main_color = HUD_COLOR_GREEN;
 	HUD_color_red = HC_colors[HUD_config.main_color].r;
@@ -1540,16 +1544,27 @@ void hud_set_default_hud_config(player * /*p*/, const char* filename)
 	color clr;
 	gr_init_alphacolor(&clr, HUD_color_red, HUD_color_green, HUD_color_blue, (HUD_color_alpha + 1) * 16);
 
-	for(idx=0; idx<NUM_HUD_GAUGES; idx++){
-		SCP_string gauge = gauge_map.get_string_id_from_numeric_id(idx);
-		HUD_config.set_gauge_color(gauge, clr);
+	for (const auto& gauge_pair : HC_gauge_map) {
+		const SCP_string& gauge_id = gauge_pair.first;
+		if (!gauge_id.empty()) {
+			HUD_config.set_gauge_color(gauge_id, clr);
+		}
 	}
 
 	HUD_config.show_flags_map.clear();
 	HUD_config.popup_flags_map.clear();
 
+	// Built-in have specific settings
 	for (const auto& gauge_id : default_visible_gauges) {
 		HUD_config.show_flags_map[gauge_id] = true;
+	}
+
+	// Custom gauges are always visible by default
+	for (const auto& gauge_pair : HC_gauge_map) {
+		if (gauge_pair.second->isCustom()) {
+			const SCP_string& gauge_id = gauge_pair.first;
+			HUD_config.show_flags_map[gauge_id] = true;
+		}
 	}
 
 	HUD_config.rp_dist = RR_INFINITY;
@@ -1777,15 +1792,17 @@ void hud_config_recalc_alpha_slider()
 
 void hud_config_red_slider()
 {
-	int idx;
 	int pos = HCS_CONV(HC_color_sliders[HCS_RED].get_currentItem()) ;
 
 	// select all ?
 	if(HC_select_all){
-		for(idx=0; idx<NUM_HUD_GAUGES; idx++){
-			SCP_string gauge = gauge_map.get_string_id_from_numeric_id(idx);
-			gr_init_alphacolor(&HUD_config.gauge_colors[gauge], pos, HUD_config.gauge_colors[gauge].green, HUD_config.gauge_colors[gauge].blue, HUD_config.gauge_colors[gauge].alpha);
-		}
+		for(const auto& gauge_pair : HC_gauge_map){ // Iterate the UI map <SCP_string, HudGauge*>
+            const SCP_string& gauge_id = gauge_pair.first;
+            if (!gauge_id.empty()) {                
+                // Apply change, keeping other components and alpha
+                gr_init_alphacolor(&HUD_config.gauge_colors[gauge_id], pos, HUD_config.gauge_colors[gauge_id].green, HUD_config.gauge_colors[gauge_id].blue, HUD_config.gauge_colors[gauge_id].alpha);
+            }
+        }
 	}
 	// individual gauge
 	else {
@@ -1802,15 +1819,17 @@ void hud_config_red_slider()
 
 void hud_config_green_slider()
 {
-	int idx;
 	int pos = HCS_CONV(HC_color_sliders[HCS_GREEN].get_currentItem()) ;
 
 	// select all ?
 	if(HC_select_all){
-		for(idx=0; idx<NUM_HUD_GAUGES; idx++){
-			SCP_string gauge = gauge_map.get_string_id_from_numeric_id(idx);
-			gr_init_alphacolor(&HUD_config.gauge_colors[gauge], HUD_config.gauge_colors[gauge].red, pos, HUD_config.gauge_colors[gauge].blue, HUD_config.gauge_colors[gauge].alpha);
-		}
+		for(const auto& gauge_pair : HC_gauge_map){ // Iterate the UI map <SCP_string, HudGauge*>
+            const SCP_string& gauge_id = gauge_pair.first;
+            if (!gauge_id.empty()) {                
+                // Apply change, keeping other components and alpha
+                gr_init_alphacolor(&HUD_config.gauge_colors[gauge_id], pos, HUD_config.gauge_colors[gauge_id].green, HUD_config.gauge_colors[gauge_id].blue, HUD_config.gauge_colors[gauge_id].alpha);
+            }
+        }
 	}
 	// individual gauge
 	else {
@@ -1827,15 +1846,17 @@ void hud_config_green_slider()
 
 void hud_config_blue_slider()
 {
-	int idx;
 	int pos = HCS_CONV(HC_color_sliders[HCS_BLUE].get_currentItem());
 
 	// select all ?
 	if(HC_select_all){
-		for(idx=0; idx<NUM_HUD_GAUGES; idx++){
-			SCP_string gauge = gauge_map.get_string_id_from_numeric_id(idx);
-			gr_init_alphacolor(&HUD_config.gauge_colors[gauge], HUD_config.gauge_colors[gauge].red, HUD_config.gauge_colors[gauge].green, pos, HUD_config.gauge_colors[gauge].alpha);
-		}
+		for(const auto& gauge_pair : HC_gauge_map){ // Iterate the UI map <SCP_string, HudGauge*>
+            const SCP_string& gauge_id = gauge_pair.first;
+            if (!gauge_id.empty()) {                
+                // Apply change, keeping other components and alpha
+                gr_init_alphacolor(&HUD_config.gauge_colors[gauge_id], pos, HUD_config.gauge_colors[gauge_id].green, HUD_config.gauge_colors[gauge_id].blue, HUD_config.gauge_colors[gauge_id].alpha);
+            }
+        }
 	}
 	// individual gauge
 	else {
@@ -1966,4 +1987,29 @@ void hud_config_select_all_toggle(bool toggle, bool API_Access)
 
 		HC_select_all = true;
 	}
+}
+
+SCP_string create_custom_gauge_id(const SCP_string& gauge_name) {
+	Assertion(!gauge_name.empty(), "Custom gauge has no name!");
+
+	SCP_string id;
+	if (Mod_title.empty()) {
+		id = Cmdline_mod;
+
+		// Basic cleanup attempt
+		// Remove path components
+		id = id.substr(0, id.find_first_of(DIR_SEPARATOR_CHAR));
+	} else {
+		id = Mod_title;
+	}
+
+	if (!id.empty()) {
+		std::replace(id.begin(), id.end(), ' ', '_');
+	} else {
+		id = "Custom";
+	}
+
+	id += "::" + gauge_name;
+
+	return id;
 }

@@ -1169,6 +1169,8 @@ add_file_folder("PilotFile"
 	pilotfile/pilotfile_convert.h
 	pilotfile/plr.cpp
 	pilotfile/plr_convert.cpp
+	pilotfile/plr_hudprefs.cpp
+	pilotfile/plr_hudprefs.h
 )
 
 # Playerman files
