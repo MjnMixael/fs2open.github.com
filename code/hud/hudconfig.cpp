@@ -1320,7 +1320,10 @@ void hud_config_button_enable(int index)
 // determine if on/off/popup buttons should be shown
 void hud_config_set_button_state()
 {
-	if (HC_gauge_selected.empty()) {
+	const auto gauge = hud_config_get_gauge_pointer(HC_gauge_selected);
+
+	// Custom gauges cannot currently be set to popup or toggle visibility
+	if (HC_gauge_selected.empty() || gauge->isCustom()) {
 		hud_config_button_disable(HCB_ON);
 		hud_config_button_disable(HCB_OFF);
 		hud_config_button_disable(HCB_POPUP);
@@ -1330,8 +1333,6 @@ void hud_config_set_button_state()
 	// on/off are always on
 	hud_config_button_enable(HCB_ON);
 	hud_config_button_enable(HCB_OFF);
-
-	const auto gauge = hud_config_get_gauge_pointer(HC_gauge_selected);
 
 	// popup is maybe available
 	if (gauge != nullptr && gauge->getConfigCanPopup()) {
