@@ -505,6 +505,16 @@ private:
 	 */
 	int save_wings();
 
+	/**
+	 * @brief Saves the prop entries to file
+	 *
+	 * @details Returns the value of CFred_mission_save::err, which is:
+	 *
+	 * @returns 0 for no error, or
+	 * @returns A negative value if an error occurred
+	 */
+	int save_props();
+
 	char *raw_ptr;
 	SCP_vector<SCP_string> fso_ver_comment;
 	int err;
