@@ -28,6 +28,8 @@
 #include "ship/shiphit.h"
 #include "weapon/weapon.h"
 
+// Need a version of this for PROPS
+
 
 extern int Game_skill_level;
 extern float ai_endangered_time(const object *ship_objp, const object *weapon_objp);
