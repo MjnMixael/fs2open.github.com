@@ -18,6 +18,7 @@
 #include "ai/aigoals.h"
 #include "FREDDoc.h"
 #include "FREDView.h"
+#include "missioneditor/common.h"
 
 #define TYPE_PATH			0x1000
 #define TYPE_SHIP			0x2000

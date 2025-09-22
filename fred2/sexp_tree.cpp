@@ -26,6 +26,7 @@
 #include "mission/missionmessage.h"
 #include "mission/missioncampaign.h"
 #include "mission/missionparse.h"
+#include "missioneditor/common.h"
 #include "CampaignEditorDlg.h"
 #include "hud/hudsquadmsg.h"
 #include "IgnoreOrdersDlg.h"
