@@ -21,9 +21,9 @@ class SexpOpfListBuilder final {
 	int find_argument_number(int parent_node, int child_node) const;
 
 	static SexpListItem* get_listing_opf_null();
-	SexpListItem* get_listing_opf_bool(int parent_node);
+	SexpListItem* get_listing_opf_bool(int parent_node = -1);
 	static SexpListItem* get_listing_opf_number();
-	SexpListItem* get_listing_opf_ship(int parent_node);
+	SexpListItem* get_listing_opf_ship(int parent_node = -1);
 	static SexpListItem* get_listing_opf_wing();
 	SexpListItem* get_listing_opf_subsystem(int parent_node, int arg_index);
 	SexpListItem* get_listing_opf_subsystem_type(int parent_node);
@@ -47,15 +47,14 @@ class SexpOpfListBuilder final {
 	static SexpListItem* get_listing_opf_waypoint_path();
 	static SexpListItem* get_listing_opf_positive();
 	SexpListItem* get_listing_opf_mission_name();
-	static SexpListItem* get_listing_opf_ship();
-	static SexpListItem* get_listing_opf_ship_point();
+	SexpListItem* get_listing_opf_ship_point();
 	SexpListItem* get_listing_opf_goal_name(int parent_node);
-	static SexpListItem* get_listing_opf_ship_wing();
-	static SexpListItem* get_listing_opf_ship_wing_wholeteam();
-	static SexpListItem* get_listing_opf_ship_wing_shiponteam_point();
-	static SexpListItem* get_listing_opf_ship_wing_point();
-	static SexpListItem* get_listing_opf_ship_wing_point_or_none();
-	static SexpListItem* get_listing_opf_order_recipient();
+	SexpListItem* get_listing_opf_ship_wing();
+	SexpListItem* get_listing_opf_ship_wing_wholeteam();
+	SexpListItem* get_listing_opf_ship_wing_shiponteam_point();
+	SexpListItem* get_listing_opf_ship_wing_point();
+	SexpListItem* get_listing_opf_ship_wing_point_or_none();
+	SexpListItem* get_listing_opf_order_recipient();
 	static SexpListItem* get_listing_opf_ship_type();
 	static SexpListItem* get_listing_opf_keypress();
 	SexpListItem* get_listing_opf_event_name(int parent_node);
@@ -69,7 +68,7 @@ class SexpOpfListBuilder final {
 	static SexpListItem* get_listing_opf_ship_class_name();
 	static SexpListItem* get_listing_opf_huge_weapon();
 	static SexpListItem* get_listing_opf_ship_not_player();
-	static SexpListItem* get_listing_opf_ship_or_none();
+	SexpListItem* get_listing_opf_ship_or_none();
 	SexpListItem* get_listing_opf_subsystem_or_none(int parent_node, int arg_index);
 	SexpListItem* get_listing_opf_subsys_or_generic(int parent_node, int arg_index);
 	static SexpListItem* get_listing_opf_jump_nodes();
