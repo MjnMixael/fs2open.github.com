@@ -5,6 +5,7 @@
 #include "iff_defs/iff_defs.h"
 #include "mission/missionmessage.h"
 #include "mission/object.h"
+#include "missioneditor/common.h"
 
 #include <globalincs/linklist.h>
 #include <ui/util/SignalBlockers.h>
