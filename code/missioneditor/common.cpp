@@ -4,6 +4,9 @@
 #include "iff_defs/iff_defs.h"
 #include "ship/ship.h"
 
+#include "iff_defs/iff_defs.h"
+#include "mission/missionparse.h"
+
 // to keep track of data
 char Voice_abbrev_briefing[NAME_LENGTH];
 char Voice_abbrev_campaign[NAME_LENGTH];
@@ -28,36 +31,6 @@ SCP_string Voice_script_instructions_string = "$name - name of the message\r\n"
 void time_to_mission_info_string(const std::tm* src, char* dest, size_t dest_max_len)
 {
 	std::strftime(dest, dest_max_len, "%x at %X", src);
-}
-
-void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, bool retail_format)
-{
-	const char* iff_name = Iff_info[iff_index].iff_name;
-
-	// stupid retail hack
-	if (retail_format && !stricmp(iff_name, "hostile") && !restrict_to_players)
-		iff_name = "enemy";
-
-	if (restrict_to_players)
-		sprintf(buf, "<any %s player>", iff_name);
-	else
-		sprintf(buf, "<any %s>", iff_name);
-
-	strlwr(buf);
-}
-
-void stuff_special_arrival_anchor_name(char* buf, int anchor_num, bool retail_format)
-{
-	// filter out iff
-	int iff_index = anchor_num;
-	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_FLAG;
-	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG;
-
-	// filter players
-	int restrict_to_players = (anchor_num & SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG);
-
-	// get name
-	stuff_special_arrival_anchor_name(buf, iff_index, restrict_to_players, retail_format);
 }
 
 void generate_weaponry_usage_list_team(int team, int* arr)
@@ -112,4 +85,71 @@ void generate_weaponry_usage_list_wing(int wing_num, int* arr)
 			}
 		}
 	}
+}
+                                              "Note that $persona and $sender will only appear for the Message section.";
+
+// Goober5000
+void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, int retail_format)
+{
+	char* iff_name = Iff_info[iff_index].iff_name;
+
+	// stupid retail hack
+	if (retail_format && !stricmp(iff_name, "hostile") && !restrict_to_players)
+		iff_name = "enemy";
+
+	if (restrict_to_players)
+		sprintf(buf, "<any %s player>", iff_name);
+	else
+		sprintf(buf, "<any %s>", iff_name);
+
+	strlwr(buf);
+}
+
+// Goober5000
+void stuff_special_arrival_anchor_name(char* buf, int anchor_num, int retail_format)
+{
+	// filter out iff
+	int iff_index = anchor_num;
+	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_FLAG;
+	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG;
+
+	// filter players
+	int restrict_to_players = (anchor_num & SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG);
+
+	// get name
+	stuff_special_arrival_anchor_name(buf, iff_index, restrict_to_players, retail_format);
+}
+
+char* Docking_bay_list[MAX_DOCKS];
+
+int get_docking_list(int model_index)
+{
+	int i;
+	polymodel* pm;
+
+	pm = model_get(model_index);
+	Assert(pm->n_docks <= MAX_DOCKS);
+	for (i = 0; i < pm->n_docks; i++)
+		Docking_bay_list[i] = pm->docking_bays[i].name;
+
+	return pm->n_docks;
+}
+
+// Given an object index, find the ship index for that object.
+int get_ship_from_obj(int obj)
+{
+	if ((Objects[obj].type == OBJ_SHIP) || (Objects[obj].type == OBJ_START))
+		return Objects[obj].instance;
+
+	Int3();
+	return 0;
+}
+
+int get_ship_from_obj(object* objp)
+{
+	if ((objp->type == OBJ_SHIP) || (objp->type == OBJ_START))
+		return objp->instance;
+
+	Assertion(false, "get_ship_from_obj: Invalid object type %d", objp->type);
+	return 0;
 }

@@ -6,6 +6,7 @@
 #include "mission/missionmessage.h"
 #include "missioneditor/common.h"
 #include "mission/object.h"
+#include "missioneditor/common.h"
 
 #include <globalincs/linklist.h>
 #include <ui/util/SignalBlockers.h>

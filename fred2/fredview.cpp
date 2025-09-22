@@ -65,6 +65,7 @@
 #include "volumetricsdlg.h"
 #include "customdatadlg.h"
 #include "customstringsdlg.h"
+#include "missioneditor/common.h"
 
 #include "osapi/osapi.h"
 

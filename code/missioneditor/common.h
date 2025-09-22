@@ -27,10 +27,16 @@ extern SCP_string Voice_script_instructions_string;
 
 void time_to_mission_info_string(const std::tm* src, char* dest, size_t dest_max_len);
 
-void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, bool retail_format);
-
-void stuff_special_arrival_anchor_name(char* buf, int anchor_num, bool retail_format);
-
 void generate_weaponry_usage_list_team(int team, int* arr);
 
 void generate_weaponry_usage_list_wing(int wing_num, int* arr);
+
+extern void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, int retail_format);
+extern void stuff_special_arrival_anchor_name(char* buf, int anchor_num, int retail_format);
+
+extern char* Docking_bay_list[];
+#define MAX_DOCKS 1000
+int get_docking_list(int model_index);
+
+int get_ship_from_obj(int obj);
+int get_ship_from_obj(object* objp);

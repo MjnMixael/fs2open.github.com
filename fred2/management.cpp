@@ -82,8 +82,6 @@
 #define SDL_MAIN_HANDLED
 #include <SDL_main.h>
 
-#define MAX_DOCKS 1000
-
 #define UNKNOWN_USER		"Unknown"
 
 extern void ssm_init();	// Need this to populate Ssm_info so OPF_SSM_CLASS does something. -MageKing17
@@ -111,8 +109,6 @@ extern void allocate_parse_text(size_t size);
 
 // object numbers for ships in a wing.
 int wing_objects[MAX_WINGS][MAX_SHIPS_PER_WING];
-
-char *Docking_bay_list[MAX_DOCKS];
 
 // Goober5000
 SCP_vector<bool> Show_iff;
@@ -1783,19 +1779,6 @@ int set_reinforcement(char *name, int state)
 	return 0;
 }
 
-int get_docking_list(int model_index)
-{
-	int i;
-	polymodel *pm;
-
-	pm = model_get(model_index);
-	Assert(pm->n_docks <= MAX_DOCKS);
-	for (i=0; i<pm->n_docks; i++)
-		Docking_bay_list[i] = pm->docking_bays[i].name;
-
-	return pm->n_docks;
-}
-
 // DA 1/7/99 These ship names are not variables
 int rename_ship(int ship, const char *name)
 {
@@ -1920,25 +1903,6 @@ void set_valid_dock_points(int ship, int type, CComboBox *box)
 		}
 
 	Assert(box->GetCount());
-}
-
-// Given an object index, find the ship index for that object.
-int get_ship_from_obj(int obj)
-{
-	if ((Objects[obj].type == OBJ_SHIP) || (Objects[obj].type == OBJ_START))
-		return Objects[obj].instance;
-
-	Int3();
-	return 0;
-}
-
-int get_ship_from_obj(object *objp)
-{
-	if ((objp->type == OBJ_SHIP) || (objp->type == OBJ_START))
-		return objp->instance;
-
-	Int3();
-	return 0;
 }
 
 void ai_update_goal_references(sexp_ref_type type, const char *old_name, const char *new_name)
