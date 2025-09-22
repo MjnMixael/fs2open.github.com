@@ -323,11 +323,11 @@ SexpListItem* SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg
 		break;
 
 	case OPF_AMBIGUOUS:
-		list = NULL;
+		list = nullptr;
 		break;
 
 	case OPF_ANYTHING:
-		list = NULL;
+		list = nullptr;
 		break;
 
 	case OPF_SKYBOX_MODEL_NAME:
@@ -414,6 +414,7 @@ SexpListItem* SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg
 		list = get_listing_opf_weapon_banks();
 		break;
 
+	//TODO does this version need to allow <any string>????
 	case OPF_MESSAGE_OR_STRING:
 		list = get_listing_opf_message();
 		break;
@@ -560,7 +561,7 @@ SexpListItem* SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg
 		head.add_data(SEXP_ARGUMENT_STRING);
 	}
 
-	if (list != NULL) {
+	if (list != nullptr) {
 		// append other list
 		head.add_list(list);
 	}
@@ -1377,68 +1378,6 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_mission_name()
 	return head.next;
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship(int parent_node)
-{
-	SexpListItem head;
-	int op = 0, dock_ship = -1, require_cap_ship = 0;
-
-	// look at the parent node and get the operator.  Some ship lists should be filtered based
-	// on what the parent operator is
-	if (parent_node >= 0) {
-		op = get_operator_const(tree_nodes[parent_node].text.c_str());
-
-		// get the dock_ship number of if this goal is an ai dock goal.  used to prune out unwanted ships out
-		// of the generated ship list
-		dock_ship = -1;
-		if (op == OP_AI_DOCK) {
-			int z = tree_nodes[parent_node].parent;
-			Assertion(z >= 0, "get_listing_opf_ship: OP_AI_DOCK parent has no valid ancestor (parent=%d).", parent_node);
-			Assertion(lcase_equal(tree_nodes[z].text, "add-ship-goal") ||
-						  lcase_equal(tree_nodes[z].text, "add-wing-goal") ||
-						  lcase_equal(tree_nodes[z].text, "add-goal"),
-				"get_listing_opf_ship: unexpected grandparent operator '%s' for OP_AI_DOCK (expected "
-				"add-ship-goal/add-wing-goal/add-goal).",
-				tree_nodes[z].text.c_str());
-
-			z = tree_nodes[z].child;
-			Assertion(z >= 0, "get_listing_opf_ship: expected child ship node under goal operator.");
-
-			dock_ship = ship_name_lookup(tree_nodes[z].text.c_str(), 1);
-			Assertion(dock_ship != -1, "get_listing_opf_ship: dock ship '%s' not found.", tree_nodes[z].text.c_str());
-		}
-	}
-
-	object* ptr = GET_FIRST(&obj_used_list);
-	while (ptr != END_OF_LIST(&obj_used_list)) {
-		if ((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) {
-			if (op == OP_AI_DOCK) {
-				// only include those ships in the list which the given ship can dock with.
-				if ((dock_ship != ptr->instance) && ship_docking_valid(dock_ship, ptr->instance))
-					head.add_data(Ships[ptr->instance].ship_name);
-
-			} else if (op == OP_CAP_SUBSYS_CARGO_KNOWN_DELAY) {
-				if (((Ship_info[Ships[ptr->instance].ship_info_index].is_huge_ship()) && // big ship
-						!(Ships[ptr->instance]
-								.flags[Ship::Ship_Flags::Toggle_subsystem_scanning])) ||    // which is not flagged OR
-					((!(Ship_info[Ships[ptr->instance].ship_info_index].is_huge_ship())) && // small ship
-						(Ships[ptr->instance]
-								.flags[Ship::Ship_Flags::Toggle_subsystem_scanning]))) { // which is flagged
-
-					head.add_data(Ships[ptr->instance].ship_name);
-				}
-			} else {
-				if (!require_cap_ship || Ship_info[Ships[ptr->instance].ship_info_index].is_huge_ship()) {
-					head.add_data(Ships[ptr->instance].ship_name);
-				}
-			}
-		}
-
-		ptr = GET_NEXT(ptr);
-	}
-
-	return head.next;
-}
-
 SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_point()
 {
 	SexpListItem head;
@@ -1502,7 +1441,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_wholeteam()
 {
 	SexpListItem head;
 
-	for (int i = 0; i < (int)Iff_info.size(); i++)
+	for (size_t i = 0; i < Iff_info.size(); i++)
 		head.add_data(Iff_info[i].iff_name);
 
 	head.add_list(get_listing_opf_ship_wing());
@@ -1514,7 +1453,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_shiponteam_point()
 {
 	SexpListItem head;
 
-	for (int i = 0; i < (int)Iff_info.size(); i++) {
+	for (size_t i = 0; i < Iff_info.size(); i++) {
 		char tmp[NAME_LENGTH + 7];
 		sprintf(tmp, "<any %s>", Iff_info[i].iff_name);
 		strlwr(tmp);
@@ -1597,7 +1536,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_event_name(int parent_node)
 	if (inCampaign) {
 		int child;
 
-		Assert(parent_node >= 0);
+		Assertion(parent_node >= 0, "Invalid parent node passed to get_listing_opf_event_name!");
 		child = tree_nodes[parent_node].child;
 		if (child < 0)
 			return nullptr;
@@ -1673,7 +1612,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_medal_name()
 {
 	SexpListItem head;
 
-	for (int i = 0; i < (int)Medals.size(); i++) {
+	for (int i = 0; i < static_cast<int>(Medals.size()); i++) {
 		// don't add Rank or the Ace badges
 		if ((i == Rank_medal_index) || (Medals[i].kills_needed > 0))
 			continue;
@@ -1984,7 +1923,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_sound_environment()
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	for (int i = 0; i < (int)EFX_presets.size(); i++) {
+	for (size_t i = 0; i < EFX_presets.size(); i++) {
 		head.add_data(EFX_presets[i].name.c_str());
 	}
 
@@ -2144,7 +2083,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_patterns()
 
 	head.add_data(SEXP_NONE_STRING);
 
-	for (int i = 0; i < (int)Neb2_bitmap_filenames.size(); i++) {
+	for (size_t i = 0; i < Neb2_bitmap_filenames.size(); i++) {
 		head.add_data(Neb2_bitmap_filenames[i].c_str());
 	}
 
@@ -2325,7 +2264,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_motion_debris()
 
 	head.add_data(SEXP_NONE_STRING);
 
-	for (int i = 0; i < (int)Motion_debris_info.size(); i++) {
+	for (size_t i = 0; i < Motion_debris_info.size(); i++) {
 		head.add_data(Motion_debris_info[i].name.c_str());
 	}
 
@@ -2338,7 +2277,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_bolt_types()
 
 	head.add_data(SEXP_NONE_STRING);
 
-	for (int i = 0; i < (int)Bolt_types.size(); i++) {
+	for (size_t i = 0; i < Bolt_types.size(); i++) {
 		head.add_data(Bolt_types[i].name);
 	}
 
@@ -2351,7 +2290,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_traitor_overrides()
 
 	head.add_data(SEXP_NONE_STRING);
 
-	for (int i = 0; i < (int)Traitor_overrides.size(); i++) {
+	for (size_t i = 0; i < Traitor_overrides.size(); i++) {
 		head.add_data(Traitor_overrides[i].name.c_str());
 	}
 
