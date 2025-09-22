@@ -9,36 +9,6 @@
 
 #include "util.h"
 
-// Goober5000
-void stuff_special_arrival_anchor_name(char *buf, int iff_index, int restrict_to_players, int retail_format)
-{
-	const char *iff_name = Iff_info[iff_index].iff_name;
-
-	// stupid retail hack
-	if (retail_format && !stricmp(iff_name, "hostile") && !restrict_to_players)
-		iff_name = "enemy";
-
-	if (restrict_to_players)
-		sprintf(buf, "<any %s player>", iff_name);
-	else
-		sprintf(buf, "<any %s>", iff_name);
-
-	strlwr(buf);
-}
-
-void stuff_special_arrival_anchor_name(char* buf, int anchor_num, int retail_format) {
-	// filter out iff
-	int iff_index = anchor_num;
-	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_FLAG;
-	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG;
-
-	// filter players
-	int restrict_to_players = (anchor_num & SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG);
-
-	// get name
-	stuff_special_arrival_anchor_name(buf, iff_index, restrict_to_players, retail_format);
-}
-
 void generate_weaponry_usage_list_team(int team, int* arr) {
 	int i;
 

@@ -26,6 +26,7 @@
 #include "mission/missionmessage.h"
 #include "mission/missiongoals.h"
 #include "mission/missionbriefcommon.h"
+#include "missioneditor/common.h"
 #include "model/modelreplace.h"
 #include "Management.h"
 #include "cfile/cfile.h"
@@ -80,8 +81,6 @@
 #define SDL_MAIN_HANDLED
 #include <SDL_main.h>
 
-#define MAX_DOCKS 1000
-
 #define UNKNOWN_USER		"Unknown"
 
 extern void ssm_init();	// Need this to populate Ssm_info so OPF_SSM_CLASS does something. -MageKing17
@@ -108,8 +107,6 @@ extern void allocate_parse_text(size_t size);
 
 // object numbers for ships in a wing.
 int wing_objects[MAX_WINGS][MAX_SHIPS_PER_WING];
-
-char *Docking_bay_list[MAX_DOCKS];
 
 // Goober5000
 SCP_vector<bool> Show_iff;
@@ -1702,19 +1699,6 @@ int set_reinforcement(char *name, int state)
 	return 0;
 }
 
-int get_docking_list(int model_index)
-{
-	int i;
-	polymodel *pm;
-
-	pm = model_get(model_index);
-	Assert(pm->n_docks <= MAX_DOCKS);
-	for (i=0; i<pm->n_docks; i++)
-		Docking_bay_list[i] = pm->docking_bays[i].name;
-
-	return pm->n_docks;
-}
-
 // DA 1/7/99 These ship names are not variables
 int rename_ship(int ship, const char *name)
 {
@@ -1839,25 +1823,6 @@ void set_valid_dock_points(int ship, int type, CComboBox *box)
 		}
 
 	Assert(box->GetCount());
-}
-
-// Given an object index, find the ship index for that object.
-int get_ship_from_obj(int obj)
-{
-	if ((Objects[obj].type == OBJ_SHIP) || (Objects[obj].type == OBJ_START))
-		return Objects[obj].instance;
-
-	Int3();
-	return 0;
-}
-
-int get_ship_from_obj(object *objp)
-{
-	if ((objp->type == OBJ_SHIP) || (objp->type == OBJ_START))
-		return objp->instance;
-
-	Int3();
-	return 0;
 }
 
 void ai_update_goal_references(sexp_ref_type type, const char *old_name, const char *new_name)
@@ -2523,38 +2488,6 @@ void update_custom_wing_indexes()
 	{
 		TVT_wings[i] = wing_name_lookup(TVT_wing_names[i], 1);
 	}
-}
-
-// Goober5000
-void stuff_special_arrival_anchor_name(char *buf, int iff_index, int restrict_to_players, int retail_format)
-{
-	char *iff_name = Iff_info[iff_index].iff_name;
-
-	// stupid retail hack
-	if (retail_format && !stricmp(iff_name, "hostile") && !restrict_to_players)
-		iff_name = "enemy";
-
-	if (restrict_to_players)
-		sprintf(buf, "<any %s player>", iff_name);
-	else
-		sprintf(buf, "<any %s>", iff_name);
-
-	strlwr(buf);
-}
-
-// Goober5000
-void stuff_special_arrival_anchor_name(char *buf, int anchor_num, int retail_format)
-{
-	// filter out iff
-	int iff_index = anchor_num;
-	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_FLAG;
-	iff_index &= ~SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG;
-
-	// filter players
-	int restrict_to_players = (anchor_num & SPECIAL_ARRIVAL_ANCHOR_PLAYER_FLAG);
-
-	// get name
-	stuff_special_arrival_anchor_name(buf, iff_index, restrict_to_players, retail_format);
 }
 
 // Goober5000

@@ -4,6 +4,7 @@
 #include "iff_defs/iff_defs.h"
 #include "mission/missionhotkey.h"
 #include "mission/missionparse.h"
+#include "missioneditor/common.h"
 #include <QObject>
 #include <QMessageBox>
 

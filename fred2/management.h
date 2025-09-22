@@ -95,13 +95,10 @@ int gray_menu_tree(CMenu* base);
 int query_initial_orders_conflict(int wing);
 int query_initial_orders_empty(ai_goal* ai_goals);
 int set_reinforcement(char* name, int state);
-int get_docking_list(int model_index);
 int rename_ship(int ship, const char* name);
 void fix_ship_name(int ship);
 int internal_integrity_check();
 void correct_marking();
-int get_ship_from_obj(int obj);
-int get_ship_from_obj(object* objp);
 void set_valid_dock_points(int ship, int type, CComboBox* box);
 void ai_update_goal_references(sexp_ref_type type, const char* old_name, const char* new_name);
 std::pair<int, sexp_src> query_referenced_in_ai_goals(sexp_ref_type type, const char* name);
@@ -130,8 +127,6 @@ extern void management_add_ships_to_combo(CComboBox* box, int flags);
 // Goober5000
 extern int wing_is_player_wing(int wing);
 extern void update_custom_wing_indexes();
-extern void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, int retail_format);
-extern void stuff_special_arrival_anchor_name(char* buf, int anchor_num, int retail_format);
 extern void update_texture_replacements(const char* old_name, const char* new_name);
 
 extern void time_to_mission_info_string(const std::tm* src, char* dest, size_t dest_max_len);

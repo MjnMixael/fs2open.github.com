@@ -73,6 +73,8 @@ const char* object_name(int obj) {
 
 	return "*unknown*";
 }
+
+// TODO maybe use the ones from common.h or replace those with these?
 int get_ship_from_obj(int obj) {
 	Assertion(query_valid_object(obj), "Invalid object index detected!");
 

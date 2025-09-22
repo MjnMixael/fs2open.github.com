@@ -24,3 +24,13 @@ extern bool Voice_group_messages;
 
 extern SCP_string Voice_script_default_string;
 extern SCP_string Voice_script_instructions_string;
+
+extern void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, int retail_format);
+extern void stuff_special_arrival_anchor_name(char* buf, int anchor_num, int retail_format);
+
+extern char* Docking_bay_list[];
+#define MAX_DOCKS 1000
+int get_docking_list(int model_index);
+
+int get_ship_from_obj(int obj);
+int get_ship_from_obj(object* objp);

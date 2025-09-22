@@ -19,6 +19,7 @@
 #include "globalincs/linklist.h"
 #include "globalincs/alphacolors.h"
 #include "object/objectdock.h"
+#include "missioneditor/common.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
