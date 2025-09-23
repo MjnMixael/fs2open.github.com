@@ -490,10 +490,10 @@ void SexpTreeModel::replaceOperator(int node_index, int new_op_index)
 		"replaceOperator: node %d is not an operator.",
 		node_index);
 
-	// 1) Update the node in place (type stays operator, text changes)
+	// Update the node in place (type stays operator, text changes)
 	setNode(node_index, (SEXPT_OPERATOR | SEXPT_VALID), Operators[new_op_index].text.c_str());
 
-	// 2) Enforce min/max, append default args, trim extra args
+	// Enforce min/max, append default args, trim extra args
 	ensureOperatorArity(node_index, new_op_index);
 }
 
