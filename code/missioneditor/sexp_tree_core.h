@@ -45,23 +45,6 @@ struct SexpNode {
 	SCP_string text;
 };
 
-// Minimal list item used for building argument-choice lists (OPF listings)
-struct SexpListItem {
-	int type = 0;
-	int op   = 0;
-	SCP_string text;
-	SexpListItem* next = nullptr;
-
-	// Construction helpers
-	void set_op(int op_num);
-	void set_data(const char* str, int t = (SEXPT_STRING | SEXPT_VALID));
-
-	void add_op(int op_num);
-	void add_data(const char* str, int t = (SEXPT_STRING | SEXPT_VALID));
-	void add_list(SexpListItem* list);
-	void destroy();
-};
-
 enum class ArgBucket {
 	STR,
 	NUM,
@@ -170,8 +153,7 @@ class SexpTreeModel {
 
 	// OPF listing
 	// Entry point used by editors to populate dropdowns for an argument.
-	// Returns the head of a single-linked list (owned by caller; use SexpListItem::destroy).
-	SexpListItem* buildListingForOpf(int opf, int parent_node, int arg_index);
+	SexpListItemPtr buildListingForOpf(int opf, int parent_node, int arg_index);
 
   private:
 	ISexpEnvironment* _env = nullptr;
