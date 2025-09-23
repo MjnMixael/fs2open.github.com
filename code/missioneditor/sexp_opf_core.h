@@ -1,6 +1,18 @@
 #pragma once
 
-#include "sexp_tree_core.h"
+#include "globalincs/pstypes.h"
+
+#include "parse/sexp_container.h"
+
+class SexpTreeModel;
+struct SexpNode;
+struct SexpListItem;
+
+struct SexpListItemDeleter {
+	void operator()(SexpListItem* p) const;
+};
+
+using SexpListItemPtr = std::unique_ptr<SexpListItem, SexpListItemDeleter>;
 
 // Minimal list item used for building argument-choice lists (OPF listings)
 struct SexpListItem {
@@ -11,26 +23,43 @@ struct SexpListItem {
 
 	// Construction helpers
 	void set_op(int op_num);
-	void set_data(const char* str, int t = (SEXPT_STRING | SEXPT_VALID));
+	void set_data(const char* str);
+	void set_data(const char* str, int t);
 
 	void add_op(int op_num);
-	void add_data(const char* str, int t = (SEXPT_STRING | SEXPT_VALID));
-	void add_list(SexpListItemPtr list); // TODO
+	void add_data(const char* str);
+	void add_data(const char* str, int t);
+	void add_list(SexpListItemPtr list);
 	void destroy();
 };
 
-// A custom deleter for the SexpListItem linked list
-struct SexpListItemDeleter {
-	void operator()(SexpListItem* p) const
-	{
-		if (p) {
-			p->destroy();
-		}
-	}
-};
+// Environment/adapter interface for data the model must *read* from the editor/game state.
+// Implemented by each the editor and injected into the model.
+struct ISexpEnvironment {
+	virtual ~ISexpEnvironment() = default;
 
-// Create a readable alias for our unique_ptr type
-using SexpListItemPtr = std::unique_ptr<SexpListItem, SexpListItemDeleter>;
+	// Events editor can pass an override to use the local message list else use Messages[] skipping builtins.
+	virtual SCP_vector<SCP_string> getMessageNames() const;
+
+	// Campaign editor can override to provide all loaded missions else use the current mission only.
+	virtual SCP_vector<SCP_string> getMissionNames() const;
+
+	// Campaign editor can override this to return true else returns false.
+	virtual bool isCampaignContext() const;
+
+	// Examples of lookups the model may need (add as we migrate code):
+	/*virtual SCP_vector<SCP_string> getMessages();
+	virtual SCP_vector<SCP_string> getPersonaNames();
+	virtual SCP_vector<SCP_string> getMissionNames();
+	virtual int getRootReturnType() const;
+
+	// Dynamic (Lua) enums
+	virtual int getDynamicEnumPosition(const SCP_string& name);
+	virtual SCP_vector<SCP_string> getDynamicEnumList(int pos);
+	virtual bool isLuaOperator(int op_const) const;
+	virtual int getDynamicParameterIndex(const SCP_string& op_name, int arg_index);
+	virtual SCP_string getChildEnumSuffix(const SCP_string& op_name, int arg_index);*/
+};
 
 class SexpOpfListBuilder final {
   public:
