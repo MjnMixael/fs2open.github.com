@@ -1,4 +1,5 @@
 #include "sexp_opf_core.h"
+#include "sexp_tree_core.h"
 #include "common.h"
 
 #include "ai/ailua.h"
@@ -36,6 +37,11 @@ void SexpListItem::set_op(int op_num)
 	text = Operators[op].text;
 	type = (SEXPT_OPERATOR | SEXPT_VALID);
 }
+void SexpListItem::set_data(const char* str)
+{
+	// Call the full version with the default values
+	set_data(str, (SEXPT_STRING | SEXPT_VALID));
+}
 void SexpListItem::set_data(const char* str, int t)
 {
 	op = -1;
@@ -51,6 +57,11 @@ void SexpListItem::add_op(int op_num)
 	auto* n = new SexpListItem();
 	n->set_op(op_num);
 	tail->next = n;
+}
+void SexpListItem::add_data(const char* str)
+{
+	// Call the full version with the default values
+	add_data(str, (SEXPT_STRING | SEXPT_VALID));
 }
 void SexpListItem::add_data(const char* str, int t)
 {
@@ -77,11 +88,52 @@ void SexpListItem::destroy()
 {
 	SexpListItem* p = this;
 	while (p) {
-		SexpListItem* next = p->next;
+		SexpListItem* n = p->next;
 		delete p;
-		p = next;
+		p = n;
 	}
 }
+
+// A custom deleter for the SexpListItem linked list
+void SexpListItemDeleter::operator()(SexpListItem* p) const
+{
+	if (p) {
+		p->destroy();
+	}
+}
+
+// ISexpEnvironment defaults
+
+SCP_vector<SCP_string> ISexpEnvironment::getMessageNames() const
+{
+	SCP_vector<SCP_string> out;
+	for (int i = Num_builtin_messages; i < Num_messages; ++i) {
+		out.emplace_back(Messages[i].name);
+	}
+	return out;
+}
+
+SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() const
+{
+	SCP_vector<SCP_string> out;
+	out.emplace_back(Mission_filename);
+	return out;
+}
+
+bool ISexpEnvironment::isCampaignContext() const
+{
+	return false;
+}
+
+/*SCP_vector<SCP_string> ISexpEnvironment::getMessages() { return {}; }
+SCP_vector<SCP_string> ISexpEnvironment::getPersonaNames() { return {}; }
+SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() { return {}; }
+int ISexpEnvironment::getRootReturnType() const { return OPR_NULL; }
+int ISexpEnvironment::getDynamicEnumPosition(const SCP_string&) { return -1; }
+SCP_vector<SCP_string> ISexpEnvironment::getDynamicEnumList(int) { return {}; }
+bool ISexpEnvironment::isLuaOperator(int) const { return false; }
+int ISexpEnvironment::getDynamicParameterIndex(const SCP_string&, int) { return -1; }
+SCP_string ISexpEnvironment::getChildEnumSuffix(const SCP_string&, int) { return {}; }*/
 
 extern SCP_vector<game_snd> Snds;
 
@@ -102,8 +154,7 @@ static void add_flag_name_helper(M& flag_name_map, SexpListItem& head, T flag_na
 // given a node's parent, check if node is eligible for being used with the special argument
 bool SexpOpfListBuilder::is_node_eligible_for_special_argument(int parent_node) const
 {
-	Assertion(parent_node != -1,
-		"Attempt to access invalid parent node for special arg eligibility check. Please report!");
+	Assertion(parent_node != -1, "Attempt to access invalid parent node for special arg eligibility check. Please report!");
 
 	const int w_arg = find_ancestral_argument_number(OP_WHEN_ARGUMENT, parent_node);
 	const int e_arg = find_ancestral_argument_number(OP_EVERY_TIME_ARGUMENT, parent_node);
@@ -948,7 +999,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsystem(int parent_node, i
 				error_display(1,
 					"Expected to find a dynamic lua parent parameter for node %i in operator %s but found nothing!",
 					arg_index,
-					tree_nodes[parent_node].text);
+					tree_nodes[parent_node].text.c_str());
 			}
 		}
 	}
@@ -1308,7 +1359,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_docker_point(int parent_node
 			error_display(1,
 				"Expected to find a dynamic lua parent parameter for node %i in operator %s but found nothing!",
 				arg_num,
-				tree_nodes[parent_node].text);
+				tree_nodes[parent_node].text.c_str());
 		}
 	}
 
@@ -2405,7 +2456,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_lua_enum(int parent_node, in
 		error_display(1,
 			"Expected to find an enum parent parameter for node %i in operator %s but found nothing!",
 			arg_index,
-			tree_nodes[parent_node].text);
+			tree_nodes[parent_node].text.c_str());
 		return nullptr;
 	}
 

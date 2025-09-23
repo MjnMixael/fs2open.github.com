@@ -1,4 +1,5 @@
 #include "sexp_actions_core.h"
+#include "sexp_tree_core.h"
 
 SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 {

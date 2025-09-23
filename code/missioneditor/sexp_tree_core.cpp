@@ -4,7 +4,6 @@
  */
 
 #include "sexp_tree_core.h"
-#include "sexp_opf_core.h"
 
 #include "fireball/fireballs.h"
 #include "mission/missiongoals.h"
@@ -13,39 +12,6 @@
 #include "weapon/emp.h"
 
 static constexpr int kNodeIncrement = 100; // mirrors TREE_NODE_INCREMENT
-
-// ISexpEnvironment defaults
-
-SCP_vector<SCP_string> ISexpEnvironment::getMessageNames() const
-{
-	SCP_vector<SCP_string> out;
-	for (int i = Num_builtin_messages; i < Num_messages; ++i) {
-		out.emplace_back(Messages[i].name);
-	}
-	return out;
-}
-
-SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() const
-{
-	SCP_vector<SCP_string> out;
-	out.emplace_back(Mission_filename);
-	return out;
-}
-
-bool ISexpEnvironment::isCampaignContext() const
-{
-	return false;
-}
-
-/*SCP_vector<SCP_string> ISexpEnvironment::getMessages() { return {}; }
-SCP_vector<SCP_string> ISexpEnvironment::getPersonaNames() { return {}; }
-SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() { return {}; }
-int ISexpEnvironment::getRootReturnType() const { return OPR_NULL; }
-int ISexpEnvironment::getDynamicEnumPosition(const SCP_string&) { return -1; }
-SCP_vector<SCP_string> ISexpEnvironment::getDynamicEnumList(int) { return {}; }
-bool ISexpEnvironment::isLuaOperator(int) const { return false; }
-int ISexpEnvironment::getDynamicParameterIndex(const SCP_string&, int) { return -1; }
-SCP_string ISexpEnvironment::getChildEnumSuffix(const SCP_string&, int) { return {}; }*/
 
 // SexpTreeModel
 SexpTreeModel::SexpTreeModel() : _actions(std::make_unique<SexpActionsHandler>(this)) {}
@@ -174,10 +140,14 @@ void SexpTreeModel::freeNode(int node_index, bool cascade)
 
 const SexpNode& SexpTreeModel::node(int index) const
 { 
+	Assertion(SCP_vector_inbounds(_nodes, index), "node: index %d out of range.", index);
+	
 	return _nodes.at(index);
 }
 SexpNode& SexpTreeModel::node(int index)
 { 
+	Assertion(SCP_vector_inbounds(_nodes, index), "node: index %d out of range.", index);
+	
 	return _nodes.at(index);
 }
 int SexpTreeModel::size() const
