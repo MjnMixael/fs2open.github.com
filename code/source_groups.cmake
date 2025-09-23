@@ -844,6 +844,8 @@ add_file_folder("MissionEditor"
 	missioneditor/campaignsave.h
 	missioneditor/missionsave.cpp
 	missioneditor/missionsave.h
+	missioneditor/sexp_actions_core.cpp
+	missioneditor/sexp_actions_core.h
 	missioneditor/sexp_opf_core.cpp
 	missioneditor/sexp_opf_core.h
 	missioneditor/sexp_tree_core.cpp

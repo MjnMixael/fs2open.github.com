@@ -10,9 +10,8 @@
 #include "parse/sexp_container.h"
 #include "parse/parselo.h"
 
-#include "globalincs/pstypes.h"   // SCP_string, SCP_vector
-#include <functional>
-#include <optional>
+#include "globalincs/pstypes.h"
+#include "sexp_actions_core.h"
 
 // tree_node type
 #define SEXPT_UNUSED 0x0000
@@ -63,6 +62,12 @@ struct SexpListItem {
 	void destroy();
 };
 
+enum class ArgBucket {
+	STR,
+	NUM,
+	BOOL
+};
+
 // Environment/adapter interface for data the model must *read* from the editor/game state.
 // Implemented by each the editor and injected into the model.
 struct ISexpEnvironment {
@@ -94,8 +99,11 @@ struct ISexpEnvironment {
 // Core SEXP tree model
 class SexpTreeModel {
   public:
+	friend class SexpActionsHandler; 
+
 	SexpTreeModel();
 	explicit SexpTreeModel(ISexpEnvironment* env);
+	~SexpTreeModel();
 
 	// Model lifetime & configuration
 	void setEnvironment(ISexpEnvironment* env);
@@ -142,6 +150,24 @@ class SexpTreeModel {
 	int countArgs(int node_index) const;
 	int identifyArgType(int first_arg_node_index) const;
 
+	// Simple traversal helpers
+	int parentOf(int index) const;
+	int firstChild(int index) const;
+	int nextSibling(int index) const;
+
+	// Flags
+	void applyDefaultFlags(int index);
+	bool isEditable(int index) const;
+	void setEditable(int index, bool on);
+	bool isOperand(int index) const;
+	void setOperand(int index, bool on);
+	bool isCombined(int index) const;
+	void setCombined(int index, bool on);
+
+	// Actions
+	SexpContextMenu queryContextMenu(int node_index) const;
+	bool executeAction(int node_index, SexpActionId id, const SexpActionParam* param = nullptr);
+
 	// OPF listing
 	// Entry point used by editors to populate dropdowns for an argument.
 	// Returns the head of a single-linked list (owned by caller; use SexpListItem::destroy).
@@ -150,13 +176,30 @@ class SexpTreeModel {
   private:
 	ISexpEnvironment* _env = nullptr;
 	SCP_vector<SexpNode> _nodes;
+	std::unique_ptr<SexpActionsHandler> _actions;
 
 	static void freeNodeChain(SCP_vector<SexpNode>& nodes, int node);
 	static void getCombinedVariableName(SCP_string& out, const char* sexp_var_name);
 	static void varNameFromTreeText(SCP_string& out, const SCP_string& text);
+	int getModifyVariableType(int parent_index) const;
+	int getTreeNameToSexpVariableIndex(const char* tree_name) const;
 	static int saveBranchRecursive(const SCP_vector<SexpNode>& nodes, int cur, bool at_root);
 	static int find_operator_index_by_value(int value);
-	int createDefaultArgForOpf(int opf, int parent);
+
+	int nodeFlags(int index) const;
+	void setNodeFlags(int index, int flags);
+	// Compute recommended flags for a node's current type/text.
+	// (Call this after setNode/replaceOperator/etc. to initialize defaults.)
+	int computeDefaultFlagsFor(const SexpNode& n) const;
+
+	ArgBucket opf_to_bucket(int opf) const;
+	ArgBucket node_to_bucket(const SexpNode& n) const;
+	bool argsCompatibleWithOperator(int op_node, int new_op_index) const;
+	
+	// Create a default argument node for the OPF/type of operator `op_index` at arg position `arg_i`.
+	// - `parent` is the model index of the operator to attach the new arg under
+	// - `context_index` is the "current" tree index used by legacy helpers (e.g., get_modify_variable_type)
+	int createDefaultArgForOpf(int opf, int parent, int op_index, int arg_i, int context_index);
 
 	int loadBranchRecursive(int sexp_idx, int model_parent_idx);
 };
