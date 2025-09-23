@@ -248,6 +248,255 @@ int SexpTreeModel::liveCount() const
 	return c;
 }
 
+void SexpTreeModel::setNode(int index, int type, const char* text)
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "setNode: index %d out of range.", index);
+	Assertion(type != SEXPT_UNUSED, "setNode: cannot set type to SEXPT_UNUSED.");
+	Assertion(_nodes[index].type != SEXPT_UNUSED, "setNode: node %d is UNUSED; allocateNode before setting.", index);
+	Assertion(text != nullptr, "setNode: text must not be null.");
+
+	size_t max_length = 0;
+	if (type & SEXPT_VARIABLE) {
+		max_length = 2 * TOKEN_LENGTH + 2;
+	} else if (type & (SEXPT_CONTAINER_NAME | SEXPT_CONTAINER_DATA)) {
+		max_length = sexp_container::NAME_MAX_LENGTH + 1;
+	} else {
+		max_length = TOKEN_LENGTH;
+	}
+	Assertion(std::strlen(text) < max_length,
+		"setNode: text '%s' exceeds max length %zu for type 0x%x.",
+		text,
+		max_length,
+		type);
+
+	auto& n = _nodes[index];
+	n.type = type;
+	n.text = text;
+	// flags/links remain unchanged here (parity with legacy set_node)
+}
+
+void SexpTreeModel::detachFromParent(int index)
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "detachFromParent: index %d out of range.", index);
+
+	const int parent = _nodes[index].parent;
+	if (parent < 0)
+		return; // already a root
+
+	int& first = _nodes[parent].child;
+	if (first == index) {
+		first = _nodes[index].next; // skip over this node
+	} else {
+		int i = first;
+		while (i >= 0 && _nodes[i].next != index) {
+			i = _nodes[i].next;
+			Assertion(i != -1, "detachFromParent: node %d not found under parent %d.", index, parent);
+		}
+		if (i >= 0) {
+			_nodes[i].next = _nodes[index].next;
+		}
+	}
+
+	_nodes[index].parent = -1;
+	_nodes[index].next = -1;
+}
+
+void SexpTreeModel::appendAsChild(int parent_index, int index)
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "appendAsChild: index %d out of range.", index);
+	Assertion(parent_index >= 0 && parent_index < static_cast<int>(_nodes.size()),
+		"appendAsChild: parent %d out of range.",
+		parent_index);
+
+	// Node must not currently be linked under a parent
+	Assertion(_nodes[index].parent < 0, "appendAsChild: node %d already has a parent %d.", index, _nodes[index].parent);
+	Assertion(_nodes[index].next < 0,
+		"appendAsChild: node %d already has a next sibling %d.",
+		index,
+		_nodes[index].next);
+
+	_nodes[index].parent = parent_index;
+	int& first = _nodes[parent_index].child;
+	if (first < 0) {
+		first = index;
+	} else {
+		int tail = first;
+		while (_nodes[tail].next >= 0)
+			tail = _nodes[tail].next;
+		_nodes[tail].next = index;
+	}
+}
+
+void SexpTreeModel::moveBranch(int source_index, int new_parent_index)
+{
+	Assertion(SCP_vector_inbounds(_nodes, source_index),
+		"moveBranch: source %d out of range.",
+		source_index);
+
+	// Nothing to do if caller passes -1
+	if (source_index == -1)
+		return;
+
+	// Splice out of old parent, if there is one
+	const int old_parent = _nodes[source_index].parent;
+	if (old_parent >= 0) {
+		int& first = _nodes[old_parent].child;
+		if (first == source_index) {
+			first = _nodes[source_index].next;
+		} else {
+			int i = first;
+			while (i >= 0 && _nodes[i].next != source_index) {
+				i = _nodes[i].next;
+				Assertion(i != -1, "moveBranch: source %d not found under old parent %d.", source_index, old_parent);
+			}
+			if (i >= 0) {
+				_nodes[i].next = _nodes[source_index].next;
+			}
+		}
+	}
+
+	// Reset link; we'll reattach under the new parent
+	_nodes[source_index].parent = -1;
+	_nodes[source_index].next = -1;
+
+	if (new_parent_index >= 0) {
+		appendAsChild(new_parent_index, source_index);
+	}
+}
+
+// Find Operators[] index from an operator 'value' (e.g. OP_TRUE)
+int SexpTreeModel::find_operator_index_by_value(int value)
+{
+	for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
+		if (Operators[i].value == value)
+			return i;
+	}
+	return -1;
+}
+
+// Build a single default argument node for an OPF_* arg under 'parent'.
+// Returns the new node index.
+int SexpTreeModel::createDefaultArgForOpf(int opf, int parent)
+{
+	switch (opf) {
+	case OPF_NUMBER:
+	case OPF_POSITIVE: {
+		const int n = allocateNode(parent);
+		setNode(n, (SEXPT_NUMBER | SEXPT_VALID), "0");
+		return n;
+	}
+	case OPF_BOOL: {
+		// Default to true
+		const int true_idx = find_operator_index_by_value(OP_TRUE);
+		Assertion(true_idx >= 0, "TRUE operator not found.");
+		const int n = allocateNode(parent);
+		setNode(n, (SEXPT_OPERATOR | SEXPT_VALID), Operators[true_idx].text.c_str());
+		return n;
+	}
+	// Many string like arg kinds default to the editor's placeholder token.
+	// That includes ships/wings/subsystems/messages/mission names/etc.
+	default: {
+		const int n = allocateNode(parent);
+		setNode(n, (SEXPT_STRING | SEXPT_VALID), SEXP_ARGUMENT_STRING);
+		return n;
+	}
+	}
+}
+
+int SexpTreeModel::makeOperatorNode(int op_index, int parent, int after_sibling)
+{
+	Assertion(op_index >= 0 && op_index < static_cast<int>(Operators.size()),
+		"makeOperatorNode: op_index %d out of range.",
+		op_index);
+
+	const int node = allocateNode(parent, after_sibling);
+	setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), Operators[op_index].text.c_str());
+	return node;
+}
+
+void SexpTreeModel::ensureOperatorArity(int op_node, int op_index)
+{
+	Assertion(op_node >= 0 && op_node < static_cast<int>(_nodes.size()),
+		"ensureOperatorArity: node %d out of range.",
+		op_node);
+	Assertion((_nodes[op_node].type & SEXPT_OPERATOR) != 0,
+		"ensureOperatorArity: node %d is not an operator.",
+		op_node);
+	Assertion(op_index >= 0 && op_index < static_cast<int>(Operators.size()),
+		"ensureOperatorArity: op_index %d out of range.",
+		op_index);
+
+	// Compute current argument count
+	int first = _nodes[op_node].child;
+	int argc = 0;
+	for (int i = first; i >= 0; i = _nodes[i].next)
+		++argc;
+
+	// Required/allowed counts from operator table
+	const int min_args = Operators[op_index].min;
+	const int max_args = Operators[op_index].max; // -1 means unbounded in FRED
+
+	// Append defaults until we reach min
+	int arg_tail = first;
+	if (arg_tail >= 0) {
+		while (_nodes[arg_tail].next >= 0)
+			arg_tail = _nodes[arg_tail].next;
+	}
+
+	for (int arg_i = argc; arg_i < min_args; ++arg_i) {
+		// Determine arg type at position arg_i
+		const int op_const = Operators[op_index].value;
+		const int opf = query_operator_argument_type(op_const, arg_i);
+		const int added = createDefaultArgForOpf(opf, op_node);
+
+		if (first < 0) {
+			first = added;
+			_nodes[op_node].child = added;
+			arg_tail = added;
+		} else {
+			_nodes[arg_tail].next = added;
+			arg_tail = added;
+		}
+	}
+
+	// Trim extras if max bounded and we exceed it
+	if (max_args >= 0 && argc > max_args) {
+		// Walk to the (max_args-1)th node to keep; cut after it
+		int keep_tail = _nodes[op_node].child;
+		for (int k = 1; k < max_args; ++k) {
+			keep_tail = _nodes[keep_tail].next;
+		}
+		// Free everything after keep_tail
+		const int to_free = _nodes[keep_tail].next;
+		_nodes[keep_tail].next = -1;
+		if (to_free >= 0) {
+			// free the whole sibling chain and their subtrees
+			freeNode(to_free, /*cascade=*/true);
+		}
+	}
+}
+
+void SexpTreeModel::replaceOperator(int node_index, int new_op_index)
+{
+	Assertion(node_index >= 0 && node_index < static_cast<int>(_nodes.size()),
+		"replaceOperator: node %d out of range.",
+		node_index);
+	Assertion(new_op_index >= 0 && new_op_index < static_cast<int>(Operators.size()),
+		"replaceOperator: new_op_index %d out of range.",
+		new_op_index);
+
+	// Must be an operator already (this mirrors typical replace flow in FRED)
+	Assertion((_nodes[node_index].type & SEXPT_OPERATOR) != 0,
+		"replaceOperator: node %d is not an operator.",
+		node_index);
+
+	// 1) Update the node in place (type stays operator, text changes)
+	setNode(node_index, (SEXPT_OPERATOR | SEXPT_VALID), Operators[new_op_index].text.c_str());
+
+	// 2) Enforce min/max, append default args, trim extra args
+	ensureOperatorArity(node_index, new_op_index);
+}
+
 // Recursive worker that translates a chain of Sexp_nodes into the model's node structure.
 // Returns the model index of the last node created in the sibling chain.
 int SexpTreeModel::loadBranchRecursive(int sexp_idx, int model_parent_idx)
