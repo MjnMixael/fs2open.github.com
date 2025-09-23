@@ -97,14 +97,14 @@ class SexpTreeModel {
 	SexpTreeModel();
 	explicit SexpTreeModel(ISexpEnvironment* env);
 
-	// ---------- Model lifetime & configuration ----------
+	// Model lifetime & configuration
 	void setEnvironment(ISexpEnvironment* env);
 	ISexpEnvironment* environment() const;
 
 	// Clears nodes and resets invariants
 	void clear();
 
-	// ---------- Node storage & navigation ----------
+	// Node storage & navigation
 	// Returns the index of a newly allocated node.
 	int allocateNode(int parent = -1, int after_sibling = -1);
 	// Releases a node
@@ -115,16 +115,34 @@ class SexpTreeModel {
 	int size() const; // number of allocated nodes
 	int liveCount() const; // number of non SEXPT_UNUSED nodes
 
-	// ---------- Load/Save ----------
+	// Model editing primitives
+	void setNode(int index, int type, const char* text);
+	void detachFromParent(int index);                        // does not change index.child subtree
+	void appendAsChild(int parent_index, int index);         // appends existing node under parent
+	void moveBranch(int source_index, int new_parent_index); // move whole subtree under new parent
+
+	// Create an OPERATOR node from Operators[op_index] and append under (parent, after_sibling).
+	// Returns the new node index.
+	int makeOperatorNode(int op_index, int parent = -1, int after_sibling = -1);
+
+	// Replace an existing operator node with another operator (by op_index).
+	// Keeps existing child list, then enforces min/max arity and default args.
+	void replaceOperator(int node_index, int new_op_index);
+
+	// Ensure the operator node has at least min args (append defaults) and
+	// at most max args (trim tail), mirroring legacy semantics for min/max.
+	void ensureOperatorArity(int op_node, int op_index);
+
+	// Load/Save
 	int loadTreeFromSexp(int sexp_root); // returns root node index in this model
 	int saveTreeToSexp(int model_root);  // returns sexp node handle
 
-	// ---------- Semantics & validation ----------
+	// Semantics & validation
 	bool queryFalse(int node_index = -1) const;
 	int countArgs(int node_index) const;
 	int identifyArgType(int first_arg_node_index) const;
 
-	// ---------- OPF listing ----------
+	// OPF listing
 	// Entry point used by editors to populate dropdowns for an argument.
 	// Returns the head of a single-linked list (owned by caller; use SexpListItem::destroy).
 	SexpListItem* buildListingForOpf(int opf, int parent_node, int arg_index);
@@ -137,6 +155,8 @@ class SexpTreeModel {
 	static void getCombinedVariableName(SCP_string& out, const char* sexp_var_name);
 	static void varNameFromTreeText(SCP_string& out, const SCP_string& text);
 	static int saveBranchRecursive(const SCP_vector<SexpNode>& nodes, int cur, bool at_root);
+	static int find_operator_index_by_value(int value);
+	int createDefaultArgForOpf(int opf, int parent);
 
 	int loadBranchRecursive(int sexp_idx, int model_parent_idx);
 };
