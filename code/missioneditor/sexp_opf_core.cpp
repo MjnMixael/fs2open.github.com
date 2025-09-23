@@ -62,7 +62,7 @@ void SexpListItem::add_data(const char* str, int t)
 	n->set_data(str, t);
 	tail->next = n;
 }
-void SexpListItem::add_list(SexpListItem* list)
+void SexpListItem::add_list(SexpListItemPtr list)
 {
 	if (!list)
 		return;
@@ -71,7 +71,7 @@ void SexpListItem::add_list(SexpListItem* list)
 	SexpListItem* tail = this;
 	while (tail->next)
 		tail = tail->next;
-	tail->next = list;
+	tail->next = list.release();
 }
 void SexpListItem::destroy()
 {
@@ -627,7 +627,7 @@ SexpListItemPtr SexpOpfListBuilder::buildListing(int opf, int parent_node, int a
 
 	if (list != nullptr) {
 		// append other list
-		head.add_list(list.release());
+		head.add_list(std::move(list));
 	}
 
 	// return listing
@@ -1446,8 +1446,8 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_point()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_ship().release());
-	head.add_list(get_listing_opf_point().release());
+	head.add_list(std::move(get_listing_opf_ship()));
+	head.add_list(std::move(get_listing_opf_point()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1495,8 +1495,8 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_ship().release());
-	head.add_list(get_listing_opf_wing().release());
+	head.add_list(std::move(get_listing_opf_ship()));
+	head.add_list(std::move(get_listing_opf_wing()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1508,7 +1508,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_wholeteam()
 	for (size_t i = 0; i < Iff_info.size(); i++)
 		head.add_data(Iff_info[i].iff_name);
 
-	head.add_list(get_listing_opf_ship_wing().release());
+	head.add_list(std::move(get_listing_opf_ship_wing()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1524,7 +1524,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_shiponteam_point()
 		head.add_data(tmp);
 	}
 
-	head.add_list(get_listing_opf_ship_wing_point().release());
+	head.add_list(std::move(get_listing_opf_ship_wing_point()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1533,9 +1533,9 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_point()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_ship().release());
-	head.add_list(get_listing_opf_wing().release());
-	head.add_list(get_listing_opf_point().release());
+	head.add_list(std::move(get_listing_opf_ship()));
+	head.add_list(std::move(get_listing_opf_wing()));
+	head.add_list(std::move(get_listing_opf_point()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1545,7 +1545,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_point_or_none()
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	head.add_list(get_listing_opf_ship_wing_point().release());
+	head.add_list(std::move(get_listing_opf_ship_wing_point()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1556,8 +1556,8 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_order_recipient()
 
 	head.add_data("<all fighters>");
 
-	head.add_list(get_listing_opf_ship().release());
-	head.add_list(get_listing_opf_wing().release());
+	head.add_list(std::move(get_listing_opf_ship()));
+	head.add_list(std::move(get_listing_opf_wing()));
 	return SexpListItemPtr(head.next);
 }
 
@@ -1748,7 +1748,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_or_none()
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	head.add_list(get_listing_opf_ship().release());
+	head.add_list(std::move(get_listing_opf_ship()));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1758,7 +1758,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsystem_or_none(int parent
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	head.add_list(get_listing_opf_subsystem(parent_node, arg_index).release());
+	head.add_list(std::move(get_listing_opf_subsystem(parent_node, arg_index)));
 
 	return SexpListItemPtr(head.next);
 }
@@ -1777,7 +1777,7 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsys_or_generic(int parent
 		}
 	}
 	head.add_data(SEXP_ALL_SUBSYSTEMS_STRING);
-	head.add_list(get_listing_opf_subsystem(parent_node, arg_index).release());
+	head.add_list(std::move(get_listing_opf_subsystem(parent_node, arg_index)));
 
 	return SexpListItemPtr(head.next);
 }
@@ -2073,8 +2073,8 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_any_hud_gauge()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_builtin_hud_gauge().release());
-	head.add_list(get_listing_opf_custom_hud_gauge().release());
+	head.add_list(std::move(get_listing_opf_builtin_hud_gauge()));
+	head.add_list(std::move(get_listing_opf_custom_hud_gauge()));
 
 	return SexpListItemPtr(head.next);
 }
