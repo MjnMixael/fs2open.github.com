@@ -6,9 +6,11 @@
 #include "sexp_tree_core.h"
 #include "sexp_opf_core.h"
 
+#include "fireball/fireballs.h"
 #include "mission/missiongoals.h"
 #include "mission/missionmessage.h"
 #include "mission/missionparse.h"
+#include "weapon/emp.h"
 
 static constexpr int kNodeIncrement = 100; // mirrors TREE_NODE_INCREMENT
 
@@ -103,8 +105,10 @@ int ISexpEnvironment::getDynamicParameterIndex(const SCP_string&, int) { return 
 SCP_string ISexpEnvironment::getChildEnumSuffix(const SCP_string&, int) { return {}; }*/
 
 // SexpTreeModel
-SexpTreeModel::SexpTreeModel() = default;
-SexpTreeModel::SexpTreeModel(ISexpEnvironment* env) : _env(env) {}
+SexpTreeModel::SexpTreeModel() : _actions(std::make_unique<SexpActionsHandler>(this)) {}
+SexpTreeModel::SexpTreeModel(ISexpEnvironment* env) : _env(env), _actions(std::make_unique<SexpActionsHandler>(this)) {}
+
+SexpTreeModel::~SexpTreeModel() = default;
 
 void SexpTreeModel::setEnvironment(ISexpEnvironment* env) { _env = env; }
 ISexpEnvironment* SexpTreeModel::environment() const { return _env; }
@@ -268,7 +272,7 @@ void SexpTreeModel::setNode(int index, int type, const char* text)
 	auto& n = _nodes[index];
 	n.type = type;
 	n.text = text;
-	// flags/links remain unchanged here
+	n.flags = computeDefaultFlagsFor(n);
 }
 
 void SexpTreeModel::detachFromParent(int index)
@@ -363,33 +367,471 @@ int SexpTreeModel::find_operator_index_by_value(int value)
 	return -1;
 }
 
-// Build a single default argument node for an OPF_* arg under parent.
-// Returns the new node index.
-int SexpTreeModel::createDefaultArgForOpf(int opf, int parent)
+int SexpTreeModel::nodeFlags(int index) const
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "nodeFlags: index %d out of range.", index);
+	return _nodes[index].flags;
+}
+
+void SexpTreeModel::setNodeFlags(int index, int flags)
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "setNodeFlags: index %d out of range.", index);
+	_nodes[index].flags = flags;
+}
+
+// Heuristic defaults
+int SexpTreeModel::computeDefaultFlagsFor(const SexpNode& n) const
+{
+	const int t = SEXPT_TYPE(n.type);
+	int flags = NOT_EDITABLE;
+
+	if (t == SEXPT_OPERATOR) {
+		// Operators are chosen from menus, not free-typed
+		flags |= OPERAND;
+		// Generally not EDITABLE as plain text; UI replaces via operator picker.
+		return flags;
+	}
+
+	// Data/atoms: numbers and strings are free-typed by default
+	if (t == SEXPT_NUMBER || t == SEXPT_STRING) {
+		flags |= EDITABLE;
+	}
+
+	// Variables: we show combined "name(...)" representation
+	if ((n.type & SEXPT_VARIABLE) != 0) {
+		flags |= COMBINED;
+		flags |= EDITABLE; // you can edit via the special handler
+	}
+
+	// Containers: names/data are string-like; allow editing unless a dialog locks them down.
+	if ((n.type & (SEXPT_CONTAINER_NAME | SEXPT_CONTAINER_DATA)) != 0) {
+		flags |= EDITABLE;
+	}
+
+	return flags;
+}
+
+void SexpTreeModel::applyDefaultFlags(int index)
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "applyDefaultFlags: index %d out of range.", index);
+	_nodes[index].flags = computeDefaultFlagsFor(_nodes[index]);
+}
+
+// Map OPF_* to coarse bucket
+ArgBucket SexpTreeModel::opf_to_bucket(int opf) const
 {
 	switch (opf) {
 	case OPF_NUMBER:
-	case OPF_POSITIVE: {
+	case OPF_POSITIVE:
+		return ArgBucket::NUM;
+	case OPF_BOOL:
+		return ArgBucket::BOOL;
+	default:
+		return ArgBucket::STR; // ships/wings/messages/etc. are string atoms in tree
+	}
+}
+
+// Map a concrete node chain to bucket
+ArgBucket SexpTreeModel::node_to_bucket(const SexpNode& n) const
+{
+	const int t = SEXPT_TYPE(n.type);
+	if (t == SEXPT_NUMBER)
+		return ArgBucket::NUM;
+	if (t == SEXPT_OPERATOR) {
+		// Operator’s return type decides its bucket
+		const int op_const = get_operator_const(n.text.c_str());
+		const int ret = query_operator_return_type(op_const);
+		if (ret == OPR_NUMBER)
+			return ArgBucket::NUM;
+		if (ret == OPR_BOOL)
+			return ArgBucket::BOOL;
+		return ArgBucket::STR;
+	}
+	// Strings, variables, containers are treated as string like for argument matching
+	return ArgBucket::STR;
+}
+
+bool SexpTreeModel::argsCompatibleWithOperator(int op_node, int new_op_index) const
+{
+	Assertion(SCP_vector_inbounds(_nodes, op_node), "argsCompatibleWithOperator: node %d out of range.", op_node);
+	Assertion(SCP_vector_inbounds(Operators, new_op_index), "argsCompatibleWithOperator: op_index %d out of range.", new_op_index);
+
+	const int op_const = Operators[new_op_index].value;
+
+	int i = _nodes[op_node].child;
+	int arg_pos = 0;
+	while (i >= 0) {
+		const int expected_opf = query_operator_argument_type(op_const, arg_pos);
+		// If the operator doesn't define a type for this arg_pos (beyond max), treat as incompatible
+		if (expected_opf < 0)
+			return false;
+
+		const ArgBucket want = opf_to_bucket(expected_opf);
+		const ArgBucket got = node_to_bucket(_nodes[i]);
+		if (want != got)
+			return false;
+
+		i = _nodes[i].next;
+		++arg_pos;
+	}
+	return true;
+}
+
+int SexpTreeModel::createDefaultArgForOpf(int type, int parent, int op_index, int i, int context_index)
+{
+	auto make_num = [&](int v) {
+		char buf[TOKEN_LENGTH];
+		std::snprintf(buf, sizeof(buf), "%d", v);
 		const int n = allocateNode(parent);
-		setNode(n, (SEXPT_NUMBER | SEXPT_VALID), "0");
+		setNode(n, (SEXPT_NUMBER | SEXPT_VALID), buf);
 		return n;
-	}
-	case OPF_BOOL: {
-		// Default to true
-		const int true_idx = find_operator_index_by_value(OP_TRUE);
-		Assertion(true_idx >= 0, "TRUE operator not found.");
+	};
+	auto make_num_str = [&](const char* v) {
 		const int n = allocateNode(parent);
-		setNode(n, (SEXPT_OPERATOR | SEXPT_VALID), Operators[true_idx].text.c_str());
+		setNode(n, (SEXPT_NUMBER | SEXPT_VALID), v);
 		return n;
-	}
-	// Many string like arg kinds default to the editor's placeholder token.
-	// That includes ships/wings/subsystems/messages/mission names/etc.
-	default: {
+	};
+	auto make_str = [&](const char* v) {
 		const int n = allocateNode(parent);
-		setNode(n, (SEXPT_STRING | SEXPT_VALID), SEXP_ARGUMENT_STRING);
+		setNode(n, (SEXPT_STRING | SEXPT_VALID), v);
 		return n;
+	};
+	auto make_op = [&](int op_value) {
+		// convert operator value -> Operators[] index
+		int idx = -1;
+		for (int k = 0; k < static_cast<int>(Operators.size()); ++k)
+			if (Operators[k].value == op_value) {
+				idx = k;
+				break;
+			}
+		Assertion(idx >= 0, "createDefaultArgForOpf: operator value %d not found.", op_value);
+		const int n = allocateNode(parent);
+		setNode(n, (SEXPT_OPERATOR | SEXPT_VALID), Operators[idx].text.c_str());
+		return n;
+	};
+
+	const int op_const = Operators[op_index].value;
+
+	switch (type) {
+	case OPF_NULL:
+		return make_op(OP_NOP);
+
+	case OPF_BOOL:
+		return make_op(OP_TRUE);
+
+	case OPF_ANYTHING:
+		if (op_const == OP_INVALIDATE_ARGUMENT || op_const == OP_VALIDATE_ARGUMENT)
+			return make_str(SEXP_ARGUMENT_STRING); // legacy prefers argument placeholder here
+		return make_str("<any data>");
+
+	case OPF_DATA_OR_STR_CONTAINER:
+		return make_str("<any data or string container>");
+
+	case OPF_NUMBER:
+	case OPF_POSITIVE:
+	case OPF_AMBIGUOUS: {
+		// AI goal last required arg is always priority 89
+		if (query_operator_return_type(op_index) == OPR_AI_GOAL && i == (Operators[op_index].min - 1))
+			return make_num(89);
+
+		// dock timing / time docked defaults at arg 2 as 1
+		if ((op_const == OP_HAS_DOCKED_DELAY || op_const == OP_HAS_UNDOCKED_DELAY || op_const == OP_TIME_DOCKED ||
+				op_const == OP_TIME_UNDOCKED) &&
+			i == 2)
+			return make_num(1);
+
+		if (op_const == OP_SHIP_TYPE_DESTROYED || op_const == OP_GOOD_SECONDARY_TIME)
+			return make_num(100);
+
+		if (op_const == OP_SET_SUPPORT_SHIP)
+			return make_num(-1);
+
+		if ((op_const == OP_SHIP_TAG && i == 1) || (op_const == OP_TRIGGER_SUBMODEL_ANIMATION && i == 3))
+			return make_num(1);
+
+		if (op_const == OP_EXPLOSION_EFFECT) {
+			int temp;
+			switch (i) {
+			case 3:
+				temp = 10;
+				break;
+			case 4:
+				temp = 10;
+				break;
+			case 5:
+				temp = 100;
+				break;
+			case 6:
+				temp = 10;
+				break;
+			case 7:
+				temp = 100;
+				break;
+			case 11:
+				temp = static_cast<int>(EMP_DEFAULT_INTENSITY);
+				break;
+			case 12:
+				temp = static_cast<int>(EMP_DEFAULT_TIME);
+				break;
+			default:
+				temp = 0;
+				break;
+			}
+			return make_num(temp);
+		}
+
+		if (op_const == OP_WARP_EFFECT) {
+			int temp;
+			switch (i) {
+			case 6:
+				temp = 100;
+				break;
+			case 7:
+				temp = 10;
+				break;
+			default:
+				temp = 0;
+				break;
+			}
+			return make_num(temp);
+		}
+
+		if (op_const == OP_CHANGE_BACKGROUND)
+			return make_num(1);
+
+		if (op_const == OP_ADD_BACKGROUND_BITMAP || op_const == OP_ADD_BACKGROUND_BITMAP_NEW) {
+			int temp = 0;
+			switch (i) {
+			case 4:
+			case 5:
+				temp = 100;
+				break;
+			case 6:
+			case 7:
+				temp = 1;
+				break;
+			default:
+				break;
+			}
+			return make_num(temp);
+		}
+
+		if (op_const == OP_ADD_SUN_BITMAP || op_const == OP_ADD_SUN_BITMAP_NEW) {
+			int temp = (i == 4) ? 100 : 0;
+			return make_num(temp);
+		}
+
+		if (op_const == OP_MISSION_SET_NEBULA) {
+			return (i == 0) ? make_num(1) : make_num(3000);
+		}
+
+		if (op_const == OP_MODIFY_VARIABLE) {
+			// uses current node context to determine numeric vs string
+			if (getModifyVariableType(context_index) == OPF_NUMBER)
+				return make_num(0);
+			return make_str("<any data>");
+		}
+
+		if (op_const == OP_MODIFY_VARIABLE_XSTR) {
+			return (i == 1) ? make_str("<any data>") : make_num(-1);
+		}
+
+		if (op_const == OP_SET_VARIABLE_BY_INDEX) {
+			return (i == 0) ? make_num(0) : make_str("<any data>");
+		}
+
+		if (op_const == OP_JETTISON_CARGO_NEW)
+			return make_num(25);
+
+		if (op_const == OP_TECH_ADD_INTEL_XSTR || op_const == OP_TECH_REMOVE_INTEL_XSTR)
+			return make_num(-1);
+
+		// default number
+		return make_num(0);
 	}
+
+	// Hybrids that used to be numbers:
+	case OPF_GAME_SND: {
+		gamesnd_id sound_index;
+		if (op_const == OP_EXPLOSION_EFFECT) {
+			sound_index = GameSounds::SHIP_EXPLODE_1;
+		} else if (op_const == OP_WARP_EFFECT) {
+			sound_index = (i == 8) ? GameSounds::CAPITAL_WARP_IN : GameSounds::CAPITAL_WARP_OUT;
+		}
+		if (sound_index.isValid()) {
+			game_snd* snd = gamesnd_get_game_sound(sound_index);
+			if (can_construe_as_integer(snd->name.c_str()))
+				return make_num_str(snd->name.c_str());
+			else
+				return make_str(snd->name.c_str());
+		}
+		// fall through to listing/default if no hardcoded default
+		break;
 	}
+
+	case OPF_FIREBALL: {
+		int fireball_index = -1;
+		if (op_const == OP_EXPLOSION_EFFECT) {
+			fireball_index = FIREBALL_MEDIUM_EXPLOSION;
+		} else if (op_const == OP_WARP_EFFECT) {
+			fireball_index = FIREBALL_WARP;
+		}
+		if (fireball_index >= 0) {
+			char* unique_id = Fireball_info[fireball_index].unique_id;
+			if (std::strlen(unique_id) > 0)
+				return make_str(unique_id);
+			char num_str[NAME_LENGTH];
+			std::snprintf(num_str, sizeof(num_str), "%d", fireball_index);
+			return make_num_str(num_str);
+		}
+		// fall through to listing/default
+		break;
+	}
+
+	case OPF_PRIORITY:
+		return make_str("Normal");
+	}
+
+	// Try OPF listing default (skip the Argument placeholder)
+	{
+		SexpOpfListBuilder builder(_nodes, _env);
+		SexpListItem* list = builder.buildListing(type, parent, i);
+
+		if (list && list->text == SEXP_ARGUMENT_STRING) {
+			SexpListItem* first = list;
+			list = list->next;
+			delete first;
+		}
+		if (list) {
+			const int n = allocateNode(parent);
+			if (list->type & SEXPT_OPERATOR) {
+				setNode(n, (SEXPT_OPERATOR | SEXPT_VALID), list->text.c_str());
+			} else if (list->type & SEXPT_NUMBER) {
+				setNode(n, (SEXPT_NUMBER | SEXPT_VALID), list->text.c_str());
+			} else {
+				setNode(n, (SEXPT_STRING | SEXPT_VALID), list->text.c_str());
+			}
+			list->destroy();
+			return n;
+		}
+	}
+
+	// Final catch-all placeholders
+	const char* str = nullptr;
+	switch (type) {
+	case OPF_SHIP:
+	case OPF_SHIP_NOT_PLAYER:
+	case OPF_SHIP_POINT:
+	case OPF_SHIP_WING:
+	case OPF_SHIP_WING_WHOLETEAM:
+	case OPF_SHIP_WING_SHIPONTEAM_POINT:
+	case OPF_SHIP_WING_POINT:
+		str = "<name of ship here>";
+		break;
+
+	case OPF_ORDER_RECIPIENT:
+		str = "<all fighters>";
+		break;
+
+	case OPF_SHIP_OR_NONE:
+	case OPF_SUBSYSTEM_OR_NONE:
+	case OPF_SHIP_WING_POINT_OR_NONE:
+		str = SEXP_NONE_STRING;
+		break;
+
+	case OPF_WING:
+		str = "<name of wing here>";
+		break;
+	case OPF_DOCKER_POINT:
+		str = "<docker point>";
+		break;
+	case OPF_DOCKEE_POINT:
+		str = "<dockee point>";
+		break;
+
+	case OPF_SUBSYSTEM:
+	case OPF_AWACS_SUBSYSTEM:
+	case OPF_ROTATING_SUBSYSTEM:
+	case OPF_TRANSLATING_SUBSYSTEM:
+	case OPF_SUBSYS_OR_GENERIC:
+		str = "<name of subsystem>";
+		break;
+
+	case OPF_SUBSYSTEM_TYPE:
+		str = Subsystem_types[SUBSYSTEM_NONE];
+		break;
+
+	case OPF_POINT:
+		str = "<waypoint>";
+		break;
+	case OPF_MESSAGE:
+		str = "<Message>";
+		break;
+	case OPF_WHO_FROM:
+		str = "<any wingman>";
+		break;
+	case OPF_WAYPOINT_PATH:
+		str = "<waypoint path>";
+		break;
+	case OPF_MISSION_NAME:
+		str = "<mission name>";
+		break;
+	case OPF_GOAL_NAME:
+		str = "<goal name>";
+		break;
+	case OPF_SHIP_TYPE:
+		str = "<ship type here>";
+		break;
+	case OPF_EVENT_NAME:
+		str = "<event name>";
+		break;
+	case OPF_HUGE_WEAPON:
+		str = "<huge weapon type>";
+		break;
+	case OPF_JUMP_NODE_NAME:
+		str = "<Jump node name>";
+		break;
+	case OPF_NAV_POINT:
+		str = "<Nav 1>";
+		break;
+	case OPF_ANYTHING:
+		str = "<any data>";
+		break;
+	case OPF_DATA_OR_STR_CONTAINER:
+		str = "<any data or string container>";
+		break;
+	case OPF_PERSONA:
+		str = "<persona name>";
+		break;
+	case OPF_FONT:
+		str = font::FontManager::getFont(0)->getName().c_str();
+		break;
+	case OPF_AUDIO_VOLUME_OPTION:
+		str = "Music";
+		break;
+	case OPF_POST_EFFECT:
+		str = "<Effect Name>";
+		break;
+	case OPF_CUSTOM_HUD_GAUGE:
+		str = "<Custom hud gauge>";
+		break;
+	case OPF_ANY_HUD_GAUGE:
+		str = "<Custom or builtin hud gauge>";
+		break;
+	case OPF_ANIMATION_NAME:
+		str = "<Animation trigger name>";
+		break;
+	case OPF_CONTAINER_VALUE:
+		str = "<container value>";
+		break;
+	case OPF_MESSAGE_TYPE:
+		str = Builtin_messages[0].name;
+		break;
+	default:
+		str = "<new default required!>";
+		break;
+	}
+	return make_str(str);
 }
 
 int SexpTreeModel::makeOperatorNode(int op_index, int parent, int after_sibling)
@@ -428,7 +870,7 @@ void SexpTreeModel::ensureOperatorArity(int op_node, int op_index)
 		// Determine arg type at position arg_i
 		const int op_const = Operators[op_index].value;
 		const int opf = query_operator_argument_type(op_const, arg_i);
-		const int added = createDefaultArgForOpf(opf, op_node);
+		const int added = createDefaultArgForOpf(opf, op_node, op_index, arg_i, op_node);
 
 		if (first < 0) {
 			first = added;
@@ -465,8 +907,19 @@ void SexpTreeModel::replaceOperator(int node_index, int new_op_index)
 	// Must be an operator already (this mirrors typical replace flow in FRED)
 	Assertion((_nodes[node_index].type & SEXPT_OPERATOR) != 0, "replaceOperator: node %d is not an operator.", node_index);
 
+	const bool compatible = argsCompatibleWithOperator(node_index, new_op_index);
+
 	// Update the node in place (type stays operator, text changes)
 	setNode(node_index, (SEXPT_OPERATOR | SEXPT_VALID), Operators[new_op_index].text.c_str());
+
+	if (!compatible) {
+		// Nuke existing child list
+		const int to_free = _nodes[node_index].child;
+		_nodes[node_index].child = -1;
+		if (to_free >= 0) {
+			freeNode(to_free, /*cascade=*/true); // free child subtree + siblings
+		}
+	}
 
 	// Enforce min/max, append default args, trim extra args
 	ensureOperatorArity(node_index, new_op_index);
@@ -607,6 +1060,80 @@ void SexpTreeModel::varNameFromTreeText(SCP_string& out, const SCP_string& text)
 	} else {
 		out = text.substr(0, p);
 	}
+}
+
+int SexpTreeModel::getModifyVariableType(int parent_index) const
+{
+	Assertion(SCP_vector_inbounds(_nodes, parent_index), "getModifyVariableType: parent index %d out of range.", parent_index);
+
+	const auto& parent = _nodes[parent_index];
+	const int op_const = get_operator_const(parent.text.c_str());
+
+	Assertion(parent.child >= 0,
+		"getModifyVariableType: operator '%s' at %d has no first child (variable spec).",
+		parent.text.c_str(),
+		parent_index);
+
+	const char* node_text = _nodes[parent.child].text.c_str();
+
+	int sexp_var_index = -1;
+
+	if (op_const == OP_MODIFY_VARIABLE) {
+		sexp_var_index = getTreeNameToSexpVariableIndex(node_text);
+	} else if (op_const == OP_SET_VARIABLE_BY_INDEX) {
+		if (can_construe_as_integer(node_text)) {
+			sexp_var_index = std::atoi(node_text);
+		} else if (std::strchr(node_text, '(') && std::strchr(node_text, ')')) {
+			// the variable index is itself a variable!
+			return OPF_AMBIGUOUS;
+		}
+		// else: leave sexp_var_index = -1 (falls through to AMBIGUOUS)
+	} else {
+		Assertion(false,
+			"getModifyVariableType: called for non-modify operator '%s' at %d.",
+			parent.text.c_str(),
+			parent_index);
+		return OPF_AMBIGUOUS;
+	}
+
+	// if we don't have a valid variable, allow replacement with anything
+	if (sexp_var_index < 0) {
+		return OPF_AMBIGUOUS;
+	}
+
+	const int var_type = Sexp_variables[sexp_var_index].type;
+
+	if ((var_type & SEXP_VARIABLE_BLOCK) || (var_type & SEXP_VARIABLE_NOT_USED)) {
+		// assume number so that we can allow tree display of number operators
+		return OPF_NUMBER;
+	} else if (var_type & SEXP_VARIABLE_NUMBER) {
+		return OPF_NUMBER;
+	} else if (var_type & SEXP_VARIABLE_STRING) {
+		return OPF_AMBIGUOUS;
+	} else {
+		Assertion(false, "getModifyVariableType: unexpected Sexp_variables[%d].type = 0x%x.", sexp_var_index, var_type);
+		return OPF_AMBIGUOUS;
+	}
+}
+
+int SexpTreeModel::getTreeNameToSexpVariableIndex(const char* tree_name) const
+{
+	Assertion(tree_name != nullptr, "getTreeNameToSexpVariableIndex: tree_name is null.");
+
+	char var_name[TOKEN_LENGTH];
+	const size_t chars_to_copy = std::strcspn(tree_name, "(");
+
+	Assertion(chars_to_copy < TOKEN_LENGTH - 1,
+		"getTreeNameToSexpVariableIndex: variable name too long (len=%zu, max=%d).",
+		chars_to_copy,
+		TOKEN_LENGTH - 1);
+
+	// Copy up to '(' and add null termination
+	std::memcpy(var_name, tree_name, chars_to_copy);
+	var_name[chars_to_copy] = '\0';
+
+	// Look up index
+	return get_index_sexp_variable_name(var_name);
 }
 
 // Recursive saver that mirrors the old save_branch.
@@ -781,6 +1308,67 @@ int SexpTreeModel::identifyArgType(int node_index) const
 	}
 
 	return type;
+}
+
+int SexpTreeModel::parentOf(int index) const
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "parentOf: index %d out of range.", index);
+	return _nodes[index].parent;
+}
+
+int SexpTreeModel::firstChild(int index) const
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "firstChild: index %d out of range.", index);
+	return _nodes[index].child;
+}
+
+int SexpTreeModel::nextSibling(int index) const
+{
+	Assertion(SCP_vector_inbounds(_nodes, index), "nextSibling: index %d out of range.", index);
+	return _nodes[index].next;
+}
+
+bool SexpTreeModel::isEditable(int index) const
+{
+	return (nodeFlags(index) & EDITABLE) != 0;
+}
+void SexpTreeModel::setEditable(int index, bool on)
+{
+	auto f = nodeFlags(index);
+	f = on ? (f | EDITABLE) : (f & ~EDITABLE);
+	setNodeFlags(index, f);
+}
+
+bool SexpTreeModel::isOperand(int index) const
+{
+	return (nodeFlags(index) & OPERAND) != 0;
+}
+void SexpTreeModel::setOperand(int index, bool on)
+{
+	auto f = nodeFlags(index);
+	f = on ? (f | OPERAND) : (f & ~OPERAND);
+	setNodeFlags(index, f);
+}
+
+bool SexpTreeModel::isCombined(int index) const
+{
+	return (nodeFlags(index) & COMBINED) != 0;
+}
+void SexpTreeModel::setCombined(int index, bool on)
+{
+	auto f = nodeFlags(index);
+	f = on ? (f | COMBINED) : (f & ~COMBINED);
+	setNodeFlags(index, f);
+}
+
+SexpContextMenu SexpTreeModel::queryContextMenu(int node_index) const
+{
+	return _actions->buildContextMenuModel(node_index);
+}
+
+bool SexpTreeModel::executeAction(int node_index, SexpActionId id, const SexpActionParam* param)
+{
+	return _actions->performAction(node_index, id, param);
 }
 
 // generate listing of valid argument values.
