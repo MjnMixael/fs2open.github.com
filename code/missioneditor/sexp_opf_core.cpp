@@ -19,6 +19,70 @@
 #include "stats/medals.h"
 #include "weapon/weapon.h"
 
+// SexpListItem
+
+void SexpListItem::set_op(int op_num)
+{
+	if (op_num >= FIRST_OP) { // do we have an op value instead of an op number (index)?
+		for (int i = 0; i < (int)Operators.size(); i++)
+			if (op_num == Operators[i].value)
+				op_num = i; // convert op value to op number
+	}
+
+	op = op_num;
+
+	Assertion(SCP_vector_inbounds(Operators, op), "Invalid operator number %d", op);
+
+	text = Operators[op].text;
+	type = (SEXPT_OPERATOR | SEXPT_VALID);
+}
+void SexpListItem::set_data(const char* str, int t)
+{
+	op = -1;
+	text = str ? str : "";
+	type = t;
+}
+void SexpListItem::add_op(int op_num)
+{
+	SexpListItem* tail = this;
+	while (tail->next)
+		tail = tail->next;
+
+	auto* n = new SexpListItem();
+	n->set_op(op_num);
+	tail->next = n;
+}
+void SexpListItem::add_data(const char* str, int t)
+{
+	SexpListItem* tail = this;
+	while (tail->next)
+		tail = tail->next;
+
+	auto* n = new SexpListItem();
+	n->set_data(str, t);
+	tail->next = n;
+}
+void SexpListItem::add_list(SexpListItem* list)
+{
+	if (!list)
+		return;
+
+	// Append the entire list as-is to preserve order
+	SexpListItem* tail = this;
+	while (tail->next)
+		tail = tail->next;
+	tail->next = list;
+}
+void SexpListItem::destroy()
+{
+	SexpListItem* p = this;
+	while (p) {
+		SexpListItem* next = p->next;
+		delete p;
+		p = next;
+	}
+}
+
 extern SCP_vector<game_snd> Snds;
 
 template <typename M, typename T, typename PTM>
@@ -97,10 +161,10 @@ int SexpOpfListBuilder::find_argument_number(int parent_node, int child_node) co
 }
 
 // This is the only public entry point to the class and it dispatches to the correct OPF lister to return
-SexpListItem* SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg_index)
+SexpListItemPtr SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg_index)
 {
 	SexpListItem head;
-	SexpListItem* list = nullptr;
+	SexpListItemPtr list = nullptr;
 
 	switch (opf) {
 	case OPF_NONE:
@@ -563,14 +627,14 @@ SexpListItem* SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg
 
 	if (list != nullptr) {
 		// append other list
-		head.add_list(list);
+		head.add_list(list.release());
 	}
 
 	// return listing
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_null()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_null()
 {
 	SexpListItem head;
 
@@ -578,10 +642,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_null()
 		if (query_operator_return_type(i) == OPR_NULL)
 			head.add_op(i);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_bool(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_bool(int parent_node)
 {
 	SexpListItem head;
 
@@ -605,10 +669,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_bool(int parent_node)
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_number()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_number()
 {
 	SexpListItem head;
 
@@ -618,10 +682,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_number()
 			head.add_op(i);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship(int parent_node)
 {
 	SexpListItem head;
 	int op = 0, dock_ship = -1, require_cap_ship = 0;
@@ -678,10 +742,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship(int parent_node)
 		ptr = GET_NEXT(ptr);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_wing()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_wing()
 {
 	SexpListItem head;
 
@@ -691,7 +755,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_wing()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
 // specific types of subsystems we're looking for
@@ -702,7 +766,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_wing()
 #define OPS_ROTATE      5
 #define OPS_TRANSLATE   6
 #define OPS_ARMOR       7
-SexpListItem* SexpOpfListBuilder::get_listing_opf_subsystem(int parent_node, int arg_index)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsystem(int parent_node, int arg_index)
 {
 	SexpListItem head;
 
@@ -953,10 +1017,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_subsystem(int parent_node, int
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_subsystem_type(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsystem_type(int parent_node)
 {
 	SexpListItem head;
 
@@ -968,7 +1032,7 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_subsystem_type(int parent_node
 	// now find the ship
 	int shipnum = ship_name_lookup(tree_nodes[child].text.c_str(), 1);
 	if (shipnum < 0) {
-		return head.next;
+		return SexpListItemPtr(head.next);
 	}
 
 	// add all relevant subsystem types
@@ -999,10 +1063,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_subsystem_type(int parent_node
 		head.add_data(Subsystem_types[SUBSYSTEM_NONE]);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_point()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_point()
 {
 	SexpListItem head;
 
@@ -1014,30 +1078,30 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_point()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_iff()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_iff()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < static_cast<int>(Iff_info.size()); i++)
 		head.add_data(Iff_info[i].iff_name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ai_class()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ai_class()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_ai_classes; i++)
 		head.add_data(Ai_class_names[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_support_ship_class()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_support_ship_class()
 {
 	SexpListItem head;
 
@@ -1049,10 +1113,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_support_ship_class()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ssm_class()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ssm_class()
 {
 	SexpListItem head;
 
@@ -1060,30 +1124,30 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ssm_class()
 		head.add_data(it->name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_arrival_location()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_arrival_location()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < MAX_ARRIVAL_NAMES; i++)
 		head.add_data(Arrival_location_names[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_departure_location()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_departure_location()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < MAX_DEPARTURE_NAMES; i++)
 		head.add_data(Departure_location_names[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_arrival_anchor_all()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_arrival_anchor_all()
 {
 	SexpListItem head;
 
@@ -1103,10 +1167,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_arrival_anchor_all()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_with_bay()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_with_bay()
 {
 	SexpListItem head;
 
@@ -1122,10 +1186,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_with_bay()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_soundtrack_name()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_soundtrack_name()
 {
 	SexpListItem head;
 
@@ -1134,10 +1198,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_soundtrack_name()
 	for (auto& st : Soundtracks)
 		head.add_data(st.name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ai_goal(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ai_goal(int parent_node)
 {
 	SexpListItem head;
 
@@ -1178,10 +1242,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ai_goal(int parent_node)
 			return nullptr; // no valid ship or wing to check against, make nothing available
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_flexible_argument()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_flexible_argument()
 {
 	SexpListItem head;
 
@@ -1189,10 +1253,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_flexible_argument()
 		if (query_operator_return_type(i) == OPR_FLEXIBLE_ARGUMENT)
 			head.add_op(i);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_docker_point(int parent_node, int arg_num)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_docker_point(int parent_node, int arg_num)
 {
 	SexpListItem head;
 
@@ -1254,10 +1318,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_docker_point(int parent_node, 
 			head.add_data(Docking_bay_list[i]);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_dockee_point(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_dockee_point(int parent_node)
 {
 	SexpListItem head;
 
@@ -1294,10 +1358,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_dockee_point(int parent_node)
 			head.add_data(Docking_bay_list[i]);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_message()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_message()
 {
 	SexpListItem head;
 
@@ -1307,10 +1371,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_message()
 			head.add_data(s.c_str());
 		}
 	}
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_who_from()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_who_from()
 {
 	SexpListItem head;
 
@@ -1328,30 +1392,30 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_who_from()
 		ptr = GET_NEXT(ptr);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_priority()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_priority()
 {
 	SexpListItem head;
 
 	head.add_data("High");
 	head.add_data("Normal");
 	head.add_data("Low");
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_waypoint_path()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_waypoint_path()
 {
 	SexpListItem head;
 
 	for (const auto& ii : Waypoint_lists)
 		head.add_data(ii.get_name());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_positive()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_positive()
 {
 	SexpListItem head;
 
@@ -1362,10 +1426,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_positive()
 			head.add_op(i);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_mission_name()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_mission_name()
 {
 	SexpListItem head;
 
@@ -1375,20 +1439,20 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_mission_name()
 	for (const auto& s : names) {
 		head.add_data(s.c_str());
 	}
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_point()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_point()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_ship());
-	head.add_list(get_listing_opf_point());
+	head.add_list(get_listing_opf_ship().release());
+	head.add_list(get_listing_opf_point().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_goal_name(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_goal_name(int parent_node)
 {
 	SexpListItem head;
 
@@ -1424,32 +1488,32 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_goal_name(int parent_node)
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_ship());
-	head.add_list(get_listing_opf_wing());
+	head.add_list(get_listing_opf_ship().release());
+	head.add_list(get_listing_opf_wing().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_wholeteam()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_wholeteam()
 {
 	SexpListItem head;
 
 	for (size_t i = 0; i < Iff_info.size(); i++)
 		head.add_data(Iff_info[i].iff_name);
 
-	head.add_list(get_listing_opf_ship_wing());
+	head.add_list(get_listing_opf_ship_wing().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_shiponteam_point()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_shiponteam_point()
 {
 	SexpListItem head;
 
@@ -1460,44 +1524,44 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_shiponteam_point()
 		head.add_data(tmp);
 	}
 
-	head.add_list(get_listing_opf_ship_wing_point());
+	head.add_list(get_listing_opf_ship_wing_point().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_point()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_point()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_ship());
-	head.add_list(get_listing_opf_wing());
-	head.add_list(get_listing_opf_point());
+	head.add_list(get_listing_opf_ship().release());
+	head.add_list(get_listing_opf_wing().release());
+	head.add_list(get_listing_opf_point().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_wing_point_or_none()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_wing_point_or_none()
 {
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	head.add_list(get_listing_opf_ship_wing_point());
+	head.add_list(get_listing_opf_ship_wing_point().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_order_recipient()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_order_recipient()
 {
 	SexpListItem head;
 
 	head.add_data("<all fighters>");
 
-	head.add_list(get_listing_opf_ship());
-	head.add_list(get_listing_opf_wing());
-	return head.next;
+	head.add_list(get_listing_opf_ship().release());
+	head.add_list(get_listing_opf_wing().release());
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_type()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_type()
 {
 	SexpListItem head;
 
@@ -1508,10 +1572,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_type()
 		head.add_data(Fighter_bomber_type_name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_keypress()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_keypress()
 {
 	SexpListItem head;
 	const auto& Default_config = Control_config_presets[0].bindings;
@@ -1524,10 +1588,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_keypress()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_event_name(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_event_name(int parent_node)
 {
 	SexpListItem head;
 
@@ -1563,30 +1627,30 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_event_name(int parent_node)
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ai_order()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ai_order()
 {
 	SexpListItem head;
 
 	for (const auto& order : Player_orders)
 		head.add_data(order.hud_name.c_str());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_skill_level()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_skill_level()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < NUM_SKILL_LEVELS; i++)
 		head.add_data(Skill_level_names(i, 0));
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_cargo()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_cargo()
 {
 	SexpListItem head;
 
@@ -1596,19 +1660,19 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_cargo()
 			head.add_data(Cargo_names[i]);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_string()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_string()
 {
 	SexpListItem head;
 
 	head.add_data(SEXP_ANY_STRING);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_medal_name()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_medal_name()
 {
 	SexpListItem head;
 
@@ -1619,40 +1683,40 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_medal_name()
 		head.add_data(Medals[i].name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_weapon_name()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_weapon_name()
 {
 	SexpListItem head;
 
 	for (auto& wi : Weapon_info)
 		head.add_data(wi.name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_intel_name()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_intel_name()
 {
 	SexpListItem head;
 
 	for (auto& ii : Intel_info)
 		head.add_data(ii.name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_class_name()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_class_name()
 {
 	SexpListItem head;
 
 	for (auto& si : Ship_info)
 		head.add_data(si.name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_huge_weapon()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_huge_weapon()
 {
 	SexpListItem head;
 
@@ -1661,10 +1725,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_huge_weapon()
 			head.add_data(wi.name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_not_player()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_not_player()
 {
 	SexpListItem head;
 
@@ -1676,30 +1740,30 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_not_player()
 		ptr = GET_NEXT(ptr);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_or_none()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_or_none()
 {
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	head.add_list(get_listing_opf_ship());
+	head.add_list(get_listing_opf_ship().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_subsystem_or_none(int parent_node, int arg_index)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsystem_or_none(int parent_node, int arg_index)
 {
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
-	head.add_list(get_listing_opf_subsystem(parent_node, arg_index));
+	head.add_list(get_listing_opf_subsystem(parent_node, arg_index).release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_subsys_or_generic(int parent_node, int arg_index)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_subsys_or_generic(int parent_node, int arg_index)
 {
 	SexpListItem head;
 
@@ -1713,12 +1777,12 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_subsys_or_generic(int parent_n
 		}
 	}
 	head.add_data(SEXP_ALL_SUBSYSTEMS_STRING);
-	head.add_list(get_listing_opf_subsystem(parent_node, arg_index));
+	head.add_list(get_listing_opf_subsystem(parent_node, arg_index).release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_jump_nodes()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_jump_nodes()
 {
 	SexpListItem head;
 
@@ -1727,10 +1791,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_jump_nodes()
 		head.add_data(jnp->GetName());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_variable_names()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_variable_names()
 {
 	SexpListItem head;
 
@@ -1740,28 +1804,28 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_variable_names()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_skybox_model()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_skybox_model()
 {
 
 	SexpListItem head;
 	head.add_data("default");
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_skybox_flags()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_skybox_flags()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_skybox_flags; ++i) {
 		head.add_data(Skybox_flags[i]);
 	}
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_background_bitmap()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_background_bitmap()
 {
 	SexpListItem head;
 	int i;
@@ -1770,10 +1834,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_background_bitmap()
 		head.add_data(stars_get_name_FRED(i, false));
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_sun_bitmap()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_sun_bitmap()
 {
 	SexpListItem head;
 	int i;
@@ -1782,10 +1846,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_sun_bitmap()
 		head.add_data(stars_get_name_FRED(i, true));
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_storm_type()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_nebula_storm_type()
 {
 	SexpListItem head;
 
@@ -1795,10 +1859,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_storm_type()
 		head.add_data(Storm_types[i].name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_poof()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_nebula_poof()
 {
 	SexpListItem head;
 
@@ -1806,30 +1870,30 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_poof()
 		head.add_data(pf.name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_turret_target_order()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_turret_target_order()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < NUM_TURRET_ORDER_TYPES; i++)
 		head.add_data(Turret_target_order_names[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_turret_types()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_turret_types()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < NUM_TURRET_TYPES; i++)
 		head.add_data(Turret_valid_types[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_turret_target_priorities()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_turret_target_priorities()
 {
 	SexpListItem head;
 
@@ -1837,20 +1901,20 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_turret_target_priorities()
 		head.add_data(Ai_tp_list[t].name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_armor_type()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_armor_type()
 {
 	SexpListItem head;
 
 	head.add_data(SEXP_NONE_STRING);
 	for (size_t t = 0; t < Armor_types.size(); t++)
 		head.add_data(Armor_types[t].GetNamePtr());
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_damage_type()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_damage_type()
 {
 	SexpListItem head;
 
@@ -1858,10 +1922,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_damage_type()
 	for (size_t t = 0; t < Damage_types.size(); t++)
 		head.add_data(Damage_types[t].name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_animation_type()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_animation_type()
 {
 	SexpListItem head;
 
@@ -1869,10 +1933,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_animation_type()
 		head.add_data(animation_type.second.first);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_persona()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_persona()
 {
 	SexpListItem head;
 
@@ -1882,10 +1946,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_persona()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_post_effect()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_post_effect()
 {
 	SexpListItem head;
 
@@ -1896,10 +1960,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_post_effect()
 	}
 	head.add_data("lightshafts");
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_font()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_font()
 {
 	SexpListItem head;
 
@@ -1907,18 +1971,18 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_font()
 		head.add_data(font::FontManager::getFont(i)->getName().c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_hud_elements()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_hud_elements()
 {
 	SexpListItem head;
 	head.add_data("warpout");
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_sound_environment()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_sound_environment()
 {
 	SexpListItem head;
 
@@ -1927,58 +1991,58 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_sound_environment()
 		head.add_data(EFX_presets[i].name.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_sound_environment_option()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_sound_environment_option()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_sound_environment_options; i++)
 		head.add_data(Sound_environment_option[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_adjust_audio_volume()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_adjust_audio_volume()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_adjust_audio_options; i++)
 		head.add_data(Adjust_audio_options[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_explosion_option()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_explosion_option()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_explosion_options; i++)
 		head.add_data(Explosion_option[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_weapon_banks()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_weapon_banks()
 {
 	SexpListItem head;
 	head.add_data(SEXP_ALL_BANKS_STRING);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_builtin_hud_gauge()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_builtin_hud_gauge()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_hud_gauge_types; i++)
 		head.add_data(Hud_gauge_types[i].name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_custom_hud_gauge()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_custom_hud_gauge()
 {
 	SexpListItem head;
 	// prevent duplicate names, comparing case-insensitively
@@ -2002,20 +2066,20 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_custom_hud_gauge()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_any_hud_gauge()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_any_hud_gauge()
 {
 	SexpListItem head;
 
-	head.add_list(get_listing_opf_builtin_hud_gauge());
-	head.add_list(get_listing_opf_custom_hud_gauge());
+	head.add_list(get_listing_opf_builtin_hud_gauge().release());
+	head.add_list(get_listing_opf_custom_hud_gauge().release());
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_effect()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_effect()
 {
 	SexpListItem head;
 
@@ -2023,20 +2087,20 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_effect()
 		head.add_data(sei->name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_mission_moods()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_mission_moods()
 {
 	SexpListItem head;
 	for (SCP_vector<SCP_string>::iterator iter = Builtin_moods.begin(); iter != Builtin_moods.end(); ++iter) {
 		head.add_data(iter->c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_flags()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_flags()
 {
 	SexpListItem head;
 	// prevent duplicate names, comparing case-insensitively
@@ -2051,10 +2115,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_ship_flags()
 		Num_parse_object_flags);
 	add_flag_name_helper(all_flags, head, Ai_flag_names, &ai_flag_name::flag_name, (size_t)Num_ai_flag_names);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_wing_flags()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_wing_flags()
 {
 	SexpListItem head;
 	// wing flags
@@ -2062,10 +2126,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_wing_flags()
 		head.add_data(Wing_flag_names[i].flag_name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_team_colors()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_team_colors()
 {
 	SexpListItem head;
 	head.add_data("None");
@@ -2074,10 +2138,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_team_colors()
 		head.add_data(tcolor->first.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_patterns()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_nebula_patterns()
 {
 	SexpListItem head;
 
@@ -2087,10 +2151,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_nebula_patterns()
 		head.add_data(Neb2_bitmap_filenames[i].c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_game_snds()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_game_snds()
 {
 	SexpListItem head;
 
@@ -2102,10 +2166,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_game_snds()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_fireball()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_fireball()
 {
 	SexpListItem head;
 
@@ -2116,40 +2180,40 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_fireball()
 			head.add_data(unique_id);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_species()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_species()
 {
 	SexpListItem head;
 
 	for (auto& species : Species_info)
 		head.add_data(species.species_name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_language()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_language()
 {
 	SexpListItem head;
 
 	for (auto& lang : Lcl_languages)
 		head.add_data(lang.lang_name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_functional_when_eval_type()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_functional_when_eval_type()
 {
 	SexpListItem head;
 
 	for (int i = 0; i < Num_functional_when_eval_types; i++)
 		head.add_data(Functional_when_eval_type[i]);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_animation_name(int parent_node)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_animation_name(int parent_node)
 {
 	SexpListItem head;
 
@@ -2201,10 +2265,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_animation_name(int parent_node
 		break;
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_sexp_containers(ContainerType con_type)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_sexp_containers(ContainerType con_type)
 {
 	SexpListItem head;
 
@@ -2214,10 +2278,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_sexp_containers(ContainerType 
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_asteroid_types()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_asteroid_types()
 {
 	SexpListItem head;
 
@@ -2229,10 +2293,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_asteroid_types()
 		head.add_data(this_asteroid.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_debris_types()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_debris_types()
 {
 	SexpListItem head;
 
@@ -2244,10 +2308,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_debris_types()
 		}
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_wing_formation()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_wing_formation()
 {
 	SexpListItem head;
 
@@ -2255,10 +2319,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_wing_formation()
 	for (const auto& formation : Wing_formations)
 		head.add_data(formation.name);
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_motion_debris()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_motion_debris()
 {
 	SexpListItem head;
 
@@ -2268,10 +2332,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_motion_debris()
 		head.add_data(Motion_debris_info[i].name.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_bolt_types()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_bolt_types()
 {
 	SexpListItem head;
 
@@ -2281,10 +2345,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_bolt_types()
 		head.add_data(Bolt_types[i].name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_traitor_overrides()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_traitor_overrides()
 {
 	SexpListItem head;
 
@@ -2294,10 +2358,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_traitor_overrides()
 		head.add_data(Traitor_overrides[i].name.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_lua_general_orders()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_lua_general_orders()
 {
 	SexpListItem head;
 
@@ -2307,10 +2371,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_lua_general_orders()
 		head.add_data(val.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_message_types()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_message_types()
 {
 	SexpListItem head;
 
@@ -2318,10 +2382,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_message_types()
 		head.add_data(val.name);
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_lua_enum(int parent_node, int arg_index)
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_lua_enum(int parent_node, int arg_index)
 {
 
 	SexpListItem head;
@@ -2360,10 +2424,10 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_lua_enum(int parent_node, int 
 		mprintf(("Could not find Lua Enum %s! Using <none> instead!", enum_name.c_str()));
 		head.add_data("<none>");
 	}
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
-SexpListItem* SexpOpfListBuilder::get_listing_opf_mission_custom_strings()
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_mission_custom_strings()
 {
 	SexpListItem head;
 
@@ -2371,12 +2435,12 @@ SexpListItem* SexpOpfListBuilder::get_listing_opf_mission_custom_strings()
 		head.add_data(val.name.c_str());
 	}
 
-	return head.next;
+	return SexpListItemPtr(head.next);
 }
 
 
 // The final check if we finish the whole switch and haven't returned yet
-SexpListItem* SexpOpfListBuilder::check_for_dynamic_sexp_enum(int opf)
+SexpListItemPtr SexpOpfListBuilder::check_for_dynamic_sexp_enum(int opf)
 {
 	SexpListItem head;
 
@@ -2387,7 +2451,7 @@ SexpListItem* SexpOpfListBuilder::check_for_dynamic_sexp_enum(int opf)
 		for (const SCP_string& enum_item : Dynamic_enums[item].list) {
 			head.add_data(enum_item.c_str());
 		}
-		return head.next;
+		return SexpListItemPtr(head.next);
 	} else {
 		// else if opf is invalid do this
 		UNREACHABLE("Unhandled SEXP argument type!"); // unknown OPF code
