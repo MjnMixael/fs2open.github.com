@@ -1,6 +1,8 @@
 #pragma once
 
-#include "sexp_tree_core.h"
+#include "globalincs/pstypes.h"
+
+class SexpTreeModel;
 
 // An extension of SexpTreeNode that provides a list of available actions the UI can take on any specific node
 
