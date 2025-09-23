@@ -15,7 +15,7 @@ struct SexpListItem {
 
 	void add_op(int op_num);
 	void add_data(const char* str, int t = (SEXPT_STRING | SEXPT_VALID));
-	void add_list(SexpListItem* list); // TODO
+	void add_list(SexpListItemPtr list); // TODO
 	void destroy();
 };
 
