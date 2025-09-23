@@ -14,63 +14,6 @@
 
 static constexpr int kNodeIncrement = 100; // mirrors TREE_NODE_INCREMENT
 
-// SexpListItem
-
-void SexpListItem::set_op(int op_num) {
-	if (op_num >= FIRST_OP) { // do we have an op value instead of an op number (index)?
-		for (int i = 0; i < (int)Operators.size(); i++)
-			if (op_num == Operators[i].value)
-				op_num = i; // convert op value to op number
-	}
-
-	op = op_num;
-
-	Assertion(SCP_vector_inbounds(Operators, op), "Invalid operator number %d", op);
-
-	text = Operators[op].text;
-	type = (SEXPT_OPERATOR | SEXPT_VALID);
-}
-void SexpListItem::set_data(const char* str, int t) {
-	op = -1;
-	text = str ? str : "";
-	type = t;
-}
-void SexpListItem::add_op(int op_num) {
-	SexpListItem* tail = this;
-	while (tail->next)
-		tail = tail->next;
-
-	auto* n = new SexpListItem();
-	n->set_op(op_num);
-	tail->next = n;
-}
-void SexpListItem::add_data(const char* str, int t) {
-	SexpListItem* tail = this;
-	while (tail->next)
-		tail = tail->next;
-
-	auto* n = new SexpListItem();
-	n->set_data(str, t);
-	tail->next = n;
-}
-void SexpListItem::add_list(SexpListItem* list) {
-	if (!list) return;
-
-	// Append the entire list as-is to preserve order
-	SexpListItem* tail = this;
-	while (tail->next)
-		tail = tail->next;
-	tail->next = list;
-}
-void SexpListItem::destroy() {
-	SexpListItem* p = this;
-	while (p) {
-		SexpListItem* next = p->next;
-		delete p;
-		p = next;
-	}
-}
-
 // ISexpEnvironment defaults
 
 SCP_vector<SCP_string> ISexpEnvironment::getMessageNames() const
@@ -695,12 +638,12 @@ int SexpTreeModel::createDefaultArgForOpf(int type, int parent, int op_index, in
 	// Try OPF listing default (skip the Argument placeholder)
 	{
 		SexpOpfListBuilder builder(_nodes, _env);
-		SexpListItem* list = builder.buildListing(type, parent, i);
+		SexpListItemPtr list = builder.buildListing(type, parent, i);
 
 		if (list && list->text == SEXP_ARGUMENT_STRING) {
-			SexpListItem* first = list;
-			list = list->next;
-			delete first;
+			SexpListItemPtr rest_of_list(list->next);
+			list->next = nullptr;
+			list = std::move(rest_of_list);
 		}
 		if (list) {
 			const int n = allocateNode(parent);
@@ -1380,7 +1323,7 @@ bool SexpTreeModel::executeAction(int node_index, SexpActionId id, const SexpAct
 // the special argument item, but only if it's a child of a when-argument (or similar) sexp.
 // Also only do this if the list has at least one item, because otherwise the argument code
 // would have nothing to select from.
-SexpListItem* SexpTreeModel::buildListingForOpf(int opf, int parent_node, int arg_index)
+SexpListItemPtr SexpTreeModel::buildListingForOpf(int opf, int parent_node, int arg_index)
 {
 	SexpOpfListBuilder builder(_nodes, _env);
 	return builder.buildListing(opf, parent_node, arg_index);
