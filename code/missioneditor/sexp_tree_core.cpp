@@ -891,6 +891,7 @@ int SexpTreeModel::loadBranchRecursive(int sexp_idx, int model_parent_idx)
 			SexpNode& n = node(model_node_idx);
 			n.text = sexp_node.text;
 			n.type = (SEXPT_OPERATOR | SEXPT_VALID);
+			applyDefaultFlags(model_node_idx);
 
 			// The rest of the current SEXP list are arguments to this operator.
 			loadBranchRecursive(sexp_node.rest, model_node_idx);
@@ -954,6 +955,7 @@ int SexpTreeModel::loadTreeFromSexp(int sexp_root)
 		const int root_idx = allocateNode();
 		node(root_idx).type = (SEXPT_OPERATOR | SEXPT_VALID);
 		node(root_idx).text = "true";
+		applyDefaultFlags(root_idx);
 		return root_idx;
 	}
 
@@ -966,6 +968,7 @@ int SexpTreeModel::loadTreeFromSexp(int sexp_root)
 		} else {
 			node(root_idx).text = "false";
 		}
+		applyDefaultFlags(root_idx);
 		return root_idx;
 	}
 
