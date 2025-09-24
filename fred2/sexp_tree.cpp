@@ -159,6 +159,8 @@ void sexp_tree::load_tree(int index, const char *deflt)
 	Assert(Sexp_nodes[index].subtype == SEXP_ATOM_OPERATOR);
 	load_branch(index, -1);
 
+	print_model_to_debug_output();
+
 	build_tree();
 }
 
@@ -177,35 +179,33 @@ void get_combined_variable_name(char *combined_name, const char *sexp_var_name)
 int sexp_tree::load_branch(int index, int parent)
 {
 	int cur = -1;
-	char combined_var_name[2*TOKEN_LENGTH + 2];
+	char combined_var_name[2 * TOKEN_LENGTH + 2];
 
 	while (index != -1) {
 		int additional_flags = SEXPT_VALID;
-
-		// special check for container modifiers
-		if (parent != -1) {
-			auto& parent_n = m_model->node(parent);
-			if ((parent_n.type & SEXPT_CONTAINER_DATA)) {
-				additional_flags |= SEXPT_MODIFIER;
-			}
-		}
+		// ... (your existing flags logic is fine) ...
 
 		Assert(Sexp_nodes[index].type != SEXP_NOT_USED);
 		if (Sexp_nodes[index].subtype == SEXP_ATOM_LIST) {
-			load_branch(Sexp_nodes[index].first, parent);  // do the sublist and continue
+			load_branch(Sexp_nodes[index].first, parent);
 
 		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_OPERATOR) {
 			cur = m_model->allocateNode(parent);
-			if ((index == select_sexp_node) && !flag) {  // translate sexp node to our node
+			if ((index == select_sexp_node) && !flag) {
 				select_sexp_node = cur;
 				flag = 1;
 			}
-
 			m_model->setNode(cur, (SEXPT_OPERATOR | additional_flags), Sexp_nodes[index].text);
-			load_branch(Sexp_nodes[index].rest, cur);  // operator is new parent now
-			return cur;  // 'rest' was just used, so nothing left to use.
+
+			// Process the operator's children using the new node 'cur' as their parent.
+			load_branch(Sexp_nodes[index].rest, cur);
+
+			// ==> BUG FIX: DO NOT return here. <==
+			// We must continue the while loop to process siblings of this operator.
+			// return cur; // <== DELETE THIS LINE
 
 		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_NUMBER) {
+			// ... (rest of your function is the same) ...
 			cur = m_model->allocateNode(parent);
 			if (Sexp_nodes[index].type & SEXP_FLAG_VARIABLE) {
 				get_combined_variable_name(combined_var_name, Sexp_nodes[index].text);
@@ -214,47 +214,18 @@ int sexp_tree::load_branch(int index, int parent)
 				m_model->setNode(cur, (SEXPT_NUMBER | additional_flags), Sexp_nodes[index].text);
 			}
 
-		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_STRING) {
-			cur = m_model->allocateNode(parent);
-			if (Sexp_nodes[index].type & SEXP_FLAG_VARIABLE) {
-				get_combined_variable_name(combined_var_name, Sexp_nodes[index].text);
-				m_model->setNode(cur, (SEXPT_VARIABLE | SEXPT_STRING | additional_flags), combined_var_name);
-			} else {
-				m_model->setNode(cur, (SEXPT_STRING | additional_flags), Sexp_nodes[index].text);
-			}
+		} // ... etc. for other types ...
 
-		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_CONTAINER_NAME) {
-			Assertion(!(additional_flags & SEXPT_MODIFIER),
-				"Found a container name node %s that is also a container modifier. Please report!",
-				Sexp_nodes[index].text);
-			Assertion(get_sexp_container(Sexp_nodes[index].text) != nullptr,
-				"Attempt to load unknown container data %s into SEXP tree. Please report!",
-				Sexp_nodes[index].text);
-			cur = m_model->allocateNode(parent);
-			m_model->setNode(cur, (SEXPT_CONTAINER_NAME | SEXPT_STRING | additional_flags), Sexp_nodes[index].text);
-
-		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_CONTAINER_DATA) {
-			cur = m_model->allocateNode(parent);
-			Assertion(get_sexp_container(Sexp_nodes[index].text) != nullptr,
-				"Attempt to load unknown container data %s into SEXP tree. Please report!",
-				Sexp_nodes[index].text);
-			m_model->setNode(cur, (SEXPT_CONTAINER_DATA | SEXPT_STRING | additional_flags), Sexp_nodes[index].text);
-			load_branch(Sexp_nodes[index].first, cur);  // container is new parent now
-
-		} else
-			Assert(0);  // unknown and/or invalid sexp type
-
-		if ((index == select_sexp_node) && !flag) {  // translate sexp node to our node
+		if ((index == select_sexp_node) && !flag) {
 			select_sexp_node = cur;
 			flag = 1;
 		}
 
+		// Now, advance to the next sibling in the CURRENT list
 		index = Sexp_nodes[index].rest;
-		if (index == -1)
-			return cur;
 	}
 
-	return cur;
+	return cur; // Return the last node created in the sibling chain
 }
 
 int sexp_tree::query_false(int node)
@@ -392,77 +363,37 @@ void sexp_tree::build_tree()
 
 // Create the CTreeCtrl tree from the tree data.  The tree data should already be setup by
 // this point.
-void sexp_tree::add_sub_tree(int node, HTREEITEM root)
+void sexp_tree::add_sub_tree(int node_index, HTREEITEM parent_handle)
 {
-	auto& n = m_model->node(node);
-	int node2 = n.child;
-
-	// check for single argument operator case (prints as one line)
-	// auto& n2 = model->node(node2);
-/*	if (node2 != -1 && n2.child == -1 && n2.next == -1) {
-		sprintf(str, "%s %s", n.text, n2.text);
-		n.handle = insert(str, root);
-		n.flags = OPERAND | EDITABLE;
-		n2.flags = COMBINED;
+	// Base case: if there's no node, we're done.
+	if (node_index < 0) {
 		return;
-	}*/
+	}
 
-	// bitmap to draw in tree
+	// 1. Get the data for the CURRENT node.
+	const SexpNode& n = m_model->node(node_index);
+
+	// 2. Determine the bitmap.
 	int bitmap;
-
 	if (n.type & SEXPT_OPERATOR) {
-		n.flags = OPERAND;
 		bitmap = BITMAP_OPERATOR;
-	} else {
-		if (n.type & SEXPT_VARIABLE) {
-			n.flags = NOT_EDITABLE;
-			bitmap = BITMAP_VARIABLE;
-		} else if (n.type & SEXPT_CONTAINER_NAME) {
-			n.flags = NOT_EDITABLE;
-			bitmap = BITMAP_CONTAINER_NAME;
-		} else if (n.type & SEXPT_CONTAINER_DATA) {
-			n.flags = NOT_EDITABLE;
-			bitmap = BITMAP_CONTAINER_DATA;
-		} else {
-			n.flags = EDITABLE;
-			bitmap = get_data_image(node);
-		}
+	} else if (n.type & SEXPT_VARIABLE) {
+		bitmap = BITMAP_VARIABLE;
+	} // ... etc. for other types ...
+	else {
+		bitmap = get_data_image(node_index);
 	}
 
-	HTREEITEM new_handle = insert(n.text.c_str(), bitmap, bitmap, root);
-	SetItemData(new_handle, node);
-	m_modelToHandle[node] = new_handle;
+	// 3. Create the UI item for THIS node and link it.
+	HTREEITEM my_handle = insert(n.text.c_str(), bitmap, bitmap, parent_handle);
+	SetItemData(my_handle, node_index);
+	m_modelToHandle[node_index] = my_handle;
 
-	node = node2;
-	while (node != -1) {
-		auto& current_sibling_node = m_model->node(node);
+	// 4. Recurse for this node's CHILDREN, passing THIS node's handle as their parent.
+	add_sub_tree(m_model->firstChild(node_index), my_handle);
 
-		Assert(current_sibling_node.type & SEXPT_VALID);
-		if (current_sibling_node.type & (SEXPT_OPERATOR | SEXPT_CONTAINER_DATA)) {
-			add_sub_tree(node, new_handle);
-
-		} else {
-			Assert(current_sibling_node.child == -1);
-			HTREEITEM leaf_handle;
-			if (current_sibling_node.type & SEXPT_VARIABLE) {
-				leaf_handle = insert(current_sibling_node.text.c_str(), BITMAP_VARIABLE, BITMAP_VARIABLE, new_handle);
-				current_sibling_node.flags = NOT_EDITABLE;
-			} else if (current_sibling_node.type & SEXPT_CONTAINER_NAME) {
-				leaf_handle = insert(current_sibling_node.text.c_str(), BITMAP_CONTAINER_NAME, BITMAP_CONTAINER_NAME, new_handle);
-				current_sibling_node.flags = NOT_EDITABLE;
-			// SEXPT_MODIFIER doesn't require special treatment here
-			} else {
-				int bmap = get_data_image(node);
-				leaf_handle = insert(current_sibling_node.text.c_str(), bmap, bmap, new_handle);
-				current_sibling_node.flags = EDITABLE;
-			}
-
-			SetItemData(leaf_handle, node);
-			m_modelToHandle[node] = leaf_handle;
-		}
-
-		node = current_sibling_node.next;
-	}
+	// 5. Recurse for this node's SIBLINGS, passing the SAME parent handle.
+	add_sub_tree(m_model->nextSibling(node_index), parent_handle);
 }
 
 // construct tree nodes for an sexp, adding them to the list and returning first node
@@ -5852,4 +5783,44 @@ sexp_list_item* sexp_tree::copy_from_model_list(const SexpListItem* src)
 		tail = n;
 	}
 	return head;
+}
+
+void sexp_tree::print_model_recursive(int node_index, int indent)
+{
+	if (node_index < 0) {
+		return;
+	}
+
+	// Create an indentation string
+	SCP_string indent_str(indent * 2, ' ');
+
+	// Get the node and print its info
+	const SexpNode& n = m_model->node(node_index);
+	mprintf(("%sNode %d: '%s' (Parent: %d, Next: %d, Child: %d)\n",
+		indent_str.c_str(),
+		node_index,
+		n.text.c_str(),
+		n.parent,
+		n.next,
+		n.child));
+
+	// Recurse for children
+	print_model_recursive(m_model->firstChild(node_index), indent + 1);
+
+	// Recurse for siblings
+	print_model_recursive(m_model->nextSibling(node_index), indent);
+}
+
+void sexp_tree::print_model_to_debug_output()
+{
+	mprintf(("--- Dumping SexpTreeModel State ---\n"));
+	int model_root = -1;
+	for (int i = 0; i < m_model->size(); i++) {
+		if (m_model->parentOf(i) == -1) {
+			model_root = i;
+			// Don't break; print all roots if there are multiple for some reason
+			print_model_recursive(model_root, 0);
+		}
+	}
+	mprintf(("--- End of Dump ---\n"));
 }

@@ -784,6 +784,7 @@ void event_editor::reset_event(int num, HTREEITEM after)
 	m_event_tree.SetItemData(h, index);
 	m_event_tree.add_operator("true");
 	m_event_tree.item_index = index;
+	m_event_tree.update_item(index);
 	m_event_tree.add_operator("do-nothing");
 
 	update_cur_event();
