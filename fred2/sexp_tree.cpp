@@ -95,6 +95,7 @@ static int Modify_variable;
 sexp_tree::sexp_tree()
 	: m_operator_box(help)
 {
+	m_model = std::make_unique<SexpTreeModel>();
 	select_sexp_node = -1;
 	root_item = -1;
 	m_mode = 0;
@@ -107,7 +108,6 @@ sexp_tree::sexp_tree()
 	m_operator_popup_created = false;
 	m_font_height = 0;
 	m_font_max_width = 0;
-	m_model = std::make_unique<SexpTreeModel>();
 }
 
 sexp_tree::~sexp_tree() = default;
@@ -496,7 +496,7 @@ void sexp_tree::setup_selected(HTREEITEM h)
 void sexp_tree::update_item(HTREEITEM h)
 {
 	item_handle = h;
-	item_index = GetItemData(h);
+	item_index = (int)GetItemData(h);
 }
 
 void sexp_tree::update_item(int node)
@@ -1653,12 +1653,10 @@ int sexp_tree::identify_arg_type(int node)
 // determine if an item should be editable.  This doesn't actually edit the label.
 int sexp_tree::edit_label(HTREEITEM h, bool *is_operator)
 {
-	uint i;
-
 	if (is_operator != nullptr)
 		*is_operator = false;
 
-	int model_index = GetItemData(h);
+	int model_index = (int)GetItemData(h);
 
 	// Check if tree root
 	if (model_index < 0 || model_index >= m_model->size()) {
@@ -1751,9 +1749,8 @@ int sexp_tree::end_label_edit(TVITEMA &item)
 	SCP_string str(item.pszText);
 	int r = 1;	
 	bool update_node = true; 
-	uint node;
 
-	int model_index = GetItemData(h);
+	int model_index = (int)GetItemData(h);
 
 	if (model_index < 0 || model_index >= m_model->size()) {
 		if (m_mode == MODE_EVENTS) {
@@ -1925,7 +1922,6 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 {
 	int i, z, id, data, node, op;
 	sexp_list_item *list, *ptr;
-	HTREEITEM h;
 
 	/*if ((item_index >= 0) && (item_index < total_nodes) && !tree_nodes.empty())
 		item_handle = tree_nodes[item_index].handle;*/ // This is redundant as item_handle is always set when item_index is set
@@ -2184,7 +2180,7 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 		Assert((SEXPT_TYPE(ptr->type) != SEXPT_OPERATOR) && (ptr->op < 0));
 		expand_operator(item_index);
 		auto n_handle = add_data(ptr->text.c_str(), ptr->type);
-		node = GetItemData(n_handle);
+		node = (int)GetItemData(n_handle);
 		list->destroy();
 
 		// bolted-on ugly hack
@@ -2327,7 +2323,7 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 				}
 			}
 
-			HTREEITEM insert_before_handle = item_handle;
+			//HTREEITEM insert_before_handle = item_handle;
 			HTREEITEM new_item_handle = insert(Operators[op].text.c_str(), BITMAP_OPERATOR, BITMAP_OPERATOR, parent_handle, TVI_FIRST);
 			SetItemData(new_item_handle, node);
 			m_modelToHandle[node] = new_item_handle;
@@ -2516,7 +2512,7 @@ void sexp_tree::NodeDelete()
 	HTREEITEM h_parent;
 
 	if ((m_mode & ST_ROOT_DELETABLE) && (item_index == -1)) {
-		item_index = GetItemData(item_handle);
+		item_index = (int)GetItemData(item_handle);
 		if (m_mode == MODE_GOALS) {
 			Assert(Goal_editor_dlg);
 			theNode = Goal_editor_dlg->handler(ROOT_DELETED, item_index);
@@ -2552,7 +2548,7 @@ void sexp_tree::NodeDelete()
 	m_model->freeNode(item_index);
 	DeleteItem(item_handle);
 
-	auto& parent_n = m_model->node(parent);
+	//auto& parent_n = m_model->node(parent);
 	theNode = n.child;
 /*			if (node != -1 && n.next == -1 && n.child == -1) {
 		sprintf(buf, "%s %s", parent_n.text.c_str(), n.text.c_str());
@@ -3711,7 +3707,7 @@ void sexp_tree::expand_operator(int node)
 		SetItem(h, TVIF_TEXT, n.text.c_str(), 0, 0, 0, 0, 0);
 		n.flags = OPERAND;
 		int bmap = get_data_image(data);
-		auto handle = insert(data_n.text.c_str(), bmap, bmap, h);
+		/*auto handle = */insert(data_n.text.c_str(), bmap, bmap, h);
 		data_n.flags = EDITABLE;
 		Expand(h, TVE_EXPAND);
 	}
@@ -3779,7 +3775,7 @@ int sexp_tree::add_variable_data(const char *data, int type)
 	node = m_model->allocateNode(item_index);
 	m_model->setNode(node, type, data);
 	auto& n = m_model->node(node);
-	auto handle = insert(data, BITMAP_VARIABLE, BITMAP_VARIABLE, item_handle);
+	/*auto handle = */insert(data, BITMAP_VARIABLE, BITMAP_VARIABLE, item_handle);
 	n.flags = NOT_EDITABLE;
 	*modified = 1;
 	return node;
@@ -3796,7 +3792,7 @@ int sexp_tree::add_container_name(const char *container_name)
 	expand_operator(item_index);
 	int node = m_model->allocateNode(item_index);
 	m_model->setNode(node, (SEXPT_VALID | SEXPT_CONTAINER_NAME | SEXPT_STRING), container_name);
-	auto handle = insert(container_name, BITMAP_CONTAINER_NAME, BITMAP_CONTAINER_NAME, item_handle);
+	/*auto handle = */insert(container_name, BITMAP_CONTAINER_NAME, BITMAP_CONTAINER_NAME, item_handle);
 	auto& n = m_model->node(node);
 	n.flags = NOT_EDITABLE;
 	*modified = 1;
@@ -3812,7 +3808,7 @@ void sexp_tree::add_container_data(const char *container_name)
 		container_name);
 	const int node = m_model->allocateNode(item_index);
 	m_model->setNode(node, (SEXPT_VALID | SEXPT_CONTAINER_DATA | SEXPT_STRING), container_name);
-	auto handle =insert(container_name, BITMAP_CONTAINER_DATA, BITMAP_CONTAINER_DATA, item_handle);
+	/*auto handle = */insert(container_name, BITMAP_CONTAINER_DATA, BITMAP_CONTAINER_DATA, item_handle);
 	auto& n = m_model->node(node);
 	n.flags = NOT_EDITABLE;
 	update_item(node);
@@ -3836,6 +3832,8 @@ void sexp_tree::add_operator(const char *op, HTREEITEM h)
 		m_model->setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
 		item_handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, item_handle);
 	}
+
+	m_modelToHandle[node] = item_handle;
 
 	auto& n = m_model->node(node);
 
@@ -4940,7 +4938,7 @@ const char *sexp_tree::help(int code)
 // get type of item clicked on
 int sexp_tree::get_type(HTREEITEM h)
 {
-	int model_index = GetItemData(h);
+	int model_index = (int)GetItemData(h);
 
 	if (h == NULL || model_index < 0 || model_index >= m_model->size()) {
 		return -1;
@@ -5009,7 +5007,7 @@ void sexp_tree::update_help(HTREEITEM h)
 	{
 		z = n.parent;
 		if (z < 0) {
-			Warning(LOCATION, "Sexp data \"%s\" has no parent!", n.text);
+			Warning(LOCATION, "Sexp data \"%s\" has no parent!", n.text.c_str());
 			return;
 		}
 
@@ -5130,27 +5128,27 @@ void sexp_tree::update_help(HTREEITEM h)
 
 				// Ship flags are pulled from multiple categories, so we have to search them all. Ew.
 				if (object_flag != Object::Object_Flags::NUM_VALUES){
-					for (size_t n = 0; n < (size_t)Num_object_flag_names; n++) {
-						if (object_flag == Object_flag_descriptions[n].flag) {
-							desc = Object_flag_descriptions[n].flag_desc;
+					for (size_t m = 0; m < (size_t)Num_object_flag_names; m++) {
+						if (object_flag == Object_flag_descriptions[m].flag) {
+							desc = Object_flag_descriptions[m].flag_desc;
 							break;
 						}
 					}
 				}
 
 				if (ship_flag != Ship::Ship_Flags::NUM_VALUES) {
-					for (size_t n = 0; n < (size_t)Num_ship_flag_names; n++) {
-						if (ship_flag == Ship_flag_descriptions[n].flag) {
-							desc = Ship_flag_descriptions[n].flag_desc;
+					for (size_t m = 0; m < (size_t)Num_ship_flag_names; m++) {
+						if (ship_flag == Ship_flag_descriptions[m].flag) {
+							desc = Ship_flag_descriptions[m].flag_desc;
 							break;
 						}
 					}
 				}
 
 				if (ai_flag != AI::AI_Flags::NUM_VALUES) {
-					for (size_t n = 0; n < (size_t)Num_ai_flag_names; n++) {
-						if (ai_flag == Ai_flag_descriptions[n].flag) {
-							desc = Ai_flag_descriptions[n].flag_desc;
+					for (size_t m = 0; m < (size_t)Num_ai_flag_names; m++) {
+						if (ai_flag == Ai_flag_descriptions[m].flag) {
+							desc = Ai_flag_descriptions[m].flag_desc;
 							break;
 						}
 					}
@@ -5159,9 +5157,9 @@ void sexp_tree::update_help(HTREEITEM h)
 				// Only check through parse object flags if we haven't found anything yet
 				if (desc.empty()) {
 					if (parse_obj_flag != Mission::Parse_Object_Flags::NUM_VALUES) {
-						for (size_t n = 0; n < (size_t)Num_parse_object_flags; n++) {
-							if (parse_obj_flag == Parse_object_flag_descriptions[n].def) {
-								desc = Parse_object_flag_descriptions[n].flag_desc;
+						for (size_t m = 0; m < (size_t)Num_parse_object_flags; m++) {
+							if (parse_obj_flag == Parse_object_flag_descriptions[m].def) {
+								desc = Parse_object_flag_descriptions[m].flag_desc;
 								break;
 							}
 						}
@@ -5185,9 +5183,9 @@ void sexp_tree::update_help(HTREEITEM h)
 				sexp_check_flag_array(n.text.c_str(), wing_flag);
 
 				if (wing_flag != Ship::Wing_Flags::NUM_VALUES) {
-					for (size_t n = 0; n < (size_t)Num_wing_flag_names; n++) {
-						if (wing_flag == Wing_flag_descriptions[n].flag) {
-							desc = Wing_flag_descriptions[n].flag_desc;
+					for (size_t m = 0; m < (size_t)Num_wing_flag_names; m++) {
+						if (wing_flag == Wing_flag_descriptions[m].flag) {
+							desc = Wing_flag_descriptions[m].flag_desc;
 							break;
 						}
 					}
@@ -5221,7 +5219,7 @@ void sexp_tree::update_help(HTREEITEM h)
 // stuff node indices into find[]
 int sexp_tree::find_text(const char *text, int *find)
 {
-	uint i;
+	int i;
 	int find_count;
 
 	// initialize find
@@ -5231,7 +5229,7 @@ int sexp_tree::find_text(const char *text, int *find)
 
 	find_count = 0;
 
-	for (i=0; i<m_model->size(); i++) {
+	for (i=0; i<(int)m_model->size(); i++) {
 		auto& n = m_model->node(i);
 		// only look at used and editable nodes
 		if ((n.flags & EDITABLE && (n.type != SEXPT_UNUSED))) {
@@ -5596,7 +5594,7 @@ void sexp_tree::delete_sexp_tree_variable(const char *var_name)
 	// store old item index
 	int old_item_index = item_index;
 
-	for (uint idx=0; idx<m_model->size(); idx++) {
+	for (int idx=0; idx<(int)m_model->size(); idx++) {
 		auto& n = m_model->node(idx);
 		if (n.type & SEXPT_VARIABLE) {
 			if ( strstr(n.text.c_str(), search_str) != NULL ) {
@@ -5648,7 +5646,7 @@ void sexp_tree::modify_sexp_tree_variable(const char *old_name, int sexp_var_ind
 	// Search string in sexp_tree nodes
 	sprintf(search_str, "%s(", old_name);
 
-	for (uint idx=0; idx<m_model->size(); idx++) {
+	for (int idx=0; idx<(int)m_model->size(); idx++) {
 		auto& n = m_model->node(idx);
 		if (n.type & SEXPT_VARIABLE) {
 			if ( strstr(n.text.c_str(), search_str) != NULL ) {
@@ -5696,7 +5694,7 @@ int sexp_tree::get_tree_name_to_sexp_variable_index(const char *tree_name)
 
 int sexp_tree::get_variable_count(const char *var_name)
 {
-	uint idx;
+	int idx;
 	int count = 0;
 	char compare_name[64];
 
@@ -5705,7 +5703,7 @@ int sexp_tree::get_variable_count(const char *var_name)
 	strcat_s(compare_name, "(");
 
 	// look for compare name
-	for (idx=0; idx<m_model->size(); idx++) {
+	for (idx=0; idx<(int)m_model->size(); idx++) {
 		auto& n = m_model->node(idx);
 		if (n.type & SEXPT_VARIABLE) {
 			if ( strstr(n.text.c_str(), compare_name) ) {
