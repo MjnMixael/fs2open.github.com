@@ -256,6 +256,9 @@ public:
 	// Convert a model SexpListItem chain into legacy sexp_list_item chain
 	static sexp_list_item* copy_from_model_list(const SexpListItem* src);
 
+	// Get the node index for a given tree item handle's actions
+	int nodeIndexForActions(HTREEITEM h) const;
+
 	// TODO delete these before merge!
 	void print_model_to_debug_output();
 	void print_model_recursive(int node_index, int indent);
