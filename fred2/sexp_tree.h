@@ -178,7 +178,7 @@ public:
 	int save_tree(int node = -1);
 	void load_tree(int index, const char *deflt = "true");
 	void add_operator(const char *op, HTREEITEM h = TVI_ROOT);
-	int add_data(const char *data, int type);
+	HTREEITEM add_data(const char* data, int type);
 	int add_variable_data(const char *data, int type);
 	int add_container_name(const char *container_name);
 	void add_container_data(const char *container_name);
@@ -232,6 +232,7 @@ public:
 	CEdit *mini_help_box;
 	CPoint m_pt;
 	OperatorComboBox m_operator_box;
+	SCP_unordered_map<int, HTREEITEM> m_modelToHandle;
 
 	void start_operator_edit(HTREEITEM h);
 	void end_operator_edit(bool confirm);
@@ -271,6 +272,7 @@ protected:
 	virtual void NodeAddPaste();
 
 	void update_item(HTREEITEM handle);
+	void update_item(int node);
 
 	int load_branch(int index, int parent);
 	int save_branch(int cur, int at_root = 0);
@@ -281,9 +283,6 @@ protected:
 	bool m_operator_popup_created;
 	int m_font_height;
 	int m_font_max_width;
-
-	SCP_vector<sexp_tree_item> tree_nodes;
-	int total_nodes;
 
 	HTREEITEM item_handle;
 	int root_item;
