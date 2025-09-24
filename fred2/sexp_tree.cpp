@@ -373,6 +373,7 @@ void sexp_tree::build_tree()
 		select_sexp_node = -1;
 
 	DeleteAllItems();
+	m_modelToHandle.clear();
 	add_sub_tree(0, TVI_ROOT);
 }
 
@@ -417,6 +418,7 @@ void sexp_tree::add_sub_tree(int node, HTREEITEM root)
 
 	HTREEITEM new_handle = insert(n.text.c_str(), bitmap, bitmap, root);
 	SetItemData(new_handle, node);
+	m_modelToHandle[node] = new_handle;
 
 	node = node2;
 	while (node != -1) {
@@ -443,6 +445,7 @@ void sexp_tree::add_sub_tree(int node, HTREEITEM root)
 			}
 
 			SetItemData(leaf_handle, node);
+			m_modelToHandle[node] = leaf_handle;
 		}
 
 		node = current_sibling_node.next;
@@ -481,6 +484,19 @@ void sexp_tree::update_item(HTREEITEM h)
 {
 	item_handle = h;
 	item_index = GetItemData(h);
+}
+
+void sexp_tree::update_item(int node)
+{
+	item_index = node;
+	if (m_modelToHandle.find(node) != m_modelToHandle.end()) {
+		item_handle = m_modelToHandle[node];
+	} else {
+		item_handle = nullptr;
+	}
+
+	// Not sure this should be allowed!!
+	Assertion(item_handle != nullptr, "update_item: node %d has no associated tree handle.", node);
 }
 
 // handler for right mouse button clicks.
@@ -1692,7 +1708,9 @@ void sexp_tree::edit_bg_color(HTREEITEM h)
 // OPF_NULL means no value (or a "void" value) is returned.  OPF_NONE means there shouldn't be any argument at this position at all.
 int sexp_tree::query_node_argument_type(int node) const
 {
-	int parent_node = tree_nodes[node].parent;
+	auto& n = m_model->node(node);
+
+	int parent_node = n.parent;
 	if (parent_node < 0) {		// parent nodes are -1 for a top-level operator like 'when'
 		return OPF_NULL;
 	}
@@ -1702,7 +1720,8 @@ int sexp_tree::query_node_argument_type(int node) const
 		return OPF_NONE;
 	}
 
-	int op_num = get_operator_index(tree_nodes[parent_node].text);
+	auto& parent_n = m_model->node(parent_node);
+	int op_num = get_operator_index(parent_n.text.c_str());
 	if (op_num < 0) {
 		return OPF_NONE;
 	}
@@ -1721,66 +1740,57 @@ int sexp_tree::end_label_edit(TVITEMA &item)
 	bool update_node = true; 
 	uint node;
 
-	for (node=0; node<tree_nodes.size(); node++)
-		if (tree_nodes[node].handle == h)
-			break;
+	int model_index = GetItemData(h);
 
-	if (node == tree_nodes.size()) {
+	if (model_index < 0 || model_index >= m_model->size()) {
 		if (m_mode == MODE_EVENTS) {
-			item_index = (int)GetItemData(h);
+			// This part interacts with the dialog, not the tree, so it remains.
 			Assert(Event_editor_dlg);
-			node = Event_editor_dlg->handler(ROOT_RENAMED, item_index, str.c_str());
+			Event_editor_dlg->handler(ROOT_RENAMED, model_index, str.c_str());
 			return 1;
-
-		} else
-			Int3();  // root labels shouldn't have been editable!
+		} else {
+			Int3(); // root labels shouldn't have been editable!
+		}
 	}
 
-	Assert(node < tree_nodes.size());
-	if (tree_nodes[node].type & SEXPT_OPERATOR) {
-		auto op = match_closest_operator(str, node);
-		if (op.empty()) return 0;	// Goober5000 - avoids crashing
+	auto& n = m_model->node(model_index);
 
-		// use the text of the operator we found
+	if (n.type & SEXPT_OPERATOR) {
+		// We need a model-aware version of match_closest_operator
+		auto op = match_closest_operator(str, model_index);
+		if (op.empty())
+			return 0;
+
 		SetItemText(h, op.c_str());
 		str = op;
 
-		item_index = node;
-		int op_num = get_operator_index(op.c_str()); 
-		if (op_num >= 0 ) {
+		int op_num = get_operator_index(op.c_str());
+		if (op_num >= 0) {
+			// This function will now modify the model and rebuild the tree
 			add_or_replace_operator(op_num, 1);
 		}
-		else {
-			update_node = false;
-		}
-		r = 0;
-	}
-	// gotta sidestep Goober5000's number hack and check entries are actually positive. 
-	else if (tree_nodes[node].type & SEXPT_NUMBER) {
-		if (query_node_argument_type(node) == OPF_POSITIVE) {
-			int val = atoi(str.c_str()); 
+
+		// Since add_or_replace_operator rebuilds the tree, we don't continue.
+		return 0;
+	} else if (n.type & SEXPT_NUMBER) {
+		// We need a model-aware version of query_node_argument_type
+		if (query_node_argument_type(model_index) == OPF_POSITIVE) {
+			int val = atoi(str.c_str());
 			if (val < 0) {
-				MessageBox("Can not enter a negative value", "Invalid Number", MB_ICONEXCLAMATION); 
+				MessageBox("Can not enter a negative value", "Invalid Number", MB_ICONEXCLAMATION);
 				update_node = false;
 			}
 		}
 	}
 
 	// Error checking would not hurt here
-	auto len = str.size();
-	if (len >= TOKEN_LENGTH)
-		len = TOKEN_LENGTH - 1;
-
 	if (update_node) {
 		*modified = 1;
-		strncpy(tree_nodes[node].text, str.c_str(), len);
-		tree_nodes[node].text[len] = 0;
-
-		// let's make sure we aren't introducing any invalid characters, per Mantis #2893
-		lcl_fred_replace_stuff(tree_nodes[node].text, TOKEN_LENGTH - 1);
-	}
-	else {
-		item.pszText = tree_nodes[node].text;
+		// This replaces the old strncpy into tree_nodes[node].text
+		m_model->setNode(model_index, n.type, str.c_str());
+	} else {
+		// If the edit was invalid, revert the text in the edit control
+		item.pszText = const_cast<char*>(n.text.c_str());
 		return 1;
 	}
 
@@ -1795,12 +1805,16 @@ const SCP_string &sexp_tree::match_closest_operator(const SCP_string &str, int n
 {
 	int z, op, arg_num, opf;
 
-	z = tree_nodes[node].parent;
+	auto& n = m_model->node(node);
+
+	z = n.parent;
 	if (z < 0) {
 		return str;
 	}
 
-	op = get_operator_index(tree_nodes[z].text);
+	auto& parent_n = m_model->node(z);
+
+	op = get_operator_index(parent_n.text.c_str());
 	if (op < 0)
 		return str;
 
@@ -1826,10 +1840,10 @@ void sexp_tree::start_operator_edit(HTREEITEM h)
 	// this can get out of sync if we add an event and then try to edit an operator in a different event
 	update_item(h);
 
+	auto& n = m_model->node(item_index);
+
 	// sanity checks
 	Assertion(item_handle == h, "Mismatch between item handle and the handle being edited!");
-	Assertion(item_index >= 0 && item_index < (int)tree_nodes.size() && !tree_nodes.empty(), "Unknown node being edited!");
-	Assertion(tree_nodes[item_index].handle == item_handle, "Mismatch between tree node and item handle!");
 
 	// we are editing an operator, so find out which type it should be
 	auto opf_type = (sexp_opf_t)query_node_argument_type(item_index);
@@ -1875,7 +1889,7 @@ void sexp_tree::start_operator_edit(HTREEITEM h)
 		m_operator_box.MoveWindow(&dropdown_rect);
 	}
 
-	m_operator_box.refresh_popup_operators(opf_type, tree_nodes[item_index].text);
+	m_operator_box.refresh_popup_operators(opf_type, n.text.c_str());
 
 	m_operator_box.ShowWindow(SW_SHOWNORMAL);
 	m_operator_box.SetFocus();
@@ -1900,8 +1914,8 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 	sexp_list_item *list, *ptr;
 	HTREEITEM h;
 
-	if ((item_index >= 0) && (item_index < total_nodes) && !tree_nodes.empty())
-		item_handle = tree_nodes[item_index].handle;
+	/*if ((item_index >= 0) && (item_index < total_nodes) && !tree_nodes.empty())
+		item_handle = tree_nodes[item_index].handle;*/ // This is redundant as item_handle is always set when item_index is set
 
 	id = LOWORD(wParam);
 	data = HIWORD(wParam);
@@ -2133,10 +2147,12 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 
 		int type = 0;
 
-		if (tree_nodes[item_index].type & SEXPT_CONTAINER_DATA) {
+		auto& n = m_model->node(item_index);
+
+		if (n.type & SEXPT_CONTAINER_DATA) {
 			list = get_container_multidim_modifiers(item_index);
 		} else {
-			op = get_operator_index(tree_nodes[item_index].text);
+			op = get_operator_index(n.text.c_str());
 			Assert(op >= 0);
 
 			type = query_operator_argument_type(op, Add_count);
@@ -2154,7 +2170,8 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 
 		Assert((SEXPT_TYPE(ptr->type) != SEXPT_OPERATOR) && (ptr->op < 0));
 		expand_operator(item_index);
-		node = add_data(ptr->text.c_str(), ptr->type);
+		auto n_handle = add_data(ptr->text.c_str(), ptr->type);
+		node = GetItemData(n_handle);
 		list->destroy();
 
 		// bolted-on ugly hack
@@ -2172,9 +2189,9 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 				UNREACHABLE("Unknown sexp variable type");
 			}
 
-			item_index = node;
+			update_item(node);
 			replace_variable_data(var_idx, (type | SEXPT_VARIABLE));
-			item_index = saved_item_index;
+			update_item(saved_item_index);
 		}
 
 		return 1;
@@ -2182,16 +2199,20 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 
 	if ((id >= ID_REPLACE_MENU) && (id < ID_REPLACE_MENU + 511)) {
 		Assert(item_index >= 0);
-		Assert(tree_nodes[item_index].parent >= 0);
 
-		if (tree_nodes[item_index].type & SEXPT_MODIFIER) {
-			list = get_container_modifiers(tree_nodes[item_index].parent);
+		auto& n = m_model->node(item_index);
+
+		Assert(n.parent >= 0);
+
+		if (n.type & SEXPT_MODIFIER) {
+			list = get_container_modifiers(n.parent);
 		} else {
-			op = get_operator_index(tree_nodes[tree_nodes[item_index].parent].text);
+			auto& parent_n = m_model->node(n.parent);
+			op = get_operator_index(parent_n.text.c_str());
 			Assert(op >= 0);
 
 			auto type = query_operator_argument_type(op, Replace_count); // check argument type at this position
-			list = get_listing_opf(type, tree_nodes[item_index].parent, Replace_count);
+			list = get_listing_opf(type, n.parent, Replace_count);
 		}
 		Assert(list);
 
@@ -2213,6 +2234,8 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 	if ((id >= ID_CONTAINER_NAME_MENU) && (id < ID_CONTAINER_NAME_MENU + 511)) {
 		Assertion(item_index >= 0, "Attempt to Replace Container Name with no node selected. Please report!");
 
+		auto& n = m_model->node(item_index);
+
 		const auto &containers = get_all_sexp_containers();
 		const int container_index = id - ID_CONTAINER_NAME_MENU;
 		Assertion((container_index >= 0) && (container_index < (int)containers.size()),
@@ -2222,7 +2245,7 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 		const int type = get_type(item_handle);
 		Assertion(type & SEXPT_STRING,
 			"Attempt to replace container name on non-string node %s with type %d. Please report!",
-			tree_nodes[item_index].text,
+			n.text.c_str(),
 			type);
 
 		replace_container_name(containers[container_index]);
@@ -2246,8 +2269,7 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 		type &= ~(SEXPT_VARIABLE | SEXPT_CONTAINER_NAME);
 		replace_container_data(containers[container_index], (type | SEXPT_CONTAINER_DATA), true, true, true);
 
-		HTREEITEM handle = tree_nodes[item_index].handle;
-		expand_branch(handle);
+		expand_branch(item_handle);
 	}
 
 	for (op=0; op<(int)Operators.size(); op++) {
@@ -2265,40 +2287,42 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 		if (id == (Operators[op].value | OP_INSERT_FLAG)) {
 			int flags;
 
-			z = tree_nodes[item_index].parent;
-			flags = tree_nodes[item_index].flags;
-			node = allocate_node(z, item_index);
-			set_node(node, (SEXPT_OPERATOR | SEXPT_VALID), Operators[op].text.c_str());
-			tree_nodes[node].flags = flags;
-			if (z >= 0)
-				h = tree_nodes[z].handle;
+			auto& n = m_model->node(item_index);
 
-			else {
-				h = GetParentItem(tree_nodes[item_index].handle);
-				if (m_mode == MODE_GOALS) {
-					Assert(Goal_editor_dlg);
-					Goal_editor_dlg->insert_handler(item_index, node);
-					SetItemData(h, node);
+			z = n.parent;
+			flags = n.flags;
+			node = m_model->allocateNode(z, item_index);
+			m_model->setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), Operators[op].text.c_str());
+			auto& new_n = m_model->node(node);
+			new_n.flags = flags;
 
-				} else if (m_mode == MODE_EVENTS) {
-					Assert(Event_editor_dlg);
-					Event_editor_dlg->insert_handler(item_index, node);
-					SetItemData(h, node);
-
-				} else if (m_mode == MODE_CAMPAIGN) {
-					Campaign_tree_formp->insert_handler(item_index, node);
-					SetItemData(h, node);
-
+			HTREEITEM parent_handle = GetParentItem(item_handle);
+			if (parent_handle == NULL) {
+				// This handles the special cases for top-level Goals/Events
+				if (m_mode == MODE_GOALS || m_mode == MODE_EVENTS || m_mode == MODE_CAMPAIGN) {
+					// This part remains the same as it interacts with the dialog, not the tree data.
+					if (m_mode == MODE_GOALS) {
+						Goal_editor_dlg->insert_handler(item_index, node);
+					} else if (m_mode == MODE_EVENTS) {
+						Event_editor_dlg->insert_handler(item_index, node);
+					} else if (m_mode == MODE_CAMPAIGN) {
+						Campaign_tree_formp->insert_handler(item_index, node);
+					}
 				} else {
-					h = TVI_ROOT;
+					parent_handle = TVI_ROOT;
 					root_item = node;
 				}
 			}
 
-			item_handle = tree_nodes[node].handle = insert(Operators[op].text.c_str(), BITMAP_OPERATOR, BITMAP_OPERATOR, h, tree_nodes[item_index].handle);
+			HTREEITEM insert_before_handle = item_handle;
+			HTREEITEM new_item_handle = insert(Operators[op].text.c_str(), BITMAP_OPERATOR, BITMAP_OPERATOR, parent_handle, TVI_FIRST);
+			SetItemData(new_item_handle, node);
+			m_modelToHandle[node] = new_item_handle;
+
+			update_item(node);
+
 			move_branch(item_index, node);
 
-			item_index = node;
 			for (i=1; i<Operators[op].min; i++)
 				add_default_operator(op, i);
 
@@ -2308,6 +2332,7 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 		}
 	}
 
+	auto& n = m_model->node(item_index);
 	switch (id) {
 		case ID_EDIT_COPY:
 			NodeCopy();
@@ -2322,7 +2347,7 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 			return 1;
 
 /*		case ID_SPLIT_LINE:
-			if ((tree_nodes[item_index].flags & OPERAND) && (tree_nodes[item_index].flags & EDITABLE))  // expandable?
+			if ((n.flags & OPERAND) && (n.flags & EDITABLE))  // expandable?
 				expand_operator(item_index);
 			else
 				merge_operator(item_index);
@@ -2350,45 +2375,45 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 
 		case ID_REPLACE_NUMBER:
 			expand_operator(item_index);
-			if (tree_nodes[item_index].type & SEXPT_MODIFIER) {
+			if (n.type & SEXPT_MODIFIER) {
 				replace_data("number", (SEXPT_NUMBER | SEXPT_MODIFIER | SEXPT_VALID));
 			} else {
 				replace_data("number", (SEXPT_NUMBER | SEXPT_VALID));
 			}
-			EditLabel(tree_nodes[item_index].handle);
+			EditLabel(item_handle);
 			return 1;
 	
 		case ID_REPLACE_STRING:
 			expand_operator(item_index);
-			if (tree_nodes[item_index].type & SEXPT_MODIFIER) {
+			if (n.type & SEXPT_MODIFIER) {
 				replace_data("string", (SEXPT_STRING | SEXPT_MODIFIER | SEXPT_VALID));
 			} else {
 				replace_data("string", (SEXPT_STRING | SEXPT_VALID));
 			}
-			EditLabel(tree_nodes[item_index].handle);
+			EditLabel(item_handle);
 			return 1;
 
 		case ID_ADD_STRING:	{
-			int theNode;
+			HTREEITEM theNode;
 
-			if (tree_nodes[item_index].type & SEXPT_CONTAINER_DATA) {
+			if (n.type & SEXPT_CONTAINER_DATA) {
 				theNode = add_data("string", (SEXPT_STRING | SEXPT_MODIFIER | SEXPT_VALID));
 			} else {
 				theNode = add_data("string", (SEXPT_STRING | SEXPT_VALID));
 			}
-			EditLabel(tree_nodes[theNode].handle);
+			EditLabel(theNode);
 			return 1;
 		}
 
 		case ID_ADD_NUMBER:	{
-			int theNode;
+			HTREEITEM theNode;
 
-			if (tree_nodes[item_index].type & SEXPT_CONTAINER_DATA) {
+			if (n.type & SEXPT_CONTAINER_DATA) {
 				theNode = add_data("number", (SEXPT_NUMBER | SEXPT_MODIFIER | SEXPT_VALID));
 			} else {
 				theNode = add_data("number", (SEXPT_NUMBER | SEXPT_VALID));
 			}
-			EditLabel(tree_nodes[theNode].handle);
+			EditLabel(theNode);
 			return 1;
 		}
 
@@ -2478,7 +2503,7 @@ void sexp_tree::NodeDelete()
 	HTREEITEM h_parent;
 
 	if ((m_mode & ST_ROOT_DELETABLE) && (item_index == -1)) {
-		item_index = (int)GetItemData(item_handle);
+		item_index = GetItemData(item_handle);
 		if (m_mode == MODE_GOALS) {
 			Assert(Goal_editor_dlg);
 			theNode = Goal_editor_dlg->handler(ROOT_DELETED, item_index);
@@ -2496,37 +2521,38 @@ void sexp_tree::NodeDelete()
 			theNode = Campaign_tree_formp->handler(ROOT_DELETED, item_index);
 		}
 
-		Assert(theNode >= 0);
-		free_node2(theNode);
+		m_model->freeNode(theNode);
 		DeleteItem(item_handle);
 		*modified = 1;
 		return;
 	}
 
-	Assert(item_index >= 0);
+	auto& n = m_model->node(item_index);
 	h_parent = GetParentItem(item_handle);
-	parent = tree_nodes[item_index].parent;
+	parent = n.parent;
 
 	// can't delete the root node
 	if (parent < 0)
 		return;
 
-	Assert(parent != -1 && tree_nodes[parent].handle == h_parent);
-	free_node(item_index);
+	Assert(parent != -1 && item_handle == h_parent);
+	m_model->freeNode(item_index);
 	DeleteItem(item_handle);
 
-	theNode = tree_nodes[parent].child;
-/*			if (node != -1 && tree_nodes[node].next == -1 && tree_nodes[node].child == -1) {
-		sprintf(buf, "%s %s", tree_nodes[parent].text, tree_nodes[node].text);
+	auto& parent_n = m_model->node(parent);
+	theNode = n.child;
+/*			if (node != -1 && n.next == -1 && n.child == -1) {
+		sprintf(buf, "%s %s", parent_n.text.c_str(), n.text.c_str());
 		SetItem(h_parent, TVIF_TEXT, buf, 0, 0, 0, 0, 0);
-		tree_nodes[parent].flags = OPERAND | EDITABLE;
-		tree_nodes[node].flags = COMBINED;
-		DeleteItem(tree_nodes[node].handle);
+		parent_n.flags = OPERAND | EDITABLE;
+		n.flags = COMBINED;
+		DeleteItem(tree_nodes[node].handle???);
 	}*/
 
 	*modified = 1;
 }
 
+// TODO move the clipboard into the model
 void sexp_tree::NodeCopy()
 {
 	if (item_index < 0)
@@ -2557,15 +2583,18 @@ void sexp_tree::NodeReplacePaste()
 		"Attempt to use container name %s from SEXP clipboard. Please report!",
 		Sexp_nodes[Sexp_clipboard].text);
 
+	auto& n = m_model->node(item_index);
+
 	if (Sexp_nodes[Sexp_clipboard].subtype == SEXP_ATOM_OPERATOR) {
 		expand_operator(item_index);
 		replace_operator(CTEXT(Sexp_clipboard));
 		if (Sexp_nodes[Sexp_clipboard].rest != -1) {
 			load_branch(Sexp_nodes[Sexp_clipboard].rest, item_index);
-			i = tree_nodes[item_index].child;
+			i = n.child;
 			while (i != -1) {
-				add_sub_tree(i, tree_nodes[item_index].handle);
-				i = tree_nodes[i].next;
+				add_sub_tree(i, item_handle);
+				auto& child_n = m_model->node(i);
+				i = child_n.next;
 			}
 		}
 
@@ -2578,14 +2607,15 @@ void sexp_tree::NodeReplacePaste()
 		const auto &container = *p_container;
 		// this should always be true, but just in case
 		const bool has_modifiers = (Sexp_nodes[Sexp_clipboard].first != -1);
-		int new_type = tree_nodes[item_index].type & ~(SEXPT_VARIABLE | SEXPT_CONTAINER_NAME) | SEXPT_CONTAINER_DATA;
+		int new_type = n.type & ~(SEXPT_VARIABLE | SEXPT_CONTAINER_NAME) | SEXPT_CONTAINER_DATA;
 		replace_container_data(container, new_type, false, true, !has_modifiers);
 		if (has_modifiers) {
 			load_branch(Sexp_nodes[Sexp_clipboard].first, item_index);
-			i = tree_nodes[item_index].child;
+			i = n.child;
 			while (i != -1) {
-				add_sub_tree(i, tree_nodes[item_index].handle);
-				i = tree_nodes[i].next;
+				add_sub_tree(i, item_handle);
+				auto& child_n = m_model->node(i);
+				i = child_n.next;
 			}
 		} else {
 			add_default_modifier(container);
@@ -2635,15 +2665,18 @@ void sexp_tree::NodeAddPaste()
 		"Attempt to use container name %s from SEXP clipboard. Please report!",
 		Sexp_nodes[Sexp_clipboard].text);
 
+	auto& n = m_model->node(item_index);
+
 	if (Sexp_nodes[Sexp_clipboard].subtype == SEXP_ATOM_OPERATOR) {
 		expand_operator(item_index);
 		add_operator(CTEXT(Sexp_clipboard));
 		if (Sexp_nodes[Sexp_clipboard].rest != -1) {
 			load_branch(Sexp_nodes[Sexp_clipboard].rest, item_index);
-			i = tree_nodes[item_index].child;
+			i = n.child;
 			while (i != -1) {
-				add_sub_tree(i, tree_nodes[item_index].handle);
-				i = tree_nodes[i].next;
+				add_sub_tree(i, item_handle);
+				auto& child_n = m_model->node(i);
+				i = child_n.next;
 			}
 		}
 
@@ -2653,10 +2686,11 @@ void sexp_tree::NodeAddPaste()
 		const int modifier_node = Sexp_nodes[Sexp_clipboard].first;
 		if (modifier_node != -1) {
 			load_branch(modifier_node, item_index);
-			i = tree_nodes[item_index].child;
+			i = n.child;
 			while (i != -1) {
-				add_sub_tree(i, tree_nodes[item_index].handle);
-				i = tree_nodes[i].next;
+				add_sub_tree(i, item_handle);
+				auto& child_n = m_model->node(i);
+				i = child_n.next;
 			}
 		} else {
 			// this shouldn't happen, but just in case
@@ -2688,21 +2722,23 @@ void sexp_tree::add_or_replace_operator(int op, int replace_flag)
 {
 	int i, op_index, op2;
 
+	auto& n = m_model->node(item_index);
+
 	op_index = item_index;
 	if (replace_flag) {
-		if (tree_nodes[item_index].type & SEXPT_OPERATOR) {  // are both operators?
-			op2 = get_operator_index(tree_nodes[item_index].text);
+		if (n.type & SEXPT_OPERATOR) {  // are both operators?
+			op2 = get_operator_index(n.text.c_str());
 			Assert(op2 >= 0);
-			i = count_args(tree_nodes[item_index].child);
+			i = m_model->countArgs(n.child);
 			if ((i >= Operators[op].min) && (i <= Operators[op].max)) {  // are old num args valid?
 				while (i--)
 					if (query_operator_argument_type(op2, i) != query_operator_argument_type(op, i))  // does each arg match expected type?
 						break;
 
 				if (i < 0) {  // everything is ok, so we can keep old arguments with new operator
-					set_node(item_index, (SEXPT_OPERATOR | SEXPT_VALID), Operators[op].text.c_str());
-					SetItemText(tree_nodes[item_index].handle, Operators[op].text.c_str());
-					tree_nodes[item_index].flags = OPERAND;
+					m_model->setNode(item_index, (SEXPT_OPERATOR | SEXPT_VALID), Operators[op].text.c_str());
+					SetItemText(item_handle, Operators[op].text.c_str());
+					n.flags = OPERAND;
 					return;
 				}
 			}
@@ -3644,22 +3680,26 @@ void sexp_tree::expand_operator(int node)
 	int data;
 	HTREEITEM h;
 
-	if (tree_nodes[node].flags & COMBINED) {
-		node = tree_nodes[node].parent;
-		Assert((tree_nodes[node].flags & OPERAND) && (tree_nodes[node].flags & EDITABLE));
+	auto& n = m_model->node(node);
+
+	if (n.flags & COMBINED) {
+		node = n.parent;
+		auto& parent_n = m_model->node(node);
+		Assert((parent_n.flags & OPERAND) && (parent_n.flags & EDITABLE));
 	}
 
-	if ((tree_nodes[node].flags & OPERAND) && (tree_nodes[node].flags & EDITABLE)) {  // expandable?
-		Assert(tree_nodes[node].type & SEXPT_OPERATOR);
-		h = tree_nodes[node].handle;
-		data = tree_nodes[node].child;
-		Assert(data != -1 && tree_nodes[data].next == -1 && tree_nodes[data].child == -1);
+	if ((n.flags & OPERAND) && (n.flags & EDITABLE)) {  // expandable?
+		Assert(n.type & SEXPT_OPERATOR);
+		h = m_modelToHandle[node]; // How to get this handle?
+		data = n.child;
+		auto& data_n = m_model->node(data);
+		Assert(data != -1 && data_n.next == -1 && data_n.child == -1);
 
-		SetItem(h, TVIF_TEXT, tree_nodes[node].text, 0, 0, 0, 0, 0);
-		tree_nodes[node].flags = OPERAND;
+		SetItem(h, TVIF_TEXT, n.text.c_str(), 0, 0, 0, 0, 0);
+		n.flags = OPERAND;
 		int bmap = get_data_image(data);
-		tree_nodes[data].handle = insert(tree_nodes[data].text, bmap, bmap, h);
-		tree_nodes[data].flags = EDITABLE;
+		auto handle = insert(data_n.text.c_str(), bmap, bmap, h);
+		data_n.flags = EDITABLE;
 		Expand(h, TVE_EXPAND);
 	}
 }
@@ -3698,18 +3738,21 @@ void sexp_tree::merge_operator(int node)
 }
 
 // add a data node under operator pointed to by item_index
-int sexp_tree::add_data(const char *data, int type)
+HTREEITEM sexp_tree::add_data(const char* data, int type)
 {
 	int node;
 
 	expand_operator(item_index);
-	node = allocate_node(item_index);
-	set_node(node, type, data);
+	node = m_model->allocateNode(item_index);
+	m_model->setNode(node, type, data);
+
+	auto& n = m_model->node(node);
+
 	int bmap = get_data_image(node);
-	tree_nodes[node].handle = insert(data, bmap, bmap, tree_nodes[item_index].handle);
-	tree_nodes[node].flags = EDITABLE;
+	HTREEITEM handle = insert(data, bmap, bmap, item_handle);
+	n.flags = EDITABLE;
 	*modified = 1;
-	return node;
+	return handle;
 }
 
 // add a (variable) data node under operator pointed to by item_index
@@ -3720,10 +3763,11 @@ int sexp_tree::add_variable_data(const char *data, int type)
 	Assert(type & SEXPT_VARIABLE);
 
 	expand_operator(item_index);
-	node = allocate_node(item_index);
-	set_node(node, type, data);
-	tree_nodes[node].handle = insert(data, BITMAP_VARIABLE, BITMAP_VARIABLE, tree_nodes[item_index].handle);
-	tree_nodes[node].flags = NOT_EDITABLE;
+	node = m_model->allocateNode(item_index);
+	m_model->setNode(node, type, data);
+	auto& n = m_model->node(node);
+	auto handle = insert(data, BITMAP_VARIABLE, BITMAP_VARIABLE, item_handle);
+	n.flags = NOT_EDITABLE;
 	*modified = 1;
 	return node;
 }
@@ -3737,11 +3781,11 @@ int sexp_tree::add_container_name(const char *container_name)
 		container_name);
 
 	expand_operator(item_index);
-	int node = allocate_node(item_index);
-	set_node(node, (SEXPT_VALID | SEXPT_CONTAINER_NAME | SEXPT_STRING), container_name);
-	tree_nodes[node].handle =
-		insert(container_name, BITMAP_CONTAINER_NAME, BITMAP_CONTAINER_NAME, tree_nodes[item_index].handle);
-	tree_nodes[node].flags = NOT_EDITABLE;
+	int node = m_model->allocateNode(item_index);
+	m_model->setNode(node, (SEXPT_VALID | SEXPT_CONTAINER_NAME | SEXPT_STRING), container_name);
+	auto handle = insert(container_name, BITMAP_CONTAINER_NAME, BITMAP_CONTAINER_NAME, item_handle);
+	auto& n = m_model->node(node);
+	n.flags = NOT_EDITABLE;
 	*modified = 1;
 	return node;
 }
@@ -3753,12 +3797,12 @@ void sexp_tree::add_container_data(const char *container_name)
 	Assertion(get_sexp_container(container_name) != nullptr,
 		"Attempt to add unknown container %s. Please report!",
 		container_name);
-	const int node = allocate_node(item_index);
-	set_node(node, (SEXPT_VALID | SEXPT_CONTAINER_DATA | SEXPT_STRING), container_name);
-	tree_nodes[node].handle =
-		insert(container_name, BITMAP_CONTAINER_DATA, BITMAP_CONTAINER_DATA, tree_nodes[item_index].handle);
-	tree_nodes[node].flags = NOT_EDITABLE;
-	item_index = node;
+	const int node = m_model->allocateNode(item_index);
+	m_model->setNode(node, (SEXPT_VALID | SEXPT_CONTAINER_DATA | SEXPT_STRING), container_name);
+	auto handle =insert(container_name, BITMAP_CONTAINER_DATA, BITMAP_CONTAINER_DATA, item_handle);
+	auto& n = m_model->node(node);
+	n.flags = NOT_EDITABLE;
+	update_item(node);
 	*modified = 1;
 }
 
@@ -3769,19 +3813,21 @@ void sexp_tree::add_operator(const char *op, HTREEITEM h)
 	int node;
 	
 	if (item_index == -1) {
-		node = allocate_node(-1);
-		set_node(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
-		item_handle = tree_nodes[node].handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, h);
+		node = m_model->allocateNode(-1);
+		m_model->setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
+		item_handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, h);
 
 	} else {
 		expand_operator(item_index);
-		node = allocate_node(item_index);
-		set_node(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
-		item_handle = tree_nodes[node].handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, tree_nodes[item_index].handle);
+		node = m_model->allocateNode(item_index);
+		m_model->setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
+		item_handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, item_handle);
 	}
 
-	tree_nodes[node].flags = OPERAND;
-	item_index = node;
+	auto& n = m_model->node(node);
+
+	n.flags = OPERAND;
+	update_item(node);
 	*modified = 1;
 }
 
@@ -3984,10 +4030,10 @@ int sexp_tree::node_error(int node, const char *msg, int *bypass)
 	if (bypass)
 		*bypass = 1;
 
-	item_index = node;
-	item_handle = tree_nodes[node].handle;
-	if (tree_nodes[node].flags & COMBINED)
-		item_handle = tree_nodes[tree_nodes[node].parent].handle;
+	update_item(node);
+	auto& n = m_model->node(node);
+	if (n.flags & COMBINED)
+		item_handle = m_modelToHandle[n.parent];
 
 	ensure_visible(node);
 	SelectItem(item_handle);
@@ -4001,18 +4047,18 @@ int sexp_tree::node_error(int node, const char *msg, int *bypass)
 void sexp_tree::hilite_item(int node)
 {
 	ensure_visible(node);
-	SelectItem(tree_nodes[node].handle);
+	SelectItem(m_modelToHandle[node]);
 }
 
 // because the MFC function EnsureVisible() doesn't do what it says it does, I wrote this.
 void sexp_tree::ensure_visible(int node)
 {
-	Assert(node != -1);
-	if (tree_nodes[node].parent != -1)
-		ensure_visible(tree_nodes[node].parent);  // expand all parents first
+	auto& n = m_model->node(node);
+	if (n.parent != -1)
+		ensure_visible(n.parent);  // expand all parents first
 
-	if (tree_nodes[node].child != -1)  // expandable?
-		Expand(tree_nodes[node].handle, TVE_EXPAND);  // expand this item
+	if (n.child != -1)  // expandable?
+		Expand(m_modelToHandle[node], TVE_EXPAND); // expand this item
 }
 
 void sexp_tree::link_modified(int *ptr)
@@ -4020,9 +4066,9 @@ void sexp_tree::link_modified(int *ptr)
 	modified = ptr;
 }
 
-void get_variable_default_text_from_variable_text(char *text, char *default_text)
+void get_variable_default_text_from_variable_text(const char *text, char *default_text)
 {
-	char *start;
+	const char *start;
 
 	// find '('
 	start = strstr(text, "(");
@@ -4050,19 +4096,21 @@ int sexp_tree::get_modify_variable_type(int parent)
 	int sexp_var_index = -1;
 
 	Assert(parent >= 0);
-	int op_const = get_operator_const(tree_nodes[parent].text);
+	auto& n = m_model->node(parent);
+	int op_const = get_operator_const(n.text.c_str());
 
-	Assert(tree_nodes[parent].child >= 0);
-	char *node_text = tree_nodes[tree_nodes[parent].child].text;
+	Assert(n.child >= 0);
+	auto& child_n = m_model->node(n.child);
+	auto node_text = child_n.text;
 
 	if ( op_const == OP_MODIFY_VARIABLE ) {
-		sexp_var_index = get_tree_name_to_sexp_variable_index(node_text);
+		sexp_var_index = get_tree_name_to_sexp_variable_index(node_text.c_str());
 	}
 	else if ( op_const == OP_SET_VARIABLE_BY_INDEX ) {
-		if (can_construe_as_integer(node_text)) {
-			sexp_var_index = atoi(node_text);
+		if (can_construe_as_integer(node_text.c_str())) {
+			sexp_var_index = atoi(node_text.c_str());
 		}
-		else if (strchr(node_text, '(') && strchr(node_text, ')')) {
+		else if (strchr(node_text.c_str(), '(') && strchr(node_text.c_str(), ')')) {
 			// the variable index is itself a variable!
 			return OPF_AMBIGUOUS;
 		}
@@ -4099,15 +4147,17 @@ void sexp_tree::verify_and_fix_arguments(int node)
 		return;
 
 	here_count++;
-	op_index = get_operator_index(tree_nodes[node].text);
+	SexpNode& n = m_model->node(node);
+	op_index = get_operator_index(n.text.c_str());
 	if (op_index < 0)
 		return;
 
 	tmp = item_index;
 
 	arg_num = 0;
-	item_index = tree_nodes[node].child;
+	update_item(n.child);
 	while (item_index >= 0) {
+		n = m_model->node(item_index);
 		// get listing of valid argument values for node item_index
 		type = query_operator_argument_type(op_index, arg_num);
 		// special case for modify-variable
@@ -4115,36 +4165,36 @@ void sexp_tree::verify_and_fix_arguments(int node)
 			is_variable_arg = true;
 			type = get_modify_variable_type(node);
 		}
-		if (tree_nodes[item_index].type & SEXPT_CONTAINER_DATA) {
+		if (n.type & SEXPT_CONTAINER_DATA) {
 			// we don't care if the data matches
 			// TODO: revisit if/when strictly typed data becomes supported
-			item_index = tree_nodes[item_index].next;
+			update_item(n.next);
 			arg_num++;
 			continue;
 		}
 		if (query_restricted_opf_range(type)) {
 			list = get_listing_opf(type, node, arg_num);
 			if (!list && (arg_num >= Operators[op_index].min)) {
-				free_node(item_index, 1);
-				item_index = tmp;
+				m_model->freeNode(item_index, 1);
+				update_item(tmp);
 				here_count--;
 				return;
 			}
 
 			if (list) {
-				// get a pointer to tree_nodes[item_index].text for normal value
+				// get a pointer to n.text for normal value
 				// or default variable value if variable
-				char *text_ptr;
+				SCP_string text_ptr;
 				char default_variable_text[TOKEN_LENGTH];
-				if (tree_nodes[item_index].type & SEXPT_VARIABLE) {
+				if (n.type & SEXPT_VARIABLE) {
 					// special case for SEXPs which can modify a variable 
 					if (type == OPF_VARIABLE_NAME) {
 						// make text_ptr to start - before '('
-						get_variable_name_from_sexp_tree_node_text(tree_nodes[item_index].text, default_variable_text);
+						get_variable_name_from_sexp_tree_node_text(n.text.c_str(), default_variable_text);
 						text_ptr = default_variable_text;
 					} else {
 						// only the type needs checking for variables. It's up the to the FREDder to ensure the value is valid
-						get_variable_name_from_sexp_tree_node_text(tree_nodes[item_index].text, default_variable_text);						
+						get_variable_name_from_sexp_tree_node_text(n.text.c_str(), default_variable_text);						
 						int sexp_var_index = get_index_sexp_variable_name(default_variable_text);
 						bool types_match = false; 
 						Assert(sexp_var_index != -1);
@@ -4165,25 +4215,25 @@ void sexp_tree::verify_and_fix_arguments(int node)
 						
 						if (types_match) {
 							// on to the next argument
-							item_index = tree_nodes[item_index].next;
+							update_item(n.next);
 							arg_num++;
 							continue; 
 						}
 						else {
 							// shouldn't really be getting here unless someone has been hacking the mission in a text editor
-							get_variable_default_text_from_variable_text(tree_nodes[item_index].text, default_variable_text);
+							get_variable_default_text_from_variable_text(n.text.c_str(), default_variable_text);
 							text_ptr = default_variable_text;
 						}
 					}
 				} else {
-					text_ptr = tree_nodes[item_index].text;
+					text_ptr = n.text;
 				}
 
 				ptr = list;
 				while (ptr) {
 					// make sure text is not NULL
 					// check that proposed text is valid for operator
-					if ( !stricmp(ptr->text.c_str(), text_ptr) )
+					if ( !stricmp(ptr->text.c_str(), text_ptr.c_str()) )
 						break;
 
 					ptr = ptr->next;
@@ -4200,11 +4250,11 @@ void sexp_tree::verify_and_fix_arguments(int node)
 			} else {
 				bool invalid = false;
 				if (type == OPF_AMBIGUOUS) {
-					if (SEXPT_TYPE(tree_nodes[item_index].type) == SEXPT_OPERATOR) {
+					if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR) {
 						invalid = true;
 					}
 				} else {
-					if (SEXPT_TYPE(tree_nodes[item_index].type) != SEXPT_OPERATOR) {
+					if (SEXPT_TYPE(n.type) != SEXPT_OPERATOR) {
 						invalid = true;
 					}
 				}
@@ -4214,7 +4264,7 @@ void sexp_tree::verify_and_fix_arguments(int node)
 				}
 			}
 
-			if (tree_nodes[item_index].type & SEXPT_OPERATOR)
+			if (n.type & SEXPT_OPERATOR)
 				verify_and_fix_arguments(item_index);
 			
 		}
@@ -4225,13 +4275,13 @@ void sexp_tree::verify_and_fix_arguments(int node)
 			) {
 			switch (type) {
 				case OPF_AMBIGUOUS:
-					tree_nodes[item_index].type |= SEXPT_STRING;
-					tree_nodes[item_index].type &= ~SEXPT_NUMBER;
+					n.type |= SEXPT_STRING;
+					n.type &= ~SEXPT_NUMBER;
 					break; 
 
 				case OPF_NUMBER:
-					tree_nodes[item_index].type |= SEXPT_NUMBER; 
-					tree_nodes[item_index].type &= ~SEXPT_STRING;
+					n.type |= SEXPT_NUMBER; 
+					n.type &= ~SEXPT_STRING;
 					break;
 
 				default:
@@ -4239,11 +4289,11 @@ void sexp_tree::verify_and_fix_arguments(int node)
 			}
 		}
 
-		item_index = tree_nodes[item_index].next;
+		update_item(n.next);
 		arg_num++;
 	}
 
-	item_index = tmp;
+	update_item(tmp);
 	here_count--;
 }
 
@@ -4252,23 +4302,25 @@ void sexp_tree::replace_data(const char *data, int type)
 	int node;
 	HTREEITEM h;
 
-	node = tree_nodes[item_index].child;
-	if (node != -1)
-		free_node2(node);
+	auto& n = m_model->node(item_index);
 
-	tree_nodes[item_index].child = -1;
-	h = tree_nodes[item_index].handle;
+	node = n.child;
+	if (node != -1)
+		m_model->freeNode(node);
+
+	n.child = -1;
+	h = item_handle;
 	while (ItemHasChildren(h))
 		DeleteItem(GetChildItem(h));
 
-	set_node(item_index, type, data);
+	m_model->setNode(item_index, type, data);
 	SetItemText(h, data);
 	int bmap = get_data_image(item_index);
 	SetItemImage(h, bmap, bmap);
-	tree_nodes[item_index].flags = EDITABLE;
+	n.flags = EDITABLE;
 
 	// check remaining data beyond replaced data for validity (in case any of it is dependent on data just replaced)
-	verify_and_fix_arguments(tree_nodes[item_index].parent);
+	verify_and_fix_arguments(n.parent);
 
 	*modified = 1;
 	update_help(GetSelectedItem());
@@ -4284,12 +4336,14 @@ void sexp_tree::replace_variable_data(int var_idx, int type)
 
 	Assert(type & SEXPT_VARIABLE);
 
-	node = tree_nodes[item_index].child;
-	if (node != -1)
-		free_node2(node);
+	auto& n = m_model->node(item_index);
 
-	tree_nodes[item_index].child = -1;
-	h = tree_nodes[item_index].handle;
+	node = n.child;
+	if (node != -1)
+		m_model->freeNode(node);
+
+	n.child = -1;
+	h = item_handle;
 	while (ItemHasChildren(h)) {
 		DeleteItem(GetChildItem(h));
 	}
@@ -4297,13 +4351,13 @@ void sexp_tree::replace_variable_data(int var_idx, int type)
 	// Assemble name
 	sprintf(buf, "%s(%s)", Sexp_variables[var_idx].variable_name, Sexp_variables[var_idx].text);
 
-	set_node(item_index, type, buf);
+	m_model->setNode(item_index, type, buf);
 	SetItemText(h, buf);
 	SetItemImage(h, BITMAP_VARIABLE, BITMAP_VARIABLE);
-	tree_nodes[item_index].flags = NOT_EDITABLE;
+	n.flags = NOT_EDITABLE;
 
 	// check remaining data beyond replaced data for validity (in case any of it is dependent on data just replaced)
-	verify_and_fix_arguments(tree_nodes[item_index].parent);
+	verify_and_fix_arguments(n.parent);
 
 	*modified = 1;
 	update_help(GetSelectedItem());
@@ -4311,22 +4365,24 @@ void sexp_tree::replace_variable_data(int var_idx, int type)
 
 void sexp_tree::replace_container_name(const sexp_container &container)
 {
-	HTREEITEM h = tree_nodes[item_index].handle;
+	HTREEITEM h = item_handle;
+
+	auto& n = m_model->node(item_index);
 
 	// clean up any child nodes
-	int node = tree_nodes[item_index].child;
+	int node = n.child;
 	if (node != -1)
-		free_node2(node);
-	tree_nodes[item_index].child = -1;
-	h = tree_nodes[item_index].handle;
+		m_model->freeNode(node);
+	n.child = -1;
+
 	while (ItemHasChildren(h)) {
 		DeleteItem(GetChildItem(h));
 	}
 
-	set_node(item_index, (SEXPT_VALID | SEXPT_STRING | SEXPT_CONTAINER_NAME), container.container_name.c_str());
+	m_model->setNode(item_index, (SEXPT_VALID | SEXPT_STRING | SEXPT_CONTAINER_NAME), container.container_name.c_str());
 	SetItemImage(h, BITMAP_CONTAINER_NAME, BITMAP_CONTAINER_NAME);
 	SetItemText(h, container.container_name.c_str());
-	tree_nodes[item_index].flags = NOT_EDITABLE;
+	n.flags = NOT_EDITABLE;
 
 	*modified = 1;
 	update_help(GetSelectedItem());
@@ -4338,16 +4394,18 @@ void sexp_tree::replace_container_data(const sexp_container &container,
 	bool delete_child_nodes,
 	bool set_default_modifier)
 {
-	HTREEITEM h = tree_nodes[item_index].handle;
+	HTREEITEM h = item_handle;
+
+	auto& n = m_model->node(item_index);
 
 	// if this is already a container of the right type, don't alter the child nodes
-	if (test_child_nodes && (tree_nodes[item_index].type & SEXPT_CONTAINER_DATA)) {
+	if (test_child_nodes && (n.type & SEXPT_CONTAINER_DATA)) {
 		if (container.is_list()) {
-			const auto *p_old_container = get_sexp_container(tree_nodes[item_index].text);
+			const auto *p_old_container = get_sexp_container(n.text.c_str());
 
 			Assertion(p_old_container != nullptr,
 				"Attempt to Replace Container Data of unknown previous container %s. Please report!",
-				tree_nodes[item_index].text);
+				n.text.c_str());
 
 			if (p_old_container->is_list()) {
 				// TODO: check for strictly typed data here
@@ -4361,20 +4419,20 @@ void sexp_tree::replace_container_data(const sexp_container &container,
 	}
 
 	if (delete_child_nodes) {
-		int node = tree_nodes[item_index].child;
+		int node = n.child;
 		if (node != -1)
-			free_node2(node);
+			m_model->freeNode(node);
 
-		tree_nodes[item_index].child = -1;
+		n.child = -1;
 		while (ItemHasChildren(h)) {
 			DeleteItem(GetChildItem(h));
 		}
 	}
 
-	set_node(item_index, type, container.container_name.c_str());
+	m_model->setNode(item_index, type, container.container_name.c_str());
 	SetItemImage(h, BITMAP_CONTAINER_DATA, BITMAP_CONTAINER_DATA);
 	SetItemText(h, container.container_name.c_str());
-	tree_nodes[item_index].flags = NOT_EDITABLE;
+	n.flags = NOT_EDITABLE;
 
 	if (set_default_modifier) {
 		add_default_modifier(container);
@@ -4417,18 +4475,20 @@ void sexp_tree::replace_operator(const char *op)
 	int node;
 	HTREEITEM h;
 
-	node = tree_nodes[item_index].child;
-	if (node != -1)
-		free_node2(node);
+	auto& n = m_model->node(item_index);
 
-	tree_nodes[item_index].child = -1;
-	h = tree_nodes[item_index].handle;
+	node = n.child;
+	if (node != -1)
+		m_model->freeNode(node);
+
+	n.child = -1;
+	h = item_handle;
 	while (ItemHasChildren(h))
 		DeleteItem(GetChildItem(h));
 
-	set_node(item_index, (SEXPT_OPERATOR | SEXPT_VALID), op);
+	m_model->setNode(item_index, (SEXPT_OPERATOR | SEXPT_VALID), op);
 	SetItemText(h, op);
-	tree_nodes[item_index].flags = OPERAND;
+	n.flags = OPERAND;
 	*modified = 1;
 	update_help(GetSelectedItem());
 
@@ -4466,67 +4526,76 @@ void sexp_tree::replace_operator(const char *op)
 // The expansion state is preserved, and node handles are updated.
 void sexp_tree::move_branch(int source, int parent)
 {
-	int node;
-
 	// if no source, skip everything
 	if (source != -1) {
-		node = tree_nodes[source].parent;
-		if (node != -1) {
-			if (tree_nodes[node].child == source)
-				tree_nodes[node].child = tree_nodes[source].next;
-			else {
-				node = tree_nodes[node].child;
-				while (tree_nodes[node].next != source) {
-					node = tree_nodes[node].next;
-					Assert(node != -1);
+		// --- 1. Detach the source node from its old parent in the model ---
+		SexpNode& source_n = m_model->node(source);
+		int old_parent_index = source_n.parent;
+
+		if (old_parent_index != -1) {
+			SexpNode& old_parent_n = m_model->node(old_parent_index);
+			if (old_parent_n.child == source) {
+				// It was the first child, so just point the parent to the next sibling.
+				old_parent_n.child = source_n.next;
+			} else {
+				// Find the sibling right before the source node.
+				int prev_sibling_index = old_parent_n.child;
+				while (prev_sibling_index != -1 && m_model->node(prev_sibling_index).next != source) {
+					prev_sibling_index = m_model->node(prev_sibling_index).next;
 				}
 
-				tree_nodes[node].next = tree_nodes[source].next;
+				if (prev_sibling_index != -1) {
+					// Splice the source node out of the list.
+					m_model->node(prev_sibling_index).next = source_n.next;
+				}
 			}
 		}
 
-		tree_nodes[source].parent = parent;
-		tree_nodes[source].next = -1;
-		if (parent) {
-			if (tree_nodes[parent].child == -1)
-				tree_nodes[parent].child = source;
-			else {
-				node = tree_nodes[parent].child;
-				while (tree_nodes[node].next != -1)
-					node = tree_nodes[node].next;
+		// --- 2. Attach the source node to its new parent in the model ---
+		source_n.parent = parent;
+		source_n.next = -1; // It's now the last sibling in its new list.
 
-				tree_nodes[node].next = source;
+		if (parent != -1) { // -1 means it's becoming a root, so no attachment needed.
+			SexpNode& new_parent_n = m_model->node(parent);
+			if (new_parent_n.child == -1) {
+				// New parent has no children, so this becomes the first.
+				new_parent_n.child = source;
+			} else {
+				// Find the last child of the new parent and append the source node.
+				int tail_index = new_parent_n.child;
+				while (m_model->node(tail_index).next != -1) {
+					tail_index = m_model->node(tail_index).next;
+				}
+				m_model->node(tail_index).next = source;
 			}
+		}
 
-			move_branch(tree_nodes[source].handle, tree_nodes[parent].handle);
+		// --- 3. Now, surgically modify the UI to match the model change ---
+		HTREEITEM source_handle = m_modelToHandle[source];
+		HTREEITEM parent_handle = (parent != -1) ? m_modelToHandle[parent] : TVI_ROOT;
 
-		} else
-			move_branch(tree_nodes[source].handle);
+		// This recursive call to the other move_branch will handle the UI surgery.
+		move_branch(source_handle, parent_handle);
 	}
 }
 
 HTREEITEM sexp_tree::move_branch(HTREEITEM source, HTREEITEM parent, HTREEITEM after)
 {
-	uint i;
 	int image1, image2;
 	HTREEITEM h = 0, child, next;
 
 	if (source) {
-		for (i=0; i<tree_nodes.size(); i++)
-			if (tree_nodes[i].handle == source)
-				break;
+		// The 'for' loop to find the handle is gone, as we already have 'source'.
+		// The 'if/else' is also gone because we don't need to write to tree_nodes anymore.
+		GetItemImage(source, image1, image2);
+		h = insert(GetItemText(source), image1, image2, parent, after);
 
-		if (i < tree_nodes.size()) {
-			GetItemImage(source, image1, image2);
-			h = insert(GetItemText(source), image1, image2, parent, after);
-			tree_nodes[i].handle = h;
+		// This part is correct. You transfer the model index to the new UI item.
+		int node_data = (int)GetItemData(source);
+		SetItemData(h, node_data);
+		m_modelToHandle[node_data] = h;
 
-		} else {
-			GetItemImage(source, image1, image2);
-  			h = insert(GetItemText(source), image1, image2, parent, after);
-		}
-
-		SetItemData(h, GetItemData(source));
+		// The rest of the function remains the same.
 		child = GetChildItem(source);
 		while (child) {
 			next = GetNextSiblingItem(child);
@@ -4545,26 +4614,23 @@ HTREEITEM sexp_tree::move_branch(HTREEITEM source, HTREEITEM parent, HTREEITEM a
 
 void sexp_tree::copy_branch(HTREEITEM source, HTREEITEM parent, HTREEITEM after)
 {
-	uint i;
+	// NOTE: This function does not modify the underlying SexpTreeModel.
+	// It only copies the UI items, which will cause the UI and data to become desynchronized.
+
 	int image1, image2;
 	HTREEITEM h, child;
 
 	if (source) {
-		for (i=0; i<tree_nodes.size(); i++)
-			if (tree_nodes[i].handle == source)
-				break;
+		// The 'for' loop and 'if/else' block are removed. We already have the source handle.
+		GetItemImage(source, image1, image2);
+		h = insert(GetItemText(source), image1, image2, parent, after);
 
-		if (i < tree_nodes.size()) {
-			GetItemImage(source, image1, image2);
-			h = insert(GetItemText(source), image1, image2, parent, after);
-			tree_nodes[i].handle = h;
+		// This part correctly transfers the model index to the new UI item.
+		int node_data = (int)GetItemData(source);
+		SetItemData(h, node_data);
+		m_modelToHandle[node_data] = h;
 
-		} else {
-			GetItemImage(source, image1, image2);
-  			h = insert(GetItemText(source), image1, image2, parent, after);
-		}
-
-		SetItemData(h, GetItemData(source));
+		// The recursive call to copy children remains.
 		child = GetChildItem(source);
 		while (child) {
 			copy_branch(child, h);
@@ -4839,7 +4905,7 @@ void sexp_tree::OnDestroy()
 
 HTREEITEM sexp_tree::handle(int node)
 {
-	return tree_nodes[node].handle;
+	return m_modelToHandle[node];
 }
 
 const char *sexp_tree::help(int code)
@@ -4861,19 +4927,13 @@ const char *sexp_tree::help(int code)
 // get type of item clicked on
 int sexp_tree::get_type(HTREEITEM h)
 {
-	uint i;
+	int model_index = GetItemData(h);
 
-	// get index into sexp_tree 
-	for (i=0; i<tree_nodes.size(); i++)
-		if (tree_nodes[i].handle == h)
-			break;
-
-	if ( (i >= tree_nodes.size()) ) {
-		// Int3();	// This would be the root of the tree  -- ie, event name
+	if (h == NULL || model_index < 0 || model_index >= m_model->size()) {
 		return -1;
 	}
 
-	return tree_nodes[i].type;
+	return m_model->node(model_index).type;
 }
 
 
@@ -4900,9 +4960,7 @@ void sexp_tree::update_help(HTREEITEM h)
 	if (mini_help_box && !::IsWindow(mini_help_box->m_hWnd))
 		return;
 
-	for (i=0; i<(int)tree_nodes.size(); i++)
-		if (tree_nodes[i].handle == h)
-			break;
+	i = (int)GetItemData(h);
 
 	int thisIndex = event_annotation_lookup(h);
 	SCP_string nodeComment;
@@ -4915,7 +4973,9 @@ void sexp_tree::update_help(HTREEITEM h)
 		nodeComment = "";
 	}
 
-	if ((i >= (int)tree_nodes.size()) || !tree_nodes[i].type) {
+	auto& n = m_model->node(i);
+
+	if ((i >= (int)m_model->size()) || !n.type) {
 		help_box->SetWindowText(nodeComment.c_str());
 		if (mini_help_box)
 			mini_help_box->SetWindowText("");
@@ -4927,25 +4987,26 @@ void sexp_tree::update_help(HTREEITEM h)
 	if (!nodeComment.empty())
 		nodeComment.insert(0, "\r\n\r\n");
 
-	if (SEXPT_TYPE(tree_nodes[i].type) == SEXPT_OPERATOR)
+	if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR)
 	{
 		if (mini_help_box)
 			mini_help_box->SetWindowText("");
 	}
 	else
 	{
-		z = tree_nodes[i].parent;
+		z = n.parent;
 		if (z < 0) {
-			Warning(LOCATION, "Sexp data \"%s\" has no parent!", tree_nodes[i].text);
+			Warning(LOCATION, "Sexp data \"%s\" has no parent!", n.text);
 			return;
 		}
 
-		code = get_operator_const(tree_nodes[z].text);
-		index = get_operator_index(tree_nodes[z].text);
+		auto& parent_n = m_model->node(z);
+		code = get_operator_const(parent_n.text.c_str());
+		index = get_operator_index(parent_n.text.c_str());
 		sibling_place = get_sibling_place(i) + 1;	//We want it to start at 1
 
 		//*****Minihelp box
-		if((SEXPT_TYPE(tree_nodes[i].type) == SEXPT_NUMBER) || (SEXPT_TYPE(tree_nodes[i].type) == SEXPT_STRING) && sibling_place > 0)
+		if((SEXPT_TYPE(n.type) == SEXPT_NUMBER) || (SEXPT_TYPE(n.type) == SEXPT_STRING) && sibling_place > 0)
 		{
 			char buffer[10240] = {""};
 
@@ -5026,9 +5087,10 @@ void sexp_tree::update_help(HTREEITEM h)
 
 		if (index >= 0) {
 			c = 0;
-			j = tree_nodes[z].child;
+			j = parent_n.child;
 			while ((j >= 0) && (j != i)) {
-				j = tree_nodes[j].next;
+				auto& sibling_n = m_model->node(j);
+				j = sibling_n.next;
 				c++;
 			}
 
@@ -5036,7 +5098,7 @@ void sexp_tree::update_help(HTREEITEM h)
 			// If the node is a message then display it
 			if (query_operator_argument_type(index, c) == OPF_MESSAGE) {
 				for (j=0; j<Num_messages; j++)
-					if (!stricmp(Messages[j].name, tree_nodes[i].text)) {
+					if (!stricmp(Messages[j].name, n.text.c_str())) {
 						text.Format("Message Text:\r\n%s%s", Messages[j].message, nodeComment.c_str());
 						help_box->SetWindowText((LPCSTR)text);
 						return;
@@ -5051,7 +5113,7 @@ void sexp_tree::update_help(HTREEITEM h)
 				AI::AI_Flags ai_flag = AI::AI_Flags::NUM_VALUES;
 				SCP_string desc;
 
-				sexp_check_flag_arrays(tree_nodes[i].text, object_flag, ship_flag, parse_obj_flag, ai_flag);
+				sexp_check_flag_arrays(n.text.c_str(), object_flag, ship_flag, parse_obj_flag, ai_flag);
 
 				// Ship flags are pulled from multiple categories, so we have to search them all. Ew.
 				if (object_flag != Object::Object_Flags::NUM_VALUES){
@@ -5107,7 +5169,7 @@ void sexp_tree::update_help(HTREEITEM h)
 				Ship::Wing_Flags wing_flag = Ship::Wing_Flags::NUM_VALUES;
 				SCP_string desc;
 
-				sexp_check_flag_array(tree_nodes[i].text, wing_flag);
+				sexp_check_flag_array(n.text.c_str(), wing_flag);
 
 				if (wing_flag != Ship::Wing_Flags::NUM_VALUES) {
 					for (size_t n = 0; n < (size_t)Num_wing_flag_names; n++) {
@@ -5131,7 +5193,7 @@ void sexp_tree::update_help(HTREEITEM h)
 		i = z;
 	}
 
-	code = get_operator_const(tree_nodes[i].text);
+	code = get_operator_const(n.text.c_str());
 	auto str = help(code);
 	if (!str) {
 		text.Format("No help available%s", nodeComment.c_str());
@@ -5156,11 +5218,12 @@ int sexp_tree::find_text(const char *text, int *find)
 
 	find_count = 0;
 
-	for (i=0; i<tree_nodes.size(); i++) {
+	for (i=0; i<m_model->size(); i++) {
+		auto& n = m_model->node(i);
 		// only look at used and editable nodes
-		if ((tree_nodes[i].flags & EDITABLE && (tree_nodes[i].type != SEXPT_UNUSED))) {
+		if ((n.flags & EDITABLE && (n.type != SEXPT_UNUSED))) {
 			// find the text
-			if ( !stricmp(tree_nodes[i].text, text)  ) {
+			if (!stricmp(n.text.c_str(), text)) {
 				find[find_count++] = i;
 
 				// don't exceed max count - array bounds
@@ -5282,7 +5345,8 @@ int sexp_tree::find_argument_number(int parent_node, int child_node) const
 
 	// code moved/adapted from match_closest_operator
 	arg_num = 0;
-	current_node = tree_nodes[parent_node].child;
+	auto& n = m_model->node(parent_node);
+	current_node = n.child;
 	while (current_node >= 0)
 	{
 		// found?
@@ -5291,7 +5355,8 @@ int sexp_tree::find_argument_number(int parent_node, int child_node) const
 
 		// continue iterating
 		arg_num++;
-		current_node = tree_nodes[current_node].next;
+		auto& current_n = m_model->node(current_node);
+		current_node = n.next;
 	}	
 
 	// not found
@@ -5310,17 +5375,20 @@ int sexp_tree::find_ancestral_argument_number(int parent_op, int child_node) con
 	int current_node;
 
 	current_node = child_node;
-	parent_node = tree_nodes[current_node].parent;
+	auto& n = m_model->node(current_node);
+	parent_node = n.parent;
 
 	while (parent_node >= 0)
 	{
+		auto& parent_n = m_model->node(parent_node);
 		// check if the parent operator is the one we're looking for
-		if (get_operator_const(tree_nodes[parent_node].text) == parent_op)
+		if (get_operator_const(parent_n.text.c_str()) == parent_op)
 			return find_argument_number(parent_node, current_node);
 
 		// continue iterating up the tree
 		current_node = parent_node;
-		parent_node = tree_nodes[current_node].parent;
+		n = m_model->node(current_node);
+		parent_node = n.parent;
 	}
 
 	// not found
@@ -5357,14 +5425,17 @@ int sexp_tree::get_data_image(int node)
 sexp_list_item *sexp_tree::get_container_modifiers(int con_data_node) const
 {
 	Assertion(con_data_node != -1, "Attempt to get modifiers for invalid container node. Please report!");
-	Assertion(tree_nodes[con_data_node].type & SEXPT_CONTAINER_DATA,
-		"Attempt to get modifiers for non-container data node %s. Please report!",
-		tree_nodes[con_data_node].text);
 
-	const auto *p_container = get_sexp_container(tree_nodes[con_data_node].text);
+	auto& n = m_model->node(con_data_node);
+
+	Assertion(n.type & SEXPT_CONTAINER_DATA,
+		"Attempt to get modifiers for non-container data node %s. Please report!",
+		n.text.c_str());
+
+	const auto *p_container = get_sexp_container(n.text.c_str());
 	Assertion(p_container,
 		"Attempt to get modifiers for unknown container %s. Please report!",
-		tree_nodes[con_data_node].text);
+		n.text.c_str());
 	const auto &container = *p_container;
 
 	sexp_list_item head;
@@ -5393,30 +5464,30 @@ sexp_list_item *sexp_tree::get_container_modifiers(int con_data_node) const
 
 int sexp_tree::get_sibling_place(int node)
 {
-	if(tree_nodes[node].parent < 0 || tree_nodes[node].parent > (int)tree_nodes.size())
+	// 1. Get the parent of the node from the model.
+	int parent_index = m_model->parentOf(node);
+
+	// 2. If there's no parent, it's a root node and has no sibling place.
+	if (parent_index < 0) {
 		return -1;
-	
-	sexp_tree_item *myparent = &tree_nodes[tree_nodes[node].parent];
-
-	if(myparent->child == -1)
-		return -1;
-
-	sexp_tree_item *mysibling = &tree_nodes[myparent->child];
-
-	int count = 0;
-	while(true)
-	{
-		if(mysibling == &tree_nodes[node])
-			break;
-
-		if(mysibling->next == -1)
-			break;
-
-		count++;
-		mysibling = &tree_nodes[mysibling->next];
 	}
 
-	return count;
+	int count = 0;
+	// 3. Start with the first child of the parent.
+	int current_sibling_index = m_model->firstChild(parent_index);
+
+	// 4. Walk the sibling list until we find our node.
+	while (current_sibling_index != -1) {
+		if (current_sibling_index == node) {
+			return count; // Found it, return the position.
+		}
+
+		count++;
+		current_sibling_index = m_model->nextSibling(current_sibling_index);
+	}
+
+	// This case should ideally not be reached if the tree is consistent.
+	return -1;
 }
 
 sexp_list_item *sexp_tree::get_list_container_modifiers() const
@@ -5435,19 +5506,20 @@ sexp_list_item *sexp_tree::get_map_container_modifiers(int con_data_node) const
 {
 	sexp_list_item head;
 
-	Assertion(tree_nodes[con_data_node].type & SEXPT_CONTAINER_DATA,
-		"Found map modifier for non-container data node %s. Please report!",
-		tree_nodes[con_data_node].text);
+	auto& n = m_model->node(con_data_node);
 
-	const auto *p_container = get_sexp_container(tree_nodes[con_data_node].text);
+	Assertion(n.type & SEXPT_CONTAINER_DATA,
+		"Found map modifier for non-container data node %s. Please report!",
+		n.text.c_str());
+
+	const auto *p_container = get_sexp_container(n.text.c_str());
 	Assertion(p_container != nullptr,
-		"Found map modifier for unknown container %s. Please report!",
-		tree_nodes[con_data_node].text);
+		"Found map modifier for unknown container %s. Please report!", n.text.c_str());
 
 	const auto &container = *p_container;
 	Assertion(container.is_map(),
 		"Found map modifier for non-map container %s with type %d. Please report!",
-		tree_nodes[con_data_node].text,
+		n.text.c_str(),
 		(int)container.type);
 
 	int type = SEXPT_VALID | SEXPT_MODIFIER;
@@ -5470,11 +5542,13 @@ sexp_list_item *sexp_tree::get_map_container_modifiers(int con_data_node) const
 // the value could be either string or number, checked in-mission
 sexp_list_item *sexp_tree::get_container_multidim_modifiers(int con_data_node) const
 {
+	auto& n = m_model->node(con_data_node);
+	
 	Assertion(con_data_node != -1,
 		"Attempt to get multidimensional modifiers for invalid container node. Please report!");
-	Assertion(tree_nodes[con_data_node].type & SEXPT_CONTAINER_DATA,
+	Assertion(n.type & SEXPT_CONTAINER_DATA,
 		"Attempt to get multidimensional modifiers for non-container data node %s. Please report!",
-		tree_nodes[con_data_node].text);
+		n.text.c_str());
 
 	sexp_list_item head;
 
@@ -5513,32 +5587,33 @@ void sexp_tree::delete_sexp_tree_variable(const char *var_name)
 	// store old item index
 	int old_item_index = item_index;
 
-	for (uint idx=0; idx<tree_nodes.size(); idx++) {
-		if (tree_nodes[idx].type & SEXPT_VARIABLE) {
-			if ( strstr(tree_nodes[idx].text, search_str) != NULL ) {
+	for (uint idx=0; idx<m_model->size(); idx++) {
+		auto& n = m_model->node(idx);
+		if (n.type & SEXPT_VARIABLE) {
+			if ( strstr(n.text.c_str(), search_str) != NULL ) {
 
 				// check type is number or string
-				Assert( (tree_nodes[idx].type & SEXPT_NUMBER) || (tree_nodes[idx].type & SEXPT_STRING) );
+				Assert( (n.type & SEXPT_NUMBER) || (n.type & SEXPT_STRING) );
 
 				// reset type as not variable
-				int type = tree_nodes[idx].type &= ~SEXPT_VARIABLE;
+				int type = n.type &= ~SEXPT_VARIABLE;
 
 				// reset text
-				if (tree_nodes[idx].type & SEXPT_NUMBER) {
+				if (n.type & SEXPT_NUMBER) {
 					strcpy_s(replace_text, "number");
 				} else {
 					strcpy_s(replace_text, "string");
 				}
 
 				// set item_index and replace data
-				item_index = idx;
+				update_item(idx);
 				replace_data(replace_text, type);
 			}
 		}
 	}
 
 	// restore item_index
-	item_index = old_item_index;
+	update_item(old_item_index);
 }
 
 
@@ -5564,11 +5639,12 @@ void sexp_tree::modify_sexp_tree_variable(const char *old_name, int sexp_var_ind
 	// Search string in sexp_tree nodes
 	sprintf(search_str, "%s(", old_name);
 
-	for (uint idx=0; idx<tree_nodes.size(); idx++) {
-		if (tree_nodes[idx].type & SEXPT_VARIABLE) {
-			if ( strstr(tree_nodes[idx].text, search_str) != NULL ) {
+	for (uint idx=0; idx<m_model->size(); idx++) {
+		auto& n = m_model->node(idx);
+		if (n.type & SEXPT_VARIABLE) {
+			if ( strstr(n.text.c_str(), search_str) != NULL ) {
 				// temp set item_index
-				item_index = idx;
+				update_item(item_index);
 
 				// replace variable data
 				replace_variable_data(sexp_var_index, (type | SEXPT_VARIABLE));
@@ -5577,7 +5653,7 @@ void sexp_tree::modify_sexp_tree_variable(const char *old_name, int sexp_var_ind
 	}
 
 	// restore item_index
-	item_index = old_item_index;
+	update_item(old_item_index);
 }
 
 
@@ -5585,9 +5661,10 @@ void sexp_tree::modify_sexp_tree_variable(const char *old_name, int sexp_var_ind
 int sexp_tree::get_item_index_to_var_index()
 {
 	// check valid item index and node is a variable
-	if ( (item_index > 0) && (tree_nodes[item_index].type & SEXPT_VARIABLE) ) {
+	auto& n = m_model->node(item_index);
+	if ( (item_index > 0) && (n.type & SEXPT_VARIABLE) ) {
 
-		return get_tree_name_to_sexp_variable_index(tree_nodes[item_index].text);
+		return get_tree_name_to_sexp_variable_index(n.text.c_str());
 	} else {
 		return -1;
 	}
@@ -5619,9 +5696,10 @@ int sexp_tree::get_variable_count(const char *var_name)
 	strcat_s(compare_name, "(");
 
 	// look for compare name
-	for (idx=0; idx<tree_nodes.size(); idx++) {
-		if (tree_nodes[idx].type & SEXPT_VARIABLE) {
-			if ( strstr(tree_nodes[idx].text, compare_name) ) {
+	for (idx=0; idx<m_model->size(); idx++) {
+		auto& n = m_model->node(idx);
+		if (n.type & SEXPT_VARIABLE) {
+			if ( strstr(n.text.c_str(), compare_name) ) {
 				count++;
 			}
 		}
@@ -5667,7 +5745,7 @@ int sexp_tree::get_container_usage_count(const SCP_string &container_name) const
 {
 	int count = 0;
 
-	for (int node_idx = 0; node_idx < (int)tree_nodes.size(); node_idx++) {
+	for (int node_idx = 0; node_idx < (int)m_model->size(); node_idx++) {
 		if (is_matching_container_node(node_idx, container_name)) {
 			count++;
 		}
@@ -5690,10 +5768,11 @@ bool sexp_tree::rename_container_nodes(const SCP_string &old_name, const SCP_str
 
 	bool renamed_anything = false;
 
-	for (int node_idx = 0; node_idx < (int)tree_nodes.size(); node_idx++) {
+	for (int node_idx = 0; node_idx < (int)m_model->size(); node_idx++) {
+		auto& n = m_model->node(node_idx);
 		if (is_matching_container_node(node_idx, old_name)) {
-			strcpy_s(tree_nodes[node_idx].text, new_name.c_str());
-			SetItemText(tree_nodes[node_idx].handle, new_name.c_str());
+			n.text = new_name;
+			SetItemText(m_modelToHandle[node_idx], new_name.c_str());
 			renamed_anything = true;
 		}
 	}
@@ -5703,18 +5782,21 @@ bool sexp_tree::rename_container_nodes(const SCP_string &old_name, const SCP_str
 
 bool sexp_tree::is_matching_container_node(int node, const SCP_string &container_name) const
 {
-	return (tree_nodes[node].type & SEXPT_VALID) &&
-		   (tree_nodes[node].type & (SEXPT_CONTAINER_NAME | SEXPT_CONTAINER_DATA)) &&
-		   !stricmp(tree_nodes[node].text, container_name.c_str());
+	auto& n = m_model->node(node);
+	return (n.type & SEXPT_VALID) &&
+		   (n.type & (SEXPT_CONTAINER_NAME | SEXPT_CONTAINER_DATA)) &&
+		   !stricmp(n.text.c_str(), container_name.c_str());
 }
 
 bool sexp_tree::is_container_name_argument(int node) const
 {
-	Assertion(node >= 0 && node < (int)tree_nodes.size(),
+	Assertion(node >= 0 && node < (int)m_model->size(),
 		"Attempt to check if out-of-range node %d is a container name argument. Please report!",
 		node);
 
-	if (tree_nodes[node].parent == -1) {
+	auto& n = m_model->node(node);
+
+	if (n.parent == -1) {
 		return false;
 	}
 
