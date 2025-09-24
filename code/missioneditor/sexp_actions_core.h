@@ -15,7 +15,7 @@ enum class SexpContextGroup {
 };
 
 // Atomic actions the UI can render as menu items or toolbar buttons
-enum class SexpActionId {
+enum class SexpActionId : int {
 	// node
 	EditText,
 	DeleteNode,
@@ -39,6 +39,8 @@ enum class SexpActionId {
 	// arguments
 	AddArgument,
 	RemoveArgument,
+
+	Num_sexp_actions // keep last
 };
 
 // Payload for actions that need parameters
