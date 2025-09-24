@@ -16,6 +16,7 @@
 #include "mission/missiongoals.h"
 #include "mission/missionmessage.h"
 
+#include "missioneditor/sexp_tree_core.h"
 
 class event_sexp_tree : public sexp_tree
 {
@@ -46,7 +47,7 @@ void event_annotation_swap_image(event_sexp_tree *tree, HTREEITEM handle, event_
 /////////////////////////////////////////////////////////////////////////////
 // event_editor dialog
 
-class event_editor : public CDialog
+class event_editor : public CDialog, public ISexpEnvironment
 {
 // Construction
 public:
@@ -118,6 +119,8 @@ public:
 	protected:
 	virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
 	//}}AFX_VIRTUAL
+
+	virtual void overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind,  int node_index, bool& is_enabled) const override;
 
 // Implementation
 protected:
