@@ -46,8 +46,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// 2) Synthetic vs real: compute flags and then flip enables.
 	const auto kind = (node_index < 0) ? SexpNodeKind::SyntheticRoot : SexpNodeKind::RealNode;
 
-	bool deletable = false; // will be computed (real) or adjusted by env (synthetic)
-	bool editable = false;   // only true for real editable nodes
 	bool is_root = false;
 	bool is_op = false;
 	bool has_prev = false;
@@ -59,27 +57,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 
 		is_root = (n.parent < 0);
 		is_op = (SEXPT_TYPE(n.type) == SEXPT_OPERATOR);
-		editable = (n.flags & EDITABLE) != 0;
-
-		// Compute can_delete from parent's min-args rule (non-root only).
-		if (!is_root) {
-			const int parent_idx = n.parent;
-			const auto& parent_node = model->_nodes[parent_idx];
-			if (SEXPT_TYPE(parent_node.type) == SEXPT_OPERATOR) {
-				int op_index = -1;
-				for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
-					if (Operators[i].text == parent_node.text) {
-						op_index = i;
-						break;
-					}
-				}
-				if (op_index != -1) {
-					const int min_args = Operators[op_index].min;
-					const int current_arg_count = model->countArgs(parent_node.child);
-					deletable = (current_arg_count > min_args);
-				}
-			}
-		}
 
 		// Siblings for MoveUp/MoveDown
 		has_next = (n.next >= 0);
@@ -129,10 +106,7 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		}
 	}
 
-	bool can_edit_text = editable;
-	bool can_delete = deletable;
 	bool can_duplicate_subtree = kind == SexpNodeKind::RealNode;
-	bool can_cut = deletable;
 	bool can_copy = kind == SexpNodeKind::RealNode;
 	bool can_paste = kind == SexpNodeKind::RealNode;
 
@@ -145,10 +119,7 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// 3) Let the environment tweak enables (e.g., allow Delete on synthetic root).
 	// TODO make this work for all actions, not just DeleteNode and Cut
 	if (model->environment()) {
-		model->environment()->overrideNodeActionEnabled(SexpActionId::EditText, kind, node_index, can_edit_text);
-		model->environment()->overrideNodeActionEnabled(SexpActionId::DeleteNode, kind, node_index, can_delete);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::DuplicateSubtree, kind, node_index, can_duplicate_subtree);
-		model->environment()->overrideNodeActionEnabled(SexpActionId::Cut, kind, node_index, can_cut);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::Copy, kind, node_index, can_copy);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::Paste, kind, node_index, can_paste);
 
@@ -160,10 +131,10 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	}
 
 	// 4) Flip enables for Node/Structure groups now that we have final flags.
-	setEnabled(SexpActionId::EditText, can_edit_text);
-	setEnabled(SexpActionId::DeleteNode, can_delete);
+	setEnabled(SexpActionId::EditText, canEditNode(kind, node_index));
+	setEnabled(SexpActionId::DeleteNode, canDeleteNode(kind, node_index));
 	setEnabled(SexpActionId::DuplicateSubtree, can_duplicate_subtree); // allow duplicate on real nodes
-	setEnabled(SexpActionId::Cut, can_cut);
+	setEnabled(SexpActionId::Cut, canCutNode(kind, node_index));
 	setEnabled(SexpActionId::Copy, can_copy);
 	setEnabled(SexpActionId::Paste, can_paste); // TODO gate later via env clipboard
 
@@ -182,6 +153,9 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 	Assertion(SCP_vector_inbounds(model->_nodes, node_index), "performAction: bad node");
 	switch (id) {
 	// Node
+	case SexpActionId::EditText:
+		return editText(node_index, ""); // TODO create a way to pass text to this maybe through SexpActionParam
+
 	case SexpActionId::DeleteNode:
 		return deleteNode(node_index);
 
@@ -224,6 +198,124 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 	default:
 		return false;
 	}
+}
+
+bool SexpActionsHandler::canEditNode(SexpNodeKind kind, int node_index) const
+{
+	bool can_edit = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canEditNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// Base rule: plain numbers/strings editable; everything else not
+		if ((SEXPT_TYPE(n.type) == SEXPT_NUMBER) || (SEXPT_TYPE(n.type) == SEXPT_STRING)) {
+			can_edit = true;
+		} else {
+			can_edit = false; // operators, variables, container name/data aren't free-edited
+		}
+
+		// Special-case: container parent
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+			if (parent.type & SEXPT_CONTAINER_DATA) {
+				// Determine container kind (list vs map) from the parent’s text
+				const auto* p_container = get_sexp_container(parent.text.c_str());
+				if (p_container && p_container->is_list()) {
+					// First child (modifier) for list containers is NOT editable
+					if (node_index == parent.child) {
+						can_edit = false;
+					}
+				}
+			}
+		}
+	} else {
+		can_edit = false;
+	}
+
+	// Environment can tweak (e.g., allow editing the synthetic root label)
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::EditText, kind, node_index, can_edit);
+	}
+
+	return can_edit;
+}
+
+bool SexpActionsHandler::canDeleteNode(SexpNodeKind kind, int node_index) const
+{
+	bool can_delete = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canDeleteNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// Top-level operator at the real root (e.g., "when") is not deletable
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+
+			// Parent is operator so use the required arg rule
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int op_index = -1;
+				for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
+					if (Operators[i].text == parent.text) {
+						op_index = i;
+						break;
+					}
+				}
+				if (op_index != -1) {
+					const int min_required = std::max(0, Operators[op_index].min);
+
+					// Find argc and this nodes 0 based position
+					int argc = 0, arg_pos = -1;
+					for (int c = parent.child; c >= 0; c = model->_nodes[c].next) {
+						if (c == node_index)
+							arg_pos = argc;
+						++argc;
+					}
+
+					if (arg_pos >= 0) {
+						// Deletable iff parent has > min args AND this arg is not among required ones
+						can_delete = (argc > min_required) && (arg_pos >= min_required);
+					}
+				}
+			}
+			// Parent is container so first child is protected but everything else is deletable
+			else if (parent.type & SEXPT_CONTAINER_DATA) {
+				const int first_child = parent.child;
+				can_delete = (first_child >= 0) && (node_index != first_child);
+			}
+		}
+	}
+
+	// Allow environment override
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::DeleteNode, kind, node_index, can_delete);
+	}
+
+	return can_delete;
+}
+
+bool SexpActionsHandler::canCutNode(SexpNodeKind kind, int node_index) const
+{
+	bool can_cut = canDeleteNode(kind, node_index);
+
+	// Allow environment override cut separetly from delete
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::Cut, kind, node_index, can_cut);
+	}
+
+	return can_cut;
+}
+
+bool SexpActionsHandler::editText(int node_index, const char* new_text)
+{
+	/* auto& nodes = model->_nodes;
+	if (!SCP_vector_inbounds(nodes, node_index))
+		return false;
+	if ((nodes[node_index].flags & EDITABLE) == 0)
+		return false;
+	nodes[node_index].text = new_text;*/
+	return true;
 }
 
 bool SexpActionsHandler::deleteNode(int node_index)

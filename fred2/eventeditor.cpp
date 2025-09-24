@@ -1997,6 +1997,7 @@ HTREEITEM event_editor::traverse_path(const event_annotation &ea)
 void event_editor::overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind, int node_index, bool& is_enabled) const
 {
 	switch (id) {
+		case SexpActionId::EditText:
 		case SexpActionId::DeleteNode:
 			if (kind == SexpNodeKind::SyntheticRoot && node_index < 0) {
 				is_enabled = true;

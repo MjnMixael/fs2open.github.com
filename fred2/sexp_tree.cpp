@@ -184,13 +184,15 @@ int sexp_tree::load_branch(int index, int parent)
 
 	while (index != -1) {
 		int additional_flags = SEXPT_VALID;
-		// ... (your existing flags logic is fine) ...
 
 		Assert(Sexp_nodes[index].type != SEXP_NOT_USED);
+
 		if (Sexp_nodes[index].subtype == SEXP_ATOM_LIST) {
+			// Flatten list: load its contents under the same parent
 			load_branch(Sexp_nodes[index].first, parent);
 
 		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_OPERATOR) {
+			// Create the operator node under 'parent'
 			cur = m_model->allocateNode(parent);
 			if ((index == select_sexp_node) && !flag) {
 				select_sexp_node = cur;
@@ -198,15 +200,13 @@ int sexp_tree::load_branch(int index, int parent)
 			}
 			m_model->setNode(cur, (SEXPT_OPERATOR | additional_flags), Sexp_nodes[index].text);
 
-			// Process the operator's children using the new node 'cur' as their parent.
+			// Recurse into the operator's argument chain, parented to this operator
 			load_branch(Sexp_nodes[index].rest, cur);
 
-			// ==> BUG FIX: DO NOT return here. <==
-			// We must continue the while loop to process siblings of this operator.
-			// return cur; // <== DELETE THIS LINE
+			// IMPORTANT: Stop at the end of this operator expression
+			return cur; // <-- this prevents re-walking args as siblings
 
 		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_NUMBER) {
-			// ... (rest of your function is the same) ...
 			cur = m_model->allocateNode(parent);
 			if (Sexp_nodes[index].type & SEXP_FLAG_VARIABLE) {
 				get_combined_variable_name(combined_var_name, Sexp_nodes[index].text);
@@ -215,18 +215,48 @@ int sexp_tree::load_branch(int index, int parent)
 				m_model->setNode(cur, (SEXPT_NUMBER | additional_flags), Sexp_nodes[index].text);
 			}
 
-		} // ... etc. for other types ...
+		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_STRING) {
+			cur = m_model->allocateNode(parent);
+			if (Sexp_nodes[index].type & SEXP_FLAG_VARIABLE) {
+				get_combined_variable_name(combined_var_name, Sexp_nodes[index].text);
+				m_model->setNode(cur, (SEXPT_VARIABLE | SEXPT_STRING | additional_flags), combined_var_name);
+			} else {
+				m_model->setNode(cur, (SEXPT_STRING | additional_flags), Sexp_nodes[index].text);
+			}
+
+		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_CONTAINER_NAME) {
+			// Container identifier (by name). This is a string atom, not a modifier.
+			Assertion(!(additional_flags & SEXPT_MODIFIER), "Found a container name node %s that is also a container modifier. Please report!", Sexp_nodes[index].text);
+			Assertion(get_sexp_container(Sexp_nodes[index].text) != nullptr, "Attempt to load unknown container data %s into SEXP tree. Please report!", Sexp_nodes[index].text);
+
+			cur = m_model->allocateNode(parent);
+			m_model->setNode(cur, (SEXPT_CONTAINER_NAME | SEXPT_STRING | additional_flags), Sexp_nodes[index].text);
+
+		} else if (Sexp_nodes[index].subtype == SEXP_ATOM_CONTAINER_DATA) {
+			// A concrete container instance; its contents become children.
+			Assertion(get_sexp_container(Sexp_nodes[index].text) != nullptr, "Attempt to load unknown container %s into SEXP tree. Please report!", Sexp_nodes[index].text);
+
+			cur = m_model->allocateNode(parent);
+			m_model->setNode(cur, (SEXPT_CONTAINER_DATA | SEXPT_STRING | additional_flags), Sexp_nodes[index].text);
+
+			// The container's contents are a list under 'first' so load as children
+			load_branch(Sexp_nodes[index].first, cur);
+
+		} else {
+			// Handle any other atom kinds you support, unchanged from your current code…
+			Assertion(false, "Unhandled SEXP subtype %d in load_branch! Please report!", Sexp_nodes[index].subtype);
+		}
 
 		if ((index == select_sexp_node) && !flag) {
 			select_sexp_node = cur;
 			flag = 1;
 		}
 
-		// Now, advance to the next sibling in the CURRENT list
+		// Advance to the next sibling in the current list
 		index = Sexp_nodes[index].rest;
 	}
 
-	return cur; // Return the last node created in the sibling chain
+	return cur; // last node created in this sibling chain
 }
 
 int sexp_tree::query_false(int node)
@@ -380,8 +410,11 @@ void sexp_tree::add_sub_tree(int node_index, HTREEITEM parent_handle)
 		bitmap = BITMAP_OPERATOR;
 	} else if (n.type & SEXPT_VARIABLE) {
 		bitmap = BITMAP_VARIABLE;
-	} // ... etc. for other types ...
-	else {
+	} else if (n.type & SEXPT_CONTAINER_NAME) {
+		bitmap = BITMAP_CONTAINER_NAME;
+	} else if (n.type & SEXPT_CONTAINER_DATA) {
+		bitmap = BITMAP_CONTAINER_DATA;
+	} else {
 		bitmap = get_data_image(node_index);
 	}
 
