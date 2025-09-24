@@ -3,6 +3,7 @@
 #include "globalincs/pstypes.h"
 
 class SexpTreeModel;
+enum class SexpNodeKind;
 
 // An extension of SexpTreeNode that provides a list of available actions the UI can take on any specific node
 
@@ -79,6 +80,13 @@ class SexpActionsHandler final {
   private:
 	SexpTreeModel* model;
 
+	// Check if an action is valid for this node
+	bool canEditNode(SexpNodeKind kind, int node_index) const;
+	bool canDeleteNode(SexpNodeKind kind, int node_index) const;
+	bool canCutNode(SexpNodeKind kind, int node_index) const;
+
+	// Action implementations
+	bool editText(int node_index, const char* new_text);
 	bool deleteNode(int node_index);
 	bool duplicateSubtree(int node_index);
 	bool addChild(int node_index);
