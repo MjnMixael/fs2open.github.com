@@ -159,7 +159,7 @@ void CMissionGoalsDlg::create_tree()
 	HTREEITEM h;
 
 	m_goals_tree.DeleteAllItems();
-	m_goals_tree.reset_handles();
+	//m_goals_tree.reset_handles();
 	for (i=0; i<(int)m_goals.size(); i++) {
 		if ( (m_goals[i].type & GOAL_TYPE_MASK) != m_display_goal_types)
 			continue;
