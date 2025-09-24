@@ -243,6 +243,9 @@ public:
 	virtual BOOL OnCommand(WPARAM wParam, LPARAM lParam);
 	//}}AFX_VIRTUAL
 
+	void update_item(HTREEITEM handle);
+	void update_item(int node);
+
 	// NEW STUFF-------------------------------------------------------------------------------------------------
 	// The shared, UI-agnostic model
 	std::unique_ptr<SexpTreeModel> m_model;
@@ -252,6 +255,10 @@ public:
 
 	// Convert a model SexpListItem chain into legacy sexp_list_item chain
 	static sexp_list_item* copy_from_model_list(const SexpListItem* src);
+
+	// TODO delete these before merge!
+	void print_model_to_debug_output();
+	void print_model_recursive(int node_index, int indent);
 
 	// Generated message map functions
 protected:
@@ -270,9 +277,6 @@ protected:
 	virtual void NodeCopy();
 	virtual void NodeReplacePaste();
 	virtual void NodeAddPaste();
-
-	void update_item(HTREEITEM handle);
-	void update_item(int node);
 
 	int load_branch(int index, int parent);
 	int save_branch(int cur, int at_root = 0);
