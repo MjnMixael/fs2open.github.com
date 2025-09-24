@@ -369,12 +369,25 @@ void sexp_tree::post_load()
 // build or rebuild a CTreeCtrl object with the current tree data
 void sexp_tree::build_tree()
 {
-	if (!flag)
+	if (!flag) {
 		select_sexp_node = -1;
+	}
 
 	DeleteAllItems();
 	m_modelToHandle.clear();
-	add_sub_tree(0, TVI_ROOT);
+
+	// Find the actual root of the model (the node with no parent)
+	int model_root = -1;
+	for (int i = 0; i < m_model->size(); i++) {
+		if (m_model->parentOf(i) == -1) {
+			model_root = i;
+			break;
+		}
+	}
+
+	if (model_root >= 0) {
+		add_sub_tree(model_root, TVI_ROOT);
+	}
 }
 
 // Create the CTreeCtrl tree from the tree data.  The tree data should already be setup by
@@ -5341,25 +5354,21 @@ sexp_list_item* sexp_tree::get_listing_opf(int opf, int parent_node, int arg_ind
 // Goober5000
 int sexp_tree::find_argument_number(int parent_node, int child_node) const
 {
-	int arg_num, current_node;
+	int arg_num = 0;
+	const SexpNode& n = m_model->node(parent_node);
+	int current_node = n.child;
 
-	// code moved/adapted from match_closest_operator
-	arg_num = 0;
-	auto& n = m_model->node(parent_node);
-	current_node = n.child;
-	while (current_node >= 0)
-	{
-		// found?
-		if (current_node == child_node)
+	while (current_node >= 0) {
+		if (current_node == child_node) {
 			return arg_num;
+		}
 
-		// continue iterating
 		arg_num++;
-		auto& current_n = m_model->node(current_node);
-		current_node = n.next;
-	}	
+		// Correctly get the *current* node to find its *next* sibling
+		const SexpNode& current_n = m_model->node(current_node);
+		current_node = current_n.next;
+	}
 
-	// not found
 	return -1;
 }
 
