@@ -52,6 +52,42 @@ enum class ArgBucket {
 	BOOL
 };
 
+enum class SexpNodeKind {
+	SyntheticRoot, // e.g., event name row
+	RealNode       // actual SEXP node in the model
+};
+
+// Environment/adapter interface for data the model must *read* from the editor/game state.
+// Implemented by each the editor and injected into the model.
+struct ISexpEnvironment {
+	virtual ~ISexpEnvironment() = default;
+
+	// Events editor can pass an override to use the local message list else use Messages[] skipping builtins.
+	virtual SCP_vector<SCP_string> getMessageNames() const;
+
+	// Campaign editor can override to provide all loaded missions else use the current mission only.
+	virtual SCP_vector<SCP_string> getMissionNames() const;
+
+	// Campaign editor can override this to return true else returns false.
+	virtual bool isCampaignContext() const;
+
+	// Allows the environment to override the default enabled state of an action.
+	virtual void overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind, int node_index, bool& is_enabled) const;
+
+	// Examples of lookups the model may need (add as we migrate code):
+	/*virtual SCP_vector<SCP_string> getMessages();
+	virtual SCP_vector<SCP_string> getPersonaNames();
+	virtual SCP_vector<SCP_string> getMissionNames();
+	virtual int getRootReturnType() const;
+
+	// Dynamic (Lua) enums
+	virtual int getDynamicEnumPosition(const SCP_string& name);
+	virtual SCP_vector<SCP_string> getDynamicEnumList(int pos);
+	virtual bool isLuaOperator(int op_const) const;
+	virtual int getDynamicParameterIndex(const SCP_string& op_name, int arg_index);
+	virtual SCP_string getChildEnumSuffix(const SCP_string& op_name, int arg_index);*/
+};
+
 // Core SEXP tree model
 class SexpTreeModel {
   public:

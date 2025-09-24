@@ -57,6 +57,8 @@
 #include "missioneditor/sexp_tree_core.h"
 #include "missioneditor/sexp_opf_core.h"
 
+#define ID_SEXP_ACTION_BASE 0xE100
+
 #define TREE_NODE_INCREMENT	100
 
 #define MAX_OP_MENUS	30
@@ -447,7 +449,144 @@ void sexp_tree::update_item(int node)
 // TODO modify this to use sexp_actions_core
 void sexp_tree::right_clicked(int mode)
 {
-	int i, j, z, count, op, add_type, replace_type, type = 0, subcategory_id;
+	// --- Boilerplate ---
+	CPoint mouse;
+	GetCursorPos(&mouse);
+	CPoint client_point = mouse;
+	ScreenToClient(&client_point);
+	UINT flags;
+	HTREEITEM h_item = HitTest(client_point, &flags);
+	if (!h_item)
+		return;
+	update_item(h_item);
+
+	// --- 1. Query the model for ALL available actions FIRST ---
+	SexpContextMenu context_menu_model = m_model->queryContextMenu(nodeIndexForActions(h_item));
+
+	// Helper to find an action in the model's response
+	auto find_action = [&](SexpActionId id) -> const SexpContextAction* {
+		for (const auto& action : context_menu_model.actions) {
+			if (action.id == id)
+				return &action;
+		}
+		return nullptr;
+	};
+
+	// --- 2. Build the menu, using the model's labels where available ---
+	CMenu menu;
+	menu.CreatePopupMenu();
+
+	const SexpContextAction* action_ptr = nullptr;
+
+	// --- Top Group ---
+	action_ptr = find_action(SexpActionId::DeleteNode); // TODO conditionally enable for root nodes (event name)
+	Assertion(action_ptr, "Action 'DeleteNode' is missing from the context menu model!");
+	UINT item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+	menu.AppendMenu(item_flags, ID_DELETE, action_ptr->label.c_str());
+
+	action_ptr = find_action(SexpActionId::EditText);
+	Assertion(action_ptr, "Action 'EditText' is missing from the context menu model!");
+	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+	menu.AppendMenu(item_flags, ID_EDIT_TEXT, action_ptr->label.c_str());
+
+	menu.AppendMenu(MF_STRING, ID_EXPAND_ALL, "Expand All");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	// --- Comment/Color Group ---
+	menu.AppendMenu(MF_STRING, ID_EDIT_COMMENT, "Edit Comment");
+	menu.AppendMenu(MF_STRING, ID_EDIT_BG_COLOR, "Edit Background Color");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	// --- Clipboard Group ---
+	action_ptr = find_action(SexpActionId::Cut);
+	Assertion(action_ptr, "Action 'Cut' is missing from the context menu model!");
+	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+	menu.AppendMenu(item_flags, ID_EDIT_CUT, action_ptr->label.c_str());
+
+	action_ptr = find_action(SexpActionId::Copy);
+	Assertion(action_ptr, "Action 'Copy' is missing from the context menu model!");
+	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+	menu.AppendMenu(item_flags, ID_EDIT_COPY, action_ptr->label.c_str());
+
+	action_ptr = find_action(SexpActionId::Paste);
+	Assertion(action_ptr, "Action 'Paste' is missing from the context menu model!");
+	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+	menu.AppendMenu(item_flags, ID_EDIT_PASTE, action_ptr->label.c_str());
+	menu.AppendMenu(MF_SEPARATOR);
+
+	// --- Structure and Operator groups (as placeholders for now) ---
+	// ... (This section remains the same, showing disabled items for actions not yet in the model) ...
+	CMenu add_op_submenu;
+	add_op_submenu.CreatePopupMenu();
+	add_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)add_op_submenu.m_hMenu, "Add Operator");
+
+	CMenu add_data_submenu;
+	add_data_submenu.CreatePopupMenu();
+	add_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no data available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)add_data_submenu.m_hMenu, "Add Data");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	menu.AppendMenu(MF_STRING | MF_GRAYED, ID_EDIT_PASTE_SPECIAL, "Paste (Add Child)");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	CMenu insert_op_submenu;
+	insert_op_submenu.CreatePopupMenu();
+	insert_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)insert_op_submenu.m_hMenu, "Insert Operator");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	// --- Replace Operator (using model label and choices) ---
+	CMenu replace_op_submenu;
+	replace_op_submenu.CreatePopupMenu();
+	action_ptr = find_action(SexpActionId::ReplaceOperator);
+	Assertion(action_ptr, "Action 'ReplaceOperator' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 0); // Placeholder ID
+			replace_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		replace_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)replace_op_submenu.m_hMenu, action_ptr->label.c_str());
+
+	// ... (The rest of the menu remains the same, using disabled placeholders) ...
+	CMenu replace_data_submenu;
+	replace_data_submenu.CreatePopupMenu();
+	replace_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no data available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_data_submenu.m_hMenu, "Replace Data");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	menu.AppendMenu(MF_STRING, ID_SEXP_TREE_ADD_VARIABLE, "Add Variable");
+	menu.AppendMenu(MF_STRING, ID_SEXP_TREE_MODIFY_VARIABLE, "Modify Variable");
+
+	CMenu replace_var_submenu;
+	replace_var_submenu.CreatePopupMenu();
+	replace_var_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no variables available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_var_submenu.m_hMenu, "Replace Variable");
+	menu.AppendMenu(MF_SEPARATOR);
+
+	menu.AppendMenu(MF_STRING, ID_EDIT_SEXP_TREE_EDIT_CONTAINERS, "Add/Modify Container");
+
+	CMenu replace_container_name_submenu;
+	replace_container_name_submenu.CreatePopupMenu();
+	replace_container_name_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no containers available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_container_name_submenu.m_hMenu, "Replace Container Name");
+
+	CMenu replace_container_data_submenu;
+	replace_container_data_submenu.CreatePopupMenu();
+	replace_container_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no containers available)");
+	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_container_data_submenu.m_hMenu, "Replace Container Data");
+
+	// --- 3. Display the menu ---
+	menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, mouse.x, mouse.y, this);
+
+	//----------------------------------------- REST IS OLD UNREACHABLE CODE----------------------------------------------
+	/*int i, j, z, count, op, add_type, replace_type, type = 0, subcategory_id;
 	sexp_list_item *list;
 	UINT _flags;
 	HTREEITEM h;
@@ -551,19 +690,19 @@ void sexp_tree::right_clicked(int mode)
 			menu.EnableMenuItem(ID_EDIT_BG_COLOR, MF_GRAYED);
 		}
 
-		/*
-		Goober5000 - allow variables in all modes;
-		the restriction seems unnecessary IMHO
 		
+		//Goober5000 - allow variables in all modes;
+		//the restriction seems unnecessary IMHO
+		//
 		// Do SEXP_VARIABLE stuff here.
-		if (m_mode != MODE_EVENTS)
-		{
-			// only allow variables in event mode
-			menu.EnableMenuItem(ID_SEXP_TREE_ADD_VARIABLE, MF_GRAYED);
-			menu.EnableMenuItem(ID_SEXP_TREE_MODIFY_VARIABLE, MF_GRAYED);
-		}
-		else
-		*/
+		//if (m_mode != MODE_EVENTS)
+		//{
+		//	// only allow variables in event mode
+		//	menu.EnableMenuItem(ID_SEXP_TREE_ADD_VARIABLE, MF_GRAYED);
+		//	menu.EnableMenuItem(ID_SEXP_TREE_MODIFY_VARIABLE, MF_GRAYED);
+		//}
+		//else
+
 		{
 			menu.EnableMenuItem(ID_SEXP_TREE_ADD_VARIABLE, MF_ENABLED);
 			menu.EnableMenuItem(ID_SEXP_TREE_MODIFY_VARIABLE, MF_ENABLED);
@@ -804,18 +943,18 @@ void sexp_tree::right_clicked(int mode)
 					{
 						switch (Operators[i].value) {
 // Commented out by Goober5000 to allow these operators to be selectable
-/*#ifdef NDEBUG
-							// various campaign operators
-							case OP_WAS_PROMOTION_GRANTED:
-							case OP_WAS_MEDAL_GRANTED:
-							case OP_GRANT_PROMOTION:
-							case OP_GRANT_MEDAL:
-							case OP_TECH_ADD_SHIP:
-							case OP_TECH_ADD_WEAPON:
-							case OP_TECH_ADD_INTEL_XSTR:
-							case OP_TECH_REMOVE_INTEL_XSTR:
-							case OP_TECH_RESET_TO_DEFAULT:
-#endif*/
+//#ifdef NDEBUG
+//							// various campaign operators
+//							case OP_WAS_PROMOTION_GRANTED:
+//							case OP_WAS_MEDAL_GRANTED:
+//							case OP_GRANT_PROMOTION:
+//							case OP_GRANT_MEDAL:
+//							case OP_TECH_ADD_SHIP:
+//							case OP_TECH_ADD_WEAPON:
+//							case OP_TECH_ADD_INTEL_XSTR:
+//							case OP_TECH_REMOVE_INTEL_XSTR:
+//							case OP_TECH_RESET_TO_DEFAULT:
+//#endif
 
 							// hide these operators per GitHub issue #6400
 							case OP_GET_VARIABLE_BY_INDEX:
@@ -871,18 +1010,18 @@ void sexp_tree::right_clicked(int mode)
 					{
 						switch (Operators[i].value) {
 // Commented out by Goober5000 to allow these operators to be selectable
-/*#ifdef NDEBUG
-							// various campaign operators
-							case OP_WAS_PROMOTION_GRANTED:
-							case OP_WAS_MEDAL_GRANTED:
-							case OP_GRANT_PROMOTION:
-							case OP_GRANT_MEDAL:
-							case OP_TECH_ADD_SHIP:
-							case OP_TECH_ADD_WEAPON:
-							case OP_TECH_ADD_INTEL_XSTR:
-							case OP_TECH_REMOVE_INTEL_XSTR:
-							case OP_TECH_RESET_TO_DEFAULT:
-#endif*/
+//#ifdef NDEBUG
+//							// various campaign operators
+//							case OP_WAS_PROMOTION_GRANTED:
+//							case OP_WAS_MEDAL_GRANTED:
+//							case OP_GRANT_PROMOTION:
+//							case OP_GRANT_MEDAL:
+//							case OP_TECH_ADD_SHIP:
+//							case OP_TECH_ADD_WEAPON:
+//							case OP_TECH_ADD_INTEL_XSTR:
+//							case OP_TECH_REMOVE_INTEL_XSTR:
+//							case OP_TECH_RESET_TO_DEFAULT:
+//#endif
 
 							// hide these operators per GitHub issue #6400
 							case OP_GET_VARIABLE_BY_INDEX:
@@ -963,20 +1102,20 @@ void sexp_tree::right_clicked(int mode)
 			menu.EnableMenuItem(ID_DELETE, MF_GRAYED);  // can't delete the root item.
 		}
 
-		/*		if ((n.flags & OPERAND) && (n.flags & EDITABLE))  // expandable?
-			menu.EnableMenuItem(ID_SPLIT_LINE, MF_ENABLED);
-
-		z = n.child;
-		auto& cn = model->node(z);
-		if (z != -1 && cn.next == -1 && cn.child == -1)
-			menu.EnableMenuItem(ID_SPLIT_LINE, MF_ENABLED);
-
-		int pz = n.parent;
-		auto& pn = model->node(pz);
-		z = pn.child;
-		auto& sz = model->node(z);
-		if (z != -1 && sz.next == -1 && sz.child == -1)
-			menu.EnableMenuItem(ID_SPLIT_LINE, MF_ENABLED);*/
+		//		if ((n.flags & OPERAND) && (n.flags & EDITABLE))  // expandable?
+		//	menu.EnableMenuItem(ID_SPLIT_LINE, MF_ENABLED);
+		//
+		//z = n.child;
+		//auto& cn = model->node(z);
+		//if (z != -1 && cn.next == -1 && cn.child == -1)
+		//	menu.EnableMenuItem(ID_SPLIT_LINE, MF_ENABLED);
+		//
+		//int pz = n.parent;
+		//auto& pn = model->node(pz);
+		//z = pn.child;
+		//auto& sz = model->node(z);
+		//if (z != -1 && sz.next == -1 && sz.child == -1)
+		//	menu.EnableMenuItem(ID_SPLIT_LINE, MF_ENABLED);
 
 		// change enabled status of 'add' type menu options.
 		add_type = 0;
@@ -1548,7 +1687,7 @@ void sexp_tree::right_clicked(int mode)
 
 		gray_menu_tree(popup_menu);
 		popup_menu->TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, mouse.x, mouse.y, this);
-	}
+	}*/
 }
 
 // identify what type of argument this is.  You call it with the node of the first argument
@@ -3756,12 +3895,13 @@ void sexp_tree::add_operator(const char *op, HTREEITEM h)
 		node = m_model->allocateNode(-1);
 		m_model->setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
 		item_handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, h);
-
+		SetItemData(item_handle, node);
 	} else {
 		expand_operator(item_index);
 		node = m_model->allocateNode(item_index);
 		m_model->setNode(node, (SEXPT_OPERATOR | SEXPT_VALID), op);
 		item_handle = insert(op, BITMAP_OPERATOR, BITMAP_OPERATOR, item_handle);
+		SetItemData(item_handle, node);
 	}
 
 	m_modelToHandle[node] = item_handle;
@@ -5823,4 +5963,13 @@ void sexp_tree::print_model_to_debug_output()
 		}
 	}
 	mprintf(("--- End of Dump ---\n"));
+}
+
+int sexp_tree::nodeIndexForActions(HTREEITEM h) const
+{
+	// For Events Editor or other "named root" trees, return -1 for the root item as it's not a real node
+	if (!GetParentItem(h)) {
+		return -1; // synthetic event root
+	}
+	return static_cast<int>(GetItemData(h));
 }

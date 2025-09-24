@@ -208,6 +208,9 @@ BOOL event_editor::OnInitDialog()
 
 	theApp.init_window(&Events_wnd_data, this, 0);
 	m_event_tree.setup((CEdit *) GetDlgItem(IDC_HELP_BOX));
+
+	m_event_tree.m_model->setEnvironment(this);
+
 	load_tree();
 	create_tree();
 
@@ -783,7 +786,7 @@ void event_editor::reset_event(int num, HTREEITEM after)
 	index = m_events[num].formula = m_event_tree.item_index;
 	m_event_tree.SetItemData(h, index);
 	m_event_tree.add_operator("true");
-	m_event_tree.item_index = index;
+	//m_event_tree.item_index = index;
 	m_event_tree.update_item(index);
 	m_event_tree.add_operator("do-nothing");
 
@@ -1989,4 +1992,22 @@ HTREEITEM event_editor::traverse_path(const event_annotation &ea)
 	}
 
 	return h;
+}
+
+void event_editor::overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind, int node_index, bool& is_enabled) const
+{
+	switch (id) {
+		case SexpActionId::DeleteNode:
+			if (kind == SexpNodeKind::SyntheticRoot && node_index < 0) {
+				is_enabled = true;
+			}
+			break;
+		case SexpActionId::Cut:
+			if (kind == SexpNodeKind::SyntheticRoot && node_index < 0) {
+				is_enabled = false;
+			}
+		default:
+			// For all other actions, we don't override anything.
+			break;
+	}
 }

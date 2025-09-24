@@ -102,39 +102,6 @@ void SexpListItemDeleter::operator()(SexpListItem* p) const
 	}
 }
 
-// ISexpEnvironment defaults
-
-SCP_vector<SCP_string> ISexpEnvironment::getMessageNames() const
-{
-	SCP_vector<SCP_string> out;
-	for (int i = Num_builtin_messages; i < Num_messages; ++i) {
-		out.emplace_back(Messages[i].name);
-	}
-	return out;
-}
-
-SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() const
-{
-	SCP_vector<SCP_string> out;
-	out.emplace_back(Mission_filename);
-	return out;
-}
-
-bool ISexpEnvironment::isCampaignContext() const
-{
-	return false;
-}
-
-/*SCP_vector<SCP_string> ISexpEnvironment::getMessages() { return {}; }
-SCP_vector<SCP_string> ISexpEnvironment::getPersonaNames() { return {}; }
-SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() { return {}; }
-int ISexpEnvironment::getRootReturnType() const { return OPR_NULL; }
-int ISexpEnvironment::getDynamicEnumPosition(const SCP_string&) { return -1; }
-SCP_vector<SCP_string> ISexpEnvironment::getDynamicEnumList(int) { return {}; }
-bool ISexpEnvironment::isLuaOperator(int) const { return false; }
-int ISexpEnvironment::getDynamicParameterIndex(const SCP_string&, int) { return -1; }
-SCP_string ISexpEnvironment::getChildEnumSuffix(const SCP_string&, int) { return {}; }*/
-
 extern SCP_vector<game_snd> Snds;
 
 template <typename M, typename T, typename PTM>

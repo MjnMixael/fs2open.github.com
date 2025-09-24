@@ -5,81 +5,174 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 {
 	SexpContextMenu out;
 	out.node_index = node_index;
-	Assertion(SCP_vector_inbounds(model->_nodes, node_index), "buildContextMenuModel: bad node");
 
-	const auto& n = model->_nodes[node_index];
-	const bool is_root = (n.parent < 0);
-	const bool is_op = (SEXPT_TYPE(n.type) == SEXPT_OPERATOR);
-	const bool editable = (n.flags & EDITABLE) != 0;
+	// 1) Build the full menu with everything disabled (so assertions on "expected actions" pass).
+	auto add = [&](SexpContextGroup g, SexpActionId id, const char* label) -> int {
+		out.actions.push_back({g, id, label, /*enabled*/ false});
+		return static_cast<int>(out.actions.size() - 1);
+	};
+	auto setEnabled = [&](SexpActionId id, bool on) {
+		for (auto& a : out.actions)
+			if (a.id == id) {
+				a.enabled = on;
+				break;
+			}
+	};
 
 	// Node group
-	if (editable)
-		out.actions.push_back({SexpContextGroup::Node, SexpActionId::EditText, "Edit", true});
-
-	out.actions.push_back({SexpContextGroup::Node, SexpActionId::DeleteNode, "Delete", !is_root});
-	out.actions.push_back({SexpContextGroup::Node, SexpActionId::DuplicateSubtree, "Duplicate", true});
-	out.actions.push_back({SexpContextGroup::Node, SexpActionId::Cut, "Cut", !is_root});
-	out.actions.push_back({SexpContextGroup::Node, SexpActionId::Copy, "Copy", true});
-	out.actions.push_back({SexpContextGroup::Node, SexpActionId::Paste, "Paste", true}); // TODO enable via env clipboard state later
+	add(SexpContextGroup::Node, SexpActionId::EditText, "Edit Data");
+	add(SexpContextGroup::Node, SexpActionId::DeleteNode, "Delete Item");
+	add(SexpContextGroup::Node, SexpActionId::DuplicateSubtree, "Duplicate");
+	add(SexpContextGroup::Node, SexpActionId::Cut, "Cut");
+	add(SexpContextGroup::Node, SexpActionId::Copy, "Copy");
+	add(SexpContextGroup::Node, SexpActionId::Paste, "Paste (Overwrite)");
 
 	// Structure group
-	out.actions.push_back({SexpContextGroup::Structure, SexpActionId::AddChild, "Add Child", is_op});
-	out.actions.push_back({SexpContextGroup::Structure, SexpActionId::AddSiblingAfter, "Add Sibling After", !is_root});
-	out.actions.push_back({SexpContextGroup::Structure, SexpActionId::AddSiblingBefore, "Add Sibling Before", !is_root});
+	add(SexpContextGroup::Structure, SexpActionId::AddChild, "Add Child");
+	add(SexpContextGroup::Structure, SexpActionId::AddSiblingAfter, "Add Sibling After");
+	add(SexpContextGroup::Structure, SexpActionId::AddSiblingBefore, "Add Sibling Before");
+	add(SexpContextGroup::Structure, SexpActionId::MoveUp, "Move Up");
+	add(SexpContextGroup::Structure, SexpActionId::MoveDown, "Move Down");
 
-	// MoveUp/MoveDown enabled only if there is a prev/next sibling
-	const int parent = n.parent;
-	bool has_prev = false, has_next = (n.next >= 0);
-	if (parent >= 0) {
-		int c = model->_nodes[parent].child;
-		if (c == node_index)
-			has_prev = false;
-		else {
-			while (model->_nodes[c].next >= 0 && model->_nodes[c].next != node_index)
-				c = model->_nodes[c].next;
-			has_prev = (model->_nodes[c].next == node_index);
-		}
-	}
-	out.actions.push_back({SexpContextGroup::Structure, SexpActionId::MoveUp, "Move Up", has_prev});
-	out.actions.push_back({SexpContextGroup::Structure, SexpActionId::MoveDown, "Move Down", has_next});
+	// Operator group
+	const int idxReplace = add(SexpContextGroup::Operator, SexpActionId::ReplaceOperator, "Replace Operator");
+	add(SexpContextGroup::Operator, SexpActionId::ToggleNot, "Toggle 'not'");
+	add(SexpContextGroup::Operator, SexpActionId::ResetToDefaults, "Reset Arguments to Defaults");
 
-	// Operator group only for operator nodes
-	if (is_op) {
-		SexpContextAction replace{SexpContextGroup::Operator, SexpActionId::ReplaceOperator, "Replace Operator", true};
-		// Fill choices with compatible operators (same return type), plus “all operators” if you want a big picklist
-		// Minimal v1: operators with the same return type as current
-		const int cur_op_const = get_operator_const(n.text.c_str());
-		const int cur_ret = query_operator_return_type(cur_op_const);
-		for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
-			if (query_operator_return_type(Operators[i].value) == cur_ret) {
-				replace.choices.push_back({/*op_index*/ i, /*arg_index*/ -1});
-				replace.choiceText.emplace_back(Operators[i].text);
+	// Arguments group
+	add(SexpContextGroup::Arguments, SexpActionId::AddArgument, "Add Argument");
+	add(SexpContextGroup::Arguments, SexpActionId::RemoveArgument, "Remove Last Argument");
+
+	// 2) Synthetic vs real: compute flags and then flip enables.
+	const auto kind = (node_index < 0) ? SexpNodeKind::SyntheticRoot : SexpNodeKind::RealNode;
+
+	bool deletable = false; // will be computed (real) or adjusted by env (synthetic)
+	bool editable = false;   // only true for real editable nodes
+	bool is_root = false;
+	bool is_op = false;
+	bool has_prev = false;
+	bool has_next = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "buildContextMenuModel: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		is_root = (n.parent < 0);
+		is_op = (SEXPT_TYPE(n.type) == SEXPT_OPERATOR);
+		editable = (n.flags & EDITABLE) != 0;
+
+		// Compute can_delete from parent's min-args rule (non-root only).
+		if (!is_root) {
+			const int parent_idx = n.parent;
+			const auto& parent_node = model->_nodes[parent_idx];
+			if (SEXPT_TYPE(parent_node.type) == SEXPT_OPERATOR) {
+				int op_index = -1;
+				for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
+					if (Operators[i].text == parent_node.text) {
+						op_index = i;
+						break;
+					}
+				}
+				if (op_index != -1) {
+					const int min_args = Operators[op_index].min;
+					const int current_arg_count = model->countArgs(parent_node.child);
+					deletable = (current_arg_count > min_args);
+				}
 			}
 		}
-		out.actions.push_back(std::move(replace));
 
-		// Quick toggles
-		out.actions.push_back({SexpContextGroup::Operator, SexpActionId::ToggleNot, "Toggle 'not'", true});
-		out.actions.push_back({SexpContextGroup::Operator, SexpActionId::ResetToDefaults, "Reset Arguments to Defaults", true});
-	}
+		// Siblings for MoveUp/MoveDown
+		has_next = (n.next >= 0);
+		if (n.parent >= 0) {
+			int c = model->_nodes[n.parent].child;
+			if (c != node_index) {
+				while (model->_nodes[c].next >= 0 && model->_nodes[c].next != node_index) {
+					c = model->_nodes[c].next;
+				}
+				has_prev = (model->_nodes[c].next == node_index);
+			}
+		}
 
-	// Arguments group only for operator nodes
-	if (is_op) {
-		const int op_index = [&] {
+		// If this is an operator, fill Replace choices and enable operator/argument actions appropriately.
+		if (is_op) {
+			auto& replace = out.actions[idxReplace]; // ReplaceOperator item
+			replace.enabled = true;
+
+			const int cur_op_const = get_operator_const(n.text.c_str());
+			const int cur_ret = query_operator_return_type(cur_op_const);
+			for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
+				if (query_operator_return_type(Operators[i].value) == cur_ret) {
+					replace.choices.push_back({/*op_index*/ i, /*arg_index*/ -1});
+					replace.choiceText.emplace_back(Operators[i].text);
+				}
+			}
+
+			// Arguments min/max awareness
+			int op_index = -1;
 			for (int i = 0; i < static_cast<int>(Operators.size()); ++i)
-				if (Operators[i].text == n.text)
-					return i;
-			return -1;
-		}();
-		if (op_index >= 0) {
-			// min/max awareness
-			const int argc = model->countArgs(n.child);
-			const int minA = Operators[op_index].min;
-			const int maxA = Operators[op_index].max;
-			out.actions.push_back({SexpContextGroup::Arguments, SexpActionId::AddArgument, "Add Argument", (maxA < 0 || argc < maxA)});
-			out.actions.push_back({SexpContextGroup::Arguments, SexpActionId::RemoveArgument, "Remove Last Argument", (argc > 0 && argc > minA)});
+				if (Operators[i].text == n.text) {
+					op_index = i;
+					break;
+				}
+
+			if (op_index >= 0) {
+				const int argc = model->countArgs(n.child);
+				const int minA = Operators[op_index].min;
+				const int maxA = Operators[op_index].max;
+				setEnabled(SexpActionId::AddArgument, (maxA < 0 || argc < maxA));
+				setEnabled(SexpActionId::RemoveArgument, (argc > 0 && argc > minA));
+			}
+
+			// Quick operator toggles
+			setEnabled(SexpActionId::ToggleNot, true);
+			setEnabled(SexpActionId::ResetToDefaults, true);
 		}
 	}
+
+	bool can_edit_text = editable;
+	bool can_delete = deletable;
+	bool can_duplicate_subtree = kind == SexpNodeKind::RealNode;
+	bool can_cut = deletable;
+	bool can_copy = kind == SexpNodeKind::RealNode;
+	bool can_paste = kind == SexpNodeKind::RealNode;
+
+	bool can_add_child = is_op;
+	bool can_add_sib_after = (kind == SexpNodeKind::RealNode) && !is_root;
+	bool can_add_sib_before = (kind == SexpNodeKind::RealNode) && !is_root;
+	bool can_move_up = has_prev;
+	bool can_move_down = has_next;
+
+	// 3) Let the environment tweak enables (e.g., allow Delete on synthetic root).
+	// TODO make this work for all actions, not just DeleteNode and Cut
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::EditText, kind, node_index, can_edit_text);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::DeleteNode, kind, node_index, can_delete);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::DuplicateSubtree, kind, node_index, can_duplicate_subtree);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::Cut, kind, node_index, can_cut);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::Copy, kind, node_index, can_copy);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::Paste, kind, node_index, can_paste);
+
+		model->environment()->overrideNodeActionEnabled(SexpActionId::AddChild, kind, node_index, can_add_child);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::AddSiblingAfter, kind, node_index, can_add_sib_after);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::AddSiblingBefore, kind, node_index, can_add_sib_before);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::MoveUp, kind, node_index, can_move_up);
+		model->environment()->overrideNodeActionEnabled(SexpActionId::MoveDown, kind, node_index, can_move_down);
+	}
+
+	// 4) Flip enables for Node/Structure groups now that we have final flags.
+	setEnabled(SexpActionId::EditText, can_edit_text);
+	setEnabled(SexpActionId::DeleteNode, can_delete);
+	setEnabled(SexpActionId::DuplicateSubtree, can_duplicate_subtree); // allow duplicate on real nodes
+	setEnabled(SexpActionId::Cut, can_cut);
+	setEnabled(SexpActionId::Copy, can_copy);
+	setEnabled(SexpActionId::Paste, can_paste); // TODO gate later via env clipboard
+
+	// Structure
+	setEnabled(SexpActionId::AddChild, can_add_child);
+	setEnabled(SexpActionId::AddSiblingAfter, can_add_sib_after);
+	setEnabled(SexpActionId::AddSiblingBefore, can_add_sib_before);
+	setEnabled(SexpActionId::MoveUp, can_move_up);
+	setEnabled(SexpActionId::MoveDown, can_move_down);
 
 	return out;
 }

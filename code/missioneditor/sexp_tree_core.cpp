@@ -11,6 +11,44 @@
 #include "mission/missionparse.h"
 #include "weapon/emp.h"
 
+// ISexpEnvironment defaults
+
+SCP_vector<SCP_string> ISexpEnvironment::getMessageNames() const
+{
+	SCP_vector<SCP_string> out;
+	for (int i = Num_builtin_messages; i < Num_messages; ++i) {
+		out.emplace_back(Messages[i].name);
+	}
+	return out;
+}
+
+SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() const
+{
+	SCP_vector<SCP_string> out;
+	out.emplace_back(Mission_filename);
+	return out;
+}
+
+bool ISexpEnvironment::isCampaignContext() const
+{
+	return false;
+}
+
+void ISexpEnvironment::overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind, int node_index, bool& is_enabled) const
+{
+	// Do nothing
+}
+
+/*SCP_vector<SCP_string> ISexpEnvironment::getMessages() { return {}; }
+SCP_vector<SCP_string> ISexpEnvironment::getPersonaNames() { return {}; }
+SCP_vector<SCP_string> ISexpEnvironment::getMissionNames() { return {}; }
+int ISexpEnvironment::getRootReturnType() const { return OPR_NULL; }
+int ISexpEnvironment::getDynamicEnumPosition(const SCP_string&) { return -1; }
+SCP_vector<SCP_string> ISexpEnvironment::getDynamicEnumList(int) { return {}; }
+bool ISexpEnvironment::isLuaOperator(int) const { return false; }
+int ISexpEnvironment::getDynamicParameterIndex(const SCP_string&, int) { return -1; }
+SCP_string ISexpEnvironment::getChildEnumSuffix(const SCP_string&, int) { return {}; }*/
+
 static constexpr int kNodeIncrement = 100; // mirrors TREE_NODE_INCREMENT
 
 // SexpTreeModel
