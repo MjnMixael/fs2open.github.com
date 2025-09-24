@@ -148,7 +148,7 @@ void CMissionCutscenesDlg::create_tree()
 	m_desc = _T(cutscene_descriptions[m_display_cutscene_types]);
 
 	m_cutscenes_tree.DeleteAllItems();
-	m_cutscenes_tree.reset_handles();
+	//m_cutscenes_tree.reset_handles();
 	for (size_t i = 0; i < m_cutscenes.size(); i++) {
 		if (m_cutscenes[i].type != m_display_cutscene_types)
 			continue;
