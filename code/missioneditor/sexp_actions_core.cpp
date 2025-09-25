@@ -32,17 +32,22 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	add(SexpContextGroup::Node, SexpActionId::Cut, "Cut");
 	add(SexpContextGroup::Node, SexpActionId::Copy, "Copy");
 	add(SexpContextGroup::Node, SexpActionId::PasteOverwrite, "Paste (Overwrite)");
-	add(SexpContextGroup::Node, SexpActionId::AddOperator, "Add Operator");
+	add(SexpContextGroup::Operator, SexpActionId::AddOperator, "Add Operator");
 	add(SexpContextGroup::Node, SexpActionId::AddData, "Add Data");
 	add(SexpContextGroup::Node, SexpActionId::PasteAdd, "Paste (Add Child)");
-	add(SexpContextGroup::Node, SexpActionId::InsertOperator, "Insert Operator");
+	add(SexpContextGroup::Operator, SexpActionId::InsertOperator, "Insert Operator");
+	add(SexpContextGroup::Operator, SexpActionId::ReplaceOperator, "Replace Operator");
+	add(SexpContextGroup::Operator, SexpActionId::ReplaceData, "Replace Data");
+	add(SexpContextGroup::Node, SexpActionId::ReplaceVariable, "Replace Variable");
+	add(SexpContextGroup::Node, SexpActionId::ReplaceContainerName, "Replace Container Name");
+	add(SexpContextGroup::Node, SexpActionId::ReplaceContainerData, "Replace Container Data");
 
+	// TODO Rest are future enhancements not yet implemented. Some will get cut.
 	// Structure group
 	add(SexpContextGroup::Structure, SexpActionId::MoveUp, "Move Up");
 	add(SexpContextGroup::Structure, SexpActionId::MoveDown, "Move Down");
 
 	// Operator group
-	const int idxReplace = add(SexpContextGroup::Operator, SexpActionId::ReplaceOperator, "Replace Operator");
 	add(SexpContextGroup::Operator, SexpActionId::ToggleNot, "Toggle 'not'");
 	add(SexpContextGroup::Operator, SexpActionId::ResetToDefaults, "Reset Arguments to Defaults");
 
@@ -52,66 +57,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 
 	// 2) Synthetic vs real: compute flags and then flip enables.
 	const auto kind = (node_index < 0) ? SexpNodeKind::SyntheticRoot : SexpNodeKind::RealNode;
-
-	bool is_root = false;
-	bool is_op = false;
-	bool has_prev = false;
-	bool has_next = false;
-
-	if (kind == SexpNodeKind::RealNode) {
-		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "buildContextMenuModel: bad node");
-		const auto& n = model->_nodes[node_index];
-
-		is_root = (n.parent < 0);
-		is_op = (SEXPT_TYPE(n.type) == SEXPT_OPERATOR);
-
-		// Siblings for MoveUp/MoveDown
-		has_next = (n.next >= 0);
-		if (n.parent >= 0) {
-			int c = model->_nodes[n.parent].child;
-			if (c != node_index) {
-				while (model->_nodes[c].next >= 0 && model->_nodes[c].next != node_index) {
-					c = model->_nodes[c].next;
-				}
-				has_prev = (model->_nodes[c].next == node_index);
-			}
-		}
-
-		// If this is an operator, fill Replace choices and enable operator/argument actions appropriately.
-		if (is_op) {
-			auto& replace = out.actions[idxReplace]; // ReplaceOperator item
-			replace.enabled = true;
-
-			const int cur_op_const = get_operator_const(n.text.c_str());
-			const int cur_ret = query_operator_return_type(cur_op_const);
-			for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
-				if (query_operator_return_type(Operators[i].value) == cur_ret) {
-					replace.choices.push_back({/*op_index*/ i, /*arg_index*/ -1});
-					replace.choiceText.emplace_back(Operators[i].text);
-				}
-			}
-
-			// Arguments min/max awareness
-			int op_index = -1;
-			for (int i = 0; i < static_cast<int>(Operators.size()); ++i)
-				if (Operators[i].text == n.text) {
-					op_index = i;
-					break;
-				}
-
-			if (op_index >= 0) {
-				const int argc = model->countArgs(n.child);
-				const int minA = Operators[op_index].min;
-				const int maxA = Operators[op_index].max;
-				setEnabled(SexpActionId::AddArgument, (maxA < 0 || argc < maxA));
-				setEnabled(SexpActionId::RemoveArgument, (argc > 0 && argc > minA));
-			}
-
-			// Quick operator toggles
-			setEnabled(SexpActionId::ToggleNot, true);
-			setEnabled(SexpActionId::ResetToDefaults, true);
-		}
-	}
 
 	// Seed a single submenu choice so sexp_tree can render submenus now.
 	// We'll replace these with real category trees later.
@@ -135,17 +80,37 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		a->choiceText.emplace_back("Choose…");
 	}
 
-	bool can_move_up = has_prev;
-	bool can_move_down = has_next;
-
-	// 3) Let the environment tweak enables (e.g., allow Delete on synthetic root).
-	// TODO make this work for all actions, not just DeleteNode and Cut
-	if (model->environment()) {
-		model->environment()->overrideNodeActionEnabled(SexpActionId::MoveUp, kind, node_index, can_move_up);
-		model->environment()->overrideNodeActionEnabled(SexpActionId::MoveDown, kind, node_index, can_move_down);
+	// Replace Operator submenu stub
+	if (auto* a = getAction(SexpActionId::ReplaceOperator)) {
+		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
 	}
 
-	// 4) Flip enables for Node/Structure groups now that we have final flags.
+	// Replace Data submenu stub
+	if (auto* a = getAction(SexpActionId::ReplaceData)) {
+		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
+	// Replace Variable submenu stub
+	if (auto* a = getAction(SexpActionId::ReplaceVariable)) {
+		a->choices.push_back({/*var_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
+	// Replace Container Name submenu stub
+	if (auto* a = getAction(SexpActionId::ReplaceContainerName)) {
+		a->choices.push_back({/*container_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
+	// Replace Container Data submenu stub
+	if (auto* a = getAction(SexpActionId::ReplaceContainerData)) {
+		a->choices.push_back({/*container_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
+	// 3) Flip enables for Node/Structure groups now that we have final flags.
 	setEnabled(SexpActionId::EditText, canEditNode(kind, node_index));
 	setEnabled(SexpActionId::DeleteNode, canDeleteNode(kind, node_index));
 	setEnabled(SexpActionId::Cut, canCutNode(kind, node_index));
@@ -155,10 +120,11 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	setEnabled(SexpActionId::AddData, canAddDataNode(kind, node_index));
 	setEnabled(SexpActionId::PasteAdd, canPasteAddNode(kind, node_index));
 	setEnabled(SexpActionId::InsertOperator, canInsertOperatorNode(kind, node_index));
-
-	// Structure
-	setEnabled(SexpActionId::MoveUp, can_move_up);
-	setEnabled(SexpActionId::MoveDown, can_move_down);
+	setEnabled(SexpActionId::ReplaceOperator, canReplaceOperatorNode(kind, node_index));
+	setEnabled(SexpActionId::ReplaceData, canReplaceDataNode(kind, node_index));
+	setEnabled(SexpActionId::ReplaceVariable, canReplaceVariableNode(kind, node_index));
+	setEnabled(SexpActionId::ReplaceContainerName, canReplaceContainerNameNode(kind, node_index));
+	setEnabled(SexpActionId::ReplaceContainerData, canReplaceContainerDataNode(kind, node_index));
 
 	return out;
 }
@@ -655,6 +621,422 @@ bool SexpActionsHandler::canInsertOperatorNode(SexpNodeKind kind, int node_index
 	// Single env tweak point, consistent with your other helpers
 	if (model->environment()) {
 		model->environment()->overrideNodeActionEnabled(SexpActionId::InsertOperator, kind, node_index, enable);
+	}
+	return enable;
+}
+
+bool SexpActionsHandler::canReplaceOperatorNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canReplaceOperatorNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// 1. Determine the expected OPF for the node's current position.
+		int expected_opf = OPF_NONE;
+		int arg_pos = 0;
+
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+			for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next) {
+				arg_pos++;
+			}
+
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int parent_idx = -1;
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					if (Operators[i].text == parent.text) {
+						parent_idx = i;
+						break;
+					}
+				}
+				if (parent_idx >= 0) {
+					expected_opf = query_operator_argument_type(parent_idx, arg_pos);
+				}
+			} else if (parent.type & SEXPT_CONTAINER_DATA) {
+				if (const auto* cont = get_sexp_container(parent.text.c_str())) {
+					expected_opf = cont->opf_type;
+				}
+			}
+		} else {
+			// It's a root node. Determine OPF based on its own return type.
+			const int eff = nodeEffectiveType_(node_index);
+			static const int kCandidates[] = {OPF_BOOL, OPF_NUMBER, OPF_STRING, OPF_AMBIGUOUS};
+			for (int opf : kCandidates) {
+				if (sexp_query_type_match(opf, eff)) {
+					expected_opf = opf;
+					break;
+				}
+			}
+			if (expected_opf == OPF_NONE)
+				expected_opf = OPF_NULL;
+		}
+
+		// 2. Find if any operator is a valid choice for this slot.
+		if (expected_opf != OPF_NONE) {
+			SexpListItemPtr list = model->buildListingForOpf(expected_opf, n.parent, arg_pos);
+			if (list) {
+				if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR) {
+					// Current node is an operator, so find a DIFFERENT operator in the list.
+					const int current_op_val = get_operator_const(n.text.c_str());
+					for (SexpListItem* item = list.get(); item != nullptr; item = item->next) {
+						if (item->op >= 0 && Operators[item->op].value != current_op_val) {
+							enable = true;
+							break;
+						}
+					}
+				} else {
+					// Current node is data, so ANY operator in the list is a valid replacement.
+					for (SexpListItem* item = list.get(); item != nullptr; item = item->next) {
+						if (item->op >= 0) {
+							enable = true;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceOperator, kind, node_index, enable);
+	}
+	return enable;
+}
+
+bool SexpActionsHandler::canReplaceDataNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canReplaceDataNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// "Replace Data" is not for root nodes (which must be operators).
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+
+			// 1. Determine the expected OPF for this node's slot.
+			int expected_opf = OPF_NONE;
+			int arg_pos = 0;
+			for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next) {
+				arg_pos++;
+			}
+
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int parent_op_idx = -1;
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					if (Operators[i].text == parent.text) {
+						parent_op_idx = i;
+						break;
+					}
+				}
+				if (parent_op_idx >= 0) {
+					expected_opf = query_operator_argument_type(parent_op_idx, arg_pos);
+				}
+			} else if (parent.type & SEXPT_CONTAINER_DATA) {
+				if (const auto* cont = get_sexp_container(parent.text.c_str())) {
+					expected_opf = cont->opf_type;
+				}
+			}
+
+			// 2. Decide enablement based on the OPF type.
+			switch (expected_opf) {
+			// These types allow free-form user input, so replacement should always be possible.
+			case OPF_NUMBER:
+			case OPF_POSITIVE:
+			case OPF_STRING:
+			case OPF_ANYTHING:
+			case OPF_AMBIGUOUS:
+			case OPF_CONTAINER_VALUE:
+			case OPF_DATA_OR_STR_CONTAINER:
+			case OPF_MESSAGE_OR_STRING:
+				enable = true;
+				break;
+
+			// No argument is expected here, so no replacement is possible.
+			case OPF_NONE:
+				enable = false;
+				break;
+
+			// For all other types (Variables, Containers, Ships, etc.), enable the action
+			// if the choice list generated for this slot contains at least one data item.
+			default: {
+				SexpListItemPtr list = model->buildListingForOpf(expected_opf, n.parent, arg_pos);
+				if (list) {
+					for (SexpListItem* item = list.get(); item != nullptr; item = item->next) {
+						if (item->op < 0) { // item->op < 0 signifies a data item.
+							enable = true;
+							break;
+						}
+					}
+				}
+				break;
+			}
+			}
+		}
+	}
+
+	// Allow the environment to make the final decision.
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceData, kind, node_index, enable);
+	}
+	return enable;
+}
+
+bool SexpActionsHandler::canReplaceVariableNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode && model->liveCount() > 0) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canReplaceVariableNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// This action should only apply to data-like nodes, not operators.
+		if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR) {
+			if (model->environment()) {
+				model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceVariable,
+					kind,
+					node_index,
+					enable);
+			}
+			return enable; // Return false for operators.
+		}
+
+		int expected_opf = OPF_NONE;
+
+		// 1. Determine the expected OPF for the node's slot.
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+			int arg_pos = 0;
+			for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next) {
+				arg_pos++;
+			}
+
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int parent_idx = -1;
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					if (Operators[i].text == parent.text) {
+						parent_idx = i;
+						break;
+					}
+				}
+				if (parent_idx >= 0) {
+					expected_opf = query_operator_argument_type(parent_idx, arg_pos);
+				}
+			} else if (parent.type & SEXPT_CONTAINER_DATA) {
+				if (const auto* cont = get_sexp_container(parent.text.c_str())) {
+					expected_opf = cont->opf_type;
+				}
+			}
+		}
+
+		// 2. Determine if the slot can accept a string or number variable.
+		bool is_string_slot = false;
+		bool is_number_slot = false;
+
+		switch (expected_opf) {
+		case OPF_NUMBER:
+		case OPF_POSITIVE:
+			is_number_slot = true;
+			break;
+
+		case OPF_BOOL:
+		case OPF_NONE:
+			break;
+
+		case OPF_AMBIGUOUS:
+			is_string_slot = true;
+			is_number_slot = true;
+			break;
+
+		default:
+			is_string_slot = true;
+			break;
+		}
+
+		if (is_string_slot || is_number_slot) {
+			// 3. Check if there is at least one defined variable of a matching type.
+			for (int i = 0; i < MAX_SEXP_VARIABLES; i++) {
+				if (Sexp_variables[i].type & SEXP_VARIABLE_SET) {
+					if (is_string_slot && (Sexp_variables[i].type & SEXP_VARIABLE_STRING)) {
+						enable = true;
+						break;
+					}
+					if (is_number_slot && (Sexp_variables[i].type & SEXP_VARIABLE_NUMBER)) {
+						enable = true;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceVariable, kind, node_index, enable);
+	}
+	return enable;
+}
+
+bool SexpActionsHandler::canReplaceContainerNameNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode && model->liveCount() > 0) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canReplaceContainerNameNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// This action is only valid on a node that has a parent.
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+
+			// 1. Determine the expected OPF for this node's slot.
+			int expected_opf = OPF_NONE;
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int arg_pos = 0;
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next) {
+					arg_pos++;
+				}
+				int parent_idx = -1;
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					if (Operators[i].text == parent.text) {
+						parent_idx = i;
+						break;
+					}
+				}
+				if (parent_idx >= 0) {
+					expected_opf = query_operator_argument_type(parent_idx, arg_pos);
+				}
+			}
+
+			// 2. Check if the OPF is for a container name.
+			if (expected_opf == OPF_CONTAINER_NAME || expected_opf == OPF_LIST_CONTAINER_NAME ||
+				expected_opf == OPF_MAP_CONTAINER_NAME || expected_opf == OPF_DATA_OR_STR_CONTAINER) {
+				// 3. Check if there is at least one container of the correct type defined.
+				const auto& all_containers = get_all_sexp_containers();
+				for (const auto& container : all_containers) {
+					bool match = false;
+					switch (expected_opf) {
+					case OPF_CONTAINER_NAME:
+						match = true;
+						break;
+					case OPF_LIST_CONTAINER_NAME:
+						match = container.is_list();
+						break;
+					case OPF_MAP_CONTAINER_NAME:
+						match = container.is_map();
+						break;
+					case OPF_DATA_OR_STR_CONTAINER:
+						match = container.is_of_string_type();
+						break;
+					}
+					if (match) {
+						enable = true;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceContainerName, kind, node_index, enable);
+	}
+	return enable;
+}
+
+bool SexpActionsHandler::canReplaceContainerDataNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode && model->liveCount() > 0) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canReplaceContainerDataNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// This action should only apply to data-like nodes, not operators.
+		if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR) {
+			if (model->environment()) {
+				model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceContainerData,
+					kind,
+					node_index,
+					enable);
+			}
+			return enable; // Return false for operators.
+		}
+
+		// This action requires a parent context to determine the slot type.
+		if (n.parent >= 0) {
+			// 1. Determine the expected OPF for the node's slot.
+			int expected_opf = OPF_NONE;
+			const auto& parent = model->_nodes[n.parent];
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int arg_pos = 0;
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next) {
+					arg_pos++;
+				}
+				int parent_idx = -1;
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					if (Operators[i].text == parent.text) {
+						parent_idx = i;
+						break;
+					}
+				}
+				if (parent_idx >= 0) {
+					expected_opf = query_operator_argument_type(parent_idx, arg_pos);
+				}
+			} else if (parent.type & SEXPT_CONTAINER_DATA) {
+				if (const auto* cont = get_sexp_container(parent.text.c_str())) {
+					expected_opf = cont->opf_type;
+				}
+			}
+
+			// 2. Correctly determine if the slot accepts a string or number.
+			bool is_string_slot = false;
+			bool is_number_slot = false;
+
+			switch (expected_opf) {
+			case OPF_NUMBER:
+			case OPF_POSITIVE:
+				is_number_slot = true;
+				break;
+
+			case OPF_BOOL:
+			case OPF_NONE:
+			case OPF_VARIABLE_NAME:
+			case OPF_FLEXIBLE_ARGUMENT:
+			case OPF_DATA_OR_STR_CONTAINER:
+				break;
+
+			case OPF_AMBIGUOUS:
+				is_string_slot = true;
+				is_number_slot = true;
+				break;
+
+			default:
+				is_string_slot = true;
+				break;
+			}
+
+			if (is_string_slot || is_number_slot) {
+				// 3. Check if there is at least one container that provides the matching data type.
+				const auto& all_containers = get_all_sexp_containers();
+				for (const auto& container : all_containers) {
+					if (is_string_slot && any(container.type & ContainerType::STRING_DATA)) {
+						enable = true;
+						break;
+					}
+					if (is_number_slot && any(container.type & ContainerType::NUMBER_DATA)) {
+						enable = true;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::ReplaceContainerData, kind, node_index, enable);
 	}
 	return enable;
 }
