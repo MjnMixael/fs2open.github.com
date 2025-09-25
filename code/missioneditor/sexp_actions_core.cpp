@@ -19,13 +19,21 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 			}
 	};
 
+	auto getAction = [&](SexpActionId id) -> SexpContextAction* {
+		for (auto& a : out.actions)
+			if (a.id == id)
+				return &a;
+		return nullptr;
+	};
+
 	// Node group
 	add(SexpContextGroup::Node, SexpActionId::EditText, "Edit Data");
 	add(SexpContextGroup::Node, SexpActionId::DeleteNode, "Delete Item");
 	add(SexpContextGroup::Node, SexpActionId::Cut, "Cut");
 	add(SexpContextGroup::Node, SexpActionId::Copy, "Copy");
 	add(SexpContextGroup::Node, SexpActionId::PasteOverwrite, "Paste (Overwrite)");
-
+	add(SexpContextGroup::Node, SexpActionId::AddOperator, "Add Operator");
+	add(SexpContextGroup::Node, SexpActionId::AddData, "Add Data");
 	add(SexpContextGroup::Node, SexpActionId::PasteAdd, "Paste (Add Child)");
 
 	// Structure group
@@ -104,9 +112,22 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		}
 	}
 
-	bool can_add_child = is_op;
-	bool can_add_sib_after = (kind == SexpNodeKind::RealNode) && !is_root;
-	bool can_add_sib_before = (kind == SexpNodeKind::RealNode) && !is_root;
+	// Seed a single submenu choice so sexp_tree can render submenus now.
+	// We'll replace these with real category trees later.
+	// TODO Finish this for real
+
+	// Add Operator submenu stub
+	if (auto* a = getAction(SexpActionId::AddOperator)) {
+		a->choices.push_back({/*op_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
+	// Add Data submenu stub
+	if (auto* a = getAction(SexpActionId::AddData)) {
+		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
 	bool can_move_up = has_prev;
 	bool can_move_down = has_next;
 
@@ -123,7 +144,8 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	setEnabled(SexpActionId::Cut, canCutNode(kind, node_index));
 	setEnabled(SexpActionId::Copy, canCopyNode(kind, node_index));
 	setEnabled(SexpActionId::PasteOverwrite, canPasteOverrideNode(kind, node_index));
-
+	setEnabled(SexpActionId::AddOperator, canAddOperatorNode(kind, node_index));
+	setEnabled(SexpActionId::AddData, canAddDataNode(kind, node_index));
 	setEnabled(SexpActionId::PasteAdd, canPasteAddNode(kind, node_index));
 
 	// Structure
@@ -187,6 +209,95 @@ int SexpActionsHandler::nodeEffectiveType_(int node_index) const
 		return SEXPT_TYPE(n.type);
 	}
 	return SEXPT_TYPE(n.type); // number/string/etc.
+}
+
+// Map OPF to "would adding an operator make sense?"
+bool SexpActionsHandler::opfAcceptsOperator_(int opf) noexcept
+{
+	// Old FRED enabled operator items whenever an OPF was defined for the slot,
+	// except OPF_NONE (no arg) and OPF_NULL (expects a "no-op" literal).
+	if (opf < 0)
+		return false;
+	switch (opf) {
+	case OPF_NONE:
+		return false; // no argument allowed
+	case OPF_NULL:
+		return true; // inserts OP_NOP operator (legacy did this)
+	default:
+		return true; // bool/number/goal/etc. -> operators allowed
+	}
+}
+
+// Map OPF to "would adding data (number/string/etc.) make sense?"
+bool SexpActionsHandler::opfAcceptsPlainData_(int opf) noexcept
+{
+	if (opf < 0)
+		return false;
+	switch (opf) {
+	case OPF_NONE:
+		return false;
+	case OPF_NULL:
+		return false; // wants OP_NOP, not data
+	case OPF_NUMBER:
+	case OPF_POSITIVE:
+	case OPF_AMBIGUOUS:
+	case OPF_CONTAINER_VALUE:
+		return true; // legacy enabled Number (and String for some)
+	default:
+		// Many OPFs are domain-specific (ships, wings, etc.) that surface through "Add Data" menus.
+		// Treat other OPFs as data-capable so the UI can present choices from OPF listings.
+		return true;
+	}
+}
+
+// Compute the OPF expected if we append a child to parent_index.
+// Returns <0 if no arg can be added (e.g., maxed out).
+int SexpActionsHandler::expectedOpfForAppend_(int parent_index) const noexcept
+{
+	const auto& parent = model->node(parent_index);
+
+	if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+		// Capacity check
+		int op_index = -1;
+		for (int i = 0; i < (int)Operators.size(); ++i)
+			if (Operators[i].text == parent.text) {
+				op_index = i;
+				break;
+			}
+		if (op_index < 0)
+			return -1;
+
+		const int argc = model->countArgs(parent.child);
+		const int maxA = Operators[op_index].max;
+		if (!(maxA < 0 || argc < maxA))
+			return -1;
+
+		return query_operator_argument_type(op_index, argc);
+	}
+
+	if (parent.type & SEXPT_CONTAINER_DATA) {
+		// Old FRED special-cased list + AT_INDEX modifier -> number expected; else number/string allowed.
+		const auto* cont = get_sexp_container(parent.text.c_str());
+		if (!cont)
+			return -1;
+
+		// If list + AT_INDEX with only the index present, treat the next thing as NUMBER-only.
+		const int modifier = parent.child;
+		if (modifier >= 0 && cont->is_list()) {
+			const auto& mn = model->node(modifier);
+			const int add_count = model->countArgs(modifier);
+			if (add_count == 1 && get_list_modifier(mn.text.c_str()) == ListModifier::AT_INDEX) {
+				return OPF_NUMBER;
+			}
+		}
+
+		// Otherwise, legacy enabled both Number and String menus and also operator items for "container multidim"
+		// so consider this slot as "string-ish" to allow both data and operators via listings.
+		return OPF_AMBIGUOUS;
+	}
+
+	// Numbers/strings/etc. are not parents for new children
+	return -1;
 }
 
 bool SexpActionsHandler::canEditNode(SexpNodeKind kind, int node_index) const
@@ -331,8 +442,16 @@ bool SexpActionsHandler::canPasteOverrideNode(SexpNodeKind kind, int node_index)
 					++argc;
 				}
 				if (arg_pos >= 0) {
-					const int parent_opc = get_operator_const(parent.text.c_str());
-					expected = query_operator_argument_type(parent_opc, arg_pos);
+					int op_index = -1;
+					for (int i = 0; i < (int)Operators.size(); ++i) {
+						if (Operators[i].text == parent.text) {
+							op_index = i;
+							break;
+						}
+					}
+					if (op_index >= 0) {
+						expected = query_operator_argument_type(op_index, arg_pos);
+					}
 				}
 			}
 		}
@@ -351,6 +470,46 @@ bool SexpActionsHandler::canPasteOverrideNode(SexpNodeKind kind, int node_index)
 		model->environment()->overrideNodeActionEnabled(SexpActionId::PasteOverwrite, kind, node_index, can_paste);
 	}
 	return can_paste;
+}
+
+bool SexpActionsHandler::canAddOperatorNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canAddOperatorNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR || (n.type & SEXPT_CONTAINER_DATA)) {
+			const int opf = expectedOpfForAppend_(node_index);
+			enable = (opf >= 0) && opfAcceptsOperator_(opf);
+		}
+	}
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::AddOperator, kind, node_index, enable);
+	}
+	return enable;
+}
+
+bool SexpActionsHandler::canAddDataNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canAddDataNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR || (n.type & SEXPT_CONTAINER_DATA)) {
+			const int opf = expectedOpfForAppend_(node_index);
+			enable = (opf >= 0) && opfAcceptsPlainData_(opf);
+		}
+	}
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::AddData, kind, node_index, enable);
+	}
+	return enable;
 }
 
 // TODO update to support paste adding to containers too
@@ -376,7 +535,7 @@ bool SexpActionsHandler::canPasteAddNode(SexpNodeKind kind, int node_index) cons
 			}
 
 			if (op_index != -1) {
-				const int minA = Operators[op_index].min;
+				//const int minA = Operators[op_index].min;
 				const int maxA = Operators[op_index].max;
 
 				// Where would the new arg go? At the end.
@@ -387,8 +546,7 @@ bool SexpActionsHandler::canPasteAddNode(SexpNodeKind kind, int node_index) cons
 				const bool has_space = (maxA < 0) || (argc < maxA);
 				if (has_space) {
 					// Expected type for that new argument position
-					const int parent_opc = Operators[op_index].value;
-					const int expected = query_operator_argument_type(parent_opc, new_pos);
+					const int expected = query_operator_argument_type(op_index, new_pos);
 
 					// Clipboard root type
 					const int clip_type = model->clipboardReturnType();
@@ -664,7 +822,7 @@ bool SexpActionsHandler::addArgument(int node_index)
 	// Force-add one more, respecting max via ensureOperatorArity
 	// (Just extend min by 1 temporarily: simplest is to append default for next index)
 	int argc = model->countArgs(model->_nodes[node_index].child);
-	int opf = query_operator_argument_type(Operators[cur_index].value, argc);
+	int opf = query_operator_argument_type(cur_index, argc);
 	if (opf < 0)
 		return false; // no extra allowed
 	const int added = model->createDefaultArgForOpf(opf, node_index, cur_index, argc, node_index);
