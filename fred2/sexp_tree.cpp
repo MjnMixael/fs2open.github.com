@@ -549,8 +549,8 @@ void sexp_tree::right_clicked(int mode)
 	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
 	menu.AppendMenu(item_flags, ID_EDIT_COPY, action_ptr->label.c_str());
 
-	action_ptr = find_action(SexpActionId::Paste);
-	Assertion(action_ptr, "Action 'Paste' is missing from the context menu model!");
+	action_ptr = find_action(SexpActionId::PasteOverwrite);
+	Assertion(action_ptr, "Action 'Paste Overwrite' is missing from the context menu model!");
 	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
 	menu.AppendMenu(item_flags, ID_EDIT_PASTE, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
@@ -568,7 +568,10 @@ void sexp_tree::right_clicked(int mode)
 	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)add_data_submenu.m_hMenu, "Add Data");
 	menu.AppendMenu(MF_SEPARATOR);
 
-	menu.AppendMenu(MF_STRING | MF_GRAYED, ID_EDIT_PASTE_SPECIAL, "Paste (Add Child)");
+	action_ptr = find_action(SexpActionId::PasteAdd);
+	Assertion(action_ptr, "Action 'Paste Add' is missing from the context menu model!");
+	item_flags = action_ptr->enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+	menu.AppendMenu(item_flags, ID_EDIT_PASTE_SPECIAL, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
 	CMenu insert_op_submenu;
