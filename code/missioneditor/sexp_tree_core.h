@@ -115,6 +115,19 @@ class SexpTreeModel {
 	int size() const; // number of allocated nodes
 	int liveCount() const; // number of non SEXPT_UNUSED nodes
 
+	// Clipboard lifecycle
+	bool hasClipboard() const noexcept; // true iff a subtree is stored
+	void clearClipboard() noexcept;     // drop any stored subtree
+
+	// Capture the subtree rooted at node_index into the model clipboard.
+	// Returns false if node_index is invalid.
+	bool captureClipboardFromNode(int node_index) noexcept;
+
+	// Returns -1 if clipboard is empty.
+	// For operator roots: returns the operator's return type.
+	// For data/variable roots: returns their base atom type (e.g., SEXPT_NUMBER / SEXPT_STRING).
+	int clipboardReturnType() const noexcept;
+
 	// Model editing primitives
 	void setNode(int index, int type, const char* text);
 	void detachFromParent(int index);                        // does not change index.child subtree
@@ -168,6 +181,15 @@ class SexpTreeModel {
 	ISexpEnvironment* _env = nullptr;
 	SCP_vector<SexpNode> _nodes;
 	std::unique_ptr<SexpActionsHandler> _actions;
+
+	struct ClipboardNode {
+		int type;        // same bitmask used in _nodes
+		SCP_string text; // node text
+		int child;       // index into ClipboardNode array, or -1
+		int next;        // index into ClipboardNode array, or -1
+	};
+
+	SCP_vector<ClipboardNode> _clipboard;
 
 	static void freeNodeChain(SCP_vector<SexpNode>& nodes, int node);
 	static void getCombinedVariableName(SCP_string& out, const char* sexp_var_name);
