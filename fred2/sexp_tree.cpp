@@ -555,17 +555,40 @@ void sexp_tree::right_clicked(int mode)
 	menu.AppendMenu(item_flags, ID_EDIT_PASTE, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
-	// --- Structure and Operator groups (as placeholders for now) ---
-	// ... (This section remains the same, showing disabled items for actions not yet in the model) ...
+	// --- Structure and Operator groups ---
 	CMenu add_op_submenu;
 	add_op_submenu.CreatePopupMenu();
-	add_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)add_op_submenu.m_hMenu, "Add Operator");
+	action_ptr = find_action(SexpActionId::AddOperator);
+	Assertion(action_ptr, "Action 'AddOperator' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 0); // TODO Placeholder ID
+			add_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		add_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)add_op_submenu.m_hMenu, action_ptr->label.c_str());
 
 	CMenu add_data_submenu;
 	add_data_submenu.CreatePopupMenu();
-	add_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no data available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)add_data_submenu.m_hMenu, "Add Data");
+	action_ptr = find_action(SexpActionId::AddData);
+	Assertion(action_ptr, "Action 'AddData' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 1); // TODO Placeholder ID
+			add_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		add_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)add_data_submenu.m_hMenu, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
 	action_ptr = find_action(SexpActionId::PasteAdd);
@@ -590,7 +613,7 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->choices.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 0); // Placeholder ID
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 2); // TODO Placeholder ID
 			replace_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
 		}
 	} else {
