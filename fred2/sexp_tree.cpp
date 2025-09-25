@@ -53,7 +53,6 @@
 #include "AddModifyContainerDlg.h"
 #include "asteroid/asteroid.h"
 
-#include "missioneditor/sexp_tree_core.h"
 #include "missioneditor/sexp_opf_core.h"
 
 #define ID_SEXP_ACTION_BASE 0xE100
@@ -525,9 +524,18 @@ void sexp_tree::right_clicked(int mode)
 	menu.AppendMenu(MF_SEPARATOR);
 
 	// --- Comment/Color Group ---
-	menu.AppendMenu(MF_STRING, ID_EDIT_COMMENT, "Edit Comment");
-	menu.AppendMenu(MF_STRING, ID_EDIT_BG_COLOR, "Edit Background Color");
-	menu.AppendMenu(MF_SEPARATOR);
+	bool annotations_added = false;
+	if (hasFlag(SexpTreeFlag::EnableAnnotations)) {
+		menu.AppendMenu(MF_STRING, ID_EDIT_COMMENT, "Edit Comment");
+		annotations_added = true;
+	}
+	if (hasFlag(SexpTreeFlag::EnableColors)) {
+		menu.AppendMenu(MF_STRING, ID_EDIT_BG_COLOR, "Edit Background Color");
+		annotations_added = true;
+	}
+	if (annotations_added) {
+		menu.AppendMenu(MF_SEPARATOR);
+	}
 
 	// --- Clipboard Group ---
 	action_ptr = find_action(SexpActionId::Cut);
@@ -5879,6 +5887,32 @@ bool sexp_tree::is_container_name_opf_type(const int op_type)
 }
 
 // NEW FUNCTIONS-------------------------------------------------------------------
+
+void sexp_tree::setFlags(SexpTreeFlag flags)
+{
+	_flagsBits = static_cast<SexpTreeFlagsBits>(flags);
+}
+
+void sexp_tree::addFlags(SexpTreeFlag flags)
+{
+	_flagsBits |= static_cast<SexpTreeFlagsBits>(flags);
+}
+
+void sexp_tree::clearFlags(SexpTreeFlag flags)
+{
+	_flagsBits &= ~static_cast<SexpTreeFlagsBits>(flags);
+}
+
+SexpTreeFlag sexp_tree::flags() const
+{
+	return static_cast<SexpTreeFlag>(_flagsBits);
+}
+
+bool sexp_tree::hasFlag(SexpTreeFlag flg) const
+{
+	return (_flagsBits & static_cast<SexpTreeFlagsBits>(flg)) != 0;
+}
+
 void sexp_tree::rebuild_model_from_sexp(int index, const char* def)
 {
 	// Build from the same root index the legacy tree uses
