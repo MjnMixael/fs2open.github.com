@@ -8,6 +8,7 @@ enum class SexpNodeKind;
 // An extension of SexpTreeNode that provides a list of available actions the UI can take on any specific node
 
 // High level buckets for menu grouping in UI
+// TODO Refine these and how they are set for each action
 enum class SexpContextGroup {
 	Node,      // delete, duplicate, cut/copy/paste, rename/edit text
 	Structure, // add child/sibling, move up/down
@@ -29,13 +30,18 @@ enum class SexpActionId : int {
 	AddData,
 
 	InsertOperator,
+	ReplaceOperator,
+	ReplaceData,
+
+	ReplaceVariable,
+	ReplaceContainerName,
+	ReplaceContainerData,
 
 	// structure
 	MoveUp,
 	MoveDown,
 
 	// operator
-	ReplaceOperator,
 	ToggleNot,
 	ResetToDefaults, // rebuild args to defaults for this op
 
@@ -98,6 +104,11 @@ class SexpActionsHandler final {
 	bool canAddDataNode(SexpNodeKind kind, int node_index) const;
 	bool canPasteAddNode(SexpNodeKind kind, int node_index) const;
 	bool canInsertOperatorNode(SexpNodeKind kind, int node_index) const;
+	bool canReplaceOperatorNode(SexpNodeKind kind, int node_index) const;
+	bool canReplaceDataNode(SexpNodeKind kind, int node_index) const;
+	bool canReplaceVariableNode(SexpNodeKind kind, int node_index) const;
+	bool canReplaceContainerNameNode(SexpNodeKind kind, int node_index) const;
+	bool canReplaceContainerDataNode(SexpNodeKind kind, int node_index) const;
 
 	// Action implementations
 	bool editText(int node_index, const char* new_text);
@@ -105,11 +116,18 @@ class SexpActionsHandler final {
 	bool cutNode(int node_index);
 	bool copyNode(int node_index);
 	bool pasteOverwrite(int node_index);
-
+	bool addOperator(int node_index, const SexpActionParam* p);
+	bool addData(int node_index, const SexpActionParam* p);
 	bool pasteAdd(int node_index);
+	bool insertOperator(int node_index, const SexpActionParam* p);
+	bool replaceOperator(int node_index, const SexpActionParam* p);
+	bool replaceData(int node_index, const SexpActionParam* p);
+	bool replaceVariable(int node_index, const SexpActionParam* p);
+	bool replaceContainerName(int node_index, const SexpActionParam* p);
+	bool replaceContainerData(int node_index, const SexpActionParam* p);
+
 	bool moveUp(int node_index);
 	bool moveDown(int node_index);
-	bool replaceOperator(int node_index, const SexpActionParam* p);
 	bool toggleNot(int node_index);
 	bool resetToDefaults(int node_index);
 	bool addArgument(int node_index);
