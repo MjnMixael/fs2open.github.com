@@ -22,12 +22,10 @@ enum class SexpActionId : int {
 	DeleteNode,
 	Cut,
 	Copy,
-	Paste,
+	PasteOverwrite,
+	PasteAdd,
 
 	// structure
-	AddChild,
-	AddSiblingAfter,
-	AddSiblingBefore,
 	MoveUp,
 	MoveDown,
 
@@ -79,18 +77,26 @@ class SexpActionsHandler final {
   private:
 	SexpTreeModel* model;
 
+	// Helpers
+	int nodeEffectiveType_(int node_index) const;
+
 	// Check if an action is valid for this node
 	bool canEditNode(SexpNodeKind kind, int node_index) const;
 	bool canDeleteNode(SexpNodeKind kind, int node_index) const;
 	bool canCutNode(SexpNodeKind kind, int node_index) const;
+	bool canCopyNode(SexpNodeKind kind, int node_index) const;
+	bool canPasteOverrideNode(SexpNodeKind kind, int node_index) const;
+
+	bool canPasteAddNode(SexpNodeKind kind, int node_index) const;
 
 	// Action implementations
 	bool editText(int node_index, const char* new_text);
 	bool deleteNode(int node_index);
-	bool addChild(int node_index);
-	bool addChildAt(int parent_node, int arg_pos);
-	bool addSiblingBefore(int node_index);
-	bool addSiblingAfter(int node_index);
+	bool cutNode(int node_index);
+	bool copyNode(int node_index);
+	bool pasteOverwrite(int node_index);
+
+	bool pasteAdd(int node_index);
 	bool moveUp(int node_index);
 	bool moveDown(int node_index);
 	bool replaceOperator(int node_index, const SexpActionParam* p);

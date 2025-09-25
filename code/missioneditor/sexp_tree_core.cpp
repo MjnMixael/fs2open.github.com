@@ -203,6 +203,72 @@ int SexpTreeModel::liveCount() const
 	return c;
 }
 
+bool SexpTreeModel::hasClipboard() const noexcept
+{
+	return !_clipboard.empty();
+}
+void SexpTreeModel::clearClipboard() noexcept
+{
+	_clipboard.clear();
+}
+
+bool SexpTreeModel::captureClipboardFromNode(int node_index) noexcept
+{
+	if (!SCP_vector_inbounds(_nodes, node_index))
+		return false;
+
+	_clipboard.clear();
+	// map from model index to clipboard index
+	SCP_unordered_map<int, int> remap;
+
+	// DFS copy
+	std::function<int(int)> copyChain = [&](int idx) -> int {
+		if (idx < 0)
+			return -1;
+		auto it = remap.find(idx);
+		if (it != remap.end())
+			return it->second;
+
+		const auto& src = _nodes[idx];
+		int newIndex = static_cast<int>(_clipboard.size());
+		remap[idx] = newIndex;
+
+		_clipboard.push_back({src.type, src.text, -1, -1});
+
+		// child then next, mapping into clipboard space
+		int childCi = copyChain(src.child);
+		int nextCi = copyChain(src.next);
+		_clipboard[newIndex].child = childCi;
+		_clipboard[newIndex].next = nextCi;
+		return newIndex;
+	};
+
+	copyChain(node_index);
+	return true;
+}
+
+int SexpTreeModel::clipboardReturnType() const noexcept
+{
+	if (_clipboard.empty())
+		return -1;
+
+	const auto& root = _clipboard[0];
+
+	// Operator: use operator return type
+	if (SEXPT_TYPE(root.type) == SEXPT_OPERATOR) {
+		const int opc = get_operator_const(root.text.c_str());
+		return query_operator_return_type(opc);
+	}
+
+	// Variables carry a base kind in their type bits
+	if (root.type & SEXPT_VARIABLE) {
+		return SEXPT_TYPE(root.type); // e.g., SEXPT_NUMBER or SEXPT_STRING
+	}
+
+	// Plain atoms: number/string/etc.
+	return SEXPT_TYPE(root.type);
+}
+
 void SexpTreeModel::setNode(int index, int type, const char* text)
 {
 	Assertion(SCP_vector_inbounds(_nodes, index), "setNode: index %d out of range.", index);

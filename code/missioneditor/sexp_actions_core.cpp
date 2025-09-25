@@ -24,12 +24,11 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	add(SexpContextGroup::Node, SexpActionId::DeleteNode, "Delete Item");
 	add(SexpContextGroup::Node, SexpActionId::Cut, "Cut");
 	add(SexpContextGroup::Node, SexpActionId::Copy, "Copy");
-	add(SexpContextGroup::Node, SexpActionId::Paste, "Paste (Overwrite)");
+	add(SexpContextGroup::Node, SexpActionId::PasteOverwrite, "Paste (Overwrite)");
+
+	add(SexpContextGroup::Node, SexpActionId::PasteAdd, "Paste (Add Child)");
 
 	// Structure group
-	add(SexpContextGroup::Structure, SexpActionId::AddChild, "Add Child");
-	add(SexpContextGroup::Structure, SexpActionId::AddSiblingAfter, "Add Sibling After");
-	add(SexpContextGroup::Structure, SexpActionId::AddSiblingBefore, "Add Sibling Before");
 	add(SexpContextGroup::Structure, SexpActionId::MoveUp, "Move Up");
 	add(SexpContextGroup::Structure, SexpActionId::MoveDown, "Move Down");
 
@@ -105,10 +104,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		}
 	}
 
-	bool can_duplicate_subtree = kind == SexpNodeKind::RealNode;
-	bool can_copy = kind == SexpNodeKind::RealNode;
-	bool can_paste = kind == SexpNodeKind::RealNode;
-
 	bool can_add_child = is_op;
 	bool can_add_sib_after = (kind == SexpNodeKind::RealNode) && !is_root;
 	bool can_add_sib_before = (kind == SexpNodeKind::RealNode) && !is_root;
@@ -118,12 +113,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// 3) Let the environment tweak enables (e.g., allow Delete on synthetic root).
 	// TODO make this work for all actions, not just DeleteNode and Cut
 	if (model->environment()) {
-		model->environment()->overrideNodeActionEnabled(SexpActionId::Copy, kind, node_index, can_copy);
-		model->environment()->overrideNodeActionEnabled(SexpActionId::Paste, kind, node_index, can_paste);
-
-		model->environment()->overrideNodeActionEnabled(SexpActionId::AddChild, kind, node_index, can_add_child);
-		model->environment()->overrideNodeActionEnabled(SexpActionId::AddSiblingAfter, kind, node_index, can_add_sib_after);
-		model->environment()->overrideNodeActionEnabled(SexpActionId::AddSiblingBefore, kind, node_index, can_add_sib_before);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::MoveUp, kind, node_index, can_move_up);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::MoveDown, kind, node_index, can_move_down);
 	}
@@ -132,13 +121,12 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	setEnabled(SexpActionId::EditText, canEditNode(kind, node_index));
 	setEnabled(SexpActionId::DeleteNode, canDeleteNode(kind, node_index));
 	setEnabled(SexpActionId::Cut, canCutNode(kind, node_index));
-	setEnabled(SexpActionId::Copy, can_copy);
-	setEnabled(SexpActionId::Paste, can_paste); // TODO gate later via env clipboard
+	setEnabled(SexpActionId::Copy, canCopyNode(kind, node_index));
+	setEnabled(SexpActionId::PasteOverwrite, canPasteOverrideNode(kind, node_index));
+
+	setEnabled(SexpActionId::PasteAdd, canPasteAddNode(kind, node_index));
 
 	// Structure
-	setEnabled(SexpActionId::AddChild, can_add_child);
-	setEnabled(SexpActionId::AddSiblingAfter, can_add_sib_after);
-	setEnabled(SexpActionId::AddSiblingBefore, can_add_sib_before);
 	setEnabled(SexpActionId::MoveUp, can_move_up);
 	setEnabled(SexpActionId::MoveDown, can_move_down);
 
@@ -157,15 +145,6 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 		return deleteNode(node_index);
 
 	// Structure
-	case SexpActionId::AddChild:
-		return addChild(node_index);
-
-	case SexpActionId::AddSiblingBefore:
-		return addSiblingBefore(node_index);
-
-	case SexpActionId::AddSiblingAfter:
-		return addSiblingAfter(node_index);
-
 	case SexpActionId::MoveUp:
 		return moveUp(node_index);
 
@@ -192,6 +171,22 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 	default:
 		return false;
 	}
+}
+
+int SexpActionsHandler::nodeEffectiveType_(int node_index) const
+{
+	Assertion(SCP_vector_inbounds(model->_nodes, node_index), "nodeEffectiveType_: bad node");
+	const auto& n = model->_nodes[node_index];
+
+	if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR) {
+		const int opc = get_operator_const(n.text.c_str());
+		return query_operator_return_type(opc);
+	}
+	// Variables encode their base kind in the type
+	if (n.type & SEXPT_VARIABLE) {
+		return SEXPT_TYPE(n.type);
+	}
+	return SEXPT_TYPE(n.type); // number/string/etc.
 }
 
 bool SexpActionsHandler::canEditNode(SexpNodeKind kind, int node_index) const
@@ -301,6 +296,117 @@ bool SexpActionsHandler::canCutNode(SexpNodeKind kind, int node_index) const
 	return can_cut;
 }
 
+bool SexpActionsHandler::canCopyNode(SexpNodeKind kind, int node_index) const
+{
+	// Base rule: real nodes are copyable; synthetic roots are not (unless env says so).
+	bool can_copy = (kind == SexpNodeKind::RealNode);
+
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::Copy, kind, node_index, can_copy);
+	}
+	return can_copy;
+}
+
+// TODO update to support paste overwriting container elements too
+bool SexpActionsHandler::canPasteOverrideNode(SexpNodeKind kind, int node_index) const
+{
+	bool can_paste = false;
+
+	if (kind == SexpNodeKind::RealNode && model->hasClipboard()) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canPasteNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// Determine the expected type at this position:
+		// - If parent is an operator, use its argument type for this child's arg_pos
+		// - Otherwise (including root), use this node's own effective type
+		int expected = -1;
+
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				int arg_pos = -1, argc = 0;
+				for (int c = parent.child; c >= 0; c = model->_nodes[c].next) {
+					if (c == node_index)
+						arg_pos = argc;
+					++argc;
+				}
+				if (arg_pos >= 0) {
+					const int parent_opc = get_operator_const(parent.text.c_str());
+					expected = query_operator_argument_type(parent_opc, arg_pos);
+				}
+			}
+		}
+
+		if (expected < 0) {
+			// No operator parent (e.g., root) should match node's own effective type
+			expected = nodeEffectiveType_(node_index);
+		}
+
+		const int clip_type = model->clipboardReturnType();
+		can_paste = (clip_type >= 0) && (expected >= 0) && (clip_type == expected);
+	}
+
+	// Environment can still refine (e.g., forbid certain contexts or allow synthetic roots later)
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::PasteOverwrite, kind, node_index, can_paste);
+	}
+	return can_paste;
+}
+
+// TODO update to support paste adding to containers too
+bool SexpActionsHandler::canPasteAddNode(SexpNodeKind kind, int node_index) const
+{
+	bool can_add = false;
+
+	// Must be a real node and have something on the clipboard
+	if (kind == SexpNodeKind::RealNode && model->hasClipboard()) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canPasteAddNode: bad node");
+		const auto& target = model->_nodes[node_index];
+
+		// We only allow adding a child to an OPERATOR node (v1).
+		// (Containers / other parents can be supported later if needed.)
+		if (SEXPT_TYPE(target.type) == SEXPT_OPERATOR) {
+			// Look up operator entry
+			int op_index = -1;
+			for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
+				if (Operators[i].text == target.text) {
+					op_index = i;
+					break;
+				}
+			}
+
+			if (op_index != -1) {
+				const int minA = Operators[op_index].min;
+				const int maxA = Operators[op_index].max;
+
+				// Where would the new arg go? At the end.
+				const int argc = model->countArgs(target.child);
+				const int new_pos = argc;
+
+				// Check capacity
+				const bool has_space = (maxA < 0) || (argc < maxA);
+				if (has_space) {
+					// Expected type for that new argument position
+					const int parent_opc = Operators[op_index].value;
+					const int expected = query_operator_argument_type(parent_opc, new_pos);
+
+					// Clipboard root type
+					const int clip_type = model->clipboardReturnType();
+
+					// Match required exactly (you can broaden to compatibility later)
+					can_add = (clip_type >= 0) && (expected >= 0) && (clip_type == expected);
+				}
+			}
+		}
+	}
+
+	// Let the environment tweak (e.g., disallow adding in certain editors)
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::PasteAdd, kind, node_index, can_add);
+	}
+	return can_add;
+}
+
 bool SexpActionsHandler::editText(int node_index, const char* new_text)
 {
 	/* auto& nodes = model->_nodes;
@@ -317,206 +423,6 @@ bool SexpActionsHandler::deleteNode(int node_index)
 	if (model->_nodes[node_index].parent < 0)
 		return false;
 	model->freeNode(node_index, /*cascade=*/false);
-	return true;
-}
-
-bool SexpActionsHandler::addChild(int node_index)
-{
-	auto& nodes = model->_nodes;
-	if (!SCP_vector_inbounds(nodes, node_index))
-		return false;
-
-	// Next argument position is current argc
-	int argc = 0;
-	for (int c = nodes[node_index].child; c >= 0; c = nodes[c].next)
-		++argc;
-
-	return addChildAt(node_index, argc);
-}
-
-bool SexpActionsHandler::addChildAt(int parent_node, int arg_pos)
-{
-	auto& nodes = model->_nodes;
-	if (!SCP_vector_inbounds(nodes, parent_node))
-		return false;
-	if (SEXPT_TYPE(nodes[parent_node].type) != SEXPT_OPERATOR)
-		return false;
-
-	// Operator table index
-	int op_index = -1;
-	for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
-		if (Operators[i].text == nodes[parent_node].text) {
-			op_index = i;
-			break;
-		}
-	}
-	if (op_index < 0)
-		return false;
-
-	// argc / max
-	const int maxA = Operators[op_index].max; // -1 == unbounded
-	int argc = 0;
-	for (int c = nodes[parent_node].child; c >= 0; c = nodes[c].next)
-		++argc;
-	if (maxA >= 0 && argc >= maxA)
-		return false;
-
-	// Clamp arg_pos into [0, argc]
-	if (arg_pos < 0)
-		arg_pos = 0;
-	if (arg_pos > argc)
-		arg_pos = argc;
-
-	const int op_const = Operators[op_index].value;
-	const int opf = query_operator_argument_type(op_const, arg_pos);
-	if (opf < 0)
-		return false;
-
-	// Create default DETACHED node
-	const int newn = model->createDefaultArgForOpf(opf, /*parent*/ -1, op_index, arg_pos, parent_node);
-	nodes[newn].parent = parent_node;
-
-	// Splice before the current node at arg_pos (or append if arg_pos == argc)
-	int prev = -1, cur = nodes[parent_node].child, pos = 0;
-	while (cur >= 0 && pos < arg_pos) {
-		prev = cur;
-		cur = nodes[cur].next;
-		++pos;
-	}
-
-	if (prev < 0) {
-		// insert at head
-		nodes[newn].next = nodes[parent_node].child;
-		nodes[parent_node].child = newn;
-	} else {
-		nodes[newn].next = nodes[prev].next; // which is 'cur'
-		nodes[prev].next = newn;
-	}
-
-	return true;
-}
-
-bool SexpActionsHandler::addSiblingAfter(int node_index)
-{
-	auto& nodes = model->_nodes;
-	if (!SCP_vector_inbounds(nodes, node_index))
-		return false;
-
-	const int parent = nodes[node_index].parent;
-	if (parent < 0)
-		return false;
-
-	// parent must be an operator
-	if (SEXPT_TYPE(nodes[parent].type) != SEXPT_OPERATOR)
-		return false;
-
-	// find operator table index from parent's text
-	int op_index = -1;
-	for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
-		if (Operators[i].text == nodes[parent].text) {
-			op_index = i;
-			break;
-		}
-	}
-	if (op_index < 0)
-		return false;
-
-	// current argc and max
-	const int maxA = Operators[op_index].max; // -1 = unbounded
-	int argc = 0;
-	for (int c = nodes[parent].child; c >= 0; c = nodes[c].next)
-		++argc;
-	if (maxA >= 0 && argc >= maxA)
-		return false; // would exceed max
-
-	// determine the argument index we are inserting at: pos = index(node) + 1
-	int arg_pos = 0;
-	for (int c = nodes[parent].child; c >= 0 && c != node_index; c = nodes[c].next)
-		++arg_pos;
-	if (nodes[parent].child < 0 || nodes[node_index].parent != parent)
-		return false; // safety
-
-	arg_pos += 1;
-
-	// type for that arg position
-	const int op_const = Operators[op_index].value;
-	const int opf = query_operator_argument_type(op_const, arg_pos);
-	if (opf < 0)
-		return false; // no arg allowed at this position
-
-	// build default arg as a DETACHED node (parent = -1), then splice
-	const int newn = model->createDefaultArgForOpf(opf, /*parent*/ -1, op_index, arg_pos, parent);
-
-	// splice after node_index
-	nodes[newn].parent = parent;
-	nodes[newn].next = nodes[node_index].next;
-	nodes[node_index].next = newn;
-
-	return true;
-}
-
-bool SexpActionsHandler::addSiblingBefore(int node_index)
-{
-	auto& nodes = model->_nodes;
-	if (!SCP_vector_inbounds(nodes, node_index))
-		return false;
-
-	const int parent = nodes[node_index].parent;
-	if (parent < 0)
-		return false;
-
-	if (SEXPT_TYPE(nodes[parent].type) != SEXPT_OPERATOR)
-		return false;
-
-	// operator table index
-	int op_index = -1;
-	for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
-		if (Operators[i].text == nodes[parent].text) {
-			op_index = i;
-			break;
-		}
-	}
-	if (op_index < 0)
-		return false;
-
-	// current argc and max
-	const int maxA = Operators[op_index].max; // -1 = unbounded
-	int argc = 0;
-	for (int c = nodes[parent].child; c >= 0; c = nodes[c].next)
-		++argc;
-	if (maxA >= 0 && argc >= maxA)
-		return false;
-
-	// find previous sibling and arg_pos (the position this node currently occupies)
-	int prev = -1, cur = nodes[parent].child, arg_pos = 0;
-	while (cur >= 0 && cur != node_index) {
-		prev = cur;
-		cur = nodes[cur].next;
-		++arg_pos;
-	}
-	if (cur != node_index)
-		return false; // not under this parent?
-
-	// type for that arg position
-	const int op_const = Operators[op_index].value;
-	const int opf = query_operator_argument_type(op_const, arg_pos);
-	if (opf < 0)
-		return false;
-
-	// create default DETACHED node, then splice before
-	const int newn = model->createDefaultArgForOpf(opf, /*parent*/ -1, op_index, arg_pos, parent);
-
-	nodes[newn].parent = parent;
-
-	if (prev >= 0) {
-		nodes[newn].next = nodes[prev].next; // which is node_index
-		nodes[prev].next = newn;
-	} else {
-		// insert at head
-		nodes[newn].next = nodes[parent].child; // current head (node_index)
-		nodes[parent].child = newn;
-	}
-
 	return true;
 }
 
