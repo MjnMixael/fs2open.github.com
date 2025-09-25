@@ -28,6 +28,8 @@ enum class SexpActionId : int {
 	AddOperator,
 	AddData,
 
+	InsertOperator,
+
 	// structure
 	MoveUp,
 	MoveDown,
@@ -95,6 +97,7 @@ class SexpActionsHandler final {
 	bool canAddOperatorNode(SexpNodeKind kind, int node_index) const;
 	bool canAddDataNode(SexpNodeKind kind, int node_index) const;
 	bool canPasteAddNode(SexpNodeKind kind, int node_index) const;
+	bool canInsertOperatorNode(SexpNodeKind kind, int node_index) const;
 
 	// Action implementations
 	bool editText(int node_index, const char* new_text);

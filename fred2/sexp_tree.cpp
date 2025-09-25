@@ -598,8 +598,20 @@ void sexp_tree::right_clicked(int mode)
 
 	CMenu insert_op_submenu;
 	insert_op_submenu.CreatePopupMenu();
-	insert_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)insert_op_submenu.m_hMenu, "Insert Operator");
+	action_ptr = find_action(SexpActionId::InsertOperator);
+	Assertion(action_ptr, "Action 'Insert Operator' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 2); // TODO Placeholder ID
+			insert_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		insert_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)insert_op_submenu.m_hMenu, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
 	// --- Replace Operator (using model label and choices) ---
@@ -612,7 +624,7 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->choices.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 2); // TODO Placeholder ID
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 3); // TODO Placeholder ID
 			replace_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
 		}
 	} else {
