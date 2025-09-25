@@ -614,7 +614,6 @@ void sexp_tree::right_clicked(int mode)
 	menu.AppendMenu(item_flags, (UINT_PTR)insert_op_submenu.m_hMenu, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
-	// --- Replace Operator (using model label and choices) ---
 	CMenu replace_op_submenu;
 	replace_op_submenu.CreatePopupMenu();
 	action_ptr = find_action(SexpActionId::ReplaceOperator);
@@ -632,33 +631,81 @@ void sexp_tree::right_clicked(int mode)
 	}
 	menu.AppendMenu(item_flags, (UINT_PTR)replace_op_submenu.m_hMenu, action_ptr->label.c_str());
 
-	// ... (The rest of the menu remains the same, using disabled placeholders) ...
 	CMenu replace_data_submenu;
 	replace_data_submenu.CreatePopupMenu();
-	replace_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no data available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_data_submenu.m_hMenu, "Replace Data");
+	action_ptr = find_action(SexpActionId::ReplaceData);
+	Assertion(action_ptr, "Action 'ReplaceData' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 4); // TODO Placeholder ID
+			replace_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		replace_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)replace_data_submenu.m_hMenu, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
+	// ... (The rest of the menu remains the same, using disabled placeholders) ...
 	menu.AppendMenu(MF_STRING, ID_SEXP_TREE_ADD_VARIABLE, "Add Variable");
 	menu.AppendMenu(MF_STRING, ID_SEXP_TREE_MODIFY_VARIABLE, "Modify Variable");
 
 	CMenu replace_var_submenu;
 	replace_var_submenu.CreatePopupMenu();
-	replace_var_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no variables available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_var_submenu.m_hMenu, "Replace Variable");
+	action_ptr = find_action(SexpActionId::ReplaceVariable);
+	Assertion(action_ptr, "Action 'ReplaceVariable' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 5); // TODO Placeholder ID
+			replace_var_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		replace_var_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)replace_var_submenu.m_hMenu, action_ptr->label.c_str());
 	menu.AppendMenu(MF_SEPARATOR);
 
 	menu.AppendMenu(MF_STRING, ID_EDIT_SEXP_TREE_EDIT_CONTAINERS, "Add/Modify Container");
 
 	CMenu replace_container_name_submenu;
 	replace_container_name_submenu.CreatePopupMenu();
-	replace_container_name_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no containers available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_container_name_submenu.m_hMenu, "Replace Container Name");
+	action_ptr = find_action(SexpActionId::ReplaceContainerName);
+	Assertion(action_ptr, "Action 'ReplaceContainerName' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 6); // TODO Placeholder ID
+			replace_container_name_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		replace_container_name_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)replace_container_name_submenu.m_hMenu, action_ptr->label.c_str());
 
 	CMenu replace_container_data_submenu;
 	replace_container_data_submenu.CreatePopupMenu();
-	replace_container_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no containers available)");
-	menu.AppendMenu(MF_POPUP | MF_GRAYED, (UINT_PTR)replace_container_data_submenu.m_hMenu, "Replace Container Data");
+	action_ptr = find_action(SexpActionId::ReplaceContainerData);
+	Assertion(action_ptr, "Action 'ReplaceContainerData' is missing from the context menu model!");
+	item_flags = MF_POPUP | MF_GRAYED;
+
+	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+		item_flags = MF_POPUP;
+		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 7); // TODO Placeholder ID
+			replace_container_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+		}
+	} else {
+		replace_container_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
+	}
+	menu.AppendMenu(item_flags, (UINT_PTR)replace_container_data_submenu.m_hMenu, action_ptr->label.c_str());
 
 	// --- 3. Display the menu ---
 	menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON, mouse.x, mouse.y, this);
