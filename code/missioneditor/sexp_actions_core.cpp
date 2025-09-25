@@ -22,7 +22,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// Node group
 	add(SexpContextGroup::Node, SexpActionId::EditText, "Edit Data");
 	add(SexpContextGroup::Node, SexpActionId::DeleteNode, "Delete Item");
-	add(SexpContextGroup::Node, SexpActionId::DuplicateSubtree, "Duplicate");
 	add(SexpContextGroup::Node, SexpActionId::Cut, "Cut");
 	add(SexpContextGroup::Node, SexpActionId::Copy, "Copy");
 	add(SexpContextGroup::Node, SexpActionId::Paste, "Paste (Overwrite)");
@@ -119,7 +118,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// 3) Let the environment tweak enables (e.g., allow Delete on synthetic root).
 	// TODO make this work for all actions, not just DeleteNode and Cut
 	if (model->environment()) {
-		model->environment()->overrideNodeActionEnabled(SexpActionId::DuplicateSubtree, kind, node_index, can_duplicate_subtree);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::Copy, kind, node_index, can_copy);
 		model->environment()->overrideNodeActionEnabled(SexpActionId::Paste, kind, node_index, can_paste);
 
@@ -133,7 +131,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// 4) Flip enables for Node/Structure groups now that we have final flags.
 	setEnabled(SexpActionId::EditText, canEditNode(kind, node_index));
 	setEnabled(SexpActionId::DeleteNode, canDeleteNode(kind, node_index));
-	setEnabled(SexpActionId::DuplicateSubtree, can_duplicate_subtree); // allow duplicate on real nodes
 	setEnabled(SexpActionId::Cut, canCutNode(kind, node_index));
 	setEnabled(SexpActionId::Copy, can_copy);
 	setEnabled(SexpActionId::Paste, can_paste); // TODO gate later via env clipboard
@@ -158,9 +155,6 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 
 	case SexpActionId::DeleteNode:
 		return deleteNode(node_index);
-
-	case SexpActionId::DuplicateSubtree:
-		return duplicateSubtree(node_index);
 
 	// Structure
 	case SexpActionId::AddChild:
@@ -324,12 +318,6 @@ bool SexpActionsHandler::deleteNode(int node_index)
 		return false;
 	model->freeNode(node_index, /*cascade=*/false);
 	return true;
-}
-
-bool SexpActionsHandler::duplicateSubtree(int node_index)
-{
-	// TODO: implement subtree clone
-	return false;
 }
 
 bool SexpActionsHandler::addChild(int node_index)

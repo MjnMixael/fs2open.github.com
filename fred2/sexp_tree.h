@@ -18,36 +18,32 @@
 #include "parse/sexp_container.h"
 #include "parse/parselo.h"
 
+#include "missioneditor/sexp_tree_core.h"
+
 class SexpTreeModel;
 struct SexpListItem;
 
-// Goober5000 - it's dynamic now
-//#define MAX_SEXP_TREE_SIZE 500
-//#define MAX_SEXP_TREE_SIZE 1050
-//#define MAX_SEXP_TREE_SIZE ((MAX_SEXP_NODES)*2/3)
+using SexpTreeFlagsBits = uint32_t;
 
-// tree_node type
-#define SEXPT_UNUSED	0x0000
-#define SEXPT_UNINIT	0x0001
-#define SEXPT_UNKNOWN	0x0002
+enum class SexpTreeFlag : SexpTreeFlagsBits {
+	None = 0,
+	EnableAnnotations = 1u << 0, // show/use "Edit Annotation"
+	EnableColors = 1u << 1,      // show/use "Edit Color"
+};
 
-#define SEXPT_VALID		0x1000
-#define SEXPT_TYPE_MASK	0x07ff
-#define SEXPT_TYPE(X)	(SEXPT_TYPE_MASK & X)
-
-#define SEXPT_OPERATOR	0x0010
-#define SEXPT_NUMBER	0x0020
-#define SEXPT_STRING	0x0040
-#define SEXPT_VARIABLE	0x0080
-#define SEXPT_CONTAINER_NAME	0x0100
-#define SEXPT_CONTAINER_DATA	0x0200
-#define SEXPT_MODIFIER	0x0400
-
-// tree_node flag
-#define NOT_EDITABLE	0x00
-#define OPERAND			0x01
-#define EDITABLE		0x02
-#define COMBINED		0x04
+constexpr SexpTreeFlag operator|(SexpTreeFlag a, SexpTreeFlag b) noexcept
+{
+	return static_cast<SexpTreeFlag>(static_cast<uint32_t>(a) | static_cast<uint32_t>(b));
+}
+constexpr SexpTreeFlag operator&(SexpTreeFlag a, SexpTreeFlag b) noexcept
+{
+	return static_cast<SexpTreeFlag>(static_cast<uint32_t>(a) & static_cast<uint32_t>(b));
+}
+constexpr SexpTreeFlag& operator|=(SexpTreeFlag& a, SexpTreeFlag b) noexcept
+{
+	a = a | b;
+	return a;
+}
 
 // Bitmaps
 #define BITMAP_OPERATOR			0
@@ -247,6 +243,19 @@ public:
 	void update_item(int node);
 
 	// NEW STUFF-------------------------------------------------------------------------------------------------
+
+	// Environment flags
+	// Set all flags at once (overwrites previous).
+	void setFlags(SexpTreeFlag flags);
+
+	// Add/clear individual flags (convenience).
+	void addFlags(SexpTreeFlag flags);
+	void clearFlags(SexpTreeFlag flags);
+
+	// Query
+	SexpTreeFlag flags() const;
+	bool hasFlag(SexpTreeFlag flag) const;
+
 	// The shared, UI-agnostic model
 	std::unique_ptr<SexpTreeModel> m_model;
 
@@ -262,6 +271,10 @@ public:
 	// TODO delete these before merge!
 	void print_model_to_debug_output();
 	void print_model_recursive(int node_index, int indent);
+
+	// TODO make these private before merge!---------------------------------------------------------------------------------
+	// Internal storage as a bitmask. Kept private; only toggle via the methods above.
+	SexpTreeFlagsBits _flagsBits = static_cast<SexpTreeFlagsBits>(SexpTreeFlag::None);
 
 	// Generated message map functions
 protected:

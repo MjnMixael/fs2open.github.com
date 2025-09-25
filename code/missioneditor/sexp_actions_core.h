@@ -20,7 +20,6 @@ enum class SexpActionId : int {
 	// node
 	EditText,
 	DeleteNode,
-	DuplicateSubtree,
 	Cut,
 	Copy,
 	Paste,
@@ -88,7 +87,6 @@ class SexpActionsHandler final {
 	// Action implementations
 	bool editText(int node_index, const char* new_text);
 	bool deleteNode(int node_index);
-	bool duplicateSubtree(int node_index);
 	bool addChild(int node_index);
 	bool addChildAt(int parent_node, int arg_pos);
 	bool addSiblingBefore(int node_index);
