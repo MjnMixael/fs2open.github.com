@@ -211,6 +211,8 @@ BOOL event_editor::OnInitDialog()
 
 	m_event_tree.m_model->setEnvironment(this);
 
+	m_event_tree.setFlags(SexpTreeFlag::EnableAnnotations | SexpTreeFlag::EnableColors);
+
 	load_tree();
 	create_tree();
 
