@@ -35,6 +35,7 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	add(SexpContextGroup::Node, SexpActionId::AddOperator, "Add Operator");
 	add(SexpContextGroup::Node, SexpActionId::AddData, "Add Data");
 	add(SexpContextGroup::Node, SexpActionId::PasteAdd, "Paste (Add Child)");
+	add(SexpContextGroup::Node, SexpActionId::InsertOperator, "Insert Operator");
 
 	// Structure group
 	add(SexpContextGroup::Structure, SexpActionId::MoveUp, "Move Up");
@@ -128,6 +129,12 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		a->choiceText.emplace_back("Choose…");
 	}
 
+	// Insert Operator submenu stub
+	if (auto* a = getAction(SexpActionId::InsertOperator)) {
+		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
+		a->choiceText.emplace_back("Choose…");
+	}
+
 	bool can_move_up = has_prev;
 	bool can_move_down = has_next;
 
@@ -147,6 +154,7 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	setEnabled(SexpActionId::AddOperator, canAddOperatorNode(kind, node_index));
 	setEnabled(SexpActionId::AddData, canAddDataNode(kind, node_index));
 	setEnabled(SexpActionId::PasteAdd, canPasteAddNode(kind, node_index));
+	setEnabled(SexpActionId::InsertOperator, canInsertOperatorNode(kind, node_index));
 
 	// Structure
 	setEnabled(SexpActionId::MoveUp, can_move_up);
@@ -563,6 +571,92 @@ bool SexpActionsHandler::canPasteAddNode(SexpNodeKind kind, int node_index) cons
 		model->environment()->overrideNodeActionEnabled(SexpActionId::PasteAdd, kind, node_index, can_add);
 	}
 	return can_add;
+}
+
+bool SexpActionsHandler::canInsertOperatorNode(SexpNodeKind kind, int node_index) const
+{
+	bool enable = false;
+
+	if (kind == SexpNodeKind::RealNode) {
+		Assertion(SCP_vector_inbounds(model->_nodes, node_index), "canInsertOperatorNode: bad node");
+		const auto& n = model->_nodes[node_index];
+
+		// ---- 1) Figure out the expected OPF for THIS position ----
+		int expected_opf = OPF_NONE;
+
+		if (n.parent >= 0) {
+			const auto& parent = model->_nodes[n.parent];
+
+			if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+				// find arg position
+				int arg_pos = 0;
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
+					++arg_pos;
+
+				// find operator INDEX and query slot OPF by index (no warning)
+				int op_index = -1;
+				for (int i = 0; i < (int)Operators.size(); ++i)
+					if (Operators[i].text == parent.text) {
+						op_index = i;
+						break;
+					}
+
+				if (op_index >= 0)
+					expected_opf = query_operator_argument_type(op_index, arg_pos);
+			} else if (parent.type & SEXPT_CONTAINER_DATA) {
+				if (const auto* cont = get_sexp_container(parent.text.c_str()))
+					expected_opf = cont->opf_type;
+			}
+		} else {
+			// Real root: choose an OPF that matches the current expression type using the matcher.
+			const int eff_type = nodeEffectiveType_(node_index);
+			// Try common OPFs in a stable order (same trick old code effectively used).
+			static const int kCandidates[] = {OPF_BOOL, OPF_NUMBER, OPF_STRING, OPF_AMBIGUOUS};
+			for (int opf : kCandidates) {
+				if (sexp_query_type_match(opf, eff_type)) {
+					expected_opf = opf;
+					break;
+				}
+			}
+
+			// legacy-friendly fallback so roots like "when" still allow Insert
+			if (expected_opf == OPF_NONE) {
+				expected_opf = OPF_NULL;
+			}
+		}
+
+		// ---- 2) If we have a meaningful OPF, check if ANY operator fits the insert pattern ----
+		if (expected_opf >= 0 && expected_opf != OPF_NONE) {
+			for (int j = 0; j < (int)Operators.size(); ++j) {
+				// Return type must be compatible with the slot OPF
+				const int ret_type = query_operator_return_type(j); // j = operator index
+				if (!sexp_query_type_match(expected_opf, ret_type))
+					continue;
+
+				// Needs at least one argument to "wrap" the current node
+				if (Operators[j].min < 1)
+					continue;
+
+				// First arg OPF must match the slot OPF (with number/positive dovetail)
+				int arg0 = query_operator_argument_type(j, 0);
+				if (expected_opf == OPF_NUMBER && arg0 == OPF_POSITIVE)
+					arg0 = OPF_NUMBER;
+				if (expected_opf == OPF_POSITIVE && arg0 == OPF_NUMBER)
+					arg0 = OPF_POSITIVE;
+
+				if (arg0 == expected_opf) {
+					enable = true;
+					break;
+				}
+			}
+		}
+	}
+
+	// Single env tweak point, consistent with your other helpers
+	if (model->environment()) {
+		model->environment()->overrideNodeActionEnabled(SexpActionId::InsertOperator, kind, node_index, enable);
+	}
+	return enable;
 }
 
 bool SexpActionsHandler::editText(int node_index, const char* new_text)
