@@ -25,6 +25,9 @@ enum class SexpActionId : int {
 	PasteOverwrite,
 	PasteAdd,
 
+	AddOperator,
+	AddData,
+
 	// structure
 	MoveUp,
 	MoveDown,
@@ -79,6 +82,9 @@ class SexpActionsHandler final {
 
 	// Helpers
 	int nodeEffectiveType_(int node_index) const;
+	static bool opfAcceptsOperator_(int opf) noexcept;
+	static bool opfAcceptsPlainData_(int opf) noexcept;
+	int expectedOpfForAppend_(int parent_index) const noexcept;
 
 	// Check if an action is valid for this node
 	bool canEditNode(SexpNodeKind kind, int node_index) const;
@@ -86,7 +92,8 @@ class SexpActionsHandler final {
 	bool canCutNode(SexpNodeKind kind, int node_index) const;
 	bool canCopyNode(SexpNodeKind kind, int node_index) const;
 	bool canPasteOverrideNode(SexpNodeKind kind, int node_index) const;
-
+	bool canAddOperatorNode(SexpNodeKind kind, int node_index) const;
+	bool canAddDataNode(SexpNodeKind kind, int node_index) const;
 	bool canPasteAddNode(SexpNodeKind kind, int node_index) const;
 
 	// Action implementations
