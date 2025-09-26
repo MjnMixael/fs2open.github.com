@@ -143,18 +143,8 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 	case SexpActionId::ReplaceOperator:
 		return replaceOperator(node_index, p);
 
-	case SexpActionId::ToggleNot:
-		return toggleNot(node_index);
-
 	case SexpActionId::ResetToDefaults:
 		return resetToDefaults(node_index);
-
-	// Arguments
-	case SexpActionId::AddArgument:
-		return addArgument(node_index);
-
-	case SexpActionId::RemoveArgument:
-		return removeArgument(node_index);
 
 	default:
 		return false;
