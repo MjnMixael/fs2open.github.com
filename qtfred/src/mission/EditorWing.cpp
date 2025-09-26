@@ -5,6 +5,7 @@
 
 #include <globalincs/linklist.h>
 #include <ship/ship.h>
+#include <missioneditor/common.h>
 
 namespace {
 
