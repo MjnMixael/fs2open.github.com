@@ -13,6 +13,7 @@
 #include "EditorViewport.h"
 #include <math/fvi.h>
 #include <jumpnode/jumpnode.h>
+#include <missioneditor/common.h>
 #include <FredApplication.h>
 
 namespace {

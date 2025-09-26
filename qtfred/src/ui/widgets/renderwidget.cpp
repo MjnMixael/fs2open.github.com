@@ -26,6 +26,7 @@
 #include "io/key.h"
 #include "io/timer.h"
 #include "starfield/starfield.h"
+#include "missioneditor/common.h"
 
 #include "mission/Editor.h"
 #include "FredApplication.h"

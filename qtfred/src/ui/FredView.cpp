@@ -44,7 +44,8 @@
 
 #include "mission/Editor.h"
 #include "mission/management.h"
-#include "missioneditor/missionsave.h"
+#include "mission/missionsave.h"
+#include "missioneditor/common.h"
 
 #include "widgets/ColorComboBox.h"
 

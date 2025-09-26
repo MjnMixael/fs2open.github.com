@@ -135,14 +135,33 @@ int get_docking_list(int model_index)
 	return pm->n_docks;
 }
 
+bool query_valid_object(int index)
+{
+	bool obj_found = false;
+	object* ptr;
+
+	if (index < 0 || index >= MAX_OBJECTS || Objects[index].type == OBJ_NONE)
+		return false;
+
+	ptr = GET_FIRST(&obj_used_list);
+	while (ptr != END_OF_LIST(&obj_used_list)) {
+		Assert(ptr->type != OBJ_NONE);
+		if (OBJ_INDEX(ptr) == index)
+			obj_found = true;
+
+		ptr = GET_NEXT(ptr);
+	}
+
+	Assert(obj_found); // just to make sure it's in the list like it should be.
+	return true;
+}
+
 // Given an object index, find the ship index for that object.
 int get_ship_from_obj(int obj)
 {
-	if ((Objects[obj].type == OBJ_SHIP) || (Objects[obj].type == OBJ_START))
-		return Objects[obj].instance;
+	Assertion(query_valid_object(obj), "Invalid object index detected!");
 
-	Int3();
-	return 0;
+	return get_ship_from_obj(&Objects[obj]);
 }
 
 int get_ship_from_obj(object* objp)

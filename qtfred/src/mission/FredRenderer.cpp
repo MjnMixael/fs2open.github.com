@@ -25,6 +25,7 @@
 #include <math/fvi.h>
 #include <graphics/light.h>
 #include <mod_table/mod_table.h>
+#include <missioneditor/common.h>
 
 #include "mission/object.h"
 #include "weapon/weapon.h"

@@ -1,6 +1,7 @@
 #include "ShipTextureReplacementDialogModel.h"
 
 #include "mission/object.h"
+#include "missioneditor/common.h"
 
 namespace fso {
 	namespace fred {

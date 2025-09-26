@@ -17,6 +17,7 @@
 #include <hud/hudsquadmsg.h>
 #include <localization/localize.h>
 #include <mission/object.h>
+#include <missioneditor/common.h>
 
 #include <QtWidgets>
 
