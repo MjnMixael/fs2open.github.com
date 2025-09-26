@@ -32,5 +32,6 @@ extern char* Docking_bay_list[];
 #define MAX_DOCKS 1000
 int get_docking_list(int model_index);
 
+bool query_valid_object(int index);
 int get_ship_from_obj(int obj);
 int get_ship_from_obj(object* objp);

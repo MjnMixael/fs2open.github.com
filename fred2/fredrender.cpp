@@ -40,6 +40,7 @@
 #include "math/vecmat.h"
 #include "mission/missiongrid.h"
 #include "mission/missionparse.h"
+#include "missioneditor/common.h"
 #include "model/model.h"
 #include "model/model.h"
 #include "mod_table/mod_table.h"
@@ -990,7 +991,7 @@ void game_do_frame() {
 		break;
 
 	case 1:  //	Control the current object's location and orientation
-		if (query_valid_object() && !Objects[cur_object_index].flags[Object::Object_Flags::Locked_from_editing]) {
+		if (query_valid_object(cur_object_index) && !Objects[cur_object_index].flags[Object::Object_Flags::Locked_from_editing]) {
 			vec3d delta_pos, leader_old_pos;
 			matrix leader_orient, leader_transpose, tmp;
 			object *leader;
@@ -1068,7 +1069,7 @@ void game_do_frame() {
 		Assert(0);
 	}
 
-	if (Lookat_mode && query_valid_object()) {
+	if (Lookat_mode && query_valid_object(cur_object_index)) {
 		float dist;
 
 		dist = vm_vec_dist(&view_pos, &Objects[cur_object_index].pos);

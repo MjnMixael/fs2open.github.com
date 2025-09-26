@@ -7,6 +7,7 @@
 #include <mission/object.h>
 #include <model/model.h>
 #include <ship/ship.h>
+#include <missioneditor/common.h>
 
 namespace fso::fred::dialogs {
 
