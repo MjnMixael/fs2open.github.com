@@ -26,6 +26,7 @@
 #include "physics/physics.h"
 #include "render/3d.h"
 #include "ship/ship.h"
+#include "missioneditor/common.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -89,7 +90,7 @@ int create_wing() {
 	object *ptr;
 	create_wing_dlg dlg;
 
-	if (!query_valid_object())
+	if (!query_valid_object(cur_object_index))
 		return -1;
 
 	leader = cur_object_index;

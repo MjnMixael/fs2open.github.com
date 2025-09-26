@@ -638,7 +638,7 @@ int drag_objects()
 	*/
 
 	// Do not move ships that we are currently centered around (Lookat_mode). The vector math will start going haywire and return NAN
-	if (!query_valid_object() || Lookat_mode)
+	if (!query_valid_object(cur_object_index) || Lookat_mode)
 		return -1;
 
 	if ((Dup_drag == 1) && (Briefing_dialog))
@@ -784,7 +784,7 @@ int drag_rotate_objects()
 	}
 	*/
 
-	if (!query_valid_object()){
+	if (!query_valid_object(cur_object_index)) {
 		return -1;
 	}
 
@@ -897,7 +897,7 @@ void cancel_drag()
 			vec3d movement_vector;
 			object *objp;
 
-			if (query_valid_object()) {
+			if (query_valid_object(cur_object_index)) {
 				objp = &Objects[cur_object_index];
 				Assert(objp->type != OBJ_NONE);
 				vm_vec_sub(&movement_vector, &original_pos, &objp->pos);
@@ -1004,7 +1004,7 @@ void CFREDView::OnLButtonDown(UINT nFlags, CPoint point)
 		}
 	}
 
-	if (query_valid_object())
+	if (query_valid_object(cur_object_index))
 		original_pos = Objects[cur_object_index].pos;
 
 	moved = 0;
@@ -1017,7 +1017,7 @@ void CFREDView::OnLButtonDown(UINT nFlags, CPoint point)
 		Update_window = 1;
 	}
 
-	if (query_valid_object() && (Marked == 1) && (Objects[cur_object_index].type == OBJ_POINT)) {
+	if (query_valid_object(cur_object_index) && (Marked == 1) && (Objects[cur_object_index].type == OBJ_POINT)) {
 		Assert(Briefing_dialog);
 		Briefing_dialog->icon_select(Objects[cur_object_index].instance);
 
@@ -1153,7 +1153,7 @@ void CFREDView::OnLButtonUp(UINT nFlags, CPoint point)
 		}
 	}
 
-	if (query_valid_object() && (Marked == 1) && (Objects[cur_object_index].type == OBJ_POINT)) {
+	if (query_valid_object(cur_object_index) && (Marked == 1) && (Objects[cur_object_index].type == OBJ_POINT)) {
 		Assert(Briefing_dialog);
 		Briefing_dialog->icon_select(Objects[cur_object_index].instance);
 
@@ -2185,7 +2185,7 @@ void CFREDView::OnZoomExtents()
 
 void CFREDView::OnZoomSelected() 
 {
-	if (query_valid_object()) {
+	if (query_valid_object(cur_object_index)) {
 		if (Marked > 1)
 			view_universe(1);
 		else
@@ -2197,7 +2197,7 @@ void CFREDView::OnZoomSelected()
 
 void CFREDView::OnUpdateZoomSelected(CCmdUI* pCmdUI) 
 {
-	pCmdUI->Enable(query_valid_object());
+	pCmdUI->Enable(query_valid_object(cur_object_index));
 }
 
 void CFREDView::OnFormWing() 
@@ -2240,7 +2240,7 @@ void CFREDView::OnUpdateFormWing(CCmdUI* pCmdUI)
 	int count = 0;
 	object *ptr;
 
-	if (query_valid_object()) {
+	if (query_valid_object(cur_object_index)) {
 		ptr = GET_FIRST(&obj_used_list);
 		while (ptr != END_OF_LIST(&obj_used_list)) {
 			if (ptr->flags[Object::Object_Flags::Marked]) {
@@ -2268,7 +2268,7 @@ int query_single_wing_marked()
 {
 	int i, obj;
 
-	if (!query_valid_object())
+	if (!query_valid_object(cur_object_index))
 		return 0;
 
 	if (cur_wing == -1)
@@ -2364,7 +2364,7 @@ void CFREDView::OnEditorsEvents()
 
 void CFREDView::OnUpdateEditorsOrient(CCmdUI* pCmdUI) 
 {
-	pCmdUI->Enable(query_valid_object());
+	pCmdUI->Enable(query_valid_object(cur_object_index));
 }
 
 void CFREDView::OnEditorsMessage()
@@ -4061,7 +4061,7 @@ void CFREDView::OnUpdateShowIFF(int iff, CCmdUI* pCmdUI)
 
 void CFREDView::OnToggleViewpoint() 
 {
-	if (viewpoint || !query_valid_object())
+	if (viewpoint || !query_valid_object(cur_object_index))
 		viewpoint = 0;
 
 	else {
@@ -4231,7 +4231,7 @@ void CFREDView::OnUpdateShowSexpHelp(CCmdUI* pCmdUI)
 void CFREDView::OnLookatObj() 
 {
 	Lookat_mode = !Lookat_mode;
-	if (Lookat_mode && query_valid_object()) {
+	if (Lookat_mode && query_valid_object(cur_object_index)) {
 		vec3d v, loc;
 		matrix m;
 
@@ -4374,7 +4374,7 @@ void CFREDView::OnNextObj()
 	if (EMPTY(&obj_used_list))
 		return;
 
-	if (query_valid_object())	{
+	if (query_valid_object(cur_object_index)) {
 		ptr = Objects[cur_object_index].next;
 		if (ptr == END_OF_LIST(&obj_used_list))
 			ptr = GET_NEXT(ptr);
@@ -4438,7 +4438,7 @@ void CFREDView::OnPrevObj()
 	}
 
 	Assert(n);
-	if (query_valid_object()) {
+	if (query_valid_object(cur_object_index)) {
 		i--;
 		if (i < 0)
 			i = n - 1;
