@@ -38,17 +38,10 @@ enum class SexpActionId : int {
 	ReplaceContainerName,
 	ReplaceContainerData,
 
-	// structure
+	// New actions
 	MoveUp,
 	MoveDown,
-
-	// operator
-	ToggleNot,
 	ResetToDefaults, // rebuild args to defaults for this op
-
-	// arguments
-	AddArgument,
-	RemoveArgument,
 
 	Num_sexp_actions // keep last
 };

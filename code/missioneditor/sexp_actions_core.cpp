@@ -42,18 +42,10 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	add(SexpContextGroup::Container, SexpActionId::ReplaceContainerName, "Replace Container Name");
 	add(SexpContextGroup::Container, SexpActionId::ReplaceContainerData, "Replace Container Data");
 
-	// TODO Rest are future enhancements not yet implemented. Some will get cut.
-	// Structure group
+	// TODO Rest are future enhancements not yet implemented.
 	add(SexpContextGroup::Structure, SexpActionId::MoveUp, "Move Up");
 	add(SexpContextGroup::Structure, SexpActionId::MoveDown, "Move Down");
-
-	// Operator group
-	add(SexpContextGroup::Operator, SexpActionId::ToggleNot, "Toggle 'not'");
 	add(SexpContextGroup::Operator, SexpActionId::ResetToDefaults, "Reset Arguments to Defaults");
-
-	// Arguments group
-	add(SexpContextGroup::Arguments, SexpActionId::AddArgument, "Add Argument");
-	add(SexpContextGroup::Arguments, SexpActionId::RemoveArgument, "Remove Last Argument");
 
 	// 2) Synthetic vs real: compute flags and then flip enables.
 	const auto kind = (node_index < 0) ? SexpNodeKind::SyntheticRoot : SexpNodeKind::RealNode;
