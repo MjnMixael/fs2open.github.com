@@ -7,13 +7,14 @@ enum class SexpNodeKind;
 
 // An extension of SexpTreeNode that provides a list of available actions the UI can take on any specific node
 
-// High level buckets for menu grouping in UI
-// TODO Refine these and how they are set for each action
+// Not currently used but can provide the editor a way to group actions together
 enum class SexpContextGroup {
-	Node,      // delete, duplicate, cut/copy/paste, rename/edit text
-	Structure, // add child/sibling, move up/down
-	Operator,  // replace operator, set defaults
-	Arguments  // add/remove args
+	Node,      // Basic stuff like delete, duplicate, cut/copy/paste, rename/edit text
+	Structure, // Organizational actions like move up/down
+	Operator,  // operator specific actions
+	Data,      // OPF data
+	Variable,  // variable data
+	Container, // container data
 };
 
 // Atomic actions the UI can render as menu items or toolbar buttons
