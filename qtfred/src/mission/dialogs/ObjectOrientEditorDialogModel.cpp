@@ -4,6 +4,7 @@
 #include <globalincs/linklist.h>
 #include <ship/ship.h>
 #include <math/bitarray.h>
+#include <missioneditor/common.h>
 
 namespace fso::fred::dialogs {
 

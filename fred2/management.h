@@ -69,7 +69,6 @@ int create_player(vec3d* pos, matrix* orient, int type = -1);
 void create_new_mission();
 void reset_mission();
 void clear_mission(bool fast_reload = false);
-int query_valid_object(int index = cur_object_index);
 int query_valid_ship(int index = cur_object_index);
 int query_valid_waypoint(int index = cur_object_index);
 void set_cur_indices(int obj = -1);

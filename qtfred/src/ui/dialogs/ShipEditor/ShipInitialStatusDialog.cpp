@@ -6,6 +6,7 @@
 
 #include "mission/util.h"
 #include "object/objectdock.h"
+#include "missioneditor/common.h"
 
 #include <globalincs/linklist.h>
 #include <mission/object.h>

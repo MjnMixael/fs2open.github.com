@@ -4,6 +4,7 @@
 
 #include <globalincs/linklist.h>
 #include <localization/localize.h>
+#include <missioneditor/common.h>
 
 #include <QtWidgets>
 #include <object/objectdock.cpp>

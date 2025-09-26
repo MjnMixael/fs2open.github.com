@@ -16,6 +16,8 @@
 #include "globalincs/linklist.h"
 #include "FREDView.h"
 
+#include "missioneditor/common.h"
+
 #ifdef _DEBUG
 #undef THIS_FILE
 static char THIS_FILE[] = __FILE__;
@@ -48,7 +50,7 @@ orient_editor::orient_editor(CWnd* pParent /*=NULL*/)
 
 	set_relative = false;
 
-	Assert(query_valid_object());
+	Assert(query_valid_object(cur_object_index));
 	auto pos = &Objects[cur_object_index].pos;
 	m_position_x.Format(INPUT_FORMAT, pos->xyz.x);
 	m_position_y.Format(INPUT_FORMAT, pos->xyz.y);

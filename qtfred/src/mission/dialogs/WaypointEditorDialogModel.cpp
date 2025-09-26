@@ -3,6 +3,7 @@
 #include <ship/ship.h>
 #include <iff_defs/iff_defs.h>
 #include "mission/dialogs/WaypointEditorDialogModel.h"
+#include "missioneditor/common.h"
 
 namespace fso::fred::dialogs {
 

@@ -31,6 +31,7 @@
 #include <mission/missionparse.h>
 #include <missionui/fictionviewer.h>
 #include <missionui/missioncmdbrief.h>
+#include <missioneditor/common.h>
 #include <nebula/neb.h>
 #include <object/objectdock.h>
 #include <object/objectshield.h>

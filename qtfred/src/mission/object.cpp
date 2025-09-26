@@ -4,6 +4,7 @@
 #include "object/waypoint.h"
 #include "object/objectdock.h"
 #include "ship/ship.h"
+#include "missioneditor/common.h"
 
 void object_moved(object *objp)
 {
@@ -24,29 +25,6 @@ void object_moved(object *objp)
 		dock_move_docked_objects(objp);
 	}
 }
-
-bool query_valid_object(int index)
-{
-	bool obj_found = false;
-	object *ptr;
-
-	if (index < 0 || index >= MAX_OBJECTS || Objects[index].type == OBJ_NONE)
-		return false;
-
-	ptr = GET_FIRST(&obj_used_list);
-	while (ptr != END_OF_LIST(&obj_used_list)) {
-		Assert(ptr->type != OBJ_NONE);
-		if (OBJ_INDEX(ptr) == index)
-			obj_found = true;
-
-		ptr = GET_NEXT(ptr);
-	}
-
-	Assert(obj_found);  // just to make sure it's in the list like it should be.
-	return true;
-}
-
-
 
 const char* object_name(int obj) {
 	static char text[80];
@@ -72,18 +50,4 @@ const char* object_name(int obj) {
 	}
 
 	return "*unknown*";
-}
-
-// TODO maybe use the ones from common.h or replace those with these?
-int get_ship_from_obj(int obj) {
-	Assertion(query_valid_object(obj), "Invalid object index detected!");
-
-	return get_ship_from_obj(&Objects[obj]);
-}
-int get_ship_from_obj(object* objp) {
-	if ((objp->type == OBJ_SHIP) || (objp->type == OBJ_START))
-		return objp->instance;
-
-	Int3();
-	return 0;
 }

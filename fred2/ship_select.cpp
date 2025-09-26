@@ -18,6 +18,8 @@
 #include "Management.h"
 #include "FREDView.h"
 
+#include "missioneditor/common.h"
+
 #define ACTIVITY_SHIP 1
 #define ACTIVITY_WING 2
 
@@ -243,7 +245,7 @@ void ship_select::OnOK()
 		ptr = GET_NEXT(ptr);
 	}
 
-	if (query_valid_object() && (Marked == 1) && (Objects[cur_object_index].type == OBJ_POINT)) {
+	if (query_valid_object(cur_object_index) && (Marked == 1) && (Objects[cur_object_index].type == OBJ_POINT)) {
 		Assert(Briefing_dialog);
 		Briefing_dialog->icon_select(Objects[cur_object_index].instance);
 
