@@ -33,14 +33,14 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	add(SexpContextGroup::Node, SexpActionId::Copy, "Copy");
 	add(SexpContextGroup::Node, SexpActionId::PasteOverwrite, "Paste (Overwrite)");
 	add(SexpContextGroup::Operator, SexpActionId::AddOperator, "Add Operator");
-	add(SexpContextGroup::Node, SexpActionId::AddData, "Add Data");
+	add(SexpContextGroup::Data, SexpActionId::AddData, "Add Data");
 	add(SexpContextGroup::Node, SexpActionId::PasteAdd, "Paste (Add Child)");
 	add(SexpContextGroup::Operator, SexpActionId::InsertOperator, "Insert Operator");
 	add(SexpContextGroup::Operator, SexpActionId::ReplaceOperator, "Replace Operator");
-	add(SexpContextGroup::Operator, SexpActionId::ReplaceData, "Replace Data");
-	add(SexpContextGroup::Node, SexpActionId::ReplaceVariable, "Replace Variable");
-	add(SexpContextGroup::Node, SexpActionId::ReplaceContainerName, "Replace Container Name");
-	add(SexpContextGroup::Node, SexpActionId::ReplaceContainerData, "Replace Container Data");
+	add(SexpContextGroup::Data, SexpActionId::ReplaceData, "Replace Data");
+	add(SexpContextGroup::Variable, SexpActionId::ReplaceVariable, "Replace Variable");
+	add(SexpContextGroup::Container, SexpActionId::ReplaceContainerName, "Replace Container Name");
+	add(SexpContextGroup::Container, SexpActionId::ReplaceContainerData, "Replace Container Data");
 
 	// TODO Rest are future enhancements not yet implemented. Some will get cut.
 	// Structure group
