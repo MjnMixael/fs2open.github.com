@@ -17,6 +17,8 @@
 #include "object/object.h"
 #include "jumpnode/jumpnode.h"
 
+#include "missioneditor/common.h"
+
 #define ID_JUMP_NODE_MENU	8000
 #define ID_WAYPOINT_MENU	9000
 
@@ -176,7 +178,7 @@ int jumpnode_dlg::update_data()
 	if (!GetSafeHwnd())
 		return 0;
 
-	if (query_valid_object() && Objects[cur_object_index].type == OBJ_JUMP_NODE) {
+	if (query_valid_object(cur_object_index) && Objects[cur_object_index].type == OBJ_JUMP_NODE) {
 		auto jnp = jumpnode_get_by_objnum(cur_object_index);
 
 		m_name.TrimLeft();

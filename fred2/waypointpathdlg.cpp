@@ -23,6 +23,7 @@
 #include "starfield/starfield.h"
 #include "jumpnode/jumpnode.h"
 #include "iff_defs/iff_defs.h"
+#include "missioneditor/common.h"
 
 #define ID_JUMP_NODE_MENU	8000
 #define ID_WAYPOINT_MENU	9000
@@ -117,7 +118,7 @@ void waypoint_path_dlg::initialize_data(int full_update)
 	if (!GetSafeHwnd())
 		return;
 
-	if (query_valid_object() && Objects[cur_object_index].type == OBJ_WAYPOINT)
+	if (query_valid_object(cur_object_index) && Objects[cur_object_index].type == OBJ_WAYPOINT)
 	{
 		Assert(cur_waypoint_list == find_waypoint_list_with_instance(Objects[cur_object_index].instance));
 	}
@@ -147,7 +148,7 @@ int waypoint_path_dlg::update_data(int redraw)
 	UpdateData(TRUE);
 	UpdateData(TRUE);
 
-	if (query_valid_object() && Objects[cur_object_index].type == OBJ_WAYPOINT)
+	if (query_valid_object(cur_object_index) && Objects[cur_object_index].type == OBJ_WAYPOINT)
 	{
 		Assert(cur_waypoint_list == find_waypoint_list_with_instance(Objects[cur_object_index].instance));
 	}

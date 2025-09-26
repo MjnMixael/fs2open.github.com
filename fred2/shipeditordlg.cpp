@@ -33,6 +33,7 @@
 #include "jumpnode/jumpnode.h"
 #include "ShipFlagsDlg.h"
 #include "mission/missionmessage.h"
+#include "missioneditor/common.h"
 #include "ShipSpecialDamage.h"
 #include "ShipTexturesDlg.h"
 #include "ShipSpecialHitpoints.h"
@@ -750,7 +751,7 @@ void CShipEditorDlg::initialize_data(int full_update)
 			}
 
 		// only 1 player selected..
-		} else if (query_valid_object() && (Objects[cur_object_index].type == OBJ_START)) {
+		} else if (query_valid_object(cur_object_index) && (Objects[cur_object_index].type == OBJ_START)) {
 			Assert((player_count == 1) && !multi_edit);
 			player_ship = Objects[cur_object_index].instance;
 			m_ship_name = Ships[player_ship].ship_name;
@@ -1637,8 +1638,8 @@ void CShipEditorDlg::OnGoals()
 {
 	ShipGoalsDlg dlg_goals;
 
-	Assert(query_valid_object());
-//	if (multi_edit)
+	Assert(query_valid_object(cur_object_index));
+	//	if (multi_edit)
 //		dlg_goals.initialize_multi();
 //
 //	else {
@@ -2170,7 +2171,7 @@ void CShipEditorDlg::OnIgnoreOrders()
 	// TODO: Add your control notification handler code here
 	ignore_orders_dlg player_order_dlg;
 
-	Assert(query_valid_object());
+	Assert(query_valid_object(cur_object_index));
 
 	if (!multi_edit) {
 		if ( single_ship != -1 ){
@@ -2403,7 +2404,7 @@ void CShipEditorDlg::OnTextures()
 {
 	CShipTexturesDlg dlg_textures;
 
-	Assert(query_valid_object());
+	Assert(query_valid_object(cur_object_index));
 
 	if (multi_edit)
 	{
@@ -2433,7 +2434,7 @@ void CShipEditorDlg::OnAltShipClass()
 // Goober5000
 void CShipEditorDlg::OnSetAsPlayerShip() 
 {
-	Assert(query_valid_object());
+	Assert(query_valid_object(cur_object_index));
 
 	if (multi_edit)
 	{
