@@ -52,7 +52,9 @@ struct SexpActionParam {
 	int arg_index = -1;
 };
 
-// A single item the UI can render
+// One item the UI can render: either a leaf action (no children), or a submenu (has children),
+// or a separator (is_separator == true). If 'children' is non-empty, treat this as a submenu
+// and ignore 'id'/'enabled' when drawing the submenu header.
 struct SexpContextAction {
 	SexpContextGroup group;
 	SexpActionId id;
@@ -61,7 +63,10 @@ struct SexpContextAction {
 
 	// If this is a chooser action, the UI might draw a submenu using 'choices'
 	SCP_vector<SexpActionParam> choices; // list of operators to choose from
-	SCP_vector<SCP_string> choiceText;   // same size as choices (labels) //TODO remove this
+	SCP_vector<SCP_string> choiceText;   // same size as choices
+
+	// New: nested menu support
+	SCP_vector<SexpContextAction> children; // non-empty => submenu
 };
 
 // The complete answer the model gives to a right click

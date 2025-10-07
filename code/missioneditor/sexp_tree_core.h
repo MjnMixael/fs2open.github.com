@@ -176,6 +176,9 @@ class SexpTreeModel {
 	// OPF listing
 	// Entry point used by editors to populate dropdowns for an argument.
 	SexpListItemPtr buildListingForOpf(int opf, int parent_node, int arg_index);
+	bool opfAcceptsRawNumberInput(int opf) const;
+	bool opfAcceptsRawStringInput(int opf) const;
+	int findArgIndex(int parent_node, int child_node) const;
 
   private:
 	ISexpEnvironment* _env = nullptr;
