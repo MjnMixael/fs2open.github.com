@@ -1,6 +1,8 @@
 #include "sexp_actions_core.h"
 #include "sexp_tree_core.h"
 
+#include "globalincs/pstypes.h"
+
 SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 {
 	SexpContextMenu out;
@@ -54,10 +56,204 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// We'll replace these with real category trees later.
 	// TODO Finish this for real
 
-	// Add Operator submenu stub
-	if (auto* a = getAction(SexpActionId::AddOperator)) {
-		a->choices.push_back({/*op_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// --- Add Operator submenu (legacy-style: build all, then enable a subset) ---
+	if (auto* addOp = getAction(SexpActionId::AddOperator)) {
+		addOp->children.clear();
+
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			const int parent_index = node_index; // appending under selected node
+			const int opf = expectedOpfForAppend_(parent_index);
+			if (opf >= 0) {
+				const int arg_index = model->countArgs(n.child);
+
+				auto& catRoots = addOp->children; // top-level category nodes
+
+				// Maps to avoid searching by label and to avoid pointer invalidation
+				// category_id -> index in addOp->children
+				std::unordered_map<int, int> catIndexById;
+				catIndexById.reserve(op_menu.size());
+
+				// subIndexByCat[category_id][sub_id] -> index in addOp->children[catIdx].children
+				std::unordered_map<int, std::unordered_map<int, int>> subIndexByCat;
+				subIndexByCat.reserve(op_submenu.size());
+
+				// Helper: ensure category header exists (by id) and return its index
+				auto ensureCategoryById = [&](int category_id, const SCP_string& label) -> int {
+					auto it = catIndexById.find(category_id);
+					if (it != catIndexById.end())
+						return it->second;
+
+					SexpContextAction cat;
+					cat.group = SexpContextGroup::Operator;
+					cat.id = SexpActionId::None; // header node
+					cat.label = label;
+					cat.enabled = false; // will be set after enable pass
+					catRoots.push_back(std::move(cat));
+					int idx = (int)catRoots.size() - 1;
+					catIndexById[category_id] = idx;
+					return idx;
+				};
+
+				// Helper: ensure subcategory header exists (by sub_id) under category index
+				auto ensureSubcategoryById = [&](int catIdx, int sub_id, const SCP_string& label) -> int {
+					auto& subMap = subIndexByCat[catIdx];
+					auto it = subMap.find(sub_id);
+					if (it != subMap.end())
+						return it->second;
+
+					SexpContextAction sub;
+					sub.group = SexpContextGroup::Operator;
+					sub.id = SexpActionId::None; // header node
+					sub.label = label;
+					sub.enabled = false;
+
+					catRoots[catIdx].children.push_back(std::move(sub));
+					int idx = (int)catRoots[catIdx].children.size() - 1;
+					subMap[sub_id] = idx;
+					return idx;
+				};
+
+				// Build label lookups from sexp.cpp tables
+				std::unordered_map<int, SCP_string> catLabel, subLabel;
+				catLabel.reserve(op_menu.size());
+				for (const auto& c : op_menu)
+					catLabel[c.id] = c.name;
+
+				subLabel.reserve(op_submenu.size());
+				for (const auto& sc : op_submenu)
+					subLabel[sc.id] = sc.name;
+
+				// 1) Build all headers (categories and subcategories)
+				for (const auto& c : op_menu) {
+					(void)ensureCategoryById(c.id, c.name);
+				}
+				for (const auto& sc : op_submenu) {
+					int parent_cat_id = category_of_subcategory(sc.id);
+					auto it = catLabel.find(parent_cat_id);
+					if (it == catLabel.end())
+						continue; // safety
+					int catIdx = ensureCategoryById(parent_cat_id, it->second);
+					(void)ensureSubcategoryById(catIdx, sc.id, sc.name);
+				}
+
+				// Map operator VALUE -> leaf pointer for the enable pass
+				std::unordered_map<int, SexpContextAction*> opValueToLeaf;
+				opValueToLeaf.reserve(Operators.size());
+
+				// Helper to append a disabled operator leaf under a parent menu
+				auto appendOperatorLeaf = [&](SexpContextAction& parentMenu, int op_value, const SCP_string& name) {
+					SexpContextAction leaf;
+					leaf.group = SexpContextGroup::Operator;
+					leaf.id = SexpActionId::InsertOperator;
+					leaf.label = name;
+					leaf.enabled = false; // start disabled
+					parentMenu.children.push_back(std::move(leaf));
+					opValueToLeaf[op_value] = &parentMenu.children.back();
+				};
+
+				auto isHiddenByLegacyRules = [&](int op_value) -> bool {
+					switch (op_value) {
+					case OP_GET_VARIABLE_BY_INDEX:
+					case OP_SET_VARIABLE_BY_INDEX:
+					case OP_COPY_VARIABLE_FROM_INDEX:
+					case OP_COPY_VARIABLE_BETWEEN_INDEXES:
+					case OP_HITS_LEFT_SUBSYSTEM:
+					case OP_CUTSCENES_SHOW_SUBTITLE:
+					case OP_ORDER:
+					case OP_TECH_ADD_INTEL:
+					case OP_TECH_REMOVE_INTEL:
+					case OP_HUD_GAUGE_SET_ACTIVE:
+					case OP_HUD_ACTIVATE_GAUGE_TYPE:
+					case OP_JETTISON_CARGO_DELAY:
+					case OP_STRING_CONCATENATE:
+					case OP_SET_OBJECT_SPEED_X:
+					case OP_SET_OBJECT_SPEED_Y:
+					case OP_SET_OBJECT_SPEED_Z:
+					case OP_DISTANCE:
+					case OP_SCRIPT_EVAL:
+					case OP_TRIGGER_SUBMODEL_ANIMATION:
+					case OP_ADD_BACKGROUND_BITMAP:
+					case OP_ADD_SUN_BITMAP:
+					case OP_JUMP_NODE_SET_JUMPNODE_NAME:
+					case OP_KEY_RESET:
+					case OP_SET_ASTEROID_FIELD:
+					case OP_SET_DEBRIS_FIELD:
+					case OP_NEBULA_TOGGLE_POOF:
+					case OP_NEBULA_FADE_POOF:
+						return true;
+					default:
+						return false;
+					}
+				};
+
+				// 2) Append EVERY visible operator to its category/subcategory (disabled)
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					const int op_value = Operators[i].value;
+					if (isHiddenByLegacyRules(op_value))
+						continue;
+
+					const int sub_id = get_subcategory(op_value);
+					if (sub_id == OP_SUBCATEGORY_NONE) {
+						const int cat_id = get_category(op_value);
+						auto it = catLabel.find(cat_id);
+						if (it == catLabel.end())
+							continue;
+						int catIdx = ensureCategoryById(cat_id, it->second);
+						appendOperatorLeaf(catRoots[catIdx], op_value, Operators[i].text);
+					} else {
+						const int parent_cat_id = category_of_subcategory(sub_id);
+						auto itCat = catLabel.find(parent_cat_id);
+						auto itSub = subLabel.find(sub_id);
+						if (itCat == catLabel.end() || itSub == subLabel.end())
+							continue;
+
+						int catIdx = ensureCategoryById(parent_cat_id, itCat->second);
+						int subIdx = ensureSubcategoryById(catIdx, sub_id, itSub->second);
+						appendOperatorLeaf(catRoots[catIdx].children[subIdx], op_value, Operators[i].text);
+					}
+				}
+
+				// 3) Enable pass: operators present in the OPF listing for this slot
+				if (auto list = model->buildListingForOpf(opf, parent_index, arg_index)) {
+					for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
+						if (it->op >= 0) {
+							const int op_value = Operators[it->op].value;
+							auto f = opValueToLeaf.find(op_value);
+							if (f != opValueToLeaf.end()) {
+								f->second->enabled = true;
+							}
+						}
+					}
+				}
+
+				// Final rule: disable operators that lack default arguments
+				for (int i = 0; i < (int)Operators.size(); ++i) {
+					auto f = opValueToLeaf.find(Operators[i].value);
+					if (f != opValueToLeaf.end()) {
+						if (!model->hasDefaultArgumentAvailable(i)) {
+							f->second->enabled = false;
+						}
+					}
+				}
+
+				// Propagate enabled up so empty submenus show disabled
+				std::function<bool(SexpContextAction&)> propagateEnabled = [&](SexpContextAction& node) -> bool {
+					if (node.children.empty())
+						return node.enabled;
+					bool any = false;
+					for (auto& ch : node.children)
+						any = propagateEnabled(ch) || any;
+					node.enabled = any;
+					return node.enabled;
+				};
+				for (auto& cat : catRoots)
+					propagateEnabled(cat);
+
+				addOp->enabled = !addOp->children.empty();
+			}
+		}
 	}
 
 	// Add Data submenu stub

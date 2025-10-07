@@ -71,6 +71,12 @@ struct ISexpEnvironment {
 	// Campaign editor can override this to return true else returns false.
 	virtual bool isCampaignContext() const;
 
+	// Event editor can override this to return true else returns false.
+	virtual bool isEventContext() const;
+
+	// For Event Editor TODO maybe find a better way to do this
+	virtual const char* getCurrentMessageName(int i) const;
+
 	// Allows the environment to override the default enabled state of an action.
 	virtual void overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind, int node_index, bool& is_enabled) const;
 
@@ -179,6 +185,8 @@ class SexpTreeModel {
 	bool opfAcceptsRawNumberInput(int opf) const;
 	bool opfAcceptsRawStringInput(int opf) const;
 	int findArgIndex(int parent_node, int child_node) const;
+	bool hasDefaultArgumentAvailable(int op);
+	bool hasDefaultArgumentAvailable(int op, int i);
 
   private:
 	ISexpEnvironment* _env = nullptr;

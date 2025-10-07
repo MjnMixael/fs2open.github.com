@@ -41,6 +41,9 @@ class SexpOpfListBuilder final {
 	{
 	}
 
+	bool hasDefaultArgumentAvailable(int op);
+	bool hasDefaultArgumentAvailable(int op, int i);
+
 	// Single public entrypoint: dispatch to the correct OPF lister.
 	SexpListItemPtr buildListing(int opf, int parent_node, int arg_index);
 

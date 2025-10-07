@@ -34,6 +34,16 @@ bool ISexpEnvironment::isCampaignContext() const
 	return false;
 }
 
+bool ISexpEnvironment::isEventContext() const
+{
+	return false;
+}
+
+const char* ISexpEnvironment::getCurrentMessageName(int /*i*/) const
+{
+	return nullptr;
+}
+
 void ISexpEnvironment::overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind, int node_index, bool& is_enabled) const
 {
 	// Do nothing
@@ -1446,4 +1456,16 @@ int SexpTreeModel::findArgIndex(int parent_node, int child_node) const
 {
 	SexpOpfListBuilder builder(_nodes, _env);
 	return builder.find_argument_number(parent_node, child_node);
+}
+
+bool SexpTreeModel::hasDefaultArgumentAvailable(int op)
+{
+	SexpOpfListBuilder builder(_nodes, _env);
+	return builder.hasDefaultArgumentAvailable(op);
+}
+
+bool SexpTreeModel::hasDefaultArgumentAvailable(int op, int i)
+{
+	SexpOpfListBuilder builder(_nodes, _env);
+	return builder.hasDefaultArgumentAvailable(op, i);
 }
