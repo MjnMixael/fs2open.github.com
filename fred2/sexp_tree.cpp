@@ -579,11 +579,22 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'AddData' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
 			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 1); // TODO Placeholder ID
-			add_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+			UINT sub_flags = action_ptr->children[i].enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+
+			if (!((i + 3) % 30)) {
+				sub_flags |= MF_MENUBARBREAK;
+			}
+
+			add_data_submenu.AppendMenu(sub_flags, choice_id, action_ptr->children[i].label.c_str());
+
+			// String/number should be the first two items.. probably need a better way to do this than assuming but whatever
+			if (i == 1) {
+				add_data_submenu.AppendMenu(MF_SEPARATOR);
+			}
 		}
 	} else {
 		add_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
@@ -638,11 +649,23 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'ReplaceData' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
 			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 4); // TODO Placeholder ID
-			replace_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+			UINT sub_flags = action_ptr->children[i].enabled ? MF_STRING : MF_STRING | MF_GRAYED;
+
+			if (!((i + 3) % 30)) {
+				sub_flags |= MF_MENUBARBREAK;
+			}
+
+			replace_data_submenu.AppendMenu(sub_flags, choice_id, action_ptr->children[i].label.c_str());
+
+			// String/number should be the first two items.. probably need a better way to do this than assuming but
+			// whatever
+			if (i == 1) {
+				replace_data_submenu.AppendMenu(MF_SEPARATOR);
+			}
 		}
 	} else {
 		replace_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
