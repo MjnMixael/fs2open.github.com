@@ -178,6 +178,291 @@ int SexpOpfListBuilder::find_argument_number(int parent_node, int child_node) co
 	return -1;
 }
 
+
+bool SexpOpfListBuilder::hasDefaultArgumentAvailable(int op)
+{
+	Assert(op >= 0); // TODO assertion
+	for (int i = 0; i < Operators[op].min; i++)
+		if (!hasDefaultArgumentAvailable(op, i))
+			return false;
+
+	return true;
+}
+
+bool SexpOpfListBuilder::hasDefaultArgumentAvailable(int op, int i)
+{
+	int j, type;
+	object* ptr;
+
+	const bool inCampaign = (environment && environment->isCampaignContext());
+	const bool inEventEditor = (environment && environment->isEventContext());
+
+	type = query_operator_argument_type(op, i);
+	switch (type) {
+	case OPF_NONE:
+	case OPF_NULL:
+	case OPF_BOOL:
+	case OPF_NUMBER:
+	case OPF_POSITIVE:
+	case OPF_IFF:
+	case OPF_AI_CLASS:
+	case OPF_WHO_FROM:
+	case OPF_PRIORITY:
+	case OPF_SHIP_TYPE:
+	case OPF_SUBSYSTEM:
+	case OPF_AWACS_SUBSYSTEM:
+	case OPF_ROTATING_SUBSYSTEM:
+	case OPF_TRANSLATING_SUBSYSTEM:
+	case OPF_SUBSYSTEM_TYPE:
+	case OPF_DOCKER_POINT:
+	case OPF_DOCKEE_POINT:
+	case OPF_AI_GOAL:
+	case OPF_KEYPRESS:
+	case OPF_AI_ORDER:
+	case OPF_SKILL_LEVEL:
+	case OPF_MEDAL_NAME:
+	case OPF_WEAPON_NAME:
+	case OPF_INTEL_NAME:
+	case OPF_SHIP_CLASS_NAME:
+	case OPF_HUGE_WEAPON:
+	case OPF_JUMP_NODE_NAME:
+	case OPF_AMBIGUOUS:
+	case OPF_CARGO:
+	case OPF_ARRIVAL_LOCATION:
+	case OPF_DEPARTURE_LOCATION:
+	case OPF_ARRIVAL_ANCHOR_ALL:
+	case OPF_SUPPORT_SHIP_CLASS:
+	case OPF_SHIP_WITH_BAY:
+	case OPF_SOUNDTRACK_NAME:
+	case OPF_STRING:
+	case OPF_FLEXIBLE_ARGUMENT:
+	case OPF_ANYTHING:
+	case OPF_DATA_OR_STR_CONTAINER:
+	case OPF_SKYBOX_MODEL_NAME:
+	case OPF_SKYBOX_FLAGS:
+	case OPF_SHIP_OR_NONE:
+	case OPF_SUBSYSTEM_OR_NONE:
+	case OPF_SHIP_WING_POINT_OR_NONE:
+	case OPF_SUBSYS_OR_GENERIC:
+	case OPF_BACKGROUND_BITMAP:
+	case OPF_SUN_BITMAP:
+	case OPF_NEBULA_STORM_TYPE:
+	case OPF_NEBULA_POOF:
+	case OPF_TURRET_TARGET_ORDER:
+	case OPF_TURRET_TYPE:
+	case OPF_POST_EFFECT:
+	case OPF_TARGET_PRIORITIES:
+	case OPF_ARMOR_TYPE:
+	case OPF_DAMAGE_TYPE:
+	case OPF_FONT:
+	case OPF_HUD_ELEMENT:
+	case OPF_SOUND_ENVIRONMENT:
+	case OPF_SOUND_ENVIRONMENT_OPTION:
+	case OPF_EXPLOSION_OPTION:
+	case OPF_AUDIO_VOLUME_OPTION:
+	case OPF_WEAPON_BANK_NUMBER:
+	case OPF_MESSAGE_OR_STRING:
+	case OPF_BUILTIN_HUD_GAUGE:
+	case OPF_CUSTOM_HUD_GAUGE:
+	case OPF_ANY_HUD_GAUGE:
+	case OPF_SHIP_EFFECT:
+	case OPF_ANIMATION_TYPE:
+	case OPF_SHIP_FLAG:
+	case OPF_WING_FLAG:
+	case OPF_NEBULA_PATTERN:
+	case OPF_NAV_POINT:
+	case OPF_TEAM_COLOR:
+	case OPF_GAME_SND:
+	case OPF_FIREBALL:
+	case OPF_SPECIES:
+	case OPF_LANGUAGE:
+	case OPF_FUNCTIONAL_WHEN_EVAL_TYPE:
+	case OPF_ANIMATION_NAME:
+	case OPF_CONTAINER_VALUE:
+	case OPF_WING_FORMATION:
+	case OPF_CHILD_LUA_ENUM:
+	case OPF_MESSAGE_TYPE:
+		return 1;
+
+	case OPF_SHIP:
+	case OPF_SHIP_WING:
+	case OPF_SHIP_POINT:
+	case OPF_SHIP_WING_POINT:
+	case OPF_SHIP_WING_WHOLETEAM:
+	case OPF_SHIP_WING_SHIPONTEAM_POINT:
+		ptr = GET_FIRST(&obj_used_list);
+		while (ptr != END_OF_LIST(&obj_used_list)) {
+			if (ptr->type == OBJ_SHIP || ptr->type == OBJ_START)
+				return 1;
+
+			ptr = GET_NEXT(ptr);
+		}
+
+		return 0;
+
+	case OPF_SHIP_NOT_PLAYER:
+	case OPF_ORDER_RECIPIENT:
+		ptr = GET_FIRST(&obj_used_list);
+		while (ptr != END_OF_LIST(&obj_used_list)) {
+			if (ptr->type == OBJ_SHIP)
+				return 1;
+
+			ptr = GET_NEXT(ptr);
+		}
+
+		return 0;
+
+	case OPF_WING:
+		for (j = 0; j < MAX_WINGS; j++)
+			if (Wings[j].wave_count)
+				return 1;
+
+		return 0;
+
+	case OPF_PERSONA:
+		return Personas.empty() ? 0 : 1;
+
+	case OPF_POINT:
+	case OPF_WAYPOINT_PATH:
+		return Waypoint_lists.empty() ? 0 : 1;
+
+	case OPF_MISSION_NAME:
+		if (!inCampaign) {
+			if (!(*Mission_filename))
+				return 0;
+
+			return 1;
+		}
+
+		if (Campaign.num_missions > 0)
+			return 1;
+
+		return 0;
+
+	case OPF_GOAL_NAME: {
+		int value;
+
+		value = Operators[op].value;
+
+		if (inCampaign)
+			return 1;
+
+		// need to be sure that previous-goal functions are available.  (i.e. we are providing a default argument for
+		// them)
+		else if ((value == OP_PREVIOUS_GOAL_TRUE) || (value == OP_PREVIOUS_GOAL_FALSE) ||
+				 (value == OP_PREVIOUS_GOAL_INCOMPLETE) || !Mission_goals.empty())
+			return 1;
+
+		return 0;
+	}
+
+	case OPF_EVENT_NAME: {
+		int value;
+
+		value = Operators[op].value;
+		if (inCampaign)
+			return 1;
+
+		// need to be sure that previous-event functions are available.  (i.e. we are providing a default argument for
+		// them)
+		else if ((value == OP_PREVIOUS_EVENT_TRUE) || (value == OP_PREVIOUS_EVENT_FALSE) ||
+				 (value == OP_PREVIOUS_EVENT_INCOMPLETE) || !Mission_events.empty())
+			return 1;
+
+		return 0;
+	}
+
+	case OPF_MESSAGE:
+		if (inEventEditor) {
+			//Assert(Event_editor_dlg); TODO?
+			if (environment && environment->getCurrentMessageName(0))
+				return 1;
+
+		} else {
+			if (Num_messages > Num_builtin_messages)
+				return 1;
+		}
+
+		return 0;
+
+	case OPF_VARIABLE_NAME:
+		return (sexp_variable_count() > 0) ? 1 : 0;
+
+	case OPF_SSM_CLASS:
+		return Ssm_info.empty() ? 0 : 1;
+
+	case OPF_MISSION_MOOD:
+		return Builtin_moods.empty() ? 0 : 1;
+
+	case OPF_CONTAINER_NAME:
+		return get_all_sexp_containers().empty() ? 0 : 1;
+
+	case OPF_LIST_CONTAINER_NAME:
+		for (const auto& container : get_all_sexp_containers()) {
+			if (container.is_list()) {
+				return 1;
+			}
+		}
+		return 0;
+
+	case OPF_MAP_CONTAINER_NAME:
+		for (const auto& container : get_all_sexp_containers()) {
+			if (container.is_map()) {
+				return 1;
+			}
+		}
+		return 0;
+
+	case OPF_ASTEROID_TYPES:
+		if (!get_list_valid_asteroid_subtypes().empty()) {
+			return 1;
+		}
+		return 0;
+
+	case OPF_DEBRIS_TYPES:
+		for (const auto& this_asteroid : Asteroid_info) {
+			if (this_asteroid.type == ASTEROID_TYPE_DEBRIS) {
+				return 1;
+			}
+		}
+		return 0;
+
+	case OPF_MOTION_DEBRIS:
+		if (Motion_debris_info.size() > 0) {
+			return 1;
+		}
+		return 0;
+
+	case OPF_BOLT_TYPE:
+		if (Bolt_types.size() > 0) {
+			return 1;
+		}
+		return 0;
+
+	case OPF_TRAITOR_OVERRIDE:
+		return Traitor_overrides.empty() ? 0 : 1;
+
+	case OPF_LUA_GENERAL_ORDER:
+		return (ai_lua_get_num_general_orders() > 0) ? 1 : 0;
+
+	case OPF_MISSION_CUSTOM_STRING:
+		return The_mission.custom_strings.empty() ? 0 : 1;
+
+	default:
+		if (!Dynamic_enums.empty()) {
+			if ((type - First_available_opf_id) < (int)Dynamic_enums.size()) {
+				return 1;
+			} else {
+				UNREACHABLE("Unhandled SEXP argument type!");
+			}
+		} else {
+			UNREACHABLE("Unhandled SEXP argument type!");
+		}
+	}
+
+	return 0;
+}
+
 // This is the only public entry point to the class and it dispatches to the correct OPF lister to return
 SexpListItemPtr SexpOpfListBuilder::buildListing(int opf, int parent_node, int arg_index)
 {
