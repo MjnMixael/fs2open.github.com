@@ -61,9 +61,85 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	}
 
 	// Add Data submenu stub
-	if (auto* a = getAction(SexpActionId::AddData)) {
-		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	if (auto* addData = getAction(SexpActionId::AddData)) {
+		addData->children.clear();
+
+		// Only meaningful on a real node
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			// If the selected node cannot accept a child, no submenu is generated.
+			const int opf = expectedOpfForAppend_(node_index);
+			if (opf >= 0) {
+				// Next arg index is current argc
+				const int arg_index = model->countArgs(n.child);
+
+				const bool allowNumber = model->opfAcceptsRawNumberInput(opf);
+				const bool allowString = model->opfAcceptsRawStringInput(opf);
+
+				// Pseudo-items for typed entry.
+				{
+					SexpContextAction numLeaf;
+					numLeaf.group = SexpContextGroup::Data;
+					numLeaf.id = SexpActionId::AddData; // action id placeholder; not wired yet
+					numLeaf.label = "Number";
+					numLeaf.enabled = allowNumber;
+					addData->children.push_back(std::move(numLeaf));
+				}
+				{
+					SexpContextAction strLeaf;
+					strLeaf.group = SexpContextGroup::Data;
+					strLeaf.id = SexpActionId::AddData; // action id placeholder; not wired yet
+					strLeaf.label = "String";
+					strLeaf.enabled = allowString;
+					addData->children.push_back(std::move(strLeaf));
+				}
+
+				// Ask the model for addable choices at this slot
+				if (auto list = model->buildListingForOpf(opf, node_index, arg_index)) {
+					for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
+						// Only list data items (ignore operator entries)
+						if (it->op < 0) {
+							SexpContextAction leaf;
+							leaf.group = SexpContextGroup::Data;
+							leaf.id = SexpActionId::AddData; // action to perform later
+							leaf.label = it->text;           // shown in submenu
+							leaf.enabled = true;
+
+							// For now we do not pass the chosen string through SexpActionParam.
+							// This proof wires up labels so the UI renders the nested submenu.
+							// Next step: extend SexpActionParam or add a dispatch to pass the chosen text.
+
+							addData->children.push_back(std::move(leaf));
+						}
+					}
+				}
+
+				// Container helpers
+				if ((n.type & SEXPT_CONTAINER_DATA) != 0) {
+					// Legacy FRED offered these under Add Data to help author keys/indices.
+					auto addMod = [&](const char* label) {
+						SexpContextAction leaf;
+						leaf.group = SexpContextGroup::Operator; // these are operators
+						leaf.id = SexpActionId::InsertOperator;  // Do these need a special action id?
+						leaf.label = label;
+						leaf.enabled = true; // keep simple; refine later if needed
+						addData->children.push_back(std::move(leaf));
+					};
+
+					addMod("Get_First");
+					addMod("Get_Last");
+					addMod("Remove_First");
+					addMod("Remove_Last");
+					addMod("Get_Random");
+					addMod("Remove_Random");
+					addMod("At");
+				}
+			}
+		}
+
+		// If there are no children, keep Add Data disabled so UI can gray it out.
+		addData->enabled = !addData->children.empty();
 	}
 
 	// Insert Operator submenu stub
@@ -78,10 +154,119 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		a->choiceText.emplace_back("Choose…");
 	}
 
-	// Replace Data submenu stub
-	if (auto* a = getAction(SexpActionId::ReplaceData)) {
-		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// Replace Data submenu
+	if (auto* repData = getAction(SexpActionId::ReplaceData)) {
+		repData->children.clear();
+
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& cur = model->_nodes[node_index];
+
+			// Replace Data only applies to data nodes (not operators)
+			if (SEXPT_TYPE(cur.type) != SEXPT_OPERATOR) {
+				const int parent_index = cur.parent;
+				if (SCP_vector_inbounds(model->_nodes, parent_index)) {
+					const auto& p = model->_nodes[parent_index];
+
+					// Arg index of this node within parent
+					const int arg_index = model->findArgIndex(parent_index, node_index);
+
+					// OPF of the slot we are replacing: parent operator + arg_index
+					int opf = -1;
+					if (SEXPT_TYPE(p.type) == SEXPT_OPERATOR) {
+						const int op_index = get_operator_index(p.text.c_str()); // index into Operators[]
+						if (op_index >= 0) {
+							opf = query_operator_argument_type(op_index, arg_index); // pass INDEX, not value
+						} else {
+							// Unknown operator name; safest is to disable choices
+							opf = OPF_NONE;
+						}
+					} else if (p.type & SEXPT_CONTAINER_DATA) {
+						// For container data parent, use your same helper that Add Data uses,
+						// but computed for this slot if you have it; otherwise, fall back:
+						// - AT_INDEX first-modifier special (list index) -> OPF_NUMBER
+						// - general multidim -> OPF_AMBIGUOUS (string or number)
+						const auto* cont = get_sexp_container(p.text.c_str());
+						const int first_mod = p.child;
+						if (cont && cont->is_list() && arg_index == 1 && first_mod >= 0 &&
+							get_list_modifier(model->_nodes[first_mod].text.c_str()) == ListModifier::AT_INDEX) {
+							opf = OPF_NUMBER;
+						} else {
+							opf = OPF_AMBIGUOUS;
+						}
+					}
+
+					if (opf >= 0) {
+						const bool allowNumber = model->opfAcceptsRawNumberInput(opf);
+						const bool allowString = model->opfAcceptsRawStringInput(opf);
+
+						// Pseudo-items first
+						{
+							SexpContextAction numLeaf;
+							numLeaf.group = SexpContextGroup::Data;
+							numLeaf.id = SexpActionId::ReplaceData;
+							numLeaf.label = "Number";
+							numLeaf.enabled = allowNumber;
+							repData->children.push_back(std::move(numLeaf));
+						}
+						{
+							SexpContextAction strLeaf;
+							strLeaf.group = SexpContextGroup::Data;
+							strLeaf.id = SexpActionId::ReplaceData;
+							strLeaf.label = "String";
+							strLeaf.enabled = allowString;
+							repData->children.push_back(std::move(strLeaf));
+						}
+
+						// If parent is container data, inject container modifiers per legacy rules
+						if (p.type & SEXPT_CONTAINER_DATA) {
+							const auto* cont = get_sexp_container(p.text.c_str());
+							const int first_mod = p.child;
+
+							// TODO this is not right!!!
+							bool suppress_modifiers_for_at_index =
+								cont && cont->is_list() && arg_index == 1 && first_mod >= 0 &&
+								get_list_modifier(model->_nodes[first_mod].text.c_str()) == ListModifier::AT_INDEX;
+
+							if (!suppress_modifiers_for_at_index) {
+								auto addMod = [&](const char* label) {
+									SexpContextAction leaf;
+									leaf.group = SexpContextGroup::Operator; // these are operators
+									leaf.id = SexpActionId::InsertOperator;  // correct tag for later
+									leaf.label = label;
+									leaf.enabled = true;
+									repData->children.push_back(std::move(leaf));
+								};
+
+								addMod("Get_First");
+								addMod("Get_Last");
+								addMod("Remove_First");
+								addMod("Remove_Last");
+								addMod("Get_Random");
+								addMod("Remove_Random");
+								addMod("At");
+							}
+						}
+
+						// TODO for variables we should not return the list?? Strange... but that's how FRED did it
+						// OPF-driven data choices for this exact slot (exclude operators)
+						if (auto list = model->buildListingForOpf(opf, parent_index, arg_index)) {
+							for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
+								if (it->op < 0) {
+									SexpContextAction leaf;
+									leaf.group = SexpContextGroup::Data;
+									leaf.id = SexpActionId::ReplaceData;
+									leaf.label = it->text;
+									leaf.enabled = true;
+									repData->children.push_back(std::move(leaf));
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
+		repData->enabled = !repData->children.empty();
 	}
 
 	// Replace Variable submenu stub

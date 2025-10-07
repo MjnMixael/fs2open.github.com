@@ -1405,3 +1405,45 @@ SexpListItemPtr SexpTreeModel::buildListingForOpf(int opf, int parent_node, int 
 	SexpOpfListBuilder builder(_nodes, _env);
 	return builder.buildListing(opf, parent_node, arg_index);
 }
+
+bool SexpTreeModel::opfAcceptsRawNumberInput(int opf) const
+{
+	switch (opf) {
+		case OPF_NUMBER:
+		case OPF_POSITIVE:
+		case OPF_CONTAINER_VALUE:
+		case OPF_AMBIGUOUS:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+bool SexpTreeModel::opfAcceptsRawStringInput(int opf) const
+{
+	switch (opf) {
+		case OPF_NONE:
+		case OPF_NULL:
+		case OPF_FLEXIBLE_ARGUMENT:
+		case OPF_BOOL:
+		case OPF_AI_GOAL:
+		case OPF_NUMBER:
+		case OPF_POSITIVE:
+		case OPF_CONTAINER_NAME:
+		case OPF_LIST_CONTAINER_NAME:
+		case OPF_MAP_CONTAINER_NAME:
+			return false;
+
+		// OPF_CONTAINER_VALUE explicitly allows both string and number.
+
+		default:
+			return true;
+	}
+}
+
+int SexpTreeModel::findArgIndex(int parent_node, int child_node) const
+{
+	SexpOpfListBuilder builder(_nodes, _env);
+	return builder.find_argument_number(parent_node, child_node);
+}

@@ -44,13 +44,13 @@ class SexpOpfListBuilder final {
 	// Single public entrypoint: dispatch to the correct OPF lister.
 	SexpListItemPtr buildListing(int opf, int parent_node, int arg_index);
 
+	int find_ancestral_argument_number(int parent_op, int child_node) const;
+	int find_argument_number(int parent_node, int child_node) const;
+	bool is_node_eligible_for_special_argument(int parent_node) const;
+
   private:
 	const SCP_vector<SexpNode>& tree_nodes; // model's nodes
 	const ISexpEnvironment* environment;    // may be null if not needed
-
-	bool is_node_eligible_for_special_argument(int parent_node) const;
-	int find_ancestral_argument_number(int parent_op, int child_node) const;
-	int find_argument_number(int parent_node, int child_node) const;
 
 	static SexpListItemPtr get_listing_opf_null();
 	SexpListItemPtr get_listing_opf_bool(int parent_node = -1);
