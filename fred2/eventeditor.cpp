@@ -2014,3 +2014,17 @@ void event_editor::overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind,
 			break;
 	}
 }
+
+bool event_editor::isEventContext() const
+{
+	return true;
+}
+
+const char* event_editor::getCurrentMessageName(int i) const
+{
+	if ((i < 0) || (i >= (int)m_messages.size())) {
+		return NULL;
+	}
+
+	return m_messages[i].name;
+}

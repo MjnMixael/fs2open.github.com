@@ -121,6 +121,8 @@ public:
 	//}}AFX_VIRTUAL
 
 	virtual void overrideNodeActionEnabled(SexpActionId id, SexpNodeKind kind,  int node_index, bool& is_enabled) const override;
+	virtual bool isEventContext() const override;
+	virtual const char* getCurrentMessageName(int index) const override;
 
 // Implementation
 protected:
