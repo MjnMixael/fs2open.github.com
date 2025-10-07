@@ -196,8 +196,36 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 					}
 
 					if (opf >= 0) {
-						const bool allowNumber = model->opfAcceptsRawNumberInput(opf);
-						const bool allowString = model->opfAcceptsRawStringInput(opf);
+						bool allowNumber = model->opfAcceptsRawNumberInput(opf);
+						bool allowString = model->opfAcceptsRawStringInput(opf);
+
+						if (p.type & SEXPT_CONTAINER_DATA) {
+							const auto* cont = get_sexp_container(p.text.c_str());
+							// arg_index here is the child-in-parent index of the node being replaced
+							if (cont) {
+								if (cont->is_list()) {
+									if (arg_index == 0) {
+										// First parameter of a list: neither typed Number nor String
+										allowNumber = false;
+										allowString = false;
+									} else {
+										// Subsequent parameters: both allowed
+										allowNumber = true;
+										allowString = true;
+									}
+								} else if (cont->is_map()) {
+									if (arg_index == 0) {
+										// First parameter of a map: String only
+										allowNumber = false;
+										allowString = true;
+									} else {
+										// Subsequent parameters: both allowed
+										allowNumber = true;
+										allowString = true;
+									}
+								}
+							}
+						}
 
 						// Pseudo-items first
 						{
@@ -222,7 +250,6 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 							const auto* cont = get_sexp_container(p.text.c_str());
 							const int first_mod = p.child;
 
-							// TODO this is not right!!!
 							bool suppress_modifiers_for_at_index =
 								cont && cont->is_list() && arg_index == 1 && first_mod >= 0 &&
 								get_list_modifier(model->_nodes[first_mod].text.c_str()) == ListModifier::AT_INDEX;
