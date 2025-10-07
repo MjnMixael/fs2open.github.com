@@ -562,15 +562,57 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'AddOperator' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 0); // TODO Placeholder ID
-			add_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
-		}
+
+		// simple running command-id allocator (unique per leaf)
+		UINT cmd_next = ID_SEXP_ACTION_BASE + MAKELONG(0, 2); // keep your scheme; bank "2" for AddOperator
+
+		// minimal recursive emitter (no helpers elsewhere)
+		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit =
+			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
+				int visible_in_col = 0;
+
+				for (size_t i = 0; i < items.size(); ++i) {
+					const auto& it = items[i];
+
+					if (!it.children.empty()) {
+						CMenu child;
+						child.CreatePopupMenu();
+
+						// recurse into submenu first
+						emit(child, it.children);
+
+						UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
+						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0) {
+							sub_flags |= MF_MENUBREAK; // new column
+						}
+
+						menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
+						child.Detach(); // CMenu now owned by parent
+						++visible_in_col;
+					} else {
+						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
+						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0) {
+							sub_flags |= MF_MENUBREAK; // new column
+						}
+
+						const UINT choice_id = cmd_next++;
+						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
+						++visible_in_col;
+					}
+				}
+
+				if (items.empty()) {
+					menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
+				}
+			};
+
+		emit(add_op_submenu, action_ptr->children);
 	} else {
 		add_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
 	}
+
 	menu.AppendMenu(item_flags, (UINT_PTR)add_op_submenu.m_hMenu, action_ptr->label.c_str());
 
 	CMenu add_data_submenu;
