@@ -266,8 +266,8 @@ add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/NoWheelSpinBox.h
     src/ui/widgets/renderwidget.cpp
     src/ui/widgets/renderwidget.h
-	src/ui/widgets/sexp_tree.cpp
-	src/ui/widgets/sexp_tree.h
+	src/ui/widgets/sexp_tree_ui.cpp
+	src/ui/widgets/sexp_tree_ui.h
 	src/ui/widgets/ShipFlagCheckbox.h
 	src/ui/widgets/ShipFlagCheckbox.cpp
 	src/ui/widgets/SimpleListSelectDialog.cpp

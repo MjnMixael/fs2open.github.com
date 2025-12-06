@@ -1,7 +1,7 @@
 #include "CampaignEditorDialog.h"
 #include "ui_CampaignEditorDialog.h"
 
-#include "ui/widgets/sexp_tree.h"
+#include "ui/widgets/sexp_tree_ui.h"
 #include "ui/widgets/SimpleListSelectDialog.h"
 #include "ui/util/SignalBlockers.h"
 #include "mission/util.h"
