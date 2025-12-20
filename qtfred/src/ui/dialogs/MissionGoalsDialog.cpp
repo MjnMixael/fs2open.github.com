@@ -37,7 +37,7 @@ void MissionGoalsDialog::accept()
 	if (_model->apply()) {
 		QDialog::accept();
 	}
-	// else: validation failed, don’t close
+	// else: validation failed, donï¿½t close
 }
 
 void MissionGoalsDialog::reject()
@@ -102,9 +102,9 @@ void MissionGoalsDialog::load_tree()
 	ui->goalEventTree->clear_tree();
 	auto& goals = _model->getGoals();
 	for (auto& goal : goals) {
-		goal.formula = ui->goalEventTree->load_sub_tree(goal.formula, true, "true");
+		goal.formula = ui->goalEventTree->_model.load_sub_tree(goal.formula, true, "true");
 	}
-	ui->goalEventTree->post_load();
+	ui->goalEventTree->_model.post_load();
 }
 void MissionGoalsDialog::recreate_tree()
 {
