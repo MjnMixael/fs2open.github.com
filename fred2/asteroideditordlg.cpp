@@ -64,6 +64,10 @@ asteroid_editor::asteroid_editor(CWnd* pParent /*=NULL*/)
 		a_field[i] = {};
 	}
 
+	if (Asteroid_fields.empty()) {
+		Asteroid_fields.push_back({});
+	}
+
 	if (!Asteroid_fields.empty()) {
 		for (i = 0; i < MAX_ASTEROID_FIELDS && i < static_cast<int>(Asteroid_fields.size()); i++) {
 			a_field[i] = Asteroid_fields[i];
@@ -474,7 +478,8 @@ void asteroid_editor::OnEnableAsteroids()
 			num_fields++;
 			CString field_name;
 			field_name.Format("Field %d", i + 1);
-			field_combo->AddString(field_name);
+			int combo_idx = field_combo->AddString(field_name);
+			field_combo->SetItemData(combo_idx, i);
 		}
 	}
 
@@ -484,13 +489,10 @@ void asteroid_editor::OnEnableAsteroids()
 
 	if (num_fields > 0) {
 		int selected_idx = 0;
-		for (int i = 0, seen = 0; i < MAX_ASTEROID_FIELDS; i++) {
-			if (a_field[i].num_initial_asteroids > 0) {
-				if (i == cur_field) {
-					selected_idx = seen;
-					break;
-				}
-				seen++;
+		for (int combo_idx = 0; combo_idx < field_combo->GetCount(); combo_idx++) {
+			if (static_cast<int>(field_combo->GetItemData(combo_idx)) == cur_field) {
+				selected_idx = combo_idx;
+				break;
 			}
 		}
 		field_combo->SetCurSel(selected_idx);
@@ -701,18 +703,14 @@ void asteroid_editor::OnFieldNumChange()
 	if (selected < 0) {
 		return;
 	}
+	const int selected_field = static_cast<int>(combo->GetItemData(selected));
+	if (!IN_RANGE(selected_field, 0, MAX_ASTEROID_FIELDS - 1)) {
+		return;
+	}
 
 	update_init();
-	for (int i = 0, seen = 0; i < MAX_ASTEROID_FIELDS; i++) {
-		if (a_field[i].num_initial_asteroids > 0) {
-			if (seen == selected) {
-				cur_field = i;
-				update_init();
-				return;
-			}
-			seen++;
-		}
-	}
+	cur_field = selected_field;
+	update_init();
 }
 
 void asteroid_editor::OnFieldTargetChange()
