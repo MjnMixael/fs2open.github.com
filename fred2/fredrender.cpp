@@ -570,66 +570,73 @@ void display_ship_info() {
 }
 
 void draw_asteroid_field() {
-	int i, j;
+	int j;
 	vec3d p[8], ip[8];
 	vertex v[8], iv[8];
 
-	for (i = 0; i < 1 /*MAX_ASTEROID_FIELDS*/; i++)
-		if (Asteroid_field.num_initial_asteroids) {
-			p[0].xyz.x = p[2].xyz.x = p[4].xyz.x = p[6].xyz.x = Asteroid_field.min_bound.xyz.x;
-			p[1].xyz.x = p[3].xyz.x = p[5].xyz.x = p[7].xyz.x = Asteroid_field.max_bound.xyz.x;
-			p[0].xyz.y = p[1].xyz.y = p[4].xyz.y = p[5].xyz.y = Asteroid_field.min_bound.xyz.y;
-			p[2].xyz.y = p[3].xyz.y = p[6].xyz.y = p[7].xyz.y = Asteroid_field.max_bound.xyz.y;
-			p[0].xyz.z = p[1].xyz.z = p[2].xyz.z = p[3].xyz.z = Asteroid_field.min_bound.xyz.z;
-			p[4].xyz.z = p[5].xyz.z = p[6].xyz.z = p[7].xyz.z = Asteroid_field.max_bound.xyz.z;
+	auto draw_field_bounds = [&](const asteroid_field& field) {
+		if (!field.num_initial_asteroids) {
+			return;
+		}
+
+		p[0].xyz.x = p[2].xyz.x = p[4].xyz.x = p[6].xyz.x = field.min_bound.xyz.x;
+		p[1].xyz.x = p[3].xyz.x = p[5].xyz.x = p[7].xyz.x = field.max_bound.xyz.x;
+		p[0].xyz.y = p[1].xyz.y = p[4].xyz.y = p[5].xyz.y = field.min_bound.xyz.y;
+		p[2].xyz.y = p[3].xyz.y = p[6].xyz.y = p[7].xyz.y = field.max_bound.xyz.y;
+		p[0].xyz.z = p[1].xyz.z = p[2].xyz.z = p[3].xyz.z = field.min_bound.xyz.z;
+		p[4].xyz.z = p[5].xyz.z = p[6].xyz.z = p[7].xyz.z = field.max_bound.xyz.z;
+
+		for (j = 0; j < 8; j++)
+			g3_rotate_vertex(&v[j], &p[j]);
+
+		g3_draw_line(&v[0], &v[1]);
+		g3_draw_line(&v[2], &v[3]);
+		g3_draw_line(&v[4], &v[5]);
+		g3_draw_line(&v[6], &v[7]);
+		g3_draw_line(&v[0], &v[2]);
+		g3_draw_line(&v[1], &v[3]);
+		g3_draw_line(&v[4], &v[6]);
+		g3_draw_line(&v[5], &v[7]);
+		g3_draw_line(&v[0], &v[4]);
+		g3_draw_line(&v[1], &v[5]);
+		g3_draw_line(&v[2], &v[6]);
+		g3_draw_line(&v[3], &v[7]);
+
+		if (field.has_inner_bound) {
+			gr_set_color(16, 192, 92);
+
+			ip[0].xyz.x = ip[2].xyz.x = ip[4].xyz.x = ip[6].xyz.x = field.inner_min_bound.xyz.x;
+			ip[1].xyz.x = ip[3].xyz.x = ip[5].xyz.x = ip[7].xyz.x = field.inner_max_bound.xyz.x;
+			ip[0].xyz.y = ip[1].xyz.y = ip[4].xyz.y = ip[5].xyz.y = field.inner_min_bound.xyz.y;
+			ip[2].xyz.y = ip[3].xyz.y = ip[6].xyz.y = ip[7].xyz.y = field.inner_max_bound.xyz.y;
+			ip[0].xyz.z = ip[1].xyz.z = ip[2].xyz.z = ip[3].xyz.z = field.inner_min_bound.xyz.z;
+			ip[4].xyz.z = ip[5].xyz.z = ip[6].xyz.z = ip[7].xyz.z = field.inner_max_bound.xyz.z;
 
 			for (j = 0; j < 8; j++)
-				g3_rotate_vertex(&v[j], &p[j]);
+				g3_rotate_vertex(&iv[j], &ip[j]);
 
-			g3_draw_line(&v[0], &v[1]);
-			g3_draw_line(&v[2], &v[3]);
-			g3_draw_line(&v[4], &v[5]);
-			g3_draw_line(&v[6], &v[7]);
-			g3_draw_line(&v[0], &v[2]);
-			g3_draw_line(&v[1], &v[3]);
-			g3_draw_line(&v[4], &v[6]);
-			g3_draw_line(&v[5], &v[7]);
-			g3_draw_line(&v[0], &v[4]);
-			g3_draw_line(&v[1], &v[5]);
-			g3_draw_line(&v[2], &v[6]);
-			g3_draw_line(&v[3], &v[7]);
-
-
-			// maybe draw inner box
-			if (Asteroid_field.has_inner_bound) {
-
-				gr_set_color(16, 192, 92);
-
-				ip[0].xyz.x = ip[2].xyz.x = ip[4].xyz.x = ip[6].xyz.x = Asteroid_field.inner_min_bound.xyz.x;
-				ip[1].xyz.x = ip[3].xyz.x = ip[5].xyz.x = ip[7].xyz.x = Asteroid_field.inner_max_bound.xyz.x;
-				ip[0].xyz.y = ip[1].xyz.y = ip[4].xyz.y = ip[5].xyz.y = Asteroid_field.inner_min_bound.xyz.y;
-				ip[2].xyz.y = ip[3].xyz.y = ip[6].xyz.y = ip[7].xyz.y = Asteroid_field.inner_max_bound.xyz.y;
-				ip[0].xyz.z = ip[1].xyz.z = ip[2].xyz.z = ip[3].xyz.z = Asteroid_field.inner_min_bound.xyz.z;
-				ip[4].xyz.z = ip[5].xyz.z = ip[6].xyz.z = ip[7].xyz.z = Asteroid_field.inner_max_bound.xyz.z;
-
-				for (j = 0; j < 8; j++)
-					g3_rotate_vertex(&iv[j], &ip[j]);
-
-				g3_draw_line(&iv[0], &iv[1]);
-				g3_draw_line(&iv[2], &iv[3]);
-				g3_draw_line(&iv[4], &iv[5]);
-				g3_draw_line(&iv[6], &iv[7]);
-				g3_draw_line(&iv[0], &iv[2]);
-				g3_draw_line(&iv[1], &iv[3]);
-				g3_draw_line(&iv[4], &iv[6]);
-				g3_draw_line(&iv[5], &iv[7]);
-				g3_draw_line(&iv[0], &iv[4]);
-				g3_draw_line(&iv[1], &iv[5]);
-				g3_draw_line(&iv[2], &iv[6]);
-				g3_draw_line(&iv[3], &iv[7]);
-			}
-
+			g3_draw_line(&iv[0], &iv[1]);
+			g3_draw_line(&iv[2], &iv[3]);
+			g3_draw_line(&iv[4], &iv[5]);
+			g3_draw_line(&iv[6], &iv[7]);
+			g3_draw_line(&iv[0], &iv[2]);
+			g3_draw_line(&iv[1], &iv[3]);
+			g3_draw_line(&iv[4], &iv[6]);
+			g3_draw_line(&iv[5], &iv[7]);
+			g3_draw_line(&iv[0], &iv[4]);
+			g3_draw_line(&iv[1], &iv[5]);
+			g3_draw_line(&iv[2], &iv[6]);
+			g3_draw_line(&iv[3], &iv[7]);
 		}
+	};
+
+	if (!Asteroid_fields.empty()) {
+		for (const auto& field : Asteroid_fields) {
+			draw_field_bounds(field);
+		}
+	} else {
+		draw_field_bounds(Asteroid_field);
+	}
 }
 
 void draw_compass_arrow(vec3d *v0) {

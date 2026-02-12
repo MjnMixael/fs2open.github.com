@@ -59,7 +59,7 @@ public:
 	//}}AFX_DATA
 
 	int cur_field, last_field;
-	asteroid_field a_field[1 /*MAX_ASTEROID_FIELDS*/];
+	asteroid_field a_field[MAX_ASTEROID_FIELDS];
 
 // Overrides
 	// ClassWizard generated virtual function overrides
@@ -85,6 +85,7 @@ protected:
 	afx_msg void OnFieldAsteroid();
 	afx_msg void OnAddField();
 	afx_msg void OnRemoveField();
+	afx_msg void OnFieldNumChange();
 	afx_msg void OnFieldTargetChange();
 	afx_msg void OnAddFieldTarget();
 	afx_msg void OnRemoveFieldTarget();

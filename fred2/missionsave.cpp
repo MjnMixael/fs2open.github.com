@@ -746,49 +746,50 @@ void CFred_mission_save::save_ai_goals(ai_goal *goalp, int ship)
 
 int CFred_mission_save::save_asteroid_fields()
 {
-	int i;
-
 	fred_parse_flag = 0;
 	required_string_fred("#Asteroid Fields");
 	parse_comments(2);
 
-	for (i = 0; i < 1 /*MAX_ASTEROID_FIELDS*/; i++) {
-		if (!Asteroid_field.num_initial_asteroids)
+	SCP_vector<asteroid_field> fields_to_save;
+	if (!Asteroid_fields.empty()) {
+		fields_to_save = Asteroid_fields;
+	} else if (Asteroid_field.num_initial_asteroids > 0) {
+		fields_to_save.push_back(Asteroid_field);
+	}
+
+	for (auto& field : fields_to_save) {
+		if (!field.num_initial_asteroids)
 			continue;
 
 		required_string_fred("$Density:");
 		parse_comments(2);
-		fout(" %d", Asteroid_field.num_initial_asteroids);
+		fout(" %d", field.num_initial_asteroids);
 
-		// field type
 		if (optional_string_fred("+Field Type:")) {
 			parse_comments();
 		} else {
 			fout("\n+Field Type:");
 		}
-		fout(" %d", Asteroid_field.field_type);
+		fout(" %d", field.field_type);
 
-		// debris type
 		if (optional_string_fred("+Debris Genre:")) {
 			parse_comments();
 		} else {
 			fout("\n+Debris Genre:");
 		}
-		fout(" %d", Asteroid_field.debris_genre);
+		fout(" %d", field.debris_genre);
 
-		// field_debris_type (only if debris genre)
-		if (Asteroid_field.debris_genre == DG_DEBRIS) {
-			for (size_t idx = 0; idx < Asteroid_field.field_debris_type.size(); idx++) {
-				if (Asteroid_field.field_debris_type[idx] != -1) {
-
+		if (field.debris_genre == DG_DEBRIS) {
+			for (size_t idx = 0; idx < field.field_debris_type.size(); idx++) {
+				if (field.field_debris_type[idx] != -1) {
 					if (Mission_save_format == FSO_FORMAT_RETAIL) {
-						if (idx < MAX_RETAIL_DEBRIS_TYPES) { // Retail can only have 3!
+						if (idx < MAX_RETAIL_DEBRIS_TYPES) {
 							if (optional_string_fred("+Field Debris Type:")) {
 								parse_comments();
 							} else {
 								fout("\n+Field Debris Type:");
 							}
-							fout(" %d", Asteroid_field.field_debris_type[idx]);
+							fout(" %d", field.field_debris_type[idx]);
 						}
 					} else {
 						if (optional_string_fred("+Field Debris Type Name:")) {
@@ -796,15 +797,14 @@ int CFred_mission_save::save_asteroid_fields()
 						} else {
 							fout("\n+Field Debris Type Name:");
 						}
-						fout(" %s", Asteroid_info[Asteroid_field.field_debris_type[idx]].name);
+						fout(" %s", Asteroid_info[field.field_debris_type[idx]].name);
 					}
 				}
 			}
 		} else {
-			for (size_t idx = 0; idx < Asteroid_field.field_asteroid_type.size(); idx++) {
-
+			for (size_t idx = 0; idx < field.field_asteroid_type.size(); idx++) {
 				if (Mission_save_format == FSO_FORMAT_RETAIL) {
-					if (idx < MAX_RETAIL_DEBRIS_TYPES) { // Retail can only have 3!
+					if (idx < MAX_RETAIL_DEBRIS_TYPES) {
 						if (optional_string_fred("+Field Debris Type:")) {
 							parse_comments();
 						} else {
@@ -818,25 +818,24 @@ int CFred_mission_save::save_asteroid_fields()
 					} else {
 						fout("\n+Field Debris Type Name:");
 					}
-					fout(" %s", Asteroid_field.field_asteroid_type[idx].c_str());
+					fout(" %s", field.field_asteroid_type[idx].c_str());
 				}
 			}
 		}
 
-
 		required_string_fred("$Average Speed:");
 		parse_comments();
-		fout(" %f", vm_vec_mag(&Asteroid_field.vel));
+		fout(" %f", vm_vec_mag(&field.vel));
 
 		required_string_fred("$Minimum:");
 		parse_comments();
-		save_vector(Asteroid_field.min_bound);
+		save_vector(field.min_bound);
 
 		required_string_fred("$Maximum:");
 		parse_comments();
-		save_vector(Asteroid_field.max_bound);
+		save_vector(field.max_bound);
 
-		if (Asteroid_field.has_inner_bound) {
+		if (field.has_inner_bound) {
 			if (optional_string_fred("+Inner Bound:")) {
 				parse_comments();
 			} else {
@@ -845,14 +844,14 @@ int CFred_mission_save::save_asteroid_fields()
 
 			required_string_fred("$Minimum:");
 			parse_comments();
-			save_vector(Asteroid_field.inner_min_bound);
+			save_vector(field.inner_min_bound);
 
 			required_string_fred("$Maximum:");
 			parse_comments();
-			save_vector(Asteroid_field.inner_max_bound);
+			save_vector(field.inner_max_bound);
 		}
 
-		if (Asteroid_field.enhanced_visibility_checks) {
+		if (field.enhanced_visibility_checks) {
 			if (Mission_save_format != FSO_FORMAT_RETAIL) {
 				if (optional_string_fred("+Use Enhanced Checks")) {
 					parse_comments();
@@ -862,7 +861,7 @@ int CFred_mission_save::save_asteroid_fields()
 			}
 		}
 
-		if (!Asteroid_field.target_names.empty()) {
+		if (!field.target_names.empty()) {
 			fso_comment_push(";;FSO 22.0.0;;");
 			if (optional_string_fred("$Asteroid Targets:")) {
 				parse_comments();
@@ -871,7 +870,7 @@ int CFred_mission_save::save_asteroid_fields()
 				fout_version("\n$Asteroid Targets: (");
 			}
 
-			for (SCP_string& name : Asteroid_field.target_names) {
+			for (SCP_string& name : field.target_names) {
 				fout(" \"%s\"", name.c_str());
 			}
 
