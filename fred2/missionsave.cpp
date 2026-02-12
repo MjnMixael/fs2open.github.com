@@ -753,8 +753,6 @@ int CFred_mission_save::save_asteroid_fields()
 	SCP_vector<asteroid_field> fields_to_save;
 	if (!Asteroid_fields.empty()) {
 		fields_to_save = Asteroid_fields;
-	} else if (Asteroid_field.num_initial_asteroids > 0) {
-		fields_to_save.push_back(Asteroid_field);
 	}
 
 	for (auto& field : fields_to_save) {

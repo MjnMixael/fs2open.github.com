@@ -6052,8 +6052,7 @@ void parse_asteroid_fields(mission *pm)
 
 	Assert(pm != NULL);
 
-	Asteroid_field.num_initial_asteroids = 0;
-	Asteroid_fields.clear();
+	Asteroid_fields.assign(1, {});
 
 	i = 0;
 
@@ -6219,15 +6218,10 @@ void parse_asteroid_fields(mission *pm)
 			stuff_string_list(Asteroid_field.target_names);
 		}
 
-		if (i < MAX_ASTEROID_FIELDS) {
+		if (i < MAX_ASTEROID_FIELDS && i > 0) {
 			Asteroid_fields.push_back(Asteroid_field);
 		}
 		i++;
-	}
-	if (!Asteroid_fields.empty()) {
-		Asteroid_field = Asteroid_fields.front();
-	} else {
-		Asteroid_field = {};
 	}
 }
 
@@ -7078,8 +7072,7 @@ void mission_init(mission *pm)
 	
 	Num_reinforcements = 0;
 
-	Asteroid_field.num_initial_asteroids = 0;
-	Asteroid_fields.clear();
+	Asteroid_fields.assign(1, {});
 
 	// This could be set with a sexp, so we should reset it here
 	Motion_debris_override = false;

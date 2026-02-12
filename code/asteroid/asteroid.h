@@ -174,8 +174,8 @@ struct asteroid_field {
 
 extern SCP_vector< asteroid_info > Asteroid_info;
 extern asteroid Asteroids[MAX_ASTEROIDS];
-extern asteroid_field	Asteroid_field;
 extern SCP_vector<asteroid_field> Asteroid_fields;
+#define Asteroid_field Asteroid_fields[0]
 
 extern int	Num_asteroids;
 extern int	Asteroids_enabled;

@@ -68,8 +68,6 @@ asteroid_editor::asteroid_editor(CWnd* pParent /*=NULL*/)
 		for (i = 0; i < MAX_ASTEROID_FIELDS && i < static_cast<int>(Asteroid_fields.size()); i++) {
 			a_field[i] = Asteroid_fields[i];
 		}
-	} else {
-		a_field[0] = Asteroid_field;
 	}
 }
 
@@ -160,9 +158,7 @@ int asteroid_editor::query_modified()
 		const asteroid_field* compare_field = SCP_vector_inbounds(Asteroid_fields, i) ? &Asteroid_fields[i] : nullptr;
 		const auto& current = a_field[i];
 		if (compare_field == nullptr) {
-			if (i == 0 && Asteroid_fields.empty()) {
-				compare_field = &Asteroid_field;
-			} else {
+			{
 				if (current.num_initial_asteroids > 0) {
 					return 1;
 				}
@@ -324,7 +320,9 @@ void asteroid_editor::OnOK()
 		}
 	}
 
-	Asteroid_field = Asteroid_fields.empty() ? asteroid_field() : Asteroid_fields.front();
+	if (Asteroid_fields.empty()) {
+		Asteroid_fields.push_back({});
+	}
 
 	update_map_window();
 	theApp.record_window_data(&Asteroid_wnd_data, this);
