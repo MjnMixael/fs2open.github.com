@@ -2772,11 +2772,12 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 	}
 
 	if (!Fred_running) {
-		// if this is an asteroid target, add it to the list
-		for (SCP_string& name : Asteroid_field.target_names) {
-			if (stricmp(name.c_str(), shipp->ship_name) == 0) {
-				asteroid_add_target(&Objects[objnum]);
-				break;
+		for (size_t field_idx = 0; field_idx < Asteroid_fields.size(); ++field_idx) {
+			for (SCP_string& name : Asteroid_fields[field_idx].target_names) {
+				if (stricmp(name.c_str(), shipp->ship_name) == 0) {
+					asteroid_add_target(&Objects[objnum], static_cast<int>(field_idx));
+					break;
+				}
 			}
 		}
 	}
@@ -6052,6 +6053,7 @@ void parse_asteroid_fields(mission *pm)
 	Assert(pm != NULL);
 
 	Asteroid_field.num_initial_asteroids = 0;
+	Asteroid_fields.clear();
 
 	i = 0;
 
@@ -6062,7 +6064,7 @@ void parse_asteroid_fields(mission *pm)
 		float speed, density;
 		int type;
 
-		Assert(i < 1);
+		Assert(i < MAX_ASTEROID_FIELDS);
 		required_string("$Density:");
 		stuff_float(&density);
 
@@ -6216,7 +6218,16 @@ void parse_asteroid_fields(mission *pm)
 		if (optional_string("$Asteroid Targets:")) {
 			stuff_string_list(Asteroid_field.target_names);
 		}
+
+		if (i < MAX_ASTEROID_FIELDS) {
+			Asteroid_fields.push_back(Asteroid_field);
+		}
 		i++;
+	}
+	if (!Asteroid_fields.empty()) {
+		Asteroid_field = Asteroid_fields.front();
+	} else {
+		Asteroid_field = {};
 	}
 }
 
@@ -7068,6 +7079,7 @@ void mission_init(mission *pm)
 	Num_reinforcements = 0;
 
 	Asteroid_field.num_initial_asteroids = 0;
+	Asteroid_fields.clear();
 
 	// This could be set with a sexp, so we should reset it here
 	Motion_debris_override = false;

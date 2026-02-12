@@ -25,6 +25,7 @@ struct collision_info_struct;
 class model_draw_list;
 
 #define	MAX_ASTEROIDS			2000	//Increased from 512 to 2000 in 2022
+#define	MAX_ASTEROID_FIELDS		2
 
 #define	NUM_ASTEROID_SIZES		3
 
@@ -119,6 +120,7 @@ typedef	struct asteroid {
 	int		collide_objsig;		// object signature corresponding to collide_objnum
 	vec3d	death_hit_pos;		// hit pos that caused death
 	int		target_objnum;		// Yes, hah!  Asteroids can have targets.  See asteroid_aim_at_target().
+	int		field_num;			// index of the source asteroid field in Asteroid_fields
 } asteroid;
 
 
@@ -173,6 +175,7 @@ struct asteroid_field {
 extern SCP_vector< asteroid_info > Asteroid_info;
 extern asteroid Asteroids[MAX_ASTEROIDS];
 extern asteroid_field	Asteroid_field;
+extern SCP_vector<asteroid_field> Asteroid_fields;
 
 extern int	Num_asteroids;
 extern int	Asteroids_enabled;
@@ -198,7 +201,7 @@ int	asteroid_collide_objnum(object *asteroid_objp);
 float asteroid_time_to_impact(object *asteroid_objp);
 void	asteroid_show_brackets();
 void	asteroid_target_closest_danger();
-void asteroid_add_target(object* objp);
+void asteroid_add_target(object* objp, int field_num = 0);
 int get_asteroid_index(const char* asteroid_name);
 const SCP_vector<SCP_string>& get_list_valid_asteroid_subtypes();
 int get_asteroid_subtype_index_by_name(const SCP_string& name, int asteroid_idx);
@@ -207,7 +210,7 @@ int get_asteroid_subtype_index_by_name(const SCP_string& name, int asteroid_idx)
 void asteroid_load(int asteroid_info_index, int asteroid_subtype);
 
 // need to extern for keycontrol debug commands
-object *asteroid_create(asteroid_field *asfieldp, int asteroid_type, int asteroid_subtype, bool check_visibility = false);
+object *asteroid_create(asteroid_field *asfieldp, int asteroid_type, int asteroid_subtype, bool check_visibility = false, int field_num = 0);
 
 // need to extern for multiplayer
 void asteroid_sub_create(object *parent_objp, int asteroid_type, vec3d *relvec);

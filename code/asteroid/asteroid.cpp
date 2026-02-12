@@ -62,6 +62,7 @@ int	Num_asteroids = 0;
 SCP_vector< asteroid_info > Asteroid_info;
 asteroid			Asteroids[MAX_ASTEROIDS];
 asteroid_field	Asteroid_field;
+SCP_vector<asteroid_field> Asteroid_fields;
 
 
 static particle::ParticleEffectHandle 		Asteroid_impact_explosion_ani;
@@ -76,6 +77,7 @@ float	Asteroid_icon_closeup_zoom;
 typedef struct asteroid_target {
 	int objnum;
 	int signature;
+	int field_num;
 	TIMESTAMP throw_stamp;
 	int incoming_asteroids;
 } asteroid_target;
@@ -88,7 +90,7 @@ SCP_vector<asteroid_target> Asteroid_targets;
 /**
  * Return number of asteroids expected to collide with a ship.
  */
-static int count_incident_asteroids(int target_objnum)
+static int count_incident_asteroids(int target_objnum, int field_num)
 {
 	object* asteroid_objp;
 	int		count = 0;
@@ -103,7 +105,7 @@ static int count_incident_asteroids(int target_objnum)
 		if (asteroid_objp->type == OBJ_ASTEROID) {
 			asteroid* asp = &Asteroids[asteroid_objp->instance];
 
-			if (asp->target_objnum == target_objnum) {
+			if (asp->target_objnum == target_objnum && asp->field_num == field_num) {
 				count++;
 			}
 		}
@@ -113,12 +115,13 @@ static int count_incident_asteroids(int target_objnum)
 }
 
 // add a ship as a new asteroid target
-void asteroid_add_target(object* objp) {
+void asteroid_add_target(object* objp, int field_num) {
 	asteroid_target new_target;
 	new_target.objnum = OBJ_INDEX(objp);
 	new_target.signature = objp->signature;
+	new_target.field_num = field_num;
 	new_target.throw_stamp = _timestamp(Random::next(500, 2000));
-	new_target.incoming_asteroids = count_incident_asteroids(OBJ_INDEX(objp)); // this *should* normally be 0
+	new_target.incoming_asteroids = count_incident_asteroids(OBJ_INDEX(objp), field_num); // this *should* normally be 0
 
 	Asteroid_targets.push_back(new_target);
 }
@@ -216,7 +219,7 @@ static float asteroid_cap_speed(int asteroid_info_index, float speed)
  * Check if asteroid is within inner bound
  * @return 0 if not inside or no inner bound, 1 if inside inner bound
  */
-static bool asteroid_in_inner_bound(asteroid_field *asfieldp, vec3d *pos, float delta) {
+static bool asteroid_in_inner_bound(const asteroid_field *asfieldp, vec3d *pos, float delta) {
 
 	if (!asfieldp->has_inner_bound) {
 		return false;
@@ -234,19 +237,19 @@ static bool asteroid_in_inner_bound(asteroid_field *asfieldp, vec3d *pos, float 
 
 }
 
-static bool asteroid_is_ship_inside_field(asteroid_field* asfieldp, vec3d* pos, float radius) {
+static bool asteroid_is_ship_inside_field(const asteroid_field* asfieldp, vec3d* pos, float radius) {
 
 	radius *= 2.0f;
 
 	if (Fix_asteroid_bounding_box_check) {
-		return pos->xyz.x - radius > Asteroid_field.min_bound.xyz.x && pos->xyz.x + radius < Asteroid_field.max_bound.xyz.x &&
-			   pos->xyz.y - radius > Asteroid_field.min_bound.xyz.y && pos->xyz.y + radius < Asteroid_field.max_bound.xyz.y &&
-			   pos->xyz.z - radius > Asteroid_field.min_bound.xyz.z && pos->xyz.z + radius < Asteroid_field.max_bound.xyz.z &&
+		return pos->xyz.x - radius > asfieldp->min_bound.xyz.x && pos->xyz.x + radius < asfieldp->max_bound.xyz.x &&
+			   pos->xyz.y - radius > asfieldp->min_bound.xyz.y && pos->xyz.y + radius < asfieldp->max_bound.xyz.y &&
+			   pos->xyz.z - radius > asfieldp->min_bound.xyz.z && pos->xyz.z + radius < asfieldp->max_bound.xyz.z &&
 			   !asteroid_in_inner_bound(asfieldp, pos, radius);
 	} else {
-		return pos->xyz.x + radius > Asteroid_field.min_bound.xyz.x && pos->xyz.x - radius < Asteroid_field.max_bound.xyz.x &&
-			   pos->xyz.y + radius > Asteroid_field.min_bound.xyz.y && pos->xyz.y - radius < Asteroid_field.max_bound.xyz.y &&
-			   pos->xyz.z + radius > Asteroid_field.min_bound.xyz.z && pos->xyz.z - radius < Asteroid_field.max_bound.xyz.z &&
+		return pos->xyz.x + radius > asfieldp->min_bound.xyz.x && pos->xyz.x - radius < asfieldp->max_bound.xyz.x &&
+			   pos->xyz.y + radius > asfieldp->min_bound.xyz.y && pos->xyz.y - radius < asfieldp->max_bound.xyz.y &&
+			   pos->xyz.z + radius > asfieldp->min_bound.xyz.z && pos->xyz.z - radius < asfieldp->max_bound.xyz.z &&
 			   !asteroid_in_inner_bound(asfieldp, pos, radius);
 	}
 
@@ -282,9 +285,9 @@ static void inner_bound_pos_fixup(asteroid_field *asfieldp, vec3d *pos)
 /**
 * Randomly select an asteroid subtype
 */
-const SCP_string& pick_random_asteroid_type()
+const SCP_string& pick_random_asteroid_type(const asteroid_field& asfield)
 {
-	return Asteroid_field.field_asteroid_type[Random::next(static_cast<int>(Asteroid_field.field_asteroid_type.size()))];
+	return asfield.field_asteroid_type[Random::next(static_cast<int>(asfield.field_asteroid_type.size()))];
 }
 
 int get_asteroid_subtype_index_by_name(const SCP_string &name, int asteroid_idx) {
@@ -301,7 +304,7 @@ int get_asteroid_subtype_index_by_name(const SCP_string &name, int asteroid_idx)
 /**
  * Create a single asteroid 
  */
-object *asteroid_create(asteroid_field *asfieldp, int asteroid_type, int asteroid_subtype, bool check_visibility)
+object *asteroid_create(asteroid_field *asfieldp, int asteroid_type, int asteroid_subtype, bool check_visibility, int field_num)
 {
 	int				n, objnum;
 	matrix			orient;
@@ -361,6 +364,7 @@ object *asteroid_create(asteroid_field *asfieldp, int asteroid_type, int asteroi
 	asp->collide_objnum = -1;
 	asp->collide_objsig = -1;
 	asp->target_objnum = -1;
+	asp->field_num = field_num;
 
 	radius = model_get_radius(asip->subtypes[asteroid_subtype].model_number);
 
@@ -498,8 +502,11 @@ void asteroid_sub_create(object *parent_objp, int asteroid_type, vec3d *relvec)
 	float speed;
 
 	Assert(parent_objp->type == OBJ_ASTEROID);
-	int subtype = Asteroids[parent_objp->instance].asteroid_subtype;
-	new_objp = asteroid_create(&Asteroid_field, asteroid_type, subtype);
+	auto* parent_asp = &Asteroids[parent_objp->instance];
+	int subtype = parent_asp->asteroid_subtype;
+	int field_num = parent_asp->field_num;
+	auto* field_ptr = SCP_vector_inbounds(Asteroid_fields, field_num) ? &Asteroid_fields[field_num] : &Asteroid_field;
+	new_objp = asteroid_create(field_ptr, asteroid_type, subtype, false, field_num);
 
 	// New asteroid size doesn't have this subtype, so abort
 	if (new_objp == nullptr)
@@ -514,7 +521,7 @@ void asteroid_sub_create(object *parent_objp, int asteroid_type, vec3d *relvec)
 	float parent_speed = vm_vec_mag_quick(&parent_objp->phys_info.vel);
 
 	if ( parent_speed < 0.1f ) {
-		parent_speed = vm_vec_mag_quick(&Asteroid_field.vel);
+		parent_speed = vm_vec_mag_quick(&field_ptr->vel);
 	}
 
 	new_objp->phys_info.vel = parent_objp->phys_info.vel;
@@ -590,114 +597,119 @@ void asteroid_load(int asteroid_info_index, int asteroid_subtype)
 /**
  * Create all the asteroids for the mission
  */
-void asteroid_create_all()
+static bool asteroid_field_is_valid_for_creation(const asteroid_field& asfield)
+{
+	if (asfield.num_initial_asteroids <= 0) {
+		return false;
+	}
+
+	if ((asfield.debris_genre == DG_DEBRIS && asfield.field_debris_type.empty()) ||
+		(asfield.debris_genre == DG_ASTEROID && asfield.field_asteroid_type.empty())) {
+		Warning(LOCATION, "An asteroid field is enabled, but no asteroid types were enabled.");
+		return false;
+	}
+
+	if (asfield.min_bound.xyz.x >= asfield.max_bound.xyz.x) {
+		Warning(LOCATION, "Asteroid field Outer Bound Min X is greater than or equal to Max X. Aborting asteroid creation!");
+		return false;
+	}
+	if (asfield.min_bound.xyz.y >= asfield.max_bound.xyz.y) {
+		Warning(LOCATION, "Asteroid field Outer Bound Min Y is greater than or equal to Max Y. Aborting asteroid creation!");
+		return false;
+	}
+	if (asfield.min_bound.xyz.z >= asfield.max_bound.xyz.z) {
+		Warning(LOCATION, "Asteroid field Outer Bound Min Z is greater than or equal to Max Z. Aborting asteroid creation!");
+		return false;
+	}
+
+	if (asfield.has_inner_bound) {
+		if (asfield.inner_min_bound.xyz.x >= asfield.inner_max_bound.xyz.x) {
+			Warning(LOCATION, "Asteroid field Inner Bound Min X is greater than or equal to Max X. Aborting asteroid creation!");
+			return false;
+		}
+		if (asfield.inner_min_bound.xyz.y >= asfield.inner_max_bound.xyz.y) {
+			Warning(LOCATION, "Asteroid field Inner Bound Min Y is greater than or equal to Max Y. Aborting asteroid creation!");
+			return false;
+		}
+		if (asfield.inner_min_bound.xyz.z >= asfield.inner_max_bound.xyz.z) {
+			Warning(LOCATION, "Asteroid field Inner Bound Min Z is greater than or equal to Max Z. Aborting asteroid creation!");
+			return false;
+		}
+	}
+
+	return true;
+}
+
+static void asteroid_create_all_in_field(asteroid_field* asfieldp, int field_num)
 {
 	int i, idx;
-
-	// ship_debris_odds_table keeps track of debris type of the next debris piece
-	// each different type (size) of debris piece has a diffenent weight, smaller weighted more heavily than larger.
-	// choose next type from table ship_debris_odds_table by Random::next()%max_weighted_range,
-	// the threshold *below* which the debris type is selected.
-	struct ShipDebrisOdds {
-		float random_threshold;
-		int debris_type;
-	};
-	std::vector<ShipDebrisOdds> shipDebrisOddsTable(Asteroid_field.field_debris_type.size());
-
+	struct ShipDebrisOdds { float random_threshold; int debris_type; };
+	std::vector<ShipDebrisOdds> shipDebrisOddsTable(asfieldp->field_debris_type.size());
 	float max_weighted_range = 0.0f;
 
-	if (!Asteroids_enabled)
-		return;
-
-	if (Asteroid_field.num_initial_asteroids <= 0 ) {
+	if (!asteroid_field_is_valid_for_creation(*asfieldp)) {
 		return;
 	}
 
-	if ((Asteroid_field.debris_genre == DG_DEBRIS && Asteroid_field.field_debris_type.empty()) ||
-		(Asteroid_field.debris_genre == DG_ASTEROID && Asteroid_field.field_asteroid_type.empty())) {
-		Warning(LOCATION, "An asteroid field is enabled, but no asteroid types were enabled.");
-		return;
-	}
-
-	//Check that the asteroid field bounds are valid - Mjn
-	if (Asteroid_field.min_bound.xyz.x >= Asteroid_field.max_bound.xyz.x) {
-		Warning(LOCATION, "Asteroid field Outer Bound Min X is greater than or equal to Max X. Aborting asteroid creation!");
-		return;
-	}
-	if (Asteroid_field.min_bound.xyz.y >= Asteroid_field.max_bound.xyz.y) {
-		Warning(LOCATION, "Asteroid field Outer Bound Min Y is greater than or equal to Max Y. Aborting asteroid creation!");
-		return;
-	}
-	if (Asteroid_field.min_bound.xyz.z >= Asteroid_field.max_bound.xyz.z) {
-		Warning(LOCATION, "Asteroid field Outer Bound Min Z is greater than or equal to Max Z. Aborting asteroid creation!");
-		return;
-	}
-	if (Asteroid_field.inner_min_bound.xyz.x >= Asteroid_field.inner_max_bound.xyz.x) {
-		Warning(LOCATION, "Asteroid field Inner Bound Min X is greater than or equal to Max X. Aborting asteroid creation!");
-		return;
-	}
-	if (Asteroid_field.inner_min_bound.xyz.y >= Asteroid_field.inner_max_bound.xyz.y) {
-		Warning(LOCATION, "Asteroid field Inner Bound Min Y is greater than or equal to Max Y. Aborting asteroid creation!");
-		return;
-	}
-	if (Asteroid_field.inner_min_bound.xyz.z >= Asteroid_field.inner_max_bound.xyz.z) {
-		Warning(LOCATION, "Asteroid field Inner Bound Min Z is greater than or equal to Max Z. Aborting asteroid creation!");
-		return;
-	}
-
-	int max_asteroids = Asteroid_field.num_initial_asteroids; // * (1.0f - 0.1f*(MAX_DETAIL_VALUE-Detail.asteroid_density)));
-
+	const int max_asteroids = asfieldp->num_initial_asteroids;
 	int num_debris_types = 0;
 
-	// get number of debris types
-	if (Asteroid_field.debris_genre == DG_DEBRIS) {
-		num_debris_types = static_cast<int>(Asteroid_field.field_debris_type.size());
-
-		// Calculate the odds table
-		for (idx=0; idx<num_debris_types; idx++) {
-			float debris_weight = Asteroid_info[Asteroid_field.field_debris_type[idx]].spawn_weight;
+	if (asfieldp->debris_genre == DG_DEBRIS) {
+		num_debris_types = static_cast<int>(asfieldp->field_debris_type.size());
+		for (idx = 0; idx < num_debris_types; idx++) {
+			float debris_weight = Asteroid_info[asfieldp->field_debris_type[idx]].spawn_weight;
 			shipDebrisOddsTable[idx].random_threshold = max_weighted_range + debris_weight;
-			shipDebrisOddsTable[idx].debris_type = Asteroid_field.field_debris_type[idx];
+			shipDebrisOddsTable[idx].debris_type = asfieldp->field_debris_type[idx];
 			max_weighted_range += debris_weight;
 		}
 	}
 
-	// Load Asteroid/debris models
-	if (Asteroid_field.debris_genre == DG_DEBRIS) {
-		for (idx=0; idx<num_debris_types; idx++) {
-			asteroid_load(Asteroid_field.field_debris_type[idx], 0);
+	if (asfieldp->debris_genre == DG_DEBRIS) {
+		for (idx = 0; idx < num_debris_types; idx++) {
+			asteroid_load(asfieldp->field_debris_type[idx], 0);
 		}
 	} else {
-		for (const auto& subtype : Asteroid_field.field_asteroid_type) {
+		for (const auto& subtype : asfieldp->field_asteroid_type) {
 			asteroid_load(ASTEROID_TYPE_SMALL, get_asteroid_subtype_index_by_name(subtype, ASTEROID_TYPE_SMALL));
 			asteroid_load(ASTEROID_TYPE_MEDIUM, get_asteroid_subtype_index_by_name(subtype, ASTEROID_TYPE_MEDIUM));
 			asteroid_load(ASTEROID_TYPE_LARGE, get_asteroid_subtype_index_by_name(subtype, ASTEROID_TYPE_LARGE));
 		}
 	}
 
-	// load all the asteroid/debris pieces
-	for (i=0; i<max_asteroids; i++) {
-		if (Asteroid_field.debris_genre == DG_ASTEROID) {
-			// For asteroid, load only large asteroids
-
-			// get a valid subtype
-			int subtype = get_asteroid_subtype_index_by_name(pick_random_asteroid_type(), ASTEROID_TYPE_LARGE);
-
-			if (subtype >= 0)
-				asteroid_create(&Asteroid_field, ASTEROID_TYPE_LARGE, subtype);
+	for (i = 0; i < max_asteroids; i++) {
+		if (asfieldp->debris_genre == DG_ASTEROID) {
+			int subtype = get_asteroid_subtype_index_by_name(pick_random_asteroid_type(*asfieldp), ASTEROID_TYPE_LARGE);
+			if (subtype >= 0) {
+				asteroid_create(asfieldp, ASTEROID_TYPE_LARGE, subtype, false, field_num);
+			}
 		} else {
 			Assert(num_debris_types > 0);
-
 			float rand_choice = frand() * max_weighted_range;
-
-			for (idx = 0; idx < static_cast<int>(Asteroid_field.field_debris_type.size()); idx++) {
-				// for ship debris, choose type according to odds table
+			for (idx = 0; idx < static_cast<int>(asfieldp->field_debris_type.size()); idx++) {
 				if (rand_choice < shipDebrisOddsTable[idx].random_threshold) {
-					asteroid_create(&Asteroid_field, shipDebrisOddsTable[idx].debris_type, 0);
+					asteroid_create(asfieldp, shipDebrisOddsTable[idx].debris_type, 0, false, field_num);
 					break;
 				}
 			}
 		}
+	}
+}
+
+/**
+ * Create all the asteroids for the mission
+ */
+void asteroid_create_all()
+{
+	if (!Asteroids_enabled)
+		return;
+
+	if (Asteroid_fields.empty()) {
+		asteroid_create_all_in_field(&Asteroid_field, 0);
+		return;
+	}
+
+	for (size_t i = 0; i < Asteroid_fields.size(); ++i) {
+		asteroid_create_all_in_field(&Asteroid_fields[i], static_cast<int>(i));
 	}
 }
 
@@ -722,6 +734,7 @@ void remove_all_asteroids()
 void asteroid_create_asteroid_field(int num_asteroids, int field_type, int asteroid_speed, vec3d o_min, vec3d o_max, bool inner_box, vec3d i_min, vec3d i_max, SCP_vector<SCP_string> asteroid_types)
 {
 	remove_all_asteroids();
+	Asteroid_fields.clear();
 
 	Asteroid_field.num_initial_asteroids = num_asteroids;
 
@@ -775,6 +788,8 @@ void asteroid_create_asteroid_field(int num_asteroids, int field_type, int aster
 		Asteroid_field.inner_max_bound = i_max;
 	}
 
+	Asteroid_fields.push_back(Asteroid_field);
+
 	// Only create asteroids if we have some to create
 	if ((!Asteroid_field.field_asteroid_type.empty()) && (num_asteroids > 0)) {
 		asteroid_create_all();
@@ -785,6 +800,7 @@ void asteroid_create_asteroid_field(int num_asteroids, int field_type, int aster
 void asteroid_create_debris_field(int num_asteroids, int asteroid_speed, SCP_vector<int> debris_types, vec3d o_min, vec3d o_max, bool enhanced)
 {
 	remove_all_asteroids();
+	Asteroid_fields.clear();
 
 	Asteroid_field.num_initial_asteroids = num_asteroids;
 
@@ -813,6 +829,8 @@ void asteroid_create_debris_field(int num_asteroids, int asteroid_speed, SCP_vec
 
 	Asteroid_field.bound_rad = MAX(3000.0f, b_rad);
 
+	Asteroid_fields.push_back(Asteroid_field);
+
 	// Only create debris if we have some to create
 	if ((!Asteroid_field.field_debris_type.empty()) && (num_asteroids > 0)) {
 		asteroid_create_all();
@@ -825,6 +843,7 @@ void asteroid_create_debris_field(int num_asteroids, int asteroid_speed, SCP_vec
 void asteroid_level_init()
 {
 	Asteroid_field = {};
+	Asteroid_fields.clear();
 
 	if (!Fred_running)
 	{
@@ -1017,52 +1036,48 @@ bool asteroid_is_within_view(vec3d *pos, float range, bool range_override)
  * Call once per frame to maybe throw some asteroids at one or more ships.
  *
  */
-static void maybe_throw_asteroid()
+static void maybe_throw_asteroid(const asteroid_field& asfield, int field_num)
 {
-	Assertion(!Asteroid_field.field_asteroid_type.empty(), "maybe_throw_asteroid() called while field_asteroid_type.size was 0; this should never happen, get a coder!");
+	auto* field_ptr = &Asteroid_fields[field_num];
+	Assertion(!asfield.field_asteroid_type.empty(), "maybe_throw_asteroid() called while field_asteroid_type.size was 0; this should never happen, get a coder!");
 
 	for (asteroid_target& target : Asteroid_targets) {
+		if (target.field_num != field_num)
+			continue;
 		if (!timestamp_elapsed(target.throw_stamp))
 			continue;
 
 		object* target_objp = &Objects[target.objnum];
-		if (!asteroid_is_ship_inside_field(&Asteroid_field, &target_objp->pos, target_objp->radius))
+		if (!asteroid_is_ship_inside_field(field_ptr, &target_objp->pos, target_objp->radius))
 			continue;
-		
-		// This should've been greater equal, but alas...
+
 		if (target.incoming_asteroids > The_mission.ai_profile->max_incoming_asteroids[Game_skill_level])
 			continue;
 
 		nprintf(("AI", "Incoming asteroids to %s: %i\n", Ships[target_objp->instance].ship_name, target.incoming_asteroids));
-
 		target.throw_stamp = _timestamp(1000 + 1200 * target.incoming_asteroids / (Game_skill_level+1));
 
-		// get a valid subtype
-		int subtype = get_asteroid_subtype_index_by_name(pick_random_asteroid_type(), ASTEROID_TYPE_LARGE);
-
-		// this really shouldn't happen but just in case...
+		int subtype = get_asteroid_subtype_index_by_name(pick_random_asteroid_type(asfield), ASTEROID_TYPE_LARGE);
 		if (subtype < 0)
 			return;
 
-		object *ast_objp = asteroid_create(&Asteroid_field, ASTEROID_TYPE_LARGE, subtype, Asteroid_field.enhanced_visibility_checks);
+		object *ast_objp = asteroid_create(field_ptr, ASTEROID_TYPE_LARGE, subtype, asfield.enhanced_visibility_checks, field_num);
 		if (ast_objp != nullptr) {
 			asteroid_aim_at_target(target_objp, ast_objp, ASTEROID_MIN_COLLIDE_TIME + frand() * 20.0f);
 
-			// if asteroid is inside inner bound, kill it
-			if (asteroid_in_inner_bound(&Asteroid_field, &ast_objp->pos, 0.0f)) {
+			if (asteroid_in_inner_bound(field_ptr, &ast_objp->pos, 0.0f)) {
 				ast_objp->flags.set(Object::Object_Flags::Should_be_dead);
 			} else {
 				Asteroids[ast_objp->instance].target_objnum = target.objnum;
 				target.incoming_asteroids++;
-
 				if ( MULTIPLAYER_MASTER ) {
 					send_asteroid_throw( ast_objp );
 				}
 			}
 		}
 	}
-
 }
+
 
 /**
  * Delete asteroid from Asteroid_used_list
@@ -1800,6 +1815,7 @@ void asteroid_level_close()
 	}
 
 	Asteroid_field.num_initial_asteroids=0;
+	Asteroid_fields.clear();
 }
 
 DCF_BOOL2(asteroids, Asteroids_enabled, "enables or disables asteroids", "Usage: asteroids [bool]\nTurns asteroid system on/off.  If nothing passed, then toggles it.\n");
@@ -2094,7 +2110,11 @@ void asteroid_process_post(object * obj)
 		//Passive fields might wrap if there's gravity so do
 		//this for all fields now-Mjn
 		if ( timestamp_elapsed(asp->check_for_wrap) ) {
-			asteroid_maybe_reposition(obj, &Asteroid_field);
+			if (SCP_vector_inbounds(Asteroid_fields, asp->field_num)) {
+				asteroid_maybe_reposition(obj, &Asteroid_fields[asp->field_num]);
+			} else {
+				asteroid_maybe_reposition(obj, &Asteroid_field);
+			}
 			asp->check_for_wrap = _timestamp(ASTEROID_CHECK_WRAP_TIMESTAMP);
 		}
 
@@ -2719,9 +2739,9 @@ void asteroid_init()
  * Pick object to throw asteroids at.
  * Pick any capital or big ship inside the bounds of the asteroid field.
  */
-static int set_asteroid_throw_objnum()
+static int set_asteroid_throw_objnum(const asteroid_field& asfield)
 {
-	if (Asteroid_field.num_initial_asteroids < 1)
+	if (asfield.num_initial_asteroids < 1)
 		return -1;
 
 	ship_obj	*so;
@@ -2733,7 +2753,7 @@ static int set_asteroid_throw_objnum()
 			continue;
 
 		if (Ship_info[Ships[ship_objp->instance].ship_info_index].is_big_or_huge()) {
-			if (asteroid_is_ship_inside_field(&Asteroid_field, &ship_objp->pos, ship_objp->radius))
+			if (asteroid_is_ship_inside_field(&asfield, &ship_objp->pos, ship_objp->radius))
 				return so->objnum;
 		}
 	}
@@ -2741,35 +2761,47 @@ static int set_asteroid_throw_objnum()
 
 }
 
+
 void asteroid_frame()
 {
 	if (Num_asteroids < 1)
 		return;
 
-	// Only throw if active field
-	if (Asteroid_field.field_type == FT_PASSIVE) {
-		return;
+	if (Asteroid_fields.empty()) {
+		Asteroid_fields.push_back(Asteroid_field);
 	}
 
-	// If no asteroid types are defined for the field, abort.
-	if (Asteroid_field.field_asteroid_type.empty()) {
-		return;
-	}
-
-	// If there are no explicit targets, fall back to default retail targeting behavior
-	if (Asteroid_field.target_names.empty()) {
-		int objnum = set_asteroid_throw_objnum();
-		if (Asteroid_targets.empty() || Asteroid_targets[0].objnum != objnum) {
-			Asteroid_targets.clear();
-			if (objnum >= 0)
-				asteroid_add_target(&Objects[objnum]);
+	for (size_t field_idx = 0; field_idx < Asteroid_fields.size(); ++field_idx) {
+		auto& asfield = Asteroid_fields[field_idx];
+		if (asfield.field_type == FT_PASSIVE) {
+			continue;
 		}
-	} 
+		if (asfield.field_asteroid_type.empty()) {
+			continue;
+		}
 
-	sanitize_asteroid_targets_list();
+		if (asfield.target_names.empty()) {
+			int objnum = set_asteroid_throw_objnum(asfield);
+			auto existing = std::find_if(Asteroid_targets.begin(), Asteroid_targets.end(), [field_idx](const asteroid_target& target) {
+				return target.field_num == static_cast<int>(field_idx);
+			});
+			if (objnum < 0) {
+				if (existing != Asteroid_targets.end()) {
+					Asteroid_targets.erase(existing);
+				}
+			} else if (existing == Asteroid_targets.end() || existing->objnum != objnum) {
+				if (existing != Asteroid_targets.end()) {
+					Asteroid_targets.erase(existing);
+				}
+				asteroid_add_target(&Objects[objnum], static_cast<int>(field_idx));
+			}
+		}
 
-	maybe_throw_asteroid();
+		sanitize_asteroid_targets_list();
+		maybe_throw_asteroid(asfield, static_cast<int>(field_idx));
+	}
 }
+
 
 extern bool Extra_target_info;
 
