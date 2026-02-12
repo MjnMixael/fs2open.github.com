@@ -57,6 +57,7 @@
 #include <string.h>
 #include <float.h>
 #include <windows.h>
+#include <algorithm>
 
 extern float flFrametime;
 extern subsys_to_render Render_subsys;
@@ -574,10 +575,14 @@ void draw_asteroid_field() {
 	vec3d p[8], ip[8];
 	vertex v[8], iv[8];
 
-	auto draw_field_bounds = [&](const asteroid_field& field) {
+	auto draw_field_bounds = [&](const asteroid_field& field, int field_idx) {
 		if (!field.num_initial_asteroids) {
 			return;
 		}
+
+		// Slightly vary per-field color so overlapping bounds are still distinguishable
+		const auto outer_g = static_cast<ubyte>(std::max(0, 96 - field_idx * 24));
+		gr_set_color(192, outer_g, 16);
 
 		p[0].xyz.x = p[2].xyz.x = p[4].xyz.x = p[6].xyz.x = field.min_bound.xyz.x;
 		p[1].xyz.x = p[3].xyz.x = p[5].xyz.x = p[7].xyz.x = field.max_bound.xyz.x;
@@ -603,7 +608,8 @@ void draw_asteroid_field() {
 		g3_draw_line(&v[3], &v[7]);
 
 		if (field.has_inner_bound) {
-			gr_set_color(16, 192, 92);
+			const auto inner_b = static_cast<ubyte>(std::max(0, 92 - field_idx * 24));
+			gr_set_color(16, 192, inner_b);
 
 			ip[0].xyz.x = ip[2].xyz.x = ip[4].xyz.x = ip[6].xyz.x = field.inner_min_bound.xyz.x;
 			ip[1].xyz.x = ip[3].xyz.x = ip[5].xyz.x = ip[7].xyz.x = field.inner_max_bound.xyz.x;
@@ -630,12 +636,8 @@ void draw_asteroid_field() {
 		}
 	};
 
-	if (!Asteroid_fields.empty()) {
-		for (const auto& field : Asteroid_fields) {
-			draw_field_bounds(field);
-		}
-	} else {
-		draw_field_bounds(Asteroid_field);
+	for (size_t field_idx = 0; field_idx < Asteroid_fields.size(); ++field_idx) {
+		draw_field_bounds(Asteroid_fields[field_idx], static_cast<int>(field_idx));
 	}
 }
 
