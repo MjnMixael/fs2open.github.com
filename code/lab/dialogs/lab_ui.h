@@ -87,6 +87,9 @@ class LabUi {
 	bool show_object_options_dialog = false;
 	bool show_background_selection_dialog = true;
 
+	// used to track the "Reset View" function
+	bool reset_view = false;
+
 	// used to track the "Close Lab" function
 	bool close_lab = false;
 
