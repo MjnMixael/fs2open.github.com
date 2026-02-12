@@ -180,6 +180,8 @@ const char* get_encoding_string(Encoding encoding) {
 	switch (encoding) {
 	case Encoding::Encoding_iso8859_1:
 		return "ISO-8859-1";
+	case Encoding::Encoding_windows_1252:
+		return "WINDOWS-1252";
 	case Encoding::Encoding_utf8:
 		return "UTF-8";
 	case Encoding::Encoding_current:

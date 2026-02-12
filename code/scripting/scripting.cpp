@@ -133,6 +133,16 @@ void script_parse_lua_script(const char *filename) {
 	cfread(&source[0], len, 1, cfp);
 	cfclose(cfp);
 
+	if (Unicode_text_mode) {
+		SCP_string utf8_source;
+		coerce_to_utf8(utf8_source, source.c_str());
+
+		if (utf8_source != source) {
+			mprintf(("SCRIPTING: Converted non-UTF-8 Lua source '%s' to UTF-8.\n", filename));
+			source = std::move(utf8_source);
+		}
+	}
+
 	try {
 		auto function = LuaFunction::createFromCode(Script_system.GetLuaSession(), source, filename);
 		function.setErrorFunction(LuaFunction::createFromCFunction(Script_system.GetLuaSession(), ade_friendly_error));

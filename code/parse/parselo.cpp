@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstdarg>
 #include <csetjmp>
+#include <cstdint>
 
 #include <cctype>
 #include "globalincs/version.h"
@@ -65,6 +66,20 @@ static const SCP_unordered_map<SCP_string, SCP_string> retail_hashes = {
 	{"strings.tbl", "84ab6e5392d7c54752a61161aac9f9fd"},
 	{"weapons.tbl", "ca2c7f305b1f36988c2bb8c371ab2027"}
 };
+
+namespace {
+bool contains_windows_1252_extension_bytes(const char* str, size_t len)
+{
+	for (size_t i = 0; i < len; ++i) {
+		auto c = static_cast<uint8_t>(str[i]);
+		if (c >= 0x80 && c <= 0x9F) {
+			return true;
+		}
+	}
+
+	return false;
+}
+}
 
 
 //	Return true if this character is white space, else false.
@@ -2413,9 +2428,10 @@ void read_raw_file_text(const char *filename, int mode, char *raw_text)
 		auto invalid = utf8::find_invalid(raw_text, raw_text + file_len);
 		if (invalid != raw_text + file_len) {
 			auto isLatin1 = util::guessLatin1Encoding(raw_text, (size_t) file_len);
+			auto isLikelyWindows1252 = isLatin1 || contains_windows_1252_extension_bytes(raw_text, (size_t) file_len);
 
 			// We do the additional can_reallocate check here since we need control over raw_text to reencode the file
-			if (isLatin1 && can_reallocate) {
+			if (isLikelyWindows1252 && can_reallocate) {
 
 				// Some retail files are known to be safe to convert to utf-8 so validate that here and only warn otherwise
 				bool downgrade_warning = false;
@@ -2446,13 +2462,13 @@ void read_raw_file_text(const char *filename, int mode, char *raw_text)
 						filename);
 				}
 
-				// SDL2 has iconv functionality so we use that to convert from Latin1 to UTF-8
+				// SDL2 has iconv functionality so we use that to convert from Windows-1252 to UTF-8
 
 				// We need the raw_text as fallback so we first need to copy the current
 				SCP_string input_str = raw_text;
 
 				SCP_string buffer;
-				bool success = unicode::convert_encoding(buffer, raw_text, unicode::Encoding::Encoding_iso8859_1, unicode::Encoding::Encoding_utf8);
+				bool success = unicode::convert_encoding(buffer, raw_text, unicode::Encoding::Encoding_windows_1252, unicode::Encoding::Encoding_utf8);
 
 				if (Parse_text_size < buffer.length()) {
 					allocate_parse_text(buffer.length());
@@ -2492,12 +2508,13 @@ void coerce_to_utf8(SCP_string &buffer, const char *str)
 		return;
 	}
 
-	bool isLatin1 = util::guessLatin1Encoding(str, len);
+	const auto looksLikeWesternText = util::guessLatin1Encoding(str, len) || contains_windows_1252_extension_bytes(str, len);
 
-	// we can convert it
-	if (isLatin1)
+	// We can convert likely ANSI/Windows-1252 text to UTF-8.
+	if (looksLikeWesternText &&
+		unicode::convert_encoding(buffer, str, unicode::Encoding::Encoding_windows_1252, unicode::Encoding::Encoding_utf8))
 	{
-		unicode::convert_encoding(buffer, str, unicode::Encoding::Encoding_iso8859_1, unicode::Encoding::Encoding_utf8);
+		return;
 	}
 
 	// unknown encoding, so just truncate
