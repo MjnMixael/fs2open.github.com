@@ -704,7 +704,7 @@ void asteroid_editor::OnFieldNumChange()
 		return;
 	}
 	const int selected_field = static_cast<int>(combo->GetItemData(selected));
-	if (!IN_RANGE(selected_field, 0, MAX_ASTEROID_FIELDS - 1)) {
+	if (selected_field < 0 || selected_field >= MAX_ASTEROID_FIELDS) {
 		return;
 	}
 
