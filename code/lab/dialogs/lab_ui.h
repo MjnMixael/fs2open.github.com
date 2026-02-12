@@ -35,7 +35,7 @@ class LabUi {
 	void build_background_list() const;
 	void show_render_options();
 	void show_object_options() const;
-	void show_controls_reference() const;
+	static void show_controls_reference();
 	void show_object_selector() const;
 	void show_background_selector() const;
 	void build_toolbar_entries();
