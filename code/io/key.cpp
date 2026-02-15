@@ -539,6 +539,8 @@ void key_mark( uint code, int state, uint latency )
 				scripting::hook_param_list(
 					scripting::hook_param("Key", 's', textify_scancode_universal(Current_key_down)),
 					scripting::hook_param("RawKey", 's', textify_scancode_universal(scancode)),
+					scripting::hook_param("DisplayKey", 's', textify_scancode(Current_key_down)),
+					scripting::hook_param("DisplayRawKey", 's', textify_scancode(scancode)),
 					scripting::hook_param("TimeHeld", 'i', time_held),
 					scripting::hook_param("WasOverridden", 'b', key_data.state[scancode] == keyboard::key_state::PRESSED_OVERRIDDEN)
 				));
@@ -590,13 +592,17 @@ void key_mark( uint code, int state, uint latency )
 				scripting::hooks::OnKeyPressed->run(scripting::hooks::KeyPressConditions{ static_cast<int>(scancode) },
 					scripting::hook_param_list(
 						scripting::hook_param("Key", 's', textify_scancode_universal(Current_key_down)),
-						scripting::hook_param("RawKey", 's', textify_scancode_universal(scancode))
+						scripting::hook_param("RawKey", 's', textify_scancode_universal(scancode)),
+						scripting::hook_param("DisplayKey", 's', textify_scancode(Current_key_down)),
+						scripting::hook_param("DisplayRawKey", 's', textify_scancode(scancode))
 					));
 
 				overrideKey = scripting::hooks::OnKeyPressed->isOverride(scripting::hooks::KeyPressConditions{ static_cast<int>(scancode) },
 					scripting::hook_param_list(
 						scripting::hook_param("Key", 's', textify_scancode_universal(Current_key_down)),
-						scripting::hook_param("RawKey", 's', textify_scancode_universal(scancode))
+						scripting::hook_param("RawKey", 's', textify_scancode_universal(scancode)),
+						scripting::hook_param("DisplayKey", 's', textify_scancode(Current_key_down)),
+						scripting::hook_param("DisplayRawKey", 's', textify_scancode(scancode))
 					));
 			}
 
