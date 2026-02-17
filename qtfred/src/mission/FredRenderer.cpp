@@ -509,6 +509,11 @@ void FredRenderer::display_ship_info(int cur_object_index) {
 					} else if (objp->type == OBJ_JUMP_NODE) {
 						CJumpNode* jnp = jumpnode_get_by_objnum(OBJ_INDEX(objp));
 						sprintf(buf, "%s\n%s", jnp->GetName(), jnp->GetDisplayName());
+					} else if (objp->type == OBJ_PROP) {
+						auto propp = prop_id_lookup(objp->instance);
+						if (propp != nullptr) {
+							sprintf(buf, "%s\n", propp->prop_name);
+						}
 					} else
 						Assert(0);
 				}
