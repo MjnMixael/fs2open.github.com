@@ -13,6 +13,7 @@
 #include <FredApplication.h>
 #include <ui/dialogs/ShipEditor/ShipEditorDialog.h>
 #include <ui/dialogs/WingEditorDialog.h>
+#include <ui/dialogs/PropEditorDialog.h>
 #include <ui/dialogs/MissionEventsDialog.h>
 #include <ui/dialogs/AsteroidEditorDialog.h>
 #include <ui/dialogs/VolumetricNebulaDialog.h>
@@ -94,6 +95,10 @@ FredView::FredView(QWidget* parent) : QMainWindow(parent), ui(new Ui::FredView()
 	initializePopupMenus();
 
 	initializeGroupActions();
+
+	auto propsAction = new QAction(tr("Props"), this);
+	connect(propsAction, &QAction::triggered, this, &FredView::on_actionProps_triggered);
+	ui->menuObjects->insertAction(ui->actionWaypoint_Paths, propsAction);
 }
 
 FredView::~FredView() {
@@ -117,6 +122,13 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	ui->toolBar->addWidget(_shipClassBox.get());
 	connect(_shipClassBox.get(), &ColorComboBox::shipClassSelected, this, &FredView::onShipClassSelected);
 
+	auto propLabel = new QLabel(tr("Props"), ui->toolBar);
+	ui->toolBar->addWidget(propLabel);
+	_propClassBox.reset(new PropComboBox(nullptr));
+	_propClassBox->initialize();
+	ui->toolBar->addWidget(_propClassBox.get());
+	connect(_propClassBox.get(), &PropComboBox::propClassSelected, this, &FredView::onPropClassSelected);
+
 	connect(fred, &Editor::missionLoaded, this, &FredView::on_mission_loaded);
 
 	// Sets the initial window title
@@ -130,6 +142,7 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	connect(this, &FredView::viewIdle, this, &FredView::onUpdateCameraControlActions);
 	connect(this, &FredView::viewIdle, this, &FredView::onUpdateSelectionLock);
 	connect(this, &FredView::viewIdle, this, &FredView::onUpdateShipClassBox);
+	connect(this, &FredView::viewIdle, this, &FredView::onUpdatePropClassBox);
 	connect(this, &FredView::viewIdle, this, &FredView::onUpdateEditorActions);
 	connect(this, &FredView::viewIdle, this, &FredView::onUpdateWingActionStatus);
 	connect(this,
@@ -761,8 +774,16 @@ void FredView::onUpdateSelectionLock() {
 void FredView::onUpdateShipClassBox() {
 	_shipClassBox->selectShipClass(_viewport->cur_model_index);
 }
+void FredView::onUpdatePropClassBox() {
+	if (_propClassBox) {
+		_propClassBox->selectPropClass(_viewport->cur_prop_index);
+	}
+}
 void FredView::onShipClassSelected(int ship_class) {
 	_viewport->cur_model_index = ship_class;
+}
+void FredView::onPropClassSelected(int prop_class) {
+	_viewport->cur_prop_index = prop_class;
 }
 void FredView::on_actionAsteroid_Field_triggered(bool) {
 	auto asteroidFieldEditor = new dialogs::AsteroidEditorDialog(this, _viewport);
@@ -823,6 +844,18 @@ void FredView::on_actionWings_triggered(bool)
 	} else {
 		_wingEditorDialog->raise();
 		_wingEditorDialog->activateWindow();
+	}
+}
+void FredView::on_actionProps_triggered(bool)
+{
+	if (!_propEditorDialog) {
+		_propEditorDialog = new dialogs::PropEditorDialog(this, _viewport);
+		_propEditorDialog->setAttribute(Qt::WA_DeleteOnClose);
+		connect(_propEditorDialog, &QObject::destroyed, this, [this]() { _propEditorDialog = nullptr; });
+		_propEditorDialog->show();
+	} else {
+		_propEditorDialog->raise();
+		_propEditorDialog->activateWindow();
 	}
 }
 void FredView::on_actionCampaign_triggered(bool) {
