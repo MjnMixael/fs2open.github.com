@@ -966,9 +966,15 @@ void FredView::handleObjectEditor(int objNum) {
 	} else {
 		Assertion(objNum >= 0, "Popup object is not valid when editObjectTriggered was called!");
 
-		if ((Objects[objNum].type == OBJ_START) || (Objects[objNum].type == OBJ_SHIP)) {
-			on_actionShips_triggered(false);
-		} else if (Objects[objNum].type == OBJ_JUMP_NODE || Objects[objNum].type == OBJ_WAYPOINT) {
+			if ((Objects[objNum].type == OBJ_START) || (Objects[objNum].type == OBJ_SHIP)) {
+				on_actionShips_triggered(false);
+			} else if (Objects[objNum].type == OBJ_PROP) {
+
+				// Select the object before displaying the dialog
+				fred->selectObject(objNum);
+
+				on_actionProps_triggered(false);
+			} else if (Objects[objNum].type == OBJ_JUMP_NODE || Objects[objNum].type == OBJ_WAYPOINT) {
 
 			// Select the object before displaying the dialog
 			fred->selectObject(objNum);
