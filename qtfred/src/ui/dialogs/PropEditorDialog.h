@@ -5,11 +5,11 @@
 #include <mission/dialogs/PropEditorDialogModel.h>
 #include <ui/FredView.h>
 
-namespace fso::fred::dialogs {
-
 namespace Ui {
 class PropEditorDialog;
 }
+
+namespace fso::fred::dialogs {
 
 class PropEditorDialog : public QDialog {
 	Q_OBJECT
@@ -24,7 +24,7 @@ class PropEditorDialog : public QDialog {
 	void on_prevButton_clicked();
 
  private:
-	std::unique_ptr<Ui::PropEditorDialog> ui;
+	std::unique_ptr<::Ui::PropEditorDialog> ui;
 	std::unique_ptr<PropEditorDialogModel> _model;
 
 	void initializeUi();

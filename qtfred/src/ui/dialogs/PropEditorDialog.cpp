@@ -8,7 +8,7 @@
 namespace fso::fred::dialogs {
 
 PropEditorDialog::PropEditorDialog(FredView* parent, EditorViewport* viewport)
-	: QDialog(parent), ui(new Ui::PropEditorDialog()), _model(new PropEditorDialogModel(this, viewport)) {
+	: QDialog(parent), ui(new ::Ui::PropEditorDialog()), _model(new PropEditorDialogModel(this, viewport)) {
 	ui->setupUi(this);
 
 	initializeUi();
