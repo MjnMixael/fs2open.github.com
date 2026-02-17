@@ -125,7 +125,6 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	auto propLabel = new QLabel(tr("Props"), ui->toolBar);
 	ui->toolBar->addWidget(propLabel);
 	_propClassBox.reset(new PropComboBox(nullptr));
-	_propClassBox->initialize();
 	ui->toolBar->addWidget(_propClassBox.get());
 	connect(_propClassBox.get(), &PropComboBox::propClassSelected, this, &FredView::onPropClassSelected);
 
@@ -776,6 +775,9 @@ void FredView::onUpdateShipClassBox() {
 }
 void FredView::onUpdatePropClassBox() {
 	if (_propClassBox) {
+		if (_viewport->cur_prop_index < 0 && _propClassBox->count() > 0) {
+			onPropClassSelected(_propClassBox->itemData(0).value<int>());
+		}
 		_propClassBox->selectPropClass(_viewport->cur_prop_index);
 	}
 }

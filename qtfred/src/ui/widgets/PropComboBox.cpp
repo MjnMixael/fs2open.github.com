@@ -4,11 +4,19 @@
 
 #include "PropComboBox.h"
 
+#include <FredApplication.h>
 #include <prop/prop.h>
+
+#include <QtGui/QBrush>
+#include <QtGui/QColor>
 
 namespace fso::fred {
 
 PropComboBox::PropComboBox(QWidget* parent) : QComboBox(parent) {
+	fredApp->runAfterInit([this]() {
+		initialize();
+	});
+
 	connect(this,
 			static_cast<void (QComboBox::*)(int)>(&QComboBox::currentIndexChanged),
 			this,
@@ -24,6 +32,13 @@ void PropComboBox::initialize() {
 		}
 
 		addItem(QString::fromStdString(Prop_info[i].name), i);
+
+		auto category = prop_get_category(Prop_info[i].category_index);
+		if (category != nullptr) {
+			setItemData(count() - 1,
+						QBrush(QColor(category->list_color.red, category->list_color.green, category->list_color.blue)),
+						Qt::ForegroundRole);
+		}
 	}
 }
 
