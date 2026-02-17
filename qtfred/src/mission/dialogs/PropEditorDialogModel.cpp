@@ -163,7 +163,12 @@ void PropEditorDialogModel::setFlagState(size_t index, bool enabled) {
 	if (!SCP_vector_inbounds(_flagState, index)) {
 		return;
 	}
-	modify(_flagState[index], enabled);
+
+	if (_flagState[index] != enabled) {
+		_flagState[index] = enabled;
+		set_modified();
+		Q_EMIT modelChanged();
+	}
 }
 
 void PropEditorDialogModel::selectNextProp() {
