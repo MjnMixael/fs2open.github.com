@@ -5,6 +5,8 @@
 #include <ui/util/SignalBlockers.h>
 #include <ui/widgets/FlagList.h>
 
+#include <QMetaObject>
+
 namespace fso::fred::dialogs {
 
 PropEditorDialog::PropEditorDialog(FredView* parent, EditorViewport* viewport)
@@ -27,7 +29,11 @@ PropEditorDialog::PropEditorDialog(FredView* parent, EditorViewport* viewport)
 				break;
 			}
 		}
-		_model->apply();
+
+		// Applying immediately can re-enter FlagListWidget while it is still processing
+		// itemChanged, which may invalidate the underlying item/model pointers.
+		// Queue the apply until the current signal stack unwinds.
+		QMetaObject::invokeMethod(this, [this]() { _model->apply(); }, Qt::QueuedConnection);
 	});
 
 	resize(QDialog::sizeHint());
