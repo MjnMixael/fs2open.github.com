@@ -15,6 +15,7 @@
 #include "mission/missiongoals.h"
 #include "nebula/neb.h"
 #include "nebula/neblightning.h"
+#include "prop/prop.h"
 #include "ship/ship.h"
 #include "starfield/starfield.h"
 #include "stats/medals.h"
@@ -490,6 +491,10 @@ SexpListItemPtr SexpOpfListBuilder::buildListing(int opf, int parent_node, int a
 		list = get_listing_opf_ship(parent_node);
 		break;
 
+	case OPF_PROP:
+		list = get_listing_opf_prop();
+		break;
+
 	case OPF_WING:
 		list = get_listing_opf_wing();
 		break;
@@ -591,6 +596,10 @@ SexpListItemPtr SexpOpfListBuilder::buildListing(int opf, int parent_node, int a
 
 	case OPF_GOAL_NAME:
 		list = get_listing_opf_goal_name(parent_node);
+		break;
+
+	case OPF_SHIP_PROP:
+		list = get_listing_opf_ship_prop();
 		break;
 
 	case OPF_SHIP_WING:
@@ -1040,6 +1049,23 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship(int parent_node)
 					head.add_data(Ships[ptr->instance].ship_name);
 				}
 			}
+		}
+
+		ptr = GET_NEXT(ptr);
+	}
+
+	return SexpListItemPtr(head.next);
+}
+
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_prop()
+{
+	object* ptr;
+	SexpListItem head;
+
+	ptr = GET_FIRST(&obj_used_list);
+	while (ptr != END_OF_LIST(&obj_used_list)) {
+		if (ptr->type == OBJ_PROP) {
+			head.add_data(prop_id_lookup(ptr->instance)->prop_name);
 		}
 
 		ptr = GET_NEXT(ptr);
@@ -1790,6 +1816,16 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_goal_name(int parent_node)
 			head.add_data(temp_name.c_str());
 		}
 	}
+
+	return SexpListItemPtr(head.next);
+}
+
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_prop()
+{
+	SexpListItem head;
+
+	head.add_list(get_listing_opf_ship());
+	head.add_list(get_listing_opf_prop());
 
 	return SexpListItemPtr(head.next);
 }

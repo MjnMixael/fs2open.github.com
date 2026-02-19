@@ -59,6 +59,7 @@ class SexpOpfListBuilder final {
 	SexpListItemPtr get_listing_opf_bool(int parent_node = -1);
 	static SexpListItemPtr get_listing_opf_number();
 	SexpListItemPtr get_listing_opf_ship(int parent_node = -1);
+	SexpListItemPtr get_listing_opf_prop();
 	static SexpListItemPtr get_listing_opf_wing();
 	SexpListItemPtr get_listing_opf_subsystem(int parent_node, int arg_index);
 	SexpListItemPtr get_listing_opf_subsystem_type(int parent_node);
@@ -84,6 +85,7 @@ class SexpOpfListBuilder final {
 	SexpListItemPtr get_listing_opf_mission_name();
 	SexpListItemPtr get_listing_opf_ship_point();
 	SexpListItemPtr get_listing_opf_goal_name(int parent_node);
+	SexpListItemPtr get_listing_opf_ship_prop();
 	SexpListItemPtr get_listing_opf_ship_wing();
 	SexpListItemPtr get_listing_opf_ship_wing_wholeteam();
 	SexpListItemPtr get_listing_opf_ship_wing_shiponteam_point();
