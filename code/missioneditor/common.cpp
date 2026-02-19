@@ -86,7 +86,6 @@ void generate_weaponry_usage_list_wing(int wing_num, int* arr)
 		}
 	}
 }
-                                              "Note that $persona and $sender will only appear for the Message section.";
 
 // Goober5000
 void stuff_special_arrival_anchor_name(char* buf, int iff_index, int restrict_to_players, int retail_format)

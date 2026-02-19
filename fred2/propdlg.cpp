@@ -81,7 +81,7 @@ void prop_dlg::initialize_data(int full_update)
 		return;
 
 	// Check if we have a selected prop
-	if (query_valid_object() && Objects[cur_object_index].type == OBJ_PROP) {
+	if (query_valid_object(cur_object_index) && Objects[cur_object_index].type == OBJ_PROP) {
 		auto prp = prop_id_lookup(Objects[cur_object_index].instance);
 		m_name = _T(prp->prop_name);
 	} else {
@@ -104,7 +104,7 @@ void prop_dlg::initialize_data(int full_update)
 	}
 
 	// Set selection states if a valid prop is selected
-	if (query_valid_object() && Objects[cur_object_index].type == OBJ_PROP) {
+	if (query_valid_object(cur_object_index) && Objects[cur_object_index].type == OBJ_PROP) {
 
 		for (int i = 0; i < m_flags_list.GetCount(); ++i) {
 			size_t flag_index = static_cast<size_t>(m_flags_list.GetItemData(i));
@@ -133,7 +133,7 @@ int prop_dlg::update_data()
 	if (!GetSafeHwnd())
 		return 0;
 
-	if (query_valid_object() && Objects[cur_object_index].type == OBJ_PROP) {
+	if (query_valid_object(cur_object_index) && Objects[cur_object_index].type == OBJ_PROP) {
 		int this_instance = Objects[cur_object_index].instance;
 		auto prp = prop_id_lookup(this_instance);
 
