@@ -1211,7 +1211,7 @@ void player_select_display_copyright()
 	auto Copyright_msg1 = gameversion::get_version_string();
 	if (Unicode_text_mode) {
 		// Use a Unicode character if we are in unicode mode instead of using special characters
-		strcpy_s(Copyright_msg2, XSTR("Copyright \xC2\xA9 1999, Volition, Inc.  All rights reserved.", 385));
+		strcpy_s(Copyright_msg2, XSTR("Copyright \xC2\xA9 1999, Volition, Inc.  \xC5\x93 All rights reserved.", -1));
 	} else {
 		sprintf(Copyright_msg2, XSTR("Copyright %c 1999, Volition, Inc.  All rights reserved.", 385), lcl_get_font_index(font::get_current_fontnum()) + 4);
 	}

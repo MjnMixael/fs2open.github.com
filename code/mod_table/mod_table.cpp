@@ -1771,7 +1771,7 @@ void mod_table_reset()
 	Window_title = "";
 	Mod_title = "";
 	Mod_version = "";
-	Unicode_text_mode = false;
+	Unicode_text_mode = true;
 	Splash_fade_in_time = 0;
 	Splash_fade_out_time = 0;
 	Splash_logo_center = false;
