@@ -103,6 +103,7 @@ class SexpOpfListBuilder final {
 	static SexpListItemPtr get_listing_opf_weapon_name();
 	static SexpListItemPtr get_listing_opf_intel_name();
 	static SexpListItemPtr get_listing_opf_ship_class_name();
+	static SexpListItemPtr get_listing_opf_prop_class_name();
 	static SexpListItemPtr get_listing_opf_huge_weapon();
 	static SexpListItemPtr get_listing_opf_ship_not_player();
 	SexpListItemPtr get_listing_opf_ship_or_none();

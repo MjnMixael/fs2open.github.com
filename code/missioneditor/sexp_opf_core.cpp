@@ -225,6 +225,7 @@ bool SexpOpfListBuilder::hasDefaultArgumentAvailable(int op, int i)
 	case OPF_WEAPON_NAME:
 	case OPF_INTEL_NAME:
 	case OPF_SHIP_CLASS_NAME:
+	case OPF_PROP_CLASS_NAME:
 	case OPF_HUGE_WEAPON:
 	case OPF_JUMP_NODE_NAME:
 	case OPF_AMBIGUOUS:
@@ -286,7 +287,9 @@ bool SexpOpfListBuilder::hasDefaultArgumentAvailable(int op, int i)
 		return 1;
 
 	case OPF_SHIP:
+	case OPF_PROP:
 	case OPF_SHIP_WING:
+	case OPF_SHIP_PROP:
 	case OPF_SHIP_POINT:
 	case OPF_SHIP_WING_POINT:
 	case OPF_SHIP_WING_WHOLETEAM:
@@ -668,6 +671,10 @@ SexpListItemPtr SexpOpfListBuilder::buildListing(int opf, int parent_node, int a
 
 	case OPF_SHIP_CLASS_NAME:
 		list = get_listing_opf_ship_class_name();
+		break;
+
+	case OPF_PROP_CLASS_NAME:
+		list = get_listing_opf_prop_class_name();
 		break;
 
 	case OPF_HUGE_WEAPON:
@@ -2051,6 +2058,16 @@ SexpListItemPtr SexpOpfListBuilder::get_listing_opf_ship_class_name()
 
 	for (auto& si : Ship_info)
 		head.add_data(si.name);
+
+	return SexpListItemPtr(head.next);
+}
+
+SexpListItemPtr SexpOpfListBuilder::get_listing_opf_prop_class_name()
+{
+	SexpListItem head;
+
+	for (auto& pi : Prop_info)
+		head.add_data(pi.name.c_str());
 
 	return SexpListItemPtr(head.next);
 }

@@ -756,6 +756,14 @@ int SexpTreeModel::createDefaultArgForOpf(int type, int parent, int op_index, in
 		str = "<name of ship here>";
 		break;
 
+	case OPF_PROP:
+		str = "<name of prop here>";
+		break;
+
+	case OPF_SHIP_PROP:
+		str = "<name of ship or prop here>";
+		break;
+
 	case OPF_ORDER_RECIPIENT:
 		str = "<all fighters>";
 		break;
@@ -808,6 +816,9 @@ int SexpTreeModel::createDefaultArgForOpf(int type, int parent, int op_index, in
 		break;
 	case OPF_SHIP_TYPE:
 		str = "<ship type here>";
+		break;
+	case OPF_PROP_CLASS_NAME:
+		str = "<prop class name here>";
 		break;
 	case OPF_EVENT_NAME:
 		str = "<event name>";
