@@ -38,6 +38,8 @@ typedef struct hud_frames {
 typedef struct objective_display_info
 {
 	int display_timer;
+	int display_time_remaining;
+	int display_time_last_update;
 	int goal_type;
 	int goal_status;
 	int goal_ntotal;
@@ -627,4 +629,3 @@ extern int Num_hud_gauge_types;
 extern bool Extra_target_info;
 
 #endif	/* __HUD_H__ */
-
