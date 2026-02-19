@@ -97,8 +97,6 @@ set(FRED2_SOURCES
 	OperatorComboBox.h
 	orienteditor.cpp
 	orienteditor.h
-	original_sexp_tree.cpp
-	original_sexp_tree.h
 	playerstarteditor.cpp
 	playerstarteditor.h
 	prefsdlg.cpp
