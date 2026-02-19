@@ -16,11 +16,18 @@ float RocketSystemInterface::GetElapsedTime() { return timer_get_microseconds() 
 int RocketSystemInterface::TranslateString(Rocket::Core::String& translated, const Rocket::Core::String& input)
 {
 	SCP_string lcl_translated;
-	lcl_ext_localize(input.CString(), lcl_translated);
+	int xstr_id = -2;
+	lcl_ext_localize(input.CString(), lcl_translated, &xstr_id);
+
+	if (xstr_id == -2) {
+		// No XSTR tag was detected so leave this as-is to avoid round-tripping through a narrow-string
+		// conversion path for plain Unicode text.
+		return 0;
+	}
 
 	translated = lcl_translated.c_str();
 
-	return 0; // Everything is translated now
+	return 1;
 }
 void RocketSystemInterface::JoinPath(Rocket::Core::String& translated_path,
                                      const Rocket::Core::String& /*document_path*/, const Rocket::Core::String& path)
