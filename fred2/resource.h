@@ -137,6 +137,7 @@
 #define IDD_MUSIC_PLAYER                330
 #define IDD_VOLUMETRICS                 332
 #define IDD_EDIT_CUSTOM_STRINGS         333
+#define IDD_SUPPORT_REARM_OPTIONS       334
 #define IDC_SHIP_CLASS                  1003
 #define IDC_SHIP_WING                   1004
 #define IDC_SOUND_CLIP_NAME             1007
@@ -1574,14 +1575,26 @@
 #define ID_INDICATOR_RIGHT              59144
 #define ID_INDICATOR_MODIFIED           59145
 
+#define IDC_SUPPORT_REARM_OPTIONS       1716
+#define IDC_DISALLOW_SUPPORT_SHIPS      1717
+#define IDC_LIMIT_SUPPORT_REARM_TO_POOL 1718
+#define IDC_DISALLOW_SUPPORT_REARM      1719
+#define IDC_ALLOW_SUPPORT_REARM_PRECEDENCE 1720
+#define IDC_SUPPORT_REARM_POOL_FROM_LOADOUT 1721
+#define IDC_SUPPORT_REARM_WEAPON_LIST   1722
+#define IDC_SUPPORT_REARM_POOL_AMOUNT   1723
+#define IDC_SUPPORT_REARM_SET_AMOUNT    1724
+#define IDC_SUPPORT_REARM_SET_UNLIMITED 1725
+#define IDC_SUPPORT_REARM_SET_ZERO      1726
+
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_3D_CONTROLS                     1
-#define _APS_NEXT_RESOURCE_VALUE        335
+#define _APS_NEXT_RESOURCE_VALUE        336
 #define _APS_NEXT_COMMAND_VALUE         33104
-#define _APS_NEXT_CONTROL_VALUE         1705
+#define _APS_NEXT_CONTROL_VALUE         1727
 #define _APS_NEXT_SYMED_VALUE           105
 #endif
 #endif
