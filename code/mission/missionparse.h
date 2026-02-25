@@ -113,6 +113,10 @@ typedef struct support_ship_info {
 	int		ship_class;						// ship class of support ship
 	int		tally;							// number of support ships so far
 	int		support_available_for_species;	// whether support is available for a given species (this is a bitfield)
+	bool	disallow_rearm;					// if true, support ships can only repair and will not rearm weapons
+	bool	allow_rearm_weapon_precedence;	// if true, support ships may swap to precedence weapons when rearm pool is empty
+	bool	rearm_pool_from_loadout;			// initialize rearm pool from mission loadout after filling starting loadout ships
+	int		rearm_weapon_pool[MAX_WEAPON_TYPES]; // mission stockpile used to limit support ship rearming
 } support_ship_info;
 
 // movie type defines
@@ -654,4 +658,3 @@ subsys_status *parse_get_subsys_status(p_object *pobjp, const char *subsys_name)
 custom_string* get_custom_string_by_name(SCP_string name);
 
 #endif
-
