@@ -265,24 +265,34 @@ ADE_LIB_DERIV(l_Mission_SupportRearmPool, "SupportRearmPool", nullptr,
 	"Array of mission support rearm pool values. Index is weapon class index.", l_Mission);
 
 ADE_INDEXER(l_Mission_SupportRearmPool,
-	"number Index, number amount",
-	"Gets/sets support rearm pool value for a weapon class (1-based index).\n"
+	"number/weaponclass IndexOrClass, number amount",
+	"Gets/sets support rearm pool value for a weapon class. Number indices are 1-based.\n"
 	"Values: -1 = unlimited, 0 = unavailable, >0 = limited amount.\n"
 	"If a weapon has $Disallow Support Rearm, this always returns 0 and ignores writes.",
 	"number",
 	"Current pool value for the weapon class.")
 {
-	int idx;
+	int idx = -1;
 	int amount;
-	if (!ade_get_args(L, "*i|i", &idx, &amount)) {
-		return ADE_RETURN_NIL;
-	}
+	if (lua_isnumber(L, 2)) {
+		if (!ade_get_args(L, "*i|i", &idx, &amount)) {
+			return ADE_RETURN_NIL;
+		}
 
-	if (idx < 1 || idx > weapon_info_size()) {
-		return ADE_RETURN_NIL;
-	}
+		if (idx < 1 || idx > weapon_info_size()) {
+			return ADE_RETURN_NIL;
+		}
 
-	idx--; // Lua to C++ index
+		idx--; // Lua to C++ index
+	} else {
+		if (!ade_get_args(L, "*o|i", l_Weaponclass.Get(&idx), &amount)) {
+			return ADE_RETURN_NIL;
+		}
+
+		if (idx < 0 || idx >= weapon_info_size()) {
+			return ADE_RETURN_NIL;
+		}
+	}
 
 	if (ADE_SETTING_VAR) {
 		if (!Weapon_info[idx].disallow_rearm) {
