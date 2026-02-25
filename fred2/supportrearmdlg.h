@@ -1,5 +1,7 @@
 #pragma once
 
+#include <afxwin.h>
+
 #include "mission/missionparse.h"
 
 class CSupportRearmDlg : public CDialog {
