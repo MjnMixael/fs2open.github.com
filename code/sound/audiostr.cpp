@@ -118,6 +118,7 @@ public:
 	void	Set_Default_Volume(float vol) { m_lDefaultVolume = vol; }
 	float	Get_Default_Volume() { return m_lDefaultVolume; }
 	uint	Get_Samples_Committed();
+	void	Seek(double seek_to_seconds);
 	int	Is_looping() { return m_bLooping; }
 	int	status;
 	int	type;
@@ -127,6 +128,7 @@ protected:
 	bool prepareOpened(const char *filename);
 	void Cue ();
 	bool WriteWaveData (uint cbSize, uint *num_bytes_written, int service = 1);
+	void QueueBuffersFromCurrentPosition();
 	uint GetMaxWriteSize ();
 	bool ServiceBuffer ();
 	static bool TimerCallback (ptr_u dwUser);
@@ -629,11 +631,28 @@ bool AudioStream::ServiceBuffer (void)
 	return (fRtn);
 }
 
-// Cue
-void AudioStream::Cue (void)
+void AudioStream::QueueBuffersFromCurrentPosition()
 {
 	uint num_bytes_written;
 
+	// Unqueue all buffers
+	ALint buffers_processed = 0;
+	OpenAL_ErrorPrint(alGetSourcei(m_source_id, AL_BUFFERS_PROCESSED, &buffers_processed));
+
+	while (buffers_processed) {
+		ALuint buffer_id = 0;
+		OpenAL_ErrorPrint(alSourceUnqueueBuffers(m_source_id, 1, &buffer_id));
+		buffers_processed--;
+	}
+
+	// Fill buffer with wave data
+	WriteWaveData(m_cbBufSize, &num_bytes_written, 0);
+	m_fCued = true;
+}
+
+// Cue
+void AudioStream::Cue (void)
+{
 	if (!m_fCued) {
 		m_bFade = false;
 		m_fade_timer_id = 0;
@@ -648,26 +667,13 @@ void AudioStream::Cue (void)
 		m_cbBufOffset = 0;
 
 		// Reset file ptr, etc
-		m_pwavefile->Cue ();
+		m_pwavefile->Cue();
 
-		// Unqueue all buffers
-		ALint buffers_processed = 0;
-		OpenAL_ErrorPrint( alGetSourcei(m_source_id, AL_BUFFERS_PROCESSED, &buffers_processed) );
-
-		while (buffers_processed) {
-			ALuint buffer_id = 0;
-			OpenAL_ErrorPrint( alSourceUnqueueBuffers(m_source_id, 1, &buffer_id) );
-			buffers_processed--;
-		}
-
-		// Fill buffer with wave data
-		WriteWaveData (m_cbBufSize, &num_bytes_written, 0);
-
-		m_fCued = true;
-
-		// Init some of our data
 		m_total_uncompressed_bytes_read = 0;
 		m_max_uncompressed_bytes_to_read = std::numeric_limits<uint>::max();
+		m_bReadingDone = false;
+
+		QueueBuffersFromCurrentPosition();
 	}
 }
 
@@ -722,6 +728,66 @@ void AudioStream::Set_Sample_Cutoff(unsigned int sample_cutoff)
 		return;
 
 	m_max_uncompressed_bytes_to_read = (sample_cutoff * m_fileProps.bytes_per_sample);
+}
+
+void AudioStream::Seek(double seek_to_seconds)
+{
+	if (m_pwavefile == nullptr) {
+		return;
+	}
+
+	if (seek_to_seconds < 0.0) {
+		seek_to_seconds = 0.0;
+	}
+
+	if (m_fileProps.duration > 0.0 && seek_to_seconds > m_fileProps.duration) {
+		seek_to_seconds = m_fileProps.duration;
+	}
+
+	const auto frame_size = static_cast<size_t>(m_fileProps.bytes_per_sample * m_fileProps.num_channels);
+	if (frame_size == 0 || m_fileProps.sample_rate <= 0) {
+		return;
+	}
+
+	auto seek_samples = static_cast<size_t>(seek_to_seconds * static_cast<double>(m_fileProps.sample_rate));
+	auto seek_bytes = seek_samples * frame_size;
+
+	const auto was_playing = m_fPlaying;
+	const auto was_paused = m_bIsPaused;
+	const auto volume = Get_Volume();
+	const auto looping = m_bLooping;
+
+	Stop_and_Rewind();
+	m_pwavefile->Cue();
+	m_total_uncompressed_bytes_read = 0;
+	m_bReadingDone = false;
+	m_bPastLimit = false;
+	m_fade_timer_id = 0;
+	m_finished_id = 0;
+
+	while (seek_bytes > 0) {
+		auto chunk_size = MIN(seek_bytes, static_cast<size_t>(BIGBUF_SIZE));
+		chunk_size -= (chunk_size % frame_size);
+		if (chunk_size == 0) {
+			break;
+		}
+
+		int num_bytes_read = m_pwavefile->Read(Wavedata_load_buffer, chunk_size);
+		if (num_bytes_read <= 0) {
+			break;
+		}
+
+		seek_bytes -= static_cast<size_t>(num_bytes_read);
+		m_total_uncompressed_bytes_read += static_cast<size_t>(num_bytes_read);
+	}
+
+	QueueBuffersFromCurrentPosition();
+
+	if (was_playing && !was_paused) {
+		Play(volume, looping);
+	} else {
+		m_bIsPaused = was_paused;
+	}
 }
 
 uint AudioStream::Get_Samples_Committed(void)
@@ -1266,6 +1332,26 @@ void audiostream_unpause(int i, bool via_sexp_or_script)
 
 	if (via_sexp_or_script)
 		Audio_streams[i].paused_via_sexp_or_script = false;
+}
+
+void audiostream_resume(int i, bool via_sexp_or_script)
+{
+	audiostream_unpause(i, via_sexp_or_script);
+}
+
+void audiostream_seek(int i, double seek_to_seconds)
+{
+	if (i == -1) {
+		return;
+	}
+
+	Assert(i >= 0 && i < MAX_AUDIO_STREAMS);
+
+	if (Audio_streams[i].status == ASF_FREE) {
+		return;
+	}
+
+	Audio_streams[i].Seek(seek_to_seconds);
 }
 
 void audiostream_pause_all(bool via_sexp_or_script)
