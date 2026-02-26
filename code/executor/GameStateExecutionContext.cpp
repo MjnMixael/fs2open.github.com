@@ -2,6 +2,13 @@
 
 #include "events/events.h"
 
+namespace {
+class AlwaysValidExecutionContext final : public executor::IExecutionContext {
+  public:
+	State determineContextState() const override { return State::Valid; }
+};
+} // namespace
+
 namespace executor {
 
 GameStateExecutionContext::GameStateExecutionContext(GS_STATE contextState, int stateInstance)
@@ -35,6 +42,12 @@ IExecutionContext::State GameStateExecutionContext::determineContextState() cons
 
 std::shared_ptr<IExecutionContext> GameStateExecutionContext::captureContext()
 {
+	if (Fred_running || gameseq_get_depth() < 0) {
+		// FRED does not run the normal game state stack and can legitimately execute async code
+		// without a valid GS_STATE context.
+		return std::make_shared<AlwaysValidExecutionContext>();
+	}
+
 	return std::make_shared<GameStateExecutionContext>(static_cast<GS_STATE>(gameseq_get_state()),
 		gameseq_get_state_instance_id());
 }
