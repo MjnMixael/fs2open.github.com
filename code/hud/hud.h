@@ -366,6 +366,7 @@ public:
 	void renderBitmap(int frame, int x, int y, float scale = 1.0f, bool config = false) const;
 	void renderBitmapColor(int frame, int x, int y, float scale = 1.0f, bool config = false) const;
 	void renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int sy, float scale = 1.0f, bool config = false) const;
+	void renderBitmapFill(int frame, int x, int y, int w, int h, float fill_pct, float fill_angle_degrees, float scale = 1.0f, bool config = false) const;
 	void renderString(int x, int y, const char *str, float scale = 1.0f, bool config = false);
 	void renderString(int x, int y, int gauge_id, const char *str, float scale = 1.0f, bool config = false);
 	void renderStringAlignCenter(int x, int y, int area_width, const char *s, float scale = 1.0f, bool config = false);
@@ -627,4 +628,3 @@ extern int Num_hud_gauge_types;
 extern bool Extra_target_info;
 
 #endif	/* __HUD_H__ */
-

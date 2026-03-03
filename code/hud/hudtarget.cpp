@@ -5844,13 +5844,19 @@ void HudGaugeCmeasures::render(float /*frametime*/, bool config)
 }
 
 HudGaugeAfterburner::HudGaugeAfterburner():
-HudGauge(HUD_OBJECT_AFTERBURNER, HUD_AFTERBURNER_ENERGY, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255)
+HudGauge(HUD_OBJECT_AFTERBURNER, HUD_AFTERBURNER_ENERGY, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255),
+Fill_angle(90.0f)
 {
 }
 
 void HudGaugeAfterburner::initEnergyHeight(int h)
 {
 	Energy_h = h;
+}
+
+void HudGaugeAfterburner::initFillAngle(float angle)
+{
+	Fill_angle = angle;
 }
 
 void HudGaugeAfterburner::initBitmaps(char *fname)
@@ -5866,7 +5872,7 @@ void HudGaugeAfterburner::initBitmaps(char *fname)
 void HudGaugeAfterburner::render(float /*frametime*/, bool config)
 {
 	float percent_left;
-	int	clip_h,w,h;
+	int	w,h;
 
 	if ( Energy_bar.first_frame < 0 ){
 		return;
@@ -5899,19 +5905,13 @@ void HudGaugeAfterburner::render(float /*frametime*/, bool config)
 		hud_config_set_mouse_coords(gauge_config_id, x, x + fl2i(bmw * scale), y, y + fl2i(bmh * scale));
 	}
 
-	clip_h = fl2i(std::lround((1.0f - percent_left) * Energy_h));
 
 	bm_get_info(Energy_bar.first_frame,&w,&h);
 
 	setGaugeColor(HUD_C_NONE, config);
 
-	if ( clip_h > 0) {
-		renderBitmapEx(Energy_bar.first_frame, x, y,w,clip_h,0,0, scale, config);
-	}
-
-	if ( clip_h <= Energy_h ) {
-		renderBitmapEx(Energy_bar.first_frame+1, x, y + fl2i(clip_h * scale),w,h-clip_h,0,clip_h, scale, config);
-	}
+	renderBitmapEx(Energy_bar.first_frame, x, y, w, h, 0, 0, scale, config);
+	renderBitmapFill(Energy_bar.first_frame + 1, x, y, w, Energy_h, percent_left, Fill_angle, scale, config);
 }
 
 void HudGaugeAfterburner::pageIn()
@@ -5920,7 +5920,8 @@ void HudGaugeAfterburner::pageIn()
 }
 
 HudGaugeWeaponEnergy::HudGaugeWeaponEnergy():
-HudGauge(HUD_OBJECT_WEAPON_ENERGY, HUD_WEAPONS_ENERGY, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255)
+HudGauge(HUD_OBJECT_WEAPON_ENERGY, HUD_WEAPONS_ENERGY, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255),
+Fill_angle(90.0f)
 {
 }
 
@@ -5933,6 +5934,11 @@ void HudGaugeWeaponEnergy::initTextOffsets(int x, int y)
 void HudGaugeWeaponEnergy::initEnergyHeight(int h)
 {
 	Wenergy_h = h;
+}
+
+void HudGaugeWeaponEnergy::initFillAngle(float angle)
+{
+	Fill_angle = angle;
 }
 
 void HudGaugeWeaponEnergy::initAlignments(HudAlignment text_align, HudAlignment armed_align)
@@ -6301,13 +6307,8 @@ void HudGaugeWeaponEnergy::render(float /*frametime*/, bool config)
 
 		bm_get_info(Energy_bar.first_frame+2,&w,&h);
 
-		if ( clip_h > 0 ) {
-			renderBitmapEx(Energy_bar.first_frame+2, x, y, w,clip_h,0,0, scale, config);
-		}
-
-		if ( clip_h <= Wenergy_h ) {
-			renderBitmapEx(Energy_bar.first_frame+3, x, y + fl2i(clip_h * scale), w,h-clip_h,0,clip_h, scale, config);
-		}
+		renderBitmapEx(Energy_bar.first_frame + 2, x, y, w, h, 0, 0, scale, config);
+		renderBitmapFill(Energy_bar.first_frame + 3, x, y, w, Wenergy_h, percent_left, Fill_angle, scale, config);
 
 		// hud_set_default_color();
 	}

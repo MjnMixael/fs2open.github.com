@@ -271,9 +271,11 @@ protected:
 	hud_frames Energy_bar;
 
 	int Energy_h;
+	float Fill_angle;
 public:
 	HudGaugeAfterburner();
 	void initEnergyHeight(int h);
+	void initFillAngle(float angle);
 	void initBitmaps(char *fname);
 	void render(float frametime, bool config = false) override;
 	void pageIn() override;
@@ -296,11 +298,13 @@ protected:
 	bool Always_show_text;
 	bool Moving_text;
 	bool Show_ballistic;
+	float Fill_angle;
 public:
 	HudGaugeWeaponEnergy();
 	void initBitmaps(char *fname);
 	void initTextOffsets(int x, int y);
 	void initEnergyHeight(int h);
+	void initFillAngle(float angle);
 	void initAlwaysShowText(bool show_text);
 	void initMoveText(bool move_text);
 	void initShowBallistics(bool show_ballistics);

@@ -58,6 +58,10 @@
 #include "weapon/emp.h"
 #include "weapon/weapon.h"
 
+#include <algorithm>
+#include <cmath>
+#include <limits>
+
 // This contains not only the retail HUD gauges but also any custom HUD gauges that are not specific to a ship.
 SCP_vector<std::unique_ptr<HudGauge>> default_hud_gauges;
 
@@ -1126,6 +1130,81 @@ void HudGauge::renderBitmapEx(int frame, int x, int y, int w, int h, int sx, int
 	gr_aabitmap_ex(x + nx, y + ny, w, h, sx, sy, resize, false, scale);
 
 	gr_reset_screen_scale();
+}
+
+void HudGauge::renderBitmapFill(int frame, int x, int y, int w, int h, float fill_pct, float fill_angle_degrees, float scale, bool config) const
+{
+	if (!emp_should_blit_gauge() || w <= 0 || h <= 0) {
+		return;
+	}
+
+	CLAMP(fill_pct, 0.0f, 1.0f);
+
+	if (fill_pct <= 0.0f) {
+		return;
+	}
+
+	if (fill_pct >= 1.0f) {
+		renderBitmapEx(frame, x, y, w, h, 0, 0, scale, config);
+		return;
+	}
+
+	const float angle = fl_radians(fill_angle_degrees);
+	const float dir_x = std::cos(angle);
+	const float dir_y = std::sin(angle);
+
+	const float corners[4][2] = {
+		{0.0f, 0.0f},
+		{static_cast<float>(w - 1), 0.0f},
+		{0.0f, static_cast<float>(h - 1)},
+		{static_cast<float>(w - 1), static_cast<float>(h - 1)}
+	};
+
+	float min_proj = std::numeric_limits<float>::max();
+	float max_proj = -std::numeric_limits<float>::max();
+
+	for (const auto& corner : corners) {
+		const float projection = (corner[0] * dir_x) + (corner[1] * dir_y);
+		if (projection < min_proj) {
+			min_proj = projection;
+		}
+		if (projection > max_proj) {
+			max_proj = projection;
+		}
+	}
+
+	const float cutoff = max_proj - (fill_pct * (max_proj - min_proj));
+
+	if (fl_abs(dir_x) < 1.0e-6f) {
+		for (int row = 0; row < h; ++row) {
+			const float projection = row * dir_y;
+			if (projection >= cutoff) {
+				renderBitmapEx(frame, x, y + fl2i(row * scale), w, 1, 0, row, scale, config);
+			}
+		}
+		return;
+	}
+
+	for (int row = 0; row < h; ++row) {
+		const float row_projection = row * dir_y;
+		float start_x;
+		float end_x;
+
+		if (dir_x > 0.0f) {
+			start_x = (cutoff - row_projection) / dir_x;
+			end_x = static_cast<float>(w);
+		} else {
+			start_x = 0.0f;
+			end_x = (cutoff - row_projection) / dir_x;
+		}
+
+		const int draw_start = std::max(0, fl2i(std::ceil(start_x)));
+		const int draw_end = std::min(w, fl2i(std::ceil(end_x)));
+
+		if (draw_end > draw_start) {
+			renderBitmapEx(frame, x + fl2i(draw_start * scale), y + fl2i(row * scale), draw_end - draw_start, 1, draw_start, row, scale, config);
+		}
+	}
 }
 
 void HudGauge::renderLine(int x1, int y1, int x2, int y2, bool config) const
