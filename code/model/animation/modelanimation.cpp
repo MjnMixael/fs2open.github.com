@@ -1048,14 +1048,14 @@ namespace animation {
 		}
 	}
 
-	bool ModelAnimationSet::updateMoveable(polymodel_instance* pmi, const SCP_string& name, const SCP_vector<std::any>& args) const {
+	bool ModelAnimationSet::updateMoveable(polymodel_instance* pmi, const SCP_string& name, const SCP_vector<std::any>& args, bool instant) const {
 		SCP_string lowername = name;
 		SCP_tolower(lowername);
 		auto moveable = m_moveableSet.find(lowername);
 		if (moveable == m_moveableSet.end())
 			return false;
 
-		moveable->second->update(pmi, args);
+		moveable->second->update(pmi, args, instant);
 		return true;
 	}
 

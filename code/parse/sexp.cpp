@@ -625,6 +625,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "trigger-ship-animation",			OP_TRIGGER_ANIMATION_NEW,				3,	7,			SEXP_ACTION_OPERATOR,	}, //Lafiel
 	{ "stop-looping-animation",			OP_STOP_LOOPING_ANIMATION,				3,  3,			SEXP_ACTION_OPERATOR,   }, //Lafiel
 	{ "update-moveable-animation",		OP_UPDATE_MOVEABLE,						2,	INT_MAX,	SEXP_ACTION_OPERATOR,	}, //Lafiel
+	{ "instant-moveable-animation",		OP_INSTANT_MOVEABLE,					2,	INT_MAX,	SEXP_ACTION_OPERATOR,	}, //MjnMixael
 
 	//Coordinate Manipulation Sub-Category
 	{ "set-object-position",			OP_SET_OBJECT_POSITION,					4,	4,			SEXP_ACTION_OPERATOR,	},	// WMC
@@ -2856,7 +2857,8 @@ int check_sexp_syntax(int node, int return_type, int recursive, int *bad_node, s
 						
 						break;
 					}
-					case OP_UPDATE_MOVEABLE: {
+					case OP_UPDATE_MOVEABLE:
+					case OP_INSTANT_MOVEABLE: {
 						//Second OP name
 						SCP_string name = CTEXT(CDR(ship_node));
 						SCP_tolower(name);
@@ -23469,6 +23471,35 @@ void sexp_update_moveable_animation(int node)
 	Ship_info[ship_entry->shipp()->ship_info_index].animations.updateMoveable(model_get_instance(ship_entry->shipp()->model_instance_num), name, args);
 }
 
+void sexp_instant_moveable_animation(int node)
+{
+	bool is_nan, is_nan_forever;
+
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || !ship_entry->has_shipp())
+		return;
+
+	node = CDR(node);
+
+	SCP_string name(CTEXT(node));
+
+	node = CDR(node);
+
+	//For now this only contains integers. It is very much feasible though that certain moveables might be updateable with strings and other non-numbers. For this, the C-side of the moveable code already supports other types
+	SCP_vector<std::any> args;
+
+	while(node >= 0) {
+		args.emplace_back(eval_num(node, is_nan, is_nan_forever));
+
+		if(is_nan || is_nan_forever)
+			Warning(LOCATION, "Value for moveable %s on ship %s was NaN!", name.c_str(), ship_entry->name);
+
+		node = CDR(node);
+	}
+
+	Ship_info[ship_entry->shipp()->ship_info_index].animations.updateMoveable(model_get_instance(ship_entry->shipp()->model_instance_num), name, args, true);
+}
+
 void sexp_add_remove_escort(int node)
 {
 	int flag;
@@ -30557,6 +30588,11 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_update_moveable_animation(node);
 				break;
 
+			case OP_INSTANT_MOVEABLE:
+				sexp_val = SEXP_TRUE;
+				sexp_instant_moveable_animation(node);
+				break;
+
 			case OP_STOP_LOOPING_ANIMATION:
 				sexp_val = SEXP_TRUE;
 				sexp_stop_looping_animation(node);
@@ -31891,6 +31927,7 @@ int query_operator_return_type(int op)
 		case OP_SET_ALPHA_MULT:
 		case OP_TRIGGER_ANIMATION_NEW:
 		case OP_UPDATE_MOVEABLE:
+		case OP_INSTANT_MOVEABLE:
 		case OP_STOP_LOOPING_ANIMATION:
 		case OP_CONTAINER_ADD_TO_LIST:
 		case OP_CONTAINER_REMOVE_FROM_LIST:
@@ -34795,6 +34832,7 @@ int query_operator_argument_type(int op, int argnum)
 				return OPF_BOOL;
 
 		case OP_UPDATE_MOVEABLE:
+		case OP_INSTANT_MOVEABLE:
 			if (argnum == 0)
 				return OPF_SHIP;
 			else if(argnum == 1)
@@ -37083,6 +37121,7 @@ int get_category(int op_id)
 		case OP_DESTROY_INSTANTLY_WITH_DEBRIS:
 		case OP_TRIGGER_ANIMATION_NEW:
 		case OP_UPDATE_MOVEABLE:
+		case OP_INSTANT_MOVEABLE:
 		case OP_NAV_SET_COLOR:
 		case OP_NAV_SET_VISITED_COLOR:
 		case OP_CONTAINER_ADD_TO_LIST:
@@ -37417,6 +37456,7 @@ int get_subcategory(int op_id)
 		case OP_SET_ALPHA_MULT:
 		case OP_TRIGGER_ANIMATION_NEW:
 		case OP_UPDATE_MOVEABLE:
+		case OP_INSTANT_MOVEABLE:
 		case OP_STOP_LOOPING_ANIMATION:
 			return CHANGE_SUBCATEGORY_MODELS_AND_TEXTURES;
 
@@ -42697,6 +42737,25 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 
 	{ OP_UPDATE_MOVEABLE , "update-moveable-animation\r\n"
 		"\tUpdates the data for a moveable animation.\r\n"
+		"Takes 2 and more arguments...\r\n"
+		"\t1: The ship to update the moveable for (ship must be in-mission).\r\n"
+		"\t2: The name of the moveable.\r\n"
+		"\tRest: The data for the moveable. Depends on moveable type. Refer to the table below:\r\n\r\n"
+		"Orientation:\r\n"
+		"\tThree numbers, x, y, z rotation respectively, in degrees\r\n"
+		"Rotation:\r\n"
+		"\tThree numbers, x, y, z rotation respectively, in degrees\r\n"
+		"Translation:\r\n"
+		"\tThree required numbers: x, y, z position target relative to base, in 1/100th meters\r\n"
+		"Axis Rotation:\r\n"
+		"\tOne number, rotation angle in degrees\r\n"
+		"Inverse Kinematics:\r\n"
+		"\tThree required numbers: x, y, z position target relative to base, in 1/100th meters\r\n"
+		"\tThree optional numbers: x, y, z rotation target relative to base, in degrees\r\n"
+	},
+
+	{ OP_INSTANT_MOVEABLE , "instant-moveable-animation\r\n"
+		"\tUpdates the data for a moveable animation and forces it to instantly reach the final position.\r\n"
 		"Takes 2 and more arguments...\r\n"
 		"\t1: The ship to update the moveable for (ship must be in-mission).\r\n"
 		"\t2: The name of the moveable.\r\n"

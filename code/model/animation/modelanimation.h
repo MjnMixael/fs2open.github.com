@@ -283,7 +283,7 @@ namespace animation {
 	public:
 		virtual ~ModelAnimationMoveable() = default;
 
-		virtual void update(polymodel_instance* pmi, const SCP_vector<std::any>& args) = 0;
+		virtual void update(polymodel_instance* pmi, const SCP_vector<std::any>& args, bool instant = false) = 0;
 		virtual void initialize(ModelAnimationSet* parentSet, polymodel_instance* pmi) = 0;
 	};
 
@@ -366,7 +366,7 @@ namespace animation {
 		SCP_vector<RegisteredTrigger> getRegisteredTriggers() const;
 		SCP_set<SCP_string> getRegisteredAnimNames() const;
 
-		bool updateMoveable(polymodel_instance* pmi, const SCP_string& name, const SCP_vector<std::any>& args) const;
+		bool updateMoveable(polymodel_instance* pmi, const SCP_string& name, const SCP_vector<std::any>& args, bool instant = false) const;
 		void initializeMoveables(polymodel_instance* pmi);
 		SCP_vector<SCP_string> getRegisteredMoveables() const;
 
