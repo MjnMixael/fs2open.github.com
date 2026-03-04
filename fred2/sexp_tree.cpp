@@ -243,7 +243,7 @@ int sexp_tree::load_branch(int index, int parent)
 			load_branch(Sexp_nodes[index].first, cur);
 
 		} else {
-			// Handle any other atom kinds you support, unchanged from your current code…
+			// Handle any other atom kinds you support, unchanged from your current codeï¿½
 			Assertion(false, "Unhandled SEXP subtype %d in load_branch! Please report!", Sexp_nodes[index].subtype);
 		}
 
@@ -656,12 +656,35 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'Insert Operator' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 2); // TODO Placeholder ID
-			insert_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
-		}
+		UINT cmd_next_ins = ID_SEXP_ACTION_BASE + MAKELONG(0, 2);
+		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit_ins =
+			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
+				int visible_in_col = 0;
+				for (const auto& it : items) {
+					if (!it.children.empty()) {
+						CMenu child;
+						child.CreatePopupMenu();
+						emit_ins(child, it.children);
+						UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
+						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
+							sub_flags |= MF_MENUBREAK;
+						menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
+						child.Detach();
+						++visible_in_col;
+					} else {
+						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
+						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
+							sub_flags |= MF_MENUBREAK;
+						menuRef.AppendMenu(sub_flags, cmd_next_ins++, it.label.c_str());
+						++visible_in_col;
+					}
+				}
+				if (items.empty())
+					menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
+			};
+		emit_ins(insert_op_submenu, action_ptr->children);
 	} else {
 		insert_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
 	}
@@ -674,12 +697,35 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'ReplaceOperator' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 3); // TODO Placeholder ID
-			replace_op_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
-		}
+		UINT cmd_next_rep = ID_SEXP_ACTION_BASE + MAKELONG(0, 3);
+		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit_rep =
+			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
+				int visible_in_col = 0;
+				for (const auto& it : items) {
+					if (!it.children.empty()) {
+						CMenu child;
+						child.CreatePopupMenu();
+						emit_rep(child, it.children);
+						UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
+						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
+							sub_flags |= MF_MENUBREAK;
+						menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
+						child.Detach();
+						++visible_in_col;
+					} else {
+						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
+						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
+							sub_flags |= MF_MENUBREAK;
+						menuRef.AppendMenu(sub_flags, cmd_next_rep++, it.label.c_str());
+						++visible_in_col;
+					}
+				}
+				if (items.empty())
+					menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
+			};
+		emit_rep(replace_op_submenu, action_ptr->children);
 	} else {
 		replace_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
 	}
@@ -725,11 +771,11 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'ReplaceVariable' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
 			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 5); // TODO Placeholder ID
-			replace_var_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+			replace_var_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->children[i].label.c_str());
 		}
 	} else {
 		replace_var_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
@@ -745,11 +791,11 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'ReplaceContainerName' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
 			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 6); // TODO Placeholder ID
-			replace_container_name_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+			replace_container_name_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->children[i].label.c_str());
 		}
 	} else {
 		replace_container_name_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
@@ -762,11 +808,11 @@ void sexp_tree::right_clicked(int mode)
 	Assertion(action_ptr, "Action 'ReplaceContainerData' is missing from the context menu model!");
 	item_flags = MF_POPUP | MF_GRAYED;
 
-	if (action_ptr->enabled && !action_ptr->choices.empty()) {
+	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		for (size_t i = 0; i < action_ptr->choices.size(); ++i) {
+		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
 			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 7); // TODO Placeholder ID
-			replace_container_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->choiceText[i].c_str());
+			replace_container_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->children[i].label.c_str());
 		}
 	} else {
 		replace_container_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
