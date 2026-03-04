@@ -52,302 +52,245 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 	// 2) Synthetic vs real: compute flags and then flip enables.
 	const auto kind = (node_index < 0) ? SexpNodeKind::SyntheticRoot : SexpNodeKind::RealNode;
 
-	// Seed a single submenu choice so sexp_tree can render submenus now.
-	// We'll replace these with real category trees later.
-	// TODO Finish this for real
+	const bool campaignContext = model->_env && model->_env->isCampaignContext();
 
-	// --- Add Operator submenu (legacy-style: build all, then enable a subset) ---
+	// Helper: determine if a given Operators[op_index] should be disabled for campaign context.
+	auto isCampaignFiltered = [&](int op_index) -> bool {
+		return campaignContext && !usable_in_campaign(Operators[op_index].value);
+	};
+
+	// --- Add Operator submenu ---
 	if (auto* addOp = getAction(SexpActionId::AddOperator)) {
-		addOp->children.clear();
-
 		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
 			const auto& n = model->_nodes[node_index];
-
-			const int parent_index = node_index; // appending under selected node
-			const int opf = expectedOpfForAppend_(parent_index);
+			const int opf = expectedOpfForAppend_(node_index);
 			if (opf >= 0) {
 				const int arg_index = model->countArgs(n.child);
 
-				auto& catRoots = addOp->children; // top-level category nodes
-
-				// Maps to avoid searching by label and to avoid pointer invalidation
-				// category_id -> index in addOp->children
-				std::unordered_map<int, int> catIndexById;
-				catIndexById.reserve(op_menu.size());
-
-				// subIndexByCat[category_id][sub_id] -> index in addOp->children[catIdx].children
-				std::unordered_map<int, std::unordered_map<int, int>> subIndexByCat;
-				subIndexByCat.reserve(op_submenu.size());
-
-				// Helper: ensure category header exists (by id) and return its index
-				auto ensureCategoryById = [&](int category_id, const SCP_string& label) -> int {
-					auto it = catIndexById.find(category_id);
-					if (it != catIndexById.end())
-						return it->second;
-
-					SexpContextAction cat;
-					cat.group = SexpContextGroup::Operator;
-					cat.id = SexpActionId::None; // header node
-					cat.label = label;
-					cat.enabled = false; // will be set after enable pass
-					catRoots.push_back(std::move(cat));
-					int idx = (int)catRoots.size() - 1;
-					catIndexById[category_id] = idx;
-					return idx;
-				};
-
-				// Helper: ensure subcategory header exists (by sub_id) under category index
-				auto ensureSubcategoryById = [&](int catIdx, int sub_id, const SCP_string& label) -> int {
-					auto& subMap = subIndexByCat[catIdx];
-					auto it = subMap.find(sub_id);
-					if (it != subMap.end())
-						return it->second;
-
-					SexpContextAction sub;
-					sub.group = SexpContextGroup::Operator;
-					sub.id = SexpActionId::None; // header node
-					sub.label = label;
-					sub.enabled = false;
-
-					catRoots[catIdx].children.push_back(std::move(sub));
-					int idx = (int)catRoots[catIdx].children.size() - 1;
-					subMap[sub_id] = idx;
-					return idx;
-				};
-
-				// Build label lookups from sexp.cpp tables
-				std::unordered_map<int, SCP_string> catLabel, subLabel;
-				catLabel.reserve(op_menu.size());
-				for (const auto& c : op_menu)
-					catLabel[c.id] = c.name;
-
-				subLabel.reserve(op_submenu.size());
-				for (const auto& sc : op_submenu)
-					subLabel[sc.id] = sc.name;
-
-				// 1) Build all headers (categories and subcategories)
-				for (const auto& c : op_menu) {
-					(void)ensureCategoryById(c.id, c.name);
-				}
-				for (const auto& sc : op_submenu) {
-					int parent_cat_id = category_of_subcategory(sc.id);
-					auto it = catLabel.find(parent_cat_id);
-					if (it == catLabel.end())
-						continue; // safety
-					int catIdx = ensureCategoryById(parent_cat_id, it->second);
-					(void)ensureSubcategoryById(catIdx, sc.id, sc.name);
-				}
-
-				// Map operator VALUE -> leaf pointer for the enable pass
-				std::unordered_map<int, SexpContextAction*> opValueToLeaf;
-				opValueToLeaf.reserve(Operators.size());
-
-				// Helper to append a disabled operator leaf under a parent menu
-				auto appendOperatorLeaf = [&](SexpContextAction& parentMenu, int op_value, const SCP_string& name) {
-					SexpContextAction leaf;
-					leaf.group = SexpContextGroup::Operator;
-					leaf.id = SexpActionId::InsertOperator;
-					leaf.label = name;
-					leaf.enabled = false; // start disabled
-					parentMenu.children.push_back(std::move(leaf));
-					opValueToLeaf[op_value] = &parentMenu.children.back();
-				};
-
-				auto isHiddenByLegacyRules = [&](int op_value) -> bool {
-					switch (op_value) {
-					case OP_GET_VARIABLE_BY_INDEX:
-					case OP_SET_VARIABLE_BY_INDEX:
-					case OP_COPY_VARIABLE_FROM_INDEX:
-					case OP_COPY_VARIABLE_BETWEEN_INDEXES:
-					case OP_HITS_LEFT_SUBSYSTEM:
-					case OP_CUTSCENES_SHOW_SUBTITLE:
-					case OP_ORDER:
-					case OP_TECH_ADD_INTEL:
-					case OP_TECH_REMOVE_INTEL:
-					case OP_HUD_GAUGE_SET_ACTIVE:
-					case OP_HUD_ACTIVATE_GAUGE_TYPE:
-					case OP_JETTISON_CARGO_DELAY:
-					case OP_STRING_CONCATENATE:
-					case OP_SET_OBJECT_SPEED_X:
-					case OP_SET_OBJECT_SPEED_Y:
-					case OP_SET_OBJECT_SPEED_Z:
-					case OP_DISTANCE:
-					case OP_SCRIPT_EVAL:
-					case OP_TRIGGER_SUBMODEL_ANIMATION:
-					case OP_ADD_BACKGROUND_BITMAP:
-					case OP_ADD_SUN_BITMAP:
-					case OP_JUMP_NODE_SET_JUMPNODE_NAME:
-					case OP_KEY_RESET:
-					case OP_SET_ASTEROID_FIELD:
-					case OP_SET_DEBRIS_FIELD:
-					case OP_NEBULA_TOGGLE_POOF:
-					case OP_NEBULA_FADE_POOF:
-						return true;
-					default:
-						return false;
-					}
-				};
-
-				// 2) Append EVERY visible operator to its category/subcategory (disabled)
-				for (int i = 0; i < (int)Operators.size(); ++i) {
-					const int op_value = Operators[i].value;
-					if (isHiddenByLegacyRules(op_value))
-						continue;
-
-					const int sub_id = get_subcategory(op_value);
-					if (sub_id == OP_SUBCATEGORY_NONE) {
-						const int cat_id = get_category(op_value);
-						auto it = catLabel.find(cat_id);
-						if (it == catLabel.end())
-							continue;
-						int catIdx = ensureCategoryById(cat_id, it->second);
-						appendOperatorLeaf(catRoots[catIdx], op_value, Operators[i].text);
-					} else {
-						const int parent_cat_id = category_of_subcategory(sub_id);
-						auto itCat = catLabel.find(parent_cat_id);
-						auto itSub = subLabel.find(sub_id);
-						if (itCat == catLabel.end() || itSub == subLabel.end())
-							continue;
-
-						int catIdx = ensureCategoryById(parent_cat_id, itCat->second);
-						int subIdx = ensureSubcategoryById(catIdx, sub_id, itSub->second);
-						appendOperatorLeaf(catRoots[catIdx].children[subIdx], op_value, Operators[i].text);
-					}
-				}
-
-				// 3) Enable pass: operators present in the OPF listing for this slot
-				if (auto list = model->buildListingForOpf(opf, parent_index, arg_index)) {
+				// Build the set of operators enabled for this slot via OPF listing
+				std::unordered_map<int, bool> opValEnabled; // op_value -> enabled
+				if (auto list = model->buildListingForOpf(opf, node_index, arg_index)) {
 					for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
-						if (it->op >= 0) {
-							const int op_value = Operators[it->op].value;
-							auto f = opValueToLeaf.find(op_value);
-							if (f != opValueToLeaf.end()) {
-								f->second->enabled = true;
-							}
-						}
+						if (it->op >= 0)
+							opValEnabled[Operators[it->op].value] = true;
 					}
 				}
 
-				// Final rule: disable operators that lack default arguments
-				for (int i = 0; i < (int)Operators.size(); ++i) {
-					auto f = opValueToLeaf.find(Operators[i].value);
-					if (f != opValueToLeaf.end()) {
-						if (!model->hasDefaultArgumentAvailable(i)) {
-							f->second->enabled = false;
-						}
-					}
-				}
-
-				// Propagate enabled up so empty submenus show disabled
-				std::function<bool(SexpContextAction&)> propagateEnabled = [&](SexpContextAction& node) -> bool {
-					if (node.children.empty())
-						return node.enabled;
-					bool any = false;
-					for (auto& ch : node.children)
-						any = propagateEnabled(ch) || any;
-					node.enabled = any;
-					return node.enabled;
-				};
-				for (auto& cat : catRoots)
-					propagateEnabled(cat);
-
-				addOp->enabled = !addOp->children.empty();
+				buildCategorizedOperatorSubmenu_(addOp, SexpActionId::AddOperator,
+					[&](int op_idx) {
+						const int op_value = Operators[op_idx].value;
+						if (!opValEnabled.count(op_value))
+							return false;
+						if (!model->hasDefaultArgumentAvailable(op_idx))
+							return false;
+						if (isCampaignFiltered(op_idx))
+							return false;
+						return true;
+					});
 			}
 		}
 	}
 
-	// Add Data submenu stub
+	// --- Add Data submenu ---
 	if (auto* addData = getAction(SexpActionId::AddData)) {
 		addData->children.clear();
 
-		// Only meaningful on a real node
 		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
 			const auto& n = model->_nodes[node_index];
-
-			// If the selected node cannot accept a child, no submenu is generated.
 			const int opf = expectedOpfForAppend_(node_index);
 			if (opf >= 0) {
-				// Next arg index is current argc
 				const int arg_index = model->countArgs(n.child);
-
 				const bool allowNumber = model->opfAcceptsRawNumberInput(opf);
 				const bool allowString = model->opfAcceptsRawStringInput(opf);
 
-				// Pseudo-items for typed entry.
+				// "Number" and "String" typed-entry pseudo-items
 				{
 					SexpContextAction numLeaf;
 					numLeaf.group = SexpContextGroup::Data;
-					numLeaf.id = SexpActionId::AddData; // action id placeholder; not wired yet
+					numLeaf.id = SexpActionId::AddData;
 					numLeaf.label = "Number";
+					numLeaf.param.op_index = -1;
+					numLeaf.param.arg_index = 0; // sentinel: typed number
 					numLeaf.enabled = allowNumber;
 					addData->children.push_back(std::move(numLeaf));
 				}
 				{
 					SexpContextAction strLeaf;
 					strLeaf.group = SexpContextGroup::Data;
-					strLeaf.id = SexpActionId::AddData; // action id placeholder; not wired yet
+					strLeaf.id = SexpActionId::AddData;
 					strLeaf.label = "String";
+					strLeaf.param.op_index = -1;
+					strLeaf.param.arg_index = 1; // sentinel: typed string
 					strLeaf.enabled = allowString;
 					addData->children.push_back(std::move(strLeaf));
 				}
 
-				// Ask the model for addable choices at this slot
+				// Named data choices from the OPF listing (data items only)
+				int data_idx = 0;
 				if (auto list = model->buildListingForOpf(opf, node_index, arg_index)) {
 					for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
-						// Only list data items (ignore operator entries)
 						if (it->op < 0) {
 							SexpContextAction leaf;
 							leaf.group = SexpContextGroup::Data;
-							leaf.id = SexpActionId::AddData; // action to perform later
-							leaf.label = it->text;           // shown in submenu
+							leaf.id = SexpActionId::AddData;
+							leaf.label = it->text;
+							leaf.param.op_index = data_idx; // index in OPF data list
+							leaf.param.arg_index = -1;
 							leaf.enabled = true;
-
-							// For now we do not pass the chosen string through SexpActionParam.
-							// This proof wires up labels so the UI renders the nested submenu.
-							// Next step: extend SexpActionParam or add a dispatch to pass the chosen text.
-
 							addData->children.push_back(std::move(leaf));
+							++data_idx;
 						}
 					}
 				}
 
-				// Container helpers
-				if ((n.type & SEXPT_CONTAINER_DATA) != 0) {
-					// Legacy FRED offered these under Add Data to help author keys/indices.
-					auto addMod = [&](const char* label) {
-						SexpContextAction leaf;
-						leaf.group = SexpContextGroup::Operator; // these are operators
-						leaf.id = SexpActionId::InsertOperator;  // Do these need a special action id?
-						leaf.label = label;
-						leaf.enabled = true; // keep simple; refine later if needed
-						addData->children.push_back(std::move(leaf));
-					};
-
-					addMod("Get_First");
-					addMod("Get_Last");
-					addMod("Remove_First");
-					addMod("Remove_Last");
-					addMod("Get_Random");
-					addMod("Remove_Random");
-					addMod("At");
+				// For container data nodes at the first modifier position, offer list modifier choices
+				if ((n.type & SEXPT_CONTAINER_DATA) != 0 && arg_index == 0) {
+					const auto* cont = get_sexp_container(n.text.c_str());
+					if (cont && cont->is_list()) {
+						for (const auto& mod : get_all_list_modifiers()) {
+							SexpContextAction leaf;
+							leaf.group = SexpContextGroup::Data;
+							leaf.id = SexpActionId::AddData;
+							leaf.label = mod.name;
+							leaf.param.op_index = -1;
+							leaf.param.arg_index = -1;
+							leaf.param.node_type = SEXPT_MODIFIER | SEXPT_STRING | SEXPT_VALID;
+							leaf.param.text = mod.name;
+							leaf.enabled = true;
+							addData->children.push_back(std::move(leaf));
+						}
+					}
 				}
 			}
 		}
 
-		// If there are no children, keep Add Data disabled so UI can gray it out.
 		addData->enabled = !addData->children.empty();
 	}
 
-	// Insert Operator submenu stub
-	if (auto* a = getAction(SexpActionId::InsertOperator)) {
-		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// --- Insert Operator submenu ---
+	if (auto* insertOp = getAction(SexpActionId::InsertOperator)) {
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			// Compute the OPF expected at this node's slot (same logic as canInsertOperatorNode)
+			int expected_opf = OPF_NONE;
+			if (n.parent >= 0) {
+				const auto& parent = model->_nodes[n.parent];
+				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+					int arg_pos = 0;
+					for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
+						++arg_pos;
+					int op_idx = get_operator_index(parent.text.c_str());
+					if (op_idx >= 0)
+						expected_opf = query_operator_argument_type(op_idx, arg_pos);
+				} else if (parent.type & SEXPT_CONTAINER_DATA) {
+					const auto* cont = get_sexp_container(parent.text.c_str());
+					if (cont)
+						expected_opf = cont->opf_type;
+				}
+			} else {
+				// Root: derive expected OPF from node's own return type
+				const int eff_type = nodeEffectiveType_(node_index);
+				static const int kRootCandidates[] = {OPF_BOOL, OPF_NUMBER, OPF_STRING, OPF_AMBIGUOUS};
+				for (int opf : kRootCandidates) {
+					if (sexp_query_type_match(opf, eff_type)) {
+						expected_opf = opf;
+						break;
+					}
+				}
+				if (expected_opf == OPF_NONE)
+					expected_opf = OPF_NULL;
+			}
+
+			if (expected_opf != OPF_NONE) {
+				buildCategorizedOperatorSubmenu_(insertOp, SexpActionId::InsertOperator,
+					[&](int op_idx) {
+						// Return type must match the slot
+						const int ret_type = query_operator_return_type(op_idx);
+						if (!sexp_query_type_match(expected_opf, ret_type))
+							return false;
+						// Must accept at least 1 argument (to wrap the current node)
+						if (Operators[op_idx].min < 1)
+							return false;
+						// First argument type must match slot (with number/positive dovetail)
+						int arg0 = query_operator_argument_type(op_idx, 0);
+						if (expected_opf == OPF_NUMBER && arg0 == OPF_POSITIVE)
+							arg0 = OPF_NUMBER;
+						if (expected_opf == OPF_POSITIVE && arg0 == OPF_NUMBER)
+							arg0 = OPF_POSITIVE;
+						if (arg0 != expected_opf)
+							return false;
+						if (isCampaignFiltered(op_idx))
+							return false;
+						return true;
+					});
+			}
+		}
 	}
 
-	// Replace Operator submenu stub
-	if (auto* a = getAction(SexpActionId::ReplaceOperator)) {
-		a->choices.push_back({/*data_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// --- Replace Operator submenu ---
+	if (auto* repOp = getAction(SexpActionId::ReplaceOperator)) {
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			// Compute expected OPF and arg_pos for this slot
+			int expected_opf = OPF_NONE;
+			int arg_pos = 0;
+			if (n.parent >= 0) {
+				const auto& parent = model->_nodes[n.parent];
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
+					++arg_pos;
+				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+					int parent_op_idx = get_operator_index(parent.text.c_str());
+					if (parent_op_idx >= 0)
+						expected_opf = query_operator_argument_type(parent_op_idx, arg_pos);
+				} else if (parent.type & SEXPT_CONTAINER_DATA) {
+					const auto* cont = get_sexp_container(parent.text.c_str());
+					if (cont)
+						expected_opf = cont->opf_type;
+				}
+			} else {
+				const int eff = nodeEffectiveType_(node_index);
+				static const int kRootCandidates[] = {OPF_BOOL, OPF_NUMBER, OPF_STRING, OPF_AMBIGUOUS};
+				for (int opf : kRootCandidates) {
+					if (sexp_query_type_match(opf, eff)) {
+						expected_opf = opf;
+						break;
+					}
+				}
+				if (expected_opf == OPF_NONE)
+					expected_opf = OPF_NULL;
+			}
+
+			if (expected_opf != OPF_NONE) {
+				// Build enabled set from OPF listing
+				std::unordered_map<int, bool> opValEnabled;
+				if (auto list = model->buildListingForOpf(expected_opf, n.parent, arg_pos)) {
+					for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
+						if (it->op >= 0)
+							opValEnabled[Operators[it->op].value] = true;
+					}
+				}
+
+				// Current operator value (excluded from the replace list)
+				int current_op_value = -1;
+				if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR)
+					current_op_value = get_operator_const(n.text.c_str());
+
+				buildCategorizedOperatorSubmenu_(repOp, SexpActionId::ReplaceOperator,
+					[&](int op_idx) {
+						const int op_value = Operators[op_idx].value;
+						if (!opValEnabled.count(op_value))
+							return false;
+						if (!model->hasDefaultArgumentAvailable(op_idx))
+							return false;
+						if (isCampaignFiltered(op_idx))
+							return false;
+						return true;
+					},
+					current_op_value);
+			}
+		}
 	}
 
 	// Replace Data submenu
@@ -429,6 +372,8 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 							numLeaf.group = SexpContextGroup::Data;
 							numLeaf.id = SexpActionId::ReplaceData;
 							numLeaf.label = "Number";
+							numLeaf.param.op_index = -1;
+							numLeaf.param.arg_index = 0; // sentinel: typed number
 							numLeaf.enabled = allowNumber;
 							repData->children.push_back(std::move(numLeaf));
 						}
@@ -437,6 +382,8 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 							strLeaf.group = SexpContextGroup::Data;
 							strLeaf.id = SexpActionId::ReplaceData;
 							strLeaf.label = "String";
+							strLeaf.param.op_index = -1;
+							strLeaf.param.arg_index = 1; // sentinel: typed string
 							strLeaf.enabled = allowString;
 							repData->children.push_back(std::move(strLeaf));
 						}
@@ -453,9 +400,13 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 							if (!suppress_modifiers_for_at_index) {
 								auto addMod = [&](const char* label) {
 									SexpContextAction leaf;
-									leaf.group = SexpContextGroup::Operator; // these are operators
-									leaf.id = SexpActionId::InsertOperator;  // correct tag for later
+									leaf.group = SexpContextGroup::Data;
+									leaf.id = SexpActionId::ReplaceData;
 									leaf.label = label;
+									leaf.param.op_index = -1;
+									leaf.param.arg_index = -1;
+									leaf.param.node_type = SEXPT_MODIFIER | SEXPT_STRING | SEXPT_VALID;
+									leaf.param.text = label;
 									leaf.enabled = true;
 									repData->children.push_back(std::move(leaf));
 								};
@@ -473,14 +424,18 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 						// TODO for variables we should not return the list?? Strange... but that's how FRED did it
 						// OPF-driven data choices for this exact slot (exclude operators)
 						if (auto list = model->buildListingForOpf(opf, parent_index, arg_index)) {
+							int data_idx = 0;
 							for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
 								if (it->op < 0) {
 									SexpContextAction leaf;
 									leaf.group = SexpContextGroup::Data;
 									leaf.id = SexpActionId::ReplaceData;
 									leaf.label = it->text;
+									leaf.param.op_index = data_idx;
+									leaf.param.arg_index = -1;
 									leaf.enabled = true;
 									repData->children.push_back(std::move(leaf));
+									++data_idx;
 								}
 							}
 						}
@@ -492,22 +447,231 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 		repData->enabled = !repData->children.empty();
 	}
 
-	// Replace Variable submenu stub
-	if (auto* a = getAction(SexpActionId::ReplaceVariable)) {
-		a->choices.push_back({/*var_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// --- Replace Variable submenu ---
+	if (auto* repVar = getAction(SexpActionId::ReplaceVariable)) {
+		repVar->children.clear();
+
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			// Only applies to data nodes with a parent
+			if (SEXPT_TYPE(n.type) != SEXPT_OPERATOR && n.parent >= 0) {
+				const auto& parent = model->_nodes[n.parent];
+
+				// Determine expected OPF for this slot
+				int expected_opf = OPF_NONE;
+				int arg_pos = 0;
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
+					++arg_pos;
+
+				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+					int op_idx = get_operator_index(parent.text.c_str());
+					if (op_idx >= 0)
+						expected_opf = query_operator_argument_type(op_idx, arg_pos);
+				} else if (parent.type & SEXPT_CONTAINER_DATA) {
+					const auto* cont = get_sexp_container(parent.text.c_str());
+					if (cont)
+						expected_opf = cont->opf_type;
+				}
+
+				// Enable all variables if this is a variable-name slot or nav-point slot
+				const bool enableAll = (expected_opf == OPF_VARIABLE_NAME || expected_opf == OPF_NAV_POINT);
+				// Enable for modifier nodes beyond the first
+				const bool enableAllModifier = (n.type & SEXPT_MODIFIER) && arg_pos > 0;
+
+				// Determine which variable types are acceptable
+				bool acceptsString = enableAll || enableAllModifier;
+				bool acceptsNumber = enableAll || enableAllModifier;
+				switch (expected_opf) {
+				case OPF_NUMBER:
+				case OPF_POSITIVE:
+					acceptsNumber = true;
+					break;
+				case OPF_BOOL:
+				case OPF_NONE:
+					// No variables for bool/none slots (unless overridden above)
+					break;
+				case OPF_AMBIGUOUS:
+					acceptsString = true;
+					acceptsNumber = true;
+					break;
+				default:
+					acceptsString = true;
+					break;
+				}
+
+				for (int idx = 0; idx < MAX_SEXP_VARIABLES; ++idx) {
+					if (!(Sexp_variables[idx].type & SEXP_VARIABLE_SET))
+						continue;
+					if (Sexp_variables[idx].type & SEXP_VARIABLE_BLOCK)
+						continue;
+
+					const bool isNum = (Sexp_variables[idx].type & SEXP_VARIABLE_NUMBER) != 0;
+					const bool isStr = (Sexp_variables[idx].type & SEXP_VARIABLE_STRING) != 0;
+					const bool canUse = enableAll || enableAllModifier ||
+						(acceptsNumber && isNum) || (acceptsString && isStr);
+
+					SCP_string label = Sexp_variables[idx].variable_name;
+					label += " (";
+					label += Sexp_variables[idx].text;
+					label += ")";
+
+					SexpContextAction leaf;
+					leaf.group = SexpContextGroup::Variable;
+					leaf.id = SexpActionId::ReplaceVariable;
+					leaf.label = std::move(label);
+					leaf.param.op_index = idx; // variable index
+					leaf.enabled = canUse;
+					repVar->children.push_back(std::move(leaf));
+				}
+			}
+		}
+
+		repVar->enabled = !repVar->children.empty();
 	}
 
-	// Replace Container Name submenu stub
-	if (auto* a = getAction(SexpActionId::ReplaceContainerName)) {
-		a->choices.push_back({/*container_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// --- Replace Container Name submenu ---
+	if (auto* repCN = getAction(SexpActionId::ReplaceContainerName)) {
+		repCN->children.clear();
+
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			if (SEXPT_TYPE(n.type) != SEXPT_OPERATOR && n.parent >= 0) {
+				const auto& parent = model->_nodes[n.parent];
+
+				int expected_opf = OPF_NONE;
+				int arg_pos = 0;
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
+					++arg_pos;
+
+				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+					int op_idx = get_operator_index(parent.text.c_str());
+					if (op_idx >= 0)
+						expected_opf = query_operator_argument_type(op_idx, arg_pos);
+				}
+
+				// Only relevant for container-name slot types
+				const bool isContainerNameSlot =
+					(expected_opf == OPF_CONTAINER_NAME ||
+					 expected_opf == OPF_LIST_CONTAINER_NAME ||
+					 expected_opf == OPF_MAP_CONTAINER_NAME ||
+					 expected_opf == OPF_DATA_OR_STR_CONTAINER);
+
+				if (isContainerNameSlot) {
+					const auto& containers = get_all_sexp_containers();
+					for (int idx = 0; idx < static_cast<int>(containers.size()); ++idx) {
+						const auto& container = containers[idx];
+
+						bool canUse = false;
+						switch (expected_opf) {
+						case OPF_CONTAINER_NAME:
+							canUse = true;
+							break;
+						case OPF_LIST_CONTAINER_NAME:
+							canUse = container.is_list();
+							break;
+						case OPF_MAP_CONTAINER_NAME:
+							canUse = container.is_map();
+							break;
+						case OPF_DATA_OR_STR_CONTAINER:
+							canUse = container.is_of_string_type();
+							break;
+						default:
+							break;
+						}
+
+						SexpContextAction leaf;
+						leaf.group = SexpContextGroup::Container;
+						leaf.id = SexpActionId::ReplaceContainerName;
+						leaf.label = container.container_name;
+						leaf.param.op_index = idx; // container index
+						leaf.enabled = canUse;
+						repCN->children.push_back(std::move(leaf));
+					}
+				}
+			}
+		}
+
+		repCN->enabled = !repCN->children.empty();
 	}
 
-	// Replace Container Data submenu stub
-	if (auto* a = getAction(SexpActionId::ReplaceContainerData)) {
-		a->choices.push_back({/*container_index*/ -1, /*arg_index*/ -1});
-		a->choiceText.emplace_back("Choose…");
+	// --- Replace Container Data submenu ---
+	if (auto* repCD = getAction(SexpActionId::ReplaceContainerData)) {
+		repCD->children.clear();
+
+		if (kind == SexpNodeKind::RealNode && SCP_vector_inbounds(model->_nodes, node_index)) {
+			const auto& n = model->_nodes[node_index];
+
+			if (SEXPT_TYPE(n.type) != SEXPT_OPERATOR && n.parent >= 0) {
+				const auto& parent = model->_nodes[n.parent];
+
+				int expected_opf = OPF_NONE;
+				int arg_pos = 0;
+				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
+					++arg_pos;
+
+				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
+					int op_idx = get_operator_index(parent.text.c_str());
+					if (op_idx >= 0)
+						expected_opf = query_operator_argument_type(op_idx, arg_pos);
+				} else if (parent.type & SEXPT_CONTAINER_DATA) {
+					const auto* cont = get_sexp_container(parent.text.c_str());
+					if (cont)
+						expected_opf = cont->opf_type;
+				}
+
+				// Container data not applicable to variable-name slots
+				if (expected_opf != OPF_VARIABLE_NAME && expected_opf != OPF_NONE) {
+					const bool isModifier = (n.type & SEXPT_MODIFIER) != 0;
+					// For modifier nodes beyond the first, all containers are valid
+					const bool enableAll = isModifier && arg_pos > 0;
+
+					// Determine which container data types are acceptable
+					bool acceptsString = enableAll;
+					bool acceptsNumber = enableAll;
+					switch (expected_opf) {
+					case OPF_NUMBER:
+					case OPF_POSITIVE:
+						acceptsNumber = true;
+						break;
+					case OPF_BOOL:
+					case OPF_FLEXIBLE_ARGUMENT:
+					case OPF_DATA_OR_STR_CONTAINER:
+						// Not applicable
+						break;
+					case OPF_AMBIGUOUS:
+						acceptsString = true;
+						acceptsNumber = true;
+						break;
+					default:
+						acceptsString = true;
+						break;
+					}
+
+					if (acceptsString || acceptsNumber) {
+						const auto& containers = get_all_sexp_containers();
+						for (int idx = 0; idx < static_cast<int>(containers.size()); ++idx) {
+							const auto& container = containers[idx];
+
+							const bool canUse = enableAll ||
+								(acceptsString && any(container.type & ContainerType::STRING_DATA)) ||
+								(acceptsNumber && any(container.type & ContainerType::NUMBER_DATA));
+
+							SexpContextAction leaf;
+							leaf.group = SexpContextGroup::Container;
+							leaf.id = SexpActionId::ReplaceContainerData;
+							leaf.label = container.container_name;
+							leaf.param.op_index = idx; // container index
+							leaf.enabled = canUse;
+							repCD->children.push_back(std::move(leaf));
+						}
+					}
+				}
+			}
+		}
+
+		repCD->enabled = !repCD->children.empty();
 	}
 
 	// 3) Flip enables for Node/Structure groups now that we have final flags.
@@ -535,10 +699,47 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 	switch (id) {
 	// Node
 	case SexpActionId::EditText:
-		return editText(node_index, ""); // TODO create a way to pass text to this maybe through SexpActionParam
+		return editText(node_index, p ? p->text.c_str() : "");
 
 	case SexpActionId::DeleteNode:
 		return deleteNode(node_index);
+
+	case SexpActionId::Cut:
+		return cutNode(node_index);
+
+	case SexpActionId::Copy:
+		return copyNode(node_index);
+
+	case SexpActionId::PasteOverwrite:
+		return pasteOverwrite(node_index);
+
+	case SexpActionId::PasteAdd:
+		return pasteAdd(node_index);
+
+	// Operator / Data
+	case SexpActionId::AddOperator:
+		return addOperator(node_index, p);
+
+	case SexpActionId::AddData:
+		return addData(node_index, p);
+
+	case SexpActionId::InsertOperator:
+		return insertOperator(node_index, p);
+
+	case SexpActionId::ReplaceOperator:
+		return replaceOperator(node_index, p);
+
+	case SexpActionId::ReplaceData:
+		return replaceData(node_index, p);
+
+	case SexpActionId::ReplaceVariable:
+		return replaceVariable(node_index, p);
+
+	case SexpActionId::ReplaceContainerName:
+		return replaceContainerName(node_index, p);
+
+	case SexpActionId::ReplaceContainerData:
+		return replaceContainerData(node_index, p);
 
 	// Structure
 	case SexpActionId::MoveUp:
@@ -547,16 +748,199 @@ bool SexpActionsHandler::performAction(int node_index, SexpActionId id, const Se
 	case SexpActionId::MoveDown:
 		return moveDown(node_index);
 
-	// Operator
-	case SexpActionId::ReplaceOperator:
-		return replaceOperator(node_index, p);
-
 	case SexpActionId::ResetToDefaults:
 		return resetToDefaults(node_index);
 
 	default:
 		return false;
 	}
+}
+
+// --- Static/shared helpers ---
+
+bool SexpActionsHandler::isHiddenByLegacyRules_(int op_value) noexcept
+{
+	switch (op_value) {
+	case OP_GET_VARIABLE_BY_INDEX:
+	case OP_SET_VARIABLE_BY_INDEX:
+	case OP_COPY_VARIABLE_FROM_INDEX:
+	case OP_COPY_VARIABLE_BETWEEN_INDEXES:
+	case OP_HITS_LEFT_SUBSYSTEM:
+	case OP_CUTSCENES_SHOW_SUBTITLE:
+	case OP_ORDER:
+	case OP_TECH_ADD_INTEL:
+	case OP_TECH_REMOVE_INTEL:
+	case OP_HUD_GAUGE_SET_ACTIVE:
+	case OP_HUD_ACTIVATE_GAUGE_TYPE:
+	case OP_JETTISON_CARGO_DELAY:
+	case OP_STRING_CONCATENATE:
+	case OP_SET_OBJECT_SPEED_X:
+	case OP_SET_OBJECT_SPEED_Y:
+	case OP_SET_OBJECT_SPEED_Z:
+	case OP_DISTANCE:
+	case OP_SCRIPT_EVAL:
+	case OP_TRIGGER_SUBMODEL_ANIMATION:
+	case OP_ADD_BACKGROUND_BITMAP:
+	case OP_ADD_SUN_BITMAP:
+	case OP_JUMP_NODE_SET_JUMPNODE_NAME:
+	case OP_KEY_RESET:
+	case OP_SET_ASTEROID_FIELD:
+	case OP_SET_DEBRIS_FIELD:
+	case OP_NEBULA_TOGGLE_POOF:
+	case OP_NEBULA_FADE_POOF:
+		return true;
+	default:
+		return false;
+	}
+}
+
+void SexpActionsHandler::buildCategorizedOperatorSubmenu_(SexpContextAction* parent_action,
+	SexpActionId leaf_id,
+	std::function<bool(int)> is_enabled_fn,
+	int exclude_op_value) const
+{
+	parent_action->children.clear();
+
+	// Build label lookups
+	std::unordered_map<int, SCP_string> catLabel, subLabel;
+	catLabel.reserve(op_menu.size());
+	for (const auto& c : op_menu)
+		catLabel[c.id] = c.name;
+	subLabel.reserve(op_submenu.size());
+	for (const auto& sc : op_submenu)
+		subLabel[sc.id] = sc.name;
+
+	auto& catRoots = parent_action->children;
+	std::unordered_map<int, int> catIndexById;
+	std::unordered_map<int, std::unordered_map<int, int>> subIndexByCat;
+
+	auto ensureCategory = [&](int cat_id) -> int {
+		auto it = catIndexById.find(cat_id);
+		if (it != catIndexById.end())
+			return it->second;
+		SexpContextAction cat;
+		cat.group = SexpContextGroup::Operator;
+		cat.id = SexpActionId::None;
+		cat.label = catLabel.count(cat_id) ? catLabel[cat_id] : "Unknown";
+		cat.enabled = false; // propagated later
+		catRoots.push_back(std::move(cat));
+		int idx = static_cast<int>(catRoots.size()) - 1;
+		catIndexById[cat_id] = idx;
+		return idx;
+	};
+
+	auto ensureSubcategory = [&](int catIdx, int sub_id) -> int {
+		auto& subMap = subIndexByCat[catIdx];
+		auto it = subMap.find(sub_id);
+		if (it != subMap.end())
+			return it->second;
+		SexpContextAction sub;
+		sub.group = SexpContextGroup::Operator;
+		sub.id = SexpActionId::None;
+		sub.label = subLabel.count(sub_id) ? subLabel[sub_id] : "Unknown";
+		sub.enabled = false;
+		catRoots[catIdx].children.push_back(std::move(sub));
+		int idx = static_cast<int>(catRoots[catIdx].children.size()) - 1;
+		subMap[sub_id] = idx;
+		return idx;
+	};
+
+	// Build all category/subcategory headers
+	for (const auto& c : op_menu)
+		ensureCategory(c.id);
+	for (const auto& sc : op_submenu) {
+		int parent_cat_id = category_of_subcategory(sc.id);
+		auto it = catLabel.find(parent_cat_id);
+		if (it == catLabel.end())
+			continue;
+		int catIdx = ensureCategory(parent_cat_id);
+		ensureSubcategory(catIdx, sc.id);
+	}
+
+	// Add each visible operator as a leaf
+	for (int i = 0; i < static_cast<int>(Operators.size()); ++i) {
+		const int op_value = Operators[i].value;
+		if (isHiddenByLegacyRules_(op_value))
+			continue;
+		if (exclude_op_value >= 0 && op_value == exclude_op_value)
+			continue;
+
+		SexpContextAction leaf;
+		leaf.group = SexpContextGroup::Operator;
+		leaf.id = leaf_id;
+		leaf.label = Operators[i].text;
+		leaf.param.op_index = i;
+		leaf.enabled = is_enabled_fn(i);
+
+		const int sub_id = get_subcategory(op_value);
+		if (sub_id == OP_SUBCATEGORY_NONE) {
+			const int cat_id = get_category(op_value);
+			auto it = catLabel.find(cat_id);
+			if (it == catLabel.end())
+				continue;
+			int catIdx = ensureCategory(cat_id);
+			catRoots[catIdx].children.push_back(std::move(leaf));
+		} else {
+			const int parent_cat_id = category_of_subcategory(sub_id);
+			auto itCat = catLabel.find(parent_cat_id);
+			if (itCat == catLabel.end())
+				continue;
+			int catIdx = ensureCategory(parent_cat_id);
+			int subIdx = ensureSubcategory(catIdx, sub_id);
+			catRoots[catIdx].children[subIdx].children.push_back(std::move(leaf));
+		}
+	}
+
+	// Propagate enabled upward: a parent is enabled iff any child is enabled
+	std::function<bool(SexpContextAction&)> propagateEnabled = [&](SexpContextAction& a) -> bool {
+		if (a.children.empty())
+			return a.enabled;
+		bool any = false;
+		for (auto& ch : a.children)
+			any = propagateEnabled(ch) || any;
+		a.enabled = any;
+		return a.enabled;
+	};
+	for (auto& cat : catRoots)
+		propagateEnabled(cat);
+
+	parent_action->enabled = !catRoots.empty() &&
+		std::any_of(catRoots.begin(), catRoots.end(), [](const SexpContextAction& c) { return c.enabled; });
+}
+
+int SexpActionsHandler::restoreClipboardSubtree_(int clip_idx, int model_parent_idx) const
+{
+	const auto& cb_nodes = model->_clipboard;
+	if (clip_idx < 0 || clip_idx >= static_cast<int>(cb_nodes.size()))
+		return -1;
+
+	int first = -1;
+	int prev_sibling = -1;
+
+	// Walk the sibling chain starting at clip_idx
+	for (int c = clip_idx; c >= 0; c = cb_nodes[c].next) {
+		const auto& cn = cb_nodes[c];
+		// Allocate new model node as child of model_parent_idx, after prev_sibling
+		int new_node = model->allocateNode(model_parent_idx, prev_sibling);
+		model->setNode(new_node, cn.type, cn.text.c_str());
+		model->applyDefaultFlags(new_node);
+		// Restore children recursively
+		if (cn.child >= 0)
+			restoreClipboardSubtree_(cn.child, new_node);
+		if (first < 0)
+			first = new_node;
+		prev_sibling = new_node;
+	}
+	return first;
+}
+
+int SexpActionsHandler::findPreviousSibling_(int parent_idx, int node_index) const noexcept
+{
+	const auto& nodes = model->_nodes;
+	int prev = -1;
+	for (int c = nodes[parent_idx].child; c >= 0 && c != node_index; c = nodes[c].next)
+		prev = c;
+	return prev;
 }
 
 int SexpActionsHandler::nodeEffectiveType_(int node_index) const
@@ -683,7 +1067,7 @@ bool SexpActionsHandler::canEditNode(SexpNodeKind kind, int node_index) const
 		if (n.parent >= 0) {
 			const auto& parent = model->_nodes[n.parent];
 			if (parent.type & SEXPT_CONTAINER_DATA) {
-				// Determine container kind (list vs map) from the parent’s text
+				// Determine container kind (list vs map) from the parentï¿½s text
 				const auto* p_container = get_sexp_container(parent.text.c_str());
 				if (p_container && p_container->is_list()) {
 					// First child (modifier) for list containers is NOT editable
@@ -1433,12 +1817,12 @@ bool SexpActionsHandler::canReplaceContainerDataNode(SexpNodeKind kind, int node
 
 bool SexpActionsHandler::editText(int node_index, const char* new_text)
 {
-	/* auto& nodes = model->_nodes;
+	auto& nodes = model->_nodes;
 	if (!SCP_vector_inbounds(nodes, node_index))
 		return false;
 	if ((nodes[node_index].flags & EDITABLE) == 0)
 		return false;
-	nodes[node_index].text = new_text;*/
+	nodes[node_index].text = new_text;
 	return true;
 }
 
@@ -1729,5 +2113,392 @@ bool SexpActionsHandler::removeArgument(int node_index)
 	else
 		model->_nodes[prev].next = -1;
 	model->freeNode(cur, true);
+	return true;
+}
+// --- Clipboard actions ---
+
+bool SexpActionsHandler::cutNode(int node_index)
+{
+	if (!model->captureClipboardFromNode(node_index))
+		return false;
+	return deleteNode(node_index);
+}
+
+bool SexpActionsHandler::copyNode(int node_index)
+{
+	return model->captureClipboardFromNode(node_index);
+}
+
+bool SexpActionsHandler::pasteOverwrite(int node_index)
+{
+	if (!model->hasClipboard())
+		return false;
+	const auto& cb = model->_clipboard;
+	if (cb.empty())
+		return false;
+
+	// Free current children of this node
+	const int old_child = model->_nodes[node_index].child;
+	if (old_child >= 0) {
+		model->_nodes[node_index].child = -1;
+		SexpTreeModel::freeNodeChain(model->_nodes, old_child);
+	}
+
+	// Replace node content with clipboard root
+	model->setNode(node_index, cb[0].type, cb[0].text.c_str());
+	model->applyDefaultFlags(node_index);
+
+	// Restore clipboard children under node_index
+	if (cb[0].child >= 0)
+		restoreClipboardSubtree_(cb[0].child, node_index);
+
+	return true;
+}
+
+bool SexpActionsHandler::pasteAdd(int node_index)
+{
+	if (!model->hasClipboard())
+		return false;
+	const auto& cb = model->_clipboard;
+	if (cb.empty())
+		return false;
+
+	// Add clipboard root as a new child of node_index
+	const int new_node = model->allocateNode(node_index);
+	model->setNode(new_node, cb[0].type, cb[0].text.c_str());
+	model->applyDefaultFlags(new_node);
+
+	// Restore clipboard children under new_node
+	if (cb[0].child >= 0)
+		restoreClipboardSubtree_(cb[0].child, new_node);
+
+	return true;
+}
+
+// --- Operator / data add actions ---
+
+bool SexpActionsHandler::addOperator(int node_index, const SexpActionParam* p)
+{
+	if (!p || p->op_index < 0 || p->op_index >= static_cast<int>(Operators.size()))
+		return false;
+	const int new_node = model->makeOperatorNode(p->op_index, node_index);
+	if (new_node < 0)
+		return false;
+	model->ensureOperatorArity(new_node, p->op_index);
+	return true;
+}
+
+bool SexpActionsHandler::addData(int node_index, const SexpActionParam* p)
+{
+	if (!p)
+		return false;
+
+	int new_type = 0;
+	SCP_string item_text;
+	bool editable = false;
+
+	if (p->arg_index == 0) {
+		// Typed number: create editable "number" placeholder
+		new_type = SEXPT_NUMBER | SEXPT_VALID;
+		item_text = "number";
+		editable = true;
+	} else if (p->arg_index == 1) {
+		// Typed string: create editable "string" placeholder
+		new_type = SEXPT_STRING | SEXPT_VALID;
+		item_text = "string";
+		editable = true;
+	} else if (p->op_index >= 0) {
+		// Named data item: re-query OPF listing for the next slot
+		const int opf = expectedOpfForAppend_(node_index);
+		if (opf < 0)
+			return false;
+		const int arg_count = model->countArgs(model->_nodes[node_index].child);
+		auto list = model->buildListingForOpf(opf, node_index, arg_count);
+		if (!list)
+			return false;
+		int idx = p->op_index;
+		bool found = false;
+		for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
+			if (it->op < 0) {
+				if (idx == 0) {
+					new_type = it->type;
+					item_text = it->text;
+					found = true;
+					break;
+				}
+				--idx;
+			}
+		}
+		if (!found)
+			return false;
+	} else if (p->node_type != 0 && !p->text.empty()) {
+		// Direct text with explicit type (e.g., container modifier)
+		new_type = p->node_type;
+		item_text = p->text;
+	} else {
+		return false;
+	}
+
+	const int new_node = model->allocateNode(node_index);
+	model->setNode(new_node, new_type, item_text.c_str());
+	model->applyDefaultFlags(new_node);
+	if (editable)
+		model->setEditable(new_node, true);
+	return true;
+}
+
+bool SexpActionsHandler::insertOperator(int node_index, const SexpActionParam* p)
+{
+	if (!p || p->op_index < 0 || p->op_index >= static_cast<int>(Operators.size()))
+		return false;
+
+	auto& nodes = model->_nodes;
+	const int parent = nodes[node_index].parent;
+	const int after  = nodes[node_index].next;
+	const int prev   = (parent >= 0) ? findPreviousSibling_(parent, node_index) : -1;
+
+	// Detach node_index from its current position in the parent's child list
+	if (parent >= 0) {
+		if (prev < 0)
+			nodes[parent].child = after;
+		else
+			nodes[prev].next = after;
+	}
+	nodes[node_index].next   = -1;
+	nodes[node_index].parent = -1; // temporarily detached
+
+	// Create the new wrapping operator (detached)
+	const int new_op = model->allocateNode(-1, -1);
+	model->setNode(new_op, SEXPT_OPERATOR | SEXPT_VALID, Operators[p->op_index].text.c_str());
+	model->applyDefaultFlags(new_op);
+
+	// Make node_index the first child of new_op
+	nodes[new_op].child      = node_index;
+	nodes[node_index].parent = new_op;
+
+	// Splice new_op into the parent at node_index's old position
+	nodes[new_op].parent = parent;
+	nodes[new_op].next   = after;
+	if (parent >= 0) {
+		if (prev < 0)
+			nodes[parent].child = new_op;
+		else
+			nodes[prev].next = new_op;
+	}
+
+	// Fill remaining required args (positions 1..min-1 already counted node_index at 0)
+	model->ensureOperatorArity(new_op, p->op_index);
+
+	return true;
+}
+
+// --- Data replacement actions ---
+
+bool SexpActionsHandler::replaceData(int node_index, const SexpActionParam* p)
+{
+	if (!p)
+		return false;
+
+	int new_type = 0;
+	SCP_string item_text;
+	bool editable = false;
+
+	if (p->arg_index == 0) {
+		// Typed number: editable placeholder, preserve MODIFIER flag if set
+		new_type = SEXPT_NUMBER | SEXPT_VALID;
+		if (model->_nodes[node_index].type & SEXPT_MODIFIER)
+			new_type |= SEXPT_MODIFIER;
+		item_text = "number";
+		editable  = true;
+	} else if (p->arg_index == 1) {
+		// Typed string: editable placeholder, preserve MODIFIER flag if set
+		new_type = SEXPT_STRING | SEXPT_VALID;
+		if (model->_nodes[node_index].type & SEXPT_MODIFIER)
+			new_type |= SEXPT_MODIFIER;
+		item_text = "string";
+		editable  = true;
+	} else if (p->op_index >= 0) {
+		// Named data item: re-query OPF listing at the same slot
+		const int parent_index = model->_nodes[node_index].parent;
+		if (parent_index < 0)
+			return false;
+		const int arg_index = model->findArgIndex(parent_index, node_index);
+
+		// Determine the OPF for this slot
+		int opf = -1;
+		const auto& par = model->_nodes[parent_index];
+		if (SEXPT_TYPE(par.type) == SEXPT_OPERATOR) {
+			const int op_idx = get_operator_index(par.text.c_str());
+			if (op_idx >= 0)
+				opf = query_operator_argument_type(op_idx, arg_index);
+		} else if (par.type & SEXPT_CONTAINER_DATA) {
+			const auto* cont = get_sexp_container(par.text.c_str());
+			if (cont)
+				opf = cont->opf_type;
+		}
+		if (opf < 0)
+			return false;
+
+		auto list = model->buildListingForOpf(opf, parent_index, arg_index);
+		if (!list)
+			return false;
+
+		int idx   = p->op_index;
+		bool found = false;
+		for (SexpListItem* it = list.get(); it != nullptr; it = it->next) {
+			if (it->op < 0) {
+				if (idx == 0) {
+					new_type  = it->type;
+					item_text = it->text;
+					found     = true;
+					break;
+				}
+				--idx;
+			}
+		}
+		if (!found)
+			return false;
+	} else if (p->node_type != 0 && !p->text.empty()) {
+		// Direct replacement with explicit type (e.g., container modifier)
+		new_type  = p->node_type;
+		item_text = p->text;
+	} else {
+		return false;
+	}
+
+	// Free current children of this node
+	const int old_child = model->_nodes[node_index].child;
+	if (old_child >= 0) {
+		model->_nodes[node_index].child = -1;
+		SexpTreeModel::freeNodeChain(model->_nodes, old_child);
+	}
+
+	model->setNode(node_index, new_type, item_text.c_str());
+	model->applyDefaultFlags(node_index);
+	if (editable)
+		model->setEditable(node_index, true);
+	return true;
+}
+
+bool SexpActionsHandler::replaceVariable(int node_index, const SexpActionParam* p)
+{
+	if (!p || p->op_index < 0 || p->op_index >= MAX_SEXP_VARIABLES)
+		return false;
+	if (!(Sexp_variables[p->op_index].type & SEXP_VARIABLE_SET))
+		return false;
+
+	const int var_idx = p->op_index;
+
+	// Determine base SEXPT type from variable type
+	int base_type = 0;
+	if (Sexp_variables[var_idx].type & SEXP_VARIABLE_NUMBER)
+		base_type = SEXPT_NUMBER;
+	else if (Sexp_variables[var_idx].type & SEXP_VARIABLE_STRING)
+		base_type = SEXPT_STRING;
+	else
+		return false;
+
+	const int new_type = SEXPT_VALID | SEXPT_VARIABLE | base_type;
+
+	// Build combined text: "varname(value)"
+	SCP_string new_text = Sexp_variables[var_idx].variable_name;
+	new_text += "(";
+	new_text += Sexp_variables[var_idx].text;
+	new_text += ")";
+
+	// Free current children
+	const int old_child = model->_nodes[node_index].child;
+	if (old_child >= 0) {
+		model->_nodes[node_index].child = -1;
+		SexpTreeModel::freeNodeChain(model->_nodes, old_child);
+	}
+
+	model->setNode(node_index, new_type, new_text.c_str());
+	model->applyDefaultFlags(node_index);
+	model->setEditable(node_index, false);
+	return true;
+}
+
+bool SexpActionsHandler::replaceContainerName(int node_index, const SexpActionParam* p)
+{
+	if (!p || p->op_index < 0)
+		return false;
+
+	const auto& containers = get_all_sexp_containers();
+	if (p->op_index >= static_cast<int>(containers.size()))
+		return false;
+
+	const auto& container = containers[p->op_index];
+	const int new_type = SEXPT_VALID | SEXPT_STRING | SEXPT_CONTAINER_NAME;
+
+	// Free current children
+	const int old_child = model->_nodes[node_index].child;
+	if (old_child >= 0) {
+		model->_nodes[node_index].child = -1;
+		SexpTreeModel::freeNodeChain(model->_nodes, old_child);
+	}
+
+	model->setNode(node_index, new_type, container.container_name.c_str());
+	model->applyDefaultFlags(node_index);
+	model->setEditable(node_index, false);
+	return true;
+}
+
+bool SexpActionsHandler::replaceContainerData(int node_index, const SexpActionParam* p)
+{
+	if (!p || p->op_index < 0)
+		return false;
+
+	const auto& containers = get_all_sexp_containers();
+	if (p->op_index >= static_cast<int>(containers.size()))
+		return false;
+
+	const auto& container = containers[p->op_index];
+
+	// Preserve existing string/number base type if possible, otherwise derive from container
+	int base_type = model->_nodes[node_index].type & (SEXPT_NUMBER | SEXPT_STRING);
+	if (!base_type) {
+		if (any(container.type & ContainerType::STRING_DATA))
+			base_type = SEXPT_STRING;
+		else if (any(container.type & ContainerType::NUMBER_DATA))
+			base_type = SEXPT_NUMBER;
+		else
+			base_type = SEXPT_STRING; // fallback
+	}
+
+	const int new_type = SEXPT_VALID | SEXPT_CONTAINER_DATA | base_type;
+
+	// Free current children
+	const int old_child = model->_nodes[node_index].child;
+	if (old_child >= 0) {
+		model->_nodes[node_index].child = -1;
+		SexpTreeModel::freeNodeChain(model->_nodes, old_child);
+	}
+
+	model->setNode(node_index, new_type, container.container_name.c_str());
+	model->applyDefaultFlags(node_index);
+	model->setEditable(node_index, false);
+
+	// Add default modifier child
+	int mod_type = SEXPT_VALID | SEXPT_MODIFIER;
+	SCP_string mod_text;
+	if (container.is_map()) {
+		if (any(container.type & ContainerType::STRING_KEYS)) {
+			mod_type |= SEXPT_STRING;
+			mod_text = SEXP_NONE_STRING;
+		} else if (any(container.type & ContainerType::NUMBER_KEYS)) {
+			mod_type |= SEXPT_NUMBER;
+			mod_text = "0";
+		}
+	} else if (container.is_list()) {
+		mod_type |= SEXPT_STRING;
+		mod_text = get_list_modifier_name(ListModifier::GET_FIRST);
+	}
+	if (!mod_text.empty()) {
+		const int mod_node = model->allocateNode(node_index);
+		model->setNode(mod_node, mod_type, mod_text.c_str());
+		model->applyDefaultFlags(mod_node);
+	}
+
 	return true;
 }

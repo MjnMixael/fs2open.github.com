@@ -51,23 +51,24 @@ enum class SexpActionId : int {
 struct SexpActionParam {
 	int op_index = -1;
 	int arg_index = -1;
+	int node_type = 0;   // SEXPT_ type bitmask for direct node creation (0 = derive from arg_index/op_index)
+	SCP_string text;     // for data-insert actions: the text to insert
 };
 
-// One item the UI can render: either a leaf action (no children), or a submenu (has children),
-// or a separator (is_separator == true). If 'children' is non-empty, treat this as a submenu
-// and ignore 'id'/'enabled' when drawing the submenu header.
+// One item the UI can render: either a leaf action (no children), or a submenu (has children).
+// If 'children' is non-empty, treat this as a submenu header and ignore 'param'.
+// If 'children' is empty, this is a leaf: the UI calls executeAction(node_index, id, &param).
 struct SexpContextAction {
 	SexpContextGroup group;
 	SexpActionId id;
 	SCP_string label; // display name
 	bool enabled = true;
 
-	// If this is a chooser action, the UI might draw a submenu using 'choices'
-	SCP_vector<SexpActionParam> choices; // list of operators to choose from
-	SCP_vector<SCP_string> choiceText;   // same size as choices
+	// For leaf actions: the parameter to pass when this item is selected
+	SexpActionParam param;
 
-	// New: nested menu support
-	SCP_vector<SexpContextAction> children; // non-empty => submenu
+	// Non-empty => this is a submenu; render children recursively
+	SCP_vector<SexpContextAction> children;
 };
 
 // The complete answer the model gives to a right click
@@ -93,6 +94,25 @@ class SexpActionsHandler final {
 	static bool opfAcceptsOperator_(int opf) noexcept;
 	static bool opfAcceptsPlainData_(int opf) noexcept;
 	int expectedOpfForAppend_(int parent_index) const noexcept;
+
+	// Returns true if the operator should not be shown in the menus per legacy rules.
+	static bool isHiddenByLegacyRules_(int op_value) noexcept;
+
+	// Build a full categorized operator submenu under parent_action.
+	// leaf_id is the SexpActionId assigned to each leaf node.
+	// is_enabled_fn(op_index) returns whether that leaf should be enabled.
+	// exclude_op_value: if >= 0, skip the operator with this Operators[].value.
+	void buildCategorizedOperatorSubmenu_(SexpContextAction* parent_action, SexpActionId leaf_id,
+		std::function<bool(int /*op_index*/)> is_enabled_fn, int exclude_op_value = -1) const;
+
+	// Clipboard restore: recursively create model nodes from _clipboard[clip_idx]
+	// (and its child chain) as children of model_parent_idx.
+	// Returns the first newly created node index, or -1 on failure.
+	int restoreClipboardSubtree_(int clip_idx, int model_parent_idx) const;
+
+	// Find the previous sibling of node_index under its parent.
+	// Returns -1 if node_index is the first child.
+	int findPreviousSibling_(int parent_idx, int node_index) const noexcept;
 
 	// Check if an action is valid for this node
 	bool canEditNode(SexpNodeKind kind, int node_index) const;
