@@ -230,6 +230,10 @@ public:
 	OperatorComboBox m_operator_box;
 	SCP_unordered_map<int, HTREEITEM> m_modelToHandle;
 
+	// Maps command IDs assigned in right_clicked() to their leaf SexpContextAction,
+	// so OnCommand() can dispatch them to the correct action handler.
+	SCP_unordered_map<UINT, SexpContextAction> m_pending_context_actions;
+
 	void start_operator_edit(HTREEITEM h);
 	void end_operator_edit(bool confirm);
 

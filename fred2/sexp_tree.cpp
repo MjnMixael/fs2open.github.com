@@ -494,6 +494,9 @@ void sexp_tree::right_clicked(int mode)
 
 	// --- 1. Query the model for ALL available actions FIRST ---
 	SexpContextMenu context_menu_model = m_model->queryContextMenu(nodeIndexForActions(h_item));
+	m_pending_context_actions.clear();
+	// Single sequential counter for all new-style action IDs (must stay <= 0xFFFF).
+	UINT cmd_action_next = ID_SEXP_ACTION_BASE;
 
 	// Helper to find an action in the model's response
 	auto find_action = [&](SexpActionId id) -> const SexpContextAction* {
@@ -565,9 +568,6 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 
-		// simple running command-id allocator (unique per leaf)
-		UINT cmd_next = ID_SEXP_ACTION_BASE + MAKELONG(0, 2); // keep your scheme; bank "2" for AddOperator
-
 		// minimal recursive emitter (no helpers elsewhere)
 		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit =
 			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
@@ -597,8 +597,9 @@ void sexp_tree::right_clicked(int mode)
 							sub_flags |= MF_MENUBREAK; // new column
 						}
 
-						const UINT choice_id = cmd_next++;
+						const UINT choice_id = cmd_action_next++;
 						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
+						m_pending_context_actions[choice_id] = it;
 						++visible_in_col;
 					}
 				}
@@ -624,7 +625,7 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 1); // TODO Placeholder ID
+			UINT choice_id = cmd_action_next++;
 			UINT sub_flags = action_ptr->children[i].enabled ? MF_STRING : MF_STRING | MF_GRAYED;
 
 			if (!((i + 3) % 30)) {
@@ -632,6 +633,7 @@ void sexp_tree::right_clicked(int mode)
 			}
 
 			add_data_submenu.AppendMenu(sub_flags, choice_id, action_ptr->children[i].label.c_str());
+			m_pending_context_actions[choice_id] = action_ptr->children[i];
 
 			// String/number should be the first two items.. probably need a better way to do this than assuming but whatever
 			if (i == 1) {
@@ -658,7 +660,6 @@ void sexp_tree::right_clicked(int mode)
 
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		UINT cmd_next_ins = ID_SEXP_ACTION_BASE + MAKELONG(0, 2);
 		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit_ins =
 			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
 				int visible_in_col = 0;
@@ -677,7 +678,9 @@ void sexp_tree::right_clicked(int mode)
 						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
 						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
 							sub_flags |= MF_MENUBREAK;
-						menuRef.AppendMenu(sub_flags, cmd_next_ins++, it.label.c_str());
+						const UINT choice_id = cmd_action_next++;
+						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
+						m_pending_context_actions[choice_id] = it;
 						++visible_in_col;
 					}
 				}
@@ -699,7 +702,6 @@ void sexp_tree::right_clicked(int mode)
 
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		UINT cmd_next_rep = ID_SEXP_ACTION_BASE + MAKELONG(0, 3);
 		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit_rep =
 			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
 				int visible_in_col = 0;
@@ -718,7 +720,9 @@ void sexp_tree::right_clicked(int mode)
 						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
 						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
 							sub_flags |= MF_MENUBREAK;
-						menuRef.AppendMenu(sub_flags, cmd_next_rep++, it.label.c_str());
+						const UINT choice_id = cmd_action_next++;
+						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
+						m_pending_context_actions[choice_id] = it;
 						++visible_in_col;
 					}
 				}
@@ -740,7 +744,7 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 4); // TODO Placeholder ID
+			UINT choice_id = cmd_action_next++;
 			UINT sub_flags = action_ptr->children[i].enabled ? MF_STRING : MF_STRING | MF_GRAYED;
 
 			if (!((i + 3) % 30)) {
@@ -748,6 +752,7 @@ void sexp_tree::right_clicked(int mode)
 			}
 
 			replace_data_submenu.AppendMenu(sub_flags, choice_id, action_ptr->children[i].label.c_str());
+			m_pending_context_actions[choice_id] = action_ptr->children[i];
 
 			// String/number should be the first two items.. probably need a better way to do this than assuming but
 			// whatever
@@ -774,8 +779,9 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 5); // TODO Placeholder ID
+			UINT choice_id = cmd_action_next++;
 			replace_var_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->children[i].label.c_str());
+			m_pending_context_actions[choice_id] = action_ptr->children[i];
 		}
 	} else {
 		replace_var_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
@@ -794,8 +800,9 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 6); // TODO Placeholder ID
+			UINT choice_id = cmd_action_next++;
 			replace_container_name_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->children[i].label.c_str());
+			m_pending_context_actions[choice_id] = action_ptr->children[i];
 		}
 	} else {
 		replace_container_name_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
@@ -811,8 +818,9 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 		for (size_t i = 0; i < action_ptr->children.size(); ++i) {
-			UINT choice_id = ID_SEXP_ACTION_BASE + MAKELONG(i, 7); // TODO Placeholder ID
+			UINT choice_id = cmd_action_next++;
 			replace_container_data_submenu.AppendMenu(MF_STRING, choice_id, action_ptr->children[i].label.c_str());
+			m_pending_context_actions[choice_id] = action_ptr->children[i];
 		}
 	} else {
 		replace_container_data_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
@@ -2586,6 +2594,192 @@ BOOL sexp_tree::OnCommand(WPARAM wParam, LPARAM lParam)
 		replace_container_data(containers[container_index], (type | SEXPT_CONTAINER_DATA), true, true, true);
 
 		expand_branch(item_handle);
+	}
+
+	// --- New-style context action dispatch (IDs assigned by right_clicked via m_pending_context_actions) ---
+	if (id >= ID_SEXP_ACTION_BASE) {
+		auto it_action = m_pending_context_actions.find(id);
+		if (it_action != m_pending_context_actions.end()) {
+			const SexpContextAction& leaf = it_action->second;
+			const SexpActionParam& p = leaf.param;
+
+			switch (leaf.id) {
+			case SexpActionId::AddOperator:
+				if (p.op_index >= 0 && p.op_index < static_cast<int>(Operators.size()))
+					add_or_replace_operator(p.op_index, 0);
+				break;
+
+			case SexpActionId::ReplaceOperator:
+				if (p.op_index >= 0 && p.op_index < static_cast<int>(Operators.size())) {
+					add_or_replace_operator(p.op_index, 1);
+					expand_branch(item_handle);
+				}
+				break;
+
+			case SexpActionId::InsertOperator: {
+				if (p.op_index < 0 || p.op_index >= static_cast<int>(Operators.size()))
+					break;
+				const int ins_op = p.op_index;
+				auto& n_ins = m_model->node(item_index);
+				int ins_flags = n_ins.flags;
+				int ins_parent = n_ins.parent;
+				int ins_node = m_model->allocateNode(ins_parent, item_index);
+				m_model->setNode(ins_node, (SEXPT_OPERATOR | SEXPT_VALID), Operators[ins_op].text.c_str());
+				m_model->node(ins_node).flags = ins_flags;
+
+				HTREEITEM parent_handle = GetParentItem(item_handle);
+				if (parent_handle == NULL) {
+					if (m_mode == MODE_GOALS || m_mode == MODE_EVENTS || m_mode == MODE_CAMPAIGN) {
+						if (m_mode == MODE_GOALS)
+							Goal_editor_dlg->insert_handler(item_index, ins_node);
+						else if (m_mode == MODE_EVENTS)
+							Event_editor_dlg->insert_handler(item_index, ins_node);
+						else if (m_mode == MODE_CAMPAIGN)
+							Campaign_tree_formp->insert_handler(item_index, ins_node);
+					} else {
+						parent_handle = TVI_ROOT;
+						root_item = ins_node;
+					}
+				}
+
+				HTREEITEM new_item_handle = insert(Operators[ins_op].text.c_str(), BITMAP_OPERATOR, BITMAP_OPERATOR, parent_handle, TVI_FIRST);
+				SetItemData(new_item_handle, ins_node);
+				m_modelToHandle[ins_node] = new_item_handle;
+				update_item(ins_node);
+				move_branch(item_index, ins_node);
+
+				for (i = 1; i < Operators[ins_op].min; i++)
+					add_default_operator(ins_op, i);
+
+				Expand(item_handle, TVE_EXPAND);
+				*modified = 1;
+				break;
+			}
+
+			case SexpActionId::AddData: {
+				if (p.node_type != 0) {
+					// Direct type+text (e.g. container modifier)
+					add_data(p.text.c_str(), p.node_type);
+				} else if (p.arg_index == 0) {
+					// Typed number placeholder
+					add_data("", SEXPT_NUMBER | SEXPT_VALID);
+				} else if (p.arg_index == 1) {
+					// Typed string placeholder
+					add_data("", SEXPT_STRING | SEXPT_VALID);
+				} else if (p.op_index >= 0) {
+					// Named item from OPF listing — re-query at current arg position
+					const auto& n_add = m_model->node(item_index);
+					const int add_op_idx = get_operator_index(n_add.text.c_str());
+					if (add_op_idx >= 0) {
+						const int add_arg_idx = m_model->countArgs(n_add.child);
+						const int add_opf = query_operator_argument_type(add_op_idx, add_arg_idx);
+						sexp_list_item* add_list = get_listing_opf(add_opf, item_index, add_arg_idx);
+						if (add_list) {
+							// skip to nth data item (op < 0 items only)
+							int nth = p.op_index;
+							sexp_list_item* ptr = add_list;
+							while (ptr && nth > 0) {
+								if (ptr->op < 0) --nth;
+								if (nth > 0) ptr = ptr->next;
+							}
+							if (ptr && ptr->op < 0) {
+								expand_operator(item_index);
+								auto n_handle = add_data(ptr->text.c_str(), ptr->type);
+								node = (int)GetItemData(n_handle);
+								if (add_opf == OPF_VARIABLE_NAME) {
+									// replicate the variable name bolted-on hack
+									int var_idx = p.op_index;
+									int var_type = (Sexp_variables[var_idx].type & SEXP_VARIABLE_NUMBER) ? SEXPT_NUMBER : SEXPT_STRING;
+									update_item(node);
+									replace_variable_data(var_idx, var_type | SEXPT_VARIABLE);
+									update_item(item_index);
+								}
+							}
+							add_list->destroy();
+						}
+					}
+				}
+				break;
+			}
+
+			case SexpActionId::ReplaceData: {
+				if (p.node_type != 0) {
+					replace_data(p.text.c_str(), p.node_type);
+				} else if (p.arg_index == 0) {
+					replace_data("", SEXPT_NUMBER | SEXPT_VALID);
+				} else if (p.arg_index == 1) {
+					replace_data("", SEXPT_STRING | SEXPT_VALID);
+				} else if (p.op_index >= 0) {
+					const auto& n_rep = m_model->node(item_index);
+					sexp_list_item* rep_list = nullptr;
+					if (n_rep.type & SEXPT_MODIFIER) {
+						rep_list = get_container_modifiers(n_rep.parent);
+					} else if (n_rep.parent >= 0) {
+						const auto& parent_n_rep = m_model->node(n_rep.parent);
+						const int rep_parent_op = get_operator_index(parent_n_rep.text.c_str());
+						if (rep_parent_op >= 0) {
+							int rep_count = 0;
+							int sib = parent_n_rep.child;
+							while (sib >= 0 && sib != item_index) {
+								sib = m_model->node(sib).next;
+								++rep_count;
+							}
+							const int rep_opf = query_operator_argument_type(rep_parent_op, rep_count);
+							rep_list = get_listing_opf(rep_opf, n_rep.parent, rep_count);
+						}
+					}
+					if (rep_list) {
+						int nth = p.op_index;
+						sexp_list_item* ptr = rep_list;
+						while (ptr && nth > 0) {
+							if (ptr->op < 0) --nth;
+							if (nth > 0) ptr = ptr->next;
+						}
+						if (ptr && ptr->op < 0)
+							replace_data(ptr->text.c_str(), ptr->type);
+						rep_list->destroy();
+					}
+				}
+				break;
+			}
+
+			case SexpActionId::ReplaceVariable: {
+				const int var_idx = p.op_index;
+				if (var_idx < 0 || var_idx >= MAX_SEXP_VARIABLES)
+					break;
+				int var_base_type = get_type(item_handle) & (SEXPT_NUMBER | SEXPT_STRING);
+				if (!var_base_type || Modify_variable || query_node_argument_type(item_index) == OPF_CONTAINER_VALUE) {
+					if (Sexp_variables[var_idx].type & SEXP_VARIABLE_NUMBER)
+						var_base_type = SEXPT_NUMBER;
+					else if (Sexp_variables[var_idx].type & SEXP_VARIABLE_STRING)
+						var_base_type = SEXPT_STRING;
+				}
+				replace_variable_data(var_idx, var_base_type | SEXPT_VARIABLE);
+				break;
+			}
+
+			case SexpActionId::ReplaceContainerName: {
+				const auto& cn_containers = get_all_sexp_containers();
+				if (p.op_index >= 0 && p.op_index < static_cast<int>(cn_containers.size()))
+					replace_container_name(cn_containers[p.op_index]);
+				break;
+			}
+
+			case SexpActionId::ReplaceContainerData: {
+				const auto& cd_containers = get_all_sexp_containers();
+				if (p.op_index >= 0 && p.op_index < static_cast<int>(cd_containers.size())) {
+					int cd_type = get_type(item_handle) & ~(SEXPT_VARIABLE | SEXPT_CONTAINER_NAME);
+					replace_container_data(cd_containers[p.op_index], (cd_type | SEXPT_CONTAINER_DATA), true, true, true);
+					expand_branch(item_handle);
+				}
+				break;
+			}
+
+			default:
+				break;
+			}
+			return 1;
+		}
 	}
 
 	for (op=0; op<(int)Operators.size(); op++) {
