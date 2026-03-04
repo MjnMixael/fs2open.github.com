@@ -465,7 +465,7 @@ ArgBucket SexpTreeModel::node_to_bucket(const SexpNode& n) const
 	if (t == SEXPT_NUMBER)
 		return ArgBucket::NUM;
 	if (t == SEXPT_OPERATOR) {
-		// Operator’s return type decides its bucket
+		// Operatorï¿½s return type decides its bucket
 		const int op_const = get_operator_const(n.text.c_str());
 		const int ret = query_operator_return_type(op_const);
 		if (ret == OPR_NUMBER)
@@ -483,12 +483,10 @@ bool SexpTreeModel::argsCompatibleWithOperator(int op_node, int new_op_index) co
 	Assertion(SCP_vector_inbounds(_nodes, op_node), "argsCompatibleWithOperator: node %d out of range.", op_node);
 	Assertion(SCP_vector_inbounds(Operators, new_op_index), "argsCompatibleWithOperator: op_index %d out of range.", new_op_index);
 
-	const int op_const = Operators[new_op_index].value;
-
 	int i = _nodes[op_node].child;
 	int arg_pos = 0;
 	while (i >= 0) {
-		const int expected_opf = query_operator_argument_type(op_const, arg_pos);
+		const int expected_opf = query_operator_argument_type(new_op_index, arg_pos);
 		// If the operator doesn't define a type for this arg_pos (beyond max), treat as incompatible
 		if (expected_opf < 0)
 			return false;
@@ -906,8 +904,7 @@ void SexpTreeModel::ensureOperatorArity(int op_node, int op_index)
 
 	for (int arg_i = argc; arg_i < min_args; ++arg_i) {
 		// Determine arg type at position arg_i
-		const int op_const = Operators[op_index].value;
-		const int opf = query_operator_argument_type(op_const, arg_i);
+		const int opf = query_operator_argument_type(op_index, arg_i);
 		const int added = createDefaultArgForOpf(opf, op_node, op_index, arg_i, op_node);
 
 		if (first < 0) {

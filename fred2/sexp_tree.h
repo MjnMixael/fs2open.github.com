@@ -234,6 +234,10 @@ public:
 	// so OnCommand() can dispatch them to the correct action handler.
 	SCP_unordered_map<UINT, SexpContextAction> m_pending_context_actions;
 
+	// Recursively appends a SexpContextAction tree to a CMenu, registering every
+	// leaf in m_pending_context_actions with a unique ID from cmd_next.
+	void appendActionsToMenu(CMenu& menuRef, const SCP_vector<SexpContextAction>& items, UINT& cmd_next);
+
 	void start_operator_edit(HTREEITEM h);
 	void end_operator_edit(bool confirm);
 

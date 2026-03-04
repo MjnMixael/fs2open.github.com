@@ -114,6 +114,9 @@ class SexpActionsHandler final {
 	// Returns -1 if node_index is the first child.
 	int findPreviousSibling_(int parent_idx, int node_index) const noexcept;
 
+	// Count how many siblings precede node_index under parent_idx (i.e., its 0-based argument position).
+	int argPositionOf_(int parent_idx, int node_index) const noexcept;
+
 	// Check if an action is valid for this node
 	bool canEditNode(SexpNodeKind kind, int node_index) const;
 	bool canDeleteNode(SexpNodeKind kind, int node_index) const;

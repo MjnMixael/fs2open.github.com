@@ -477,6 +477,34 @@ void sexp_tree::update_item(int node)
 	Assertion(item_handle != nullptr, "update_item: node %d has no associated tree handle.", node);
 }
 
+void sexp_tree::appendActionsToMenu(CMenu& menuRef, const SCP_vector<SexpContextAction>& items, UINT& cmd_next)
+{
+	int visible_in_col = 0;
+	for (const auto& it : items) {
+		if (!it.children.empty()) {
+			CMenu child;
+			child.CreatePopupMenu();
+			appendActionsToMenu(child, it.children, cmd_next);
+			UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
+			if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
+				sub_flags |= MF_MENUBREAK;
+			menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
+			child.Detach();
+			++visible_in_col;
+		} else {
+			UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
+			if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
+				sub_flags |= MF_MENUBREAK;
+			const UINT choice_id = cmd_next++;
+			menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
+			m_pending_context_actions[choice_id] = it;
+			++visible_in_col;
+		}
+	}
+	if (items.empty())
+		menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
+}
+
 // handler for right mouse button clicks.
 // TODO modify this to use sexp_actions_core
 void sexp_tree::right_clicked(int mode)
@@ -568,48 +596,7 @@ void sexp_tree::right_clicked(int mode)
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
 
-		// minimal recursive emitter (no helpers elsewhere)
-		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit =
-			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
-				int visible_in_col = 0;
-
-				for (size_t i = 0; i < items.size(); ++i) {
-					const auto& it = items[i];
-
-					if (!it.children.empty()) {
-						CMenu child;
-						child.CreatePopupMenu();
-
-						// recurse into submenu first
-						emit(child, it.children);
-
-						UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
-						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0) {
-							sub_flags |= MF_MENUBREAK; // new column
-						}
-
-						menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
-						child.Detach(); // CMenu now owned by parent
-						++visible_in_col;
-					} else {
-						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
-						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0) {
-							sub_flags |= MF_MENUBREAK; // new column
-						}
-
-						const UINT choice_id = cmd_action_next++;
-						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
-						m_pending_context_actions[choice_id] = it;
-						++visible_in_col;
-					}
-				}
-
-				if (items.empty()) {
-					menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
-				}
-			};
-
-		emit(add_op_submenu, action_ptr->children);
+		appendActionsToMenu(add_op_submenu, action_ptr->children, cmd_action_next);
 	} else {
 		add_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
 	}
@@ -660,34 +647,7 @@ void sexp_tree::right_clicked(int mode)
 
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit_ins =
-			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
-				int visible_in_col = 0;
-				for (const auto& it : items) {
-					if (!it.children.empty()) {
-						CMenu child;
-						child.CreatePopupMenu();
-						emit_ins(child, it.children);
-						UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
-						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
-							sub_flags |= MF_MENUBREAK;
-						menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
-						child.Detach();
-						++visible_in_col;
-					} else {
-						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
-						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
-							sub_flags |= MF_MENUBREAK;
-						const UINT choice_id = cmd_action_next++;
-						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
-						m_pending_context_actions[choice_id] = it;
-						++visible_in_col;
-					}
-				}
-				if (items.empty())
-					menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
-			};
-		emit_ins(insert_op_submenu, action_ptr->children);
+		appendActionsToMenu(insert_op_submenu, action_ptr->children, cmd_action_next);
 	} else {
 		insert_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
 	}
@@ -702,34 +662,7 @@ void sexp_tree::right_clicked(int mode)
 
 	if (action_ptr->enabled && !action_ptr->children.empty()) {
 		item_flags = MF_POPUP;
-		std::function<void(CMenu&, const SCP_vector<SexpContextAction>&)> emit_rep =
-			[&](CMenu& menuRef, const SCP_vector<SexpContextAction>& items) {
-				int visible_in_col = 0;
-				for (const auto& it : items) {
-					if (!it.children.empty()) {
-						CMenu child;
-						child.CreatePopupMenu();
-						emit_rep(child, it.children);
-						UINT sub_flags = MF_POPUP | (it.enabled ? 0u : MF_GRAYED);
-						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
-							sub_flags |= MF_MENUBREAK;
-						menuRef.AppendMenu(sub_flags, (UINT_PTR)child.m_hMenu, it.label.c_str());
-						child.Detach();
-						++visible_in_col;
-					} else {
-						UINT sub_flags = it.enabled ? MF_STRING : (MF_STRING | MF_GRAYED);
-						if (visible_in_col > 0 && ((visible_in_col + 3) % 30) == 0)
-							sub_flags |= MF_MENUBREAK;
-						const UINT choice_id = cmd_action_next++;
-						menuRef.AppendMenu(sub_flags, choice_id, it.label.c_str());
-						m_pending_context_actions[choice_id] = it;
-						++visible_in_col;
-					}
-				}
-				if (items.empty())
-					menuRef.AppendMenu(MF_STRING | MF_GRAYED, 0, "(none)");
-			};
-		emit_rep(replace_op_submenu, action_ptr->children);
+		appendActionsToMenu(replace_op_submenu, action_ptr->children, cmd_action_next);
 	} else {
 		replace_op_submenu.AppendMenu(MF_STRING | MF_GRAYED, 0, "(no operators available)");
 	}

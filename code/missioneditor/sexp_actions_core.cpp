@@ -177,9 +177,7 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 			if (n.parent >= 0) {
 				const auto& parent = model->_nodes[n.parent];
 				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
-					int arg_pos = 0;
-					for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
-						++arg_pos;
+					const int arg_pos = argPositionOf_(n.parent, node_index);
 					int op_idx = get_operator_index(parent.text.c_str());
 					if (op_idx >= 0)
 						expected_opf = query_operator_argument_type(op_idx, arg_pos);
@@ -235,11 +233,9 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 
 			// Compute expected OPF and arg_pos for this slot
 			int expected_opf = OPF_NONE;
-			int arg_pos = 0;
 			if (n.parent >= 0) {
 				const auto& parent = model->_nodes[n.parent];
-				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
-					++arg_pos;
+				const int arg_pos = argPositionOf_(n.parent, node_index);
 				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
 					int parent_op_idx = get_operator_index(parent.text.c_str());
 					if (parent_op_idx >= 0)
@@ -460,9 +456,7 @@ SexpContextMenu SexpActionsHandler::buildContextMenuModel(int node_index) const
 
 				// Determine expected OPF for this slot
 				int expected_opf = OPF_NONE;
-				int arg_pos = 0;
-				for (int c = parent.child; c >= 0 && c != node_index; c = model->_nodes[c].next)
-					++arg_pos;
+				const int arg_pos = argPositionOf_(n.parent, node_index);
 
 				if (SEXPT_TYPE(parent.type) == SEXPT_OPERATOR) {
 					int op_idx = get_operator_index(parent.text.c_str());
@@ -821,7 +815,7 @@ void SexpActionsHandler::buildCategorizedOperatorSubmenu_(SexpContextAction* par
 		SexpContextAction cat;
 		cat.group = SexpContextGroup::Operator;
 		cat.id = SexpActionId::None;
-		cat.label = catLabel.count(cat_id) ? catLabel[cat_id] : "Unknown";
+		{ auto it2 = catLabel.find(cat_id); cat.label = (it2 != catLabel.end()) ? it2->second : "Unknown"; }
 		cat.enabled = false; // propagated later
 		catRoots.push_back(std::move(cat));
 		int idx = static_cast<int>(catRoots.size()) - 1;
@@ -837,7 +831,7 @@ void SexpActionsHandler::buildCategorizedOperatorSubmenu_(SexpContextAction* par
 		SexpContextAction sub;
 		sub.group = SexpContextGroup::Operator;
 		sub.id = SexpActionId::None;
-		sub.label = subLabel.count(sub_id) ? subLabel[sub_id] : "Unknown";
+		{ auto it2 = subLabel.find(sub_id); sub.label = (it2 != subLabel.end()) ? it2->second : "Unknown"; }
 		sub.enabled = false;
 		catRoots[catIdx].children.push_back(std::move(sub));
 		int idx = static_cast<int>(catRoots[catIdx].children.size()) - 1;
@@ -941,6 +935,15 @@ int SexpActionsHandler::findPreviousSibling_(int parent_idx, int node_index) con
 	for (int c = nodes[parent_idx].child; c >= 0 && c != node_index; c = nodes[c].next)
 		prev = c;
 	return prev;
+}
+
+int SexpActionsHandler::argPositionOf_(int parent_idx, int node_index) const noexcept
+{
+	const auto& nodes = model->_nodes;
+	int pos = 0;
+	for (int c = nodes[parent_idx].child; c >= 0 && c != node_index; c = nodes[c].next)
+		++pos;
+	return pos;
 }
 
 int SexpActionsHandler::nodeEffectiveType_(int node_index) const
