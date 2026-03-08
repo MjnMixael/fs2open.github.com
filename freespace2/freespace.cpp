@@ -45,6 +45,7 @@
 #include "cheats_table/cheats_table.h"
 #include "cmdline/cmdline.h"
 #include "cmeasure/cmeasure.h"
+#include "controlconfig/controlsconfig.h"
 #include "cutscene/cutscenes.h"
 #include "cutscene/movie.h"
 #include "executor/global_executors.h"
@@ -378,6 +379,157 @@ fix Game_time_compression = F1_0;
 fix Desired_time_compression = Game_time_compression;
 fix Time_compression_change_rate = 0;
 bool Time_compression_locked = false; //Can the user change time with shift- controls?
+
+namespace {
+bool Photo_mode_active = false;
+camid Photo_mode_id;
+fix Photo_mode_saved_time_compression = F1_0;
+bool Photo_mode_saved_lock_state = false;
+bool Photo_mode_screenshot_queued_this_frame = false;
+bool Photo_mode_allowed = true;
+
+constexpr float Photo_mode_turn_rate = PI_2; // radians/sec
+constexpr float Photo_mode_move_speed = 90.0f;
+constexpr float Photo_mode_boost_multiplier = 6.0f;
+constexpr float Photo_mode_time_compression = 0.01f;
+
+void photo_mode_set_active(bool active)
+{
+	if (active == Photo_mode_active) {
+		return;
+	}
+
+	if (active) {
+		if (!Photo_mode_allowed) {
+			HUD_printf("Photo Mode is disabled for this mission.");
+			return;
+		}
+
+		if ((Game_mode & GM_MULTIPLAYER) != 0 || Player_obj == nullptr || !game_in_mission()) {
+			HUD_printf("Photo Mode can only be enabled in singleplayer missions.");
+			return;
+		}
+
+		if (Time_compression_locked) {
+			HUD_printf("Photo Mode unavailable while time compression is already locked.");
+			return;
+		}
+
+		if (Player_obj->type != OBJ_SHIP) {
+			HUD_printf("Photo Mode unavailable for current player object.");
+			return;
+		}
+
+		Photo_mode_saved_time_compression = Game_time_compression;
+		Photo_mode_saved_lock_state = Time_compression_locked;
+
+		Photo_mode_id = cam_create("Photo Mode", &Eye_position, &Eye_matrix);
+		if (!Photo_mode_id.isValid() || !cam_set_camera(Photo_mode_id)) {
+			cam_delete(Photo_mode_id);
+			Photo_mode_id = camid();
+			HUD_printf("Failed to enable Photo Mode.");
+			return;
+		}
+
+		set_time_compression(Photo_mode_time_compression, 0.0f);
+		lock_time_compression(true);
+		Photo_mode_active = true;
+		HUD_printf("Photo Mode enabled.");
+		return;
+	}
+
+	cam_reset_camera();
+	cam_delete(Photo_mode_id);
+	Photo_mode_id = camid();
+
+	set_time_compression(f2fl(Photo_mode_saved_time_compression), 0.0f);
+	lock_time_compression(Photo_mode_saved_lock_state);
+
+	Photo_mode_active = false;
+	HUD_printf("Photo Mode disabled.");
+}
+
+void photo_mode_do_frame(float frame_time)
+{
+	if (!Photo_mode_active || !Photo_mode_id.isValid()) {
+		return;
+	}
+
+	auto photo_mode = Photo_mode_id.getCamera();
+	if (photo_mode == nullptr) {
+		photo_mode_set_active(false);
+		return;
+	}
+
+	vec3d cam_pos = vmd_zero_vector;
+	matrix cam_orient = vmd_identity_matrix;
+	photo_mode->get_info(&cam_pos, &cam_orient);
+
+	angles delta_angles{};
+	delta_angles.p = fl2f((check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD)) * Photo_mode_turn_rate * frame_time);
+	delta_angles.h = fl2f((check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT)) * Photo_mode_turn_rate * frame_time);
+	delta_angles.b = fl2f((check_control_timef(BANK_RIGHT) - check_control_timef(BANK_LEFT)) * Photo_mode_turn_rate * frame_time);
+
+	matrix delta_orient = vmd_identity_matrix;
+	vm_angles_2_matrix(&delta_orient, &delta_angles);
+	vm_matrix_x_matrix(&cam_orient, &cam_orient, &delta_orient);
+	vm_fix_matrix(&cam_orient);
+
+	float speed = Photo_mode_move_speed;
+	if (check_control(AFTERBURNER)) {
+		speed *= Photo_mode_boost_multiplier;
+	}
+
+	const float forward = check_control_timef(FORWARD_THRUST) - check_control_timef(REVERSE_THRUST);
+	const float right = check_control_timef(RIGHT_SLIDE_THRUST) - check_control_timef(LEFT_SLIDE_THRUST);
+	const float up = check_control_timef(UP_SLIDE_THRUST) - check_control_timef(DOWN_SLIDE_THRUST);
+
+	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.fvec, forward * speed * frame_time);
+	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.rvec, right * speed * frame_time);
+	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.uvec, up * speed * frame_time);
+
+	photo_mode->set_rotation(&cam_orient);
+	photo_mode->set_position(&cam_pos);
+}
+
+void photo_mode_maybe_render_hud()
+{
+	if (!Photo_mode_active || Photo_mode_screenshot_queued_this_frame) {
+		return;
+	}
+
+	auto photo_mode = Photo_mode_id.getCamera();
+	if (photo_mode == nullptr) {
+		return;
+	}
+
+	vec3d cam_pos = vmd_zero_vector;
+	matrix cam_orient = vmd_identity_matrix;
+	photo_mode->get_info(&cam_pos, &cam_orient);
+
+	auto keybind = Control_config[TOGGLE_PHOTO_MODE].first.textify();
+	if (keybind.empty()) {
+		keybind = Control_config[TOGGLE_PHOTO_MODE].second.textify();
+	}
+	if (keybind.empty()) {
+		keybind = "Unbound";
+	}
+
+	hud_set_default_color();
+	int line = gr_screen.center_offset_y + 40;
+	const int line_height = gr_get_font_height();
+
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Photo Mode");
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Toggle: %s", keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Time Compression: %.2fx", f2fl(Game_time_compression));
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Cam Pos: X %.1f  Y %.1f  Z %.1f", cam_pos.xyz.x, cam_pos.xyz.y, cam_pos.xyz.z);
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Controls: Move/slide + pitch/yaw/bank (+afterburner boost)");
+}
+}
 
 // auto-lang stuff
 int detect_lang();
@@ -945,6 +1097,7 @@ void game_level_close()
 		ct_level_close();
 		beam_level_close();
 		mission_brief_common_reset();		// close out parsed briefing/mission stuff
+		photo_mode_set_active(false);
 		cam_close();
 		subtitles_close();
 		animation::ModelAnimationSet::stopAnimations();
@@ -1044,6 +1197,7 @@ void game_level_init()
 
 	Perspective_locked = false;
 	Slew_locked = false;
+	game_set_photo_mode_allowed(true);
 
 	// reset the geometry map and distortion map batcher, this should to be done pretty soon in this mission load process (though it's not required)
 	batch_reset();
@@ -2428,6 +2582,56 @@ void game_show_time_left()
 	gr_printf_no_resize( gr_screen.center_offset_x + 5, gr_screen.center_offset_y + 40, XSTR( "Mission time remaining: %d seconds", 179), diff );
 }
 
+void game_toggle_photo_mode()
+{
+	photo_mode_set_active(!Photo_mode_active);
+}
+
+void game_set_photo_mode_allowed(bool allowed)
+{
+	Photo_mode_allowed = allowed;
+
+	if (!Photo_mode_allowed && Photo_mode_active) {
+		photo_mode_set_active(false);
+	}
+}
+
+bool game_get_photo_mode_allowed()
+{
+	return Photo_mode_allowed;
+}
+
+DCF(photo_mode, "Toggles Photo Mode.")
+{
+	bool process = true;
+	bool set_active = false;
+
+	if (dc_optional_string_either("help", "--help")) {
+		dc_printf("Usage: photo_mode [bool]\nEnables or disables Photo Mode. If no argument is provided, toggles it.\n");
+		process = false;
+	}
+
+	if (dc_optional_string_either("status", "--status") || dc_optional_string_either("?", "--?")) {
+		dc_printf("Photo Mode is %s\n", Photo_mode_active ? "ON" : "OFF");
+		process = false;
+	}
+
+	if (!process) {
+		return;
+	}
+
+	if (!dc_maybe_stuff_boolean(&set_active)) {
+		game_toggle_photo_mode();
+	} else {
+		photo_mode_set_active(set_active);
+	}
+}
+
+DCF(screen_cam, "Deprecated alias for photo_mode.")
+{
+	game_toggle_photo_mode();
+}
+
 //========================================================================================
 //=================== NEW DEBUG CONSOLE COMMANDS TO REPLACE OLD DEBUG PAUSE MENU =========
 //========================================================================================
@@ -3639,6 +3843,8 @@ void game_simulation_frame()
 		cam_do_frame(flRealframetime);
 	}
 
+	photo_mode_do_frame(flRealframetime);
+
 	// blow ships up in multiplayer dogfight
 	if( MULTIPLAYER_MASTER && (Net_player != nullptr) && (Netgame.type_flags & NG_TYPE_DOGFIGHT) && (f2fl(Missiontime) >= 2.0f) && !dogfight_blown){
 		// blow up all non-player ships
@@ -4149,6 +4355,7 @@ void game_do_full_frame(DEBUG_TIMER_SIG const vec3d* offset = nullptr, const mat
 	game_show_eye_pos(cid);
 
 	game_show_time_left();
+	photo_mode_maybe_render_hud();
 
 	gr_reset_clip();
 	game_render_post_frame();
@@ -4549,6 +4756,7 @@ void game_do_frame(bool set_frametime)
 	}
 
 	game_update_missiontime();
+	Photo_mode_screenshot_queued_this_frame = false;
 
 	if (Game_mode & GM_STANDALONE_SERVER) {
 		std_multi_set_standalone_missiontime(f2fl(Missiontime));
@@ -4759,6 +4967,8 @@ int game_poll()
 
 		case KEY_PRINT_SCRN: 
 			{
+				Photo_mode_screenshot_queued_this_frame = true;
+
 				static int counter = os_config_read_uint(nullptr, "ScreenshotNum", 0);
 				char tmp_name[MAX_FILENAME_LEN];
 

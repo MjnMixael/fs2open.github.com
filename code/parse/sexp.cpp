@@ -747,6 +747,8 @@ SCP_vector<sexp_oper> Operators = {
 	{ "show-subtitle-image",			OP_CUTSCENES_SHOW_SUBTITLE_IMAGE,		8,	11,			SEXP_ACTION_OPERATOR,	},
 	{ "clear-subtitles",				OP_CLEAR_SUBTITLES,						0,	0,			SEXP_ACTION_OPERATOR,	},
 	{ "lock-perspective",				OP_CUTSCENES_FORCE_PERSPECTIVE,			1,	3,			SEXP_ACTION_OPERATOR,	},
+	{ "allow-photo-mode",				OP_ALLOW_PHOTO_MODE,					1,	1,			SEXP_ACTION_OPERATOR,	},
+	{ "allow-screencam",				OP_ALLOW_PHOTO_MODE,					1,	1,			SEXP_ACTION_OPERATOR,	}, // deprecated alias
 	{ "set-camera-shudder",				OP_SET_CAMERA_SHUDDER,					2,	4,			SEXP_ACTION_OPERATOR,	},
 	{ "supernova-start",				OP_SUPERNOVA_START,						1,	1,			SEXP_ACTION_OPERATOR,	},
 	{ "supernova-stop",					OP_SUPERNOVA_STOP,						0,	0,			SEXP_ACTION_OPERATOR,	},	//CommanderDJ
@@ -26787,6 +26789,11 @@ void sexp_force_perspective(int n)
 	}
 }
 
+void sexp_allow_photo_mode(int n)
+{
+	game_set_photo_mode_allowed(is_sexp_true(n));
+}
+
 void sexp_set_camera_shudder(int n)
 {
 	int time;
@@ -30378,6 +30385,10 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				sexp_force_perspective(node);
 				break;
+			case OP_ALLOW_PHOTO_MODE:
+				sexp_val = SEXP_TRUE;
+				sexp_allow_photo_mode(node);
+				break;
 
 			case OP_SET_CAMERA_SHUDDER:
 				sexp_val = SEXP_TRUE;
@@ -31778,6 +31789,7 @@ int query_operator_return_type(int op)
 		case OP_CUTSCENES_SET_TIME_COMPRESSION:
 		case OP_CUTSCENES_RESET_TIME_COMPRESSION:
 		case OP_CUTSCENES_FORCE_PERSPECTIVE:
+		case OP_ALLOW_PHOTO_MODE:
 		case OP_SET_CAMERA_SHUDDER:
 		case OP_JUMP_NODE_SET_JUMPNODE_NAME:
 		case OP_JUMP_NODE_SET_JUMPNODE_DISPLAY_NAME:
@@ -34426,6 +34438,9 @@ int query_operator_argument_type(int op, int argnum)
 			else
 				return OPF_BOOL;
 
+		case OP_ALLOW_PHOTO_MODE:
+			return OPF_BOOL;
+
 		case OP_SET_CAMERA_SHUDDER:
 			if (argnum == 0 || argnum == 1)
 				return OPF_POSITIVE;
@@ -36887,6 +36902,7 @@ int get_category(int op_id)
 		case OP_CUTSCENES_SET_TIME_COMPRESSION:
 		case OP_CUTSCENES_RESET_TIME_COMPRESSION:
 		case OP_CUTSCENES_FORCE_PERSPECTIVE:
+		case OP_ALLOW_PHOTO_MODE:
 		case OP_JUMP_NODE_SET_JUMPNODE_NAME:
 		case OP_JUMP_NODE_SET_JUMPNODE_DISPLAY_NAME:
 		case OP_JUMP_NODE_SET_JUMPNODE_COLOR:
@@ -37535,6 +37551,7 @@ int get_subcategory(int op_id)
 		case OP_CUTSCENES_SHOW_SUBTITLE_IMAGE:
 		case OP_CLEAR_SUBTITLES:
 		case OP_CUTSCENES_FORCE_PERSPECTIVE:
+		case OP_ALLOW_PHOTO_MODE:
 		case OP_SET_CAMERA_SHUDDER:
 		case OP_SUPERNOVA_START:
 		case OP_SUPERNOVA_STOP:
@@ -42196,6 +42213,12 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\t1:\tTrue to lock the view mode, false to unlock it\r\n"
 		"\t2:\tWhat view mode to lock; 0 for first-person, 1 for chase, 2 for external, 3 for top-down, or -1 to not change the current view mode\r\n"
 		"\t3:\tIf in first-person, true to lock the hat/slew/free-look/target-track mode, false to unlock it (optional)\r\n"
+	},
+
+	{ OP_ALLOW_PHOTO_MODE, "allow-photo-mode\r\n"
+		"\tAllows or disallows Photo Mode for this mission.  "
+		"Takes 1 argument...\r\n"
+		"\t1:\tTrue to allow Photo Mode, false to disallow it\r\n"
 	},
 
 	{ OP_SET_CAMERA_SHUDDER, "set-camera-shudder\r\n"
