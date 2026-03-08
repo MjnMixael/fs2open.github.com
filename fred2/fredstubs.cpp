@@ -244,3 +244,6 @@ void game_render_frame(camid  /*cid*/, const vec3d* /*offset*/ = nullptr, const 
 void game_simulation_frame(){}
 void game_update_missiontime(){}
 void game_render_post_frame(){}
+void game_toggle_photo_mode() {}
+void game_set_photo_mode_allowed(bool) {}
+bool game_get_photo_mode_allowed() { return false; }
