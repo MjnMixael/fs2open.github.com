@@ -1538,9 +1538,13 @@ void game_do_end_mission_popup()
 			if (Game_subspace_effect) {
 				game_start_subspace_ambient_sound();
 			}
-			audiostream_unpause_all();
+
+			if (!game_is_photo_mode_active()) {
+				audiostream_unpause_all();
+				message_resume_all();
+			}
+
 			weapon_unpause_sounds();
-			message_resume_all();
 			break;
 		}
 

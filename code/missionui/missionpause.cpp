@@ -254,8 +254,10 @@ void pause_close()
 	// unpause all weapon sounds
 	weapon_unpause_sounds();
 
-	// unpause voices
-	message_resume_all();
+	// unpause voices unless Photo Mode is keeping playback paused
+	if (!game_is_photo_mode_active()) {
+		message_resume_all();
+	}
 
 	// deinit stuff
 	if(Pause_saved_screen != -1) {
@@ -273,8 +275,10 @@ void pause_close()
 	
 	io::mouse::CursorManager::get()->popStatus();
 
-	// unpause all the music
-	audiostream_unpause_all();		
+	// unpause all the music unless Photo Mode is keeping playback paused
+	if (!game_is_photo_mode_active()) {
+		audiostream_unpause_all();
+	}
 
 	Paused = false;
 }
