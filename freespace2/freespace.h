@@ -127,12 +127,14 @@ inline void game_toggle_photo_mode() {}
 // mission-level permission to allow/disallow Photo Mode
 inline void game_set_photo_mode_allowed(bool /*allowed*/) {}
 inline bool game_get_photo_mode_allowed() { return false; }
+inline bool game_is_photo_mode_active() { return false; }
 #else
 void game_toggle_photo_mode();
 
 // mission-level permission to allow/disallow Photo Mode
 void game_set_photo_mode_allowed(bool allowed);
 bool game_get_photo_mode_allowed();
+bool game_is_photo_mode_active();
 #endif
 
 // call this to set frametime properly (once per frame)
