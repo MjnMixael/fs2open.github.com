@@ -2233,9 +2233,11 @@ int button_function_demo_valid(int n)
 	case TIME_SLOW_DOWN:
 		ret = 1;
 		if (Game_mode & GM_NORMAL && (!Time_compression_locked || game_is_photo_mode_active())) {
+			const auto min_compression = game_is_photo_mode_active() ? fl2f(0.01f) : (F1_0 / (Cmdline_retail_time_compression_range ? MAX_TIME_DIVIDER_RETAIL : MAX_TIME_DIVIDER));
+
 			// Goober5000 - time dilation only available in cheat mode (see above);
 			// now you can do it with or without pressing the tilde, per Kazan's request
-			if ((Game_time_compression > F1_0) || (Cheats_enabled && (Game_time_compression > (F1_0 / (Cmdline_retail_time_compression_range ? MAX_TIME_DIVIDER_RETAIL : MAX_TIME_DIVIDER))))) {
+			if ((Game_time_compression > F1_0) || (Game_time_compression > min_compression && (Cheats_enabled || game_is_photo_mode_active()))) {
 				change_time_compression(0.5f);
 				break;
 			}
