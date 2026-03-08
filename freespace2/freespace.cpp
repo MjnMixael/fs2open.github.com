@@ -2615,6 +2615,11 @@ bool game_get_photo_mode_allowed()
 	return Photo_mode_allowed;
 }
 
+bool game_is_photo_mode_active()
+{
+	return Photo_mode_active;
+}
+
 DCF(photo_mode, "Toggles Photo Mode.")
 {
 	bool process = true;
