@@ -121,11 +121,19 @@ void set_time_compression(float multiplier, float change_time = 0);
 void change_time_compression(float multiplier);
 
 // toggle Photo Mode
+#ifdef FRED
+inline void game_toggle_photo_mode() {}
+
+// mission-level permission to allow/disallow Photo Mode
+inline void game_set_photo_mode_allowed(bool /*allowed*/) {}
+inline bool game_get_photo_mode_allowed() { return false; }
+#else
 void game_toggle_photo_mode();
 
 // mission-level permission to allow/disallow Photo Mode
 void game_set_photo_mode_allowed(bool allowed);
 bool game_get_photo_mode_allowed();
+#endif
 
 // call this to set frametime properly (once per frame)
 void game_set_frametime(int state);
