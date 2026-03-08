@@ -388,7 +388,7 @@ bool Photo_mode_saved_lock_state = false;
 bool Photo_mode_screenshot_queued_this_frame = false;
 bool Photo_mode_allowed = true;
 
-constexpr float Photo_mode_turn_rate = PI_2; // radians/sec
+const float Photo_mode_turn_rate = PI_2; // radians/sec
 constexpr float Photo_mode_move_speed = 90.0f;
 constexpr float Photo_mode_boost_multiplier = 6.0f;
 constexpr float Photo_mode_time_compression = 0.01f;
