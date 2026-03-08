@@ -5513,6 +5513,10 @@ void game_leave_state( int old_state, int new_state )
 			break;
 	}
 
+	if (old_state == GS_STATE_GAME_PLAY && new_state != GS_STATE_GAME_PLAY) {
+		photo_mode_set_active(false);
+	}
+
 	// This is kind of a hack but it ensures options are logged even if scripting calls for a state change with an override active
 	if (old_state == GS_STATE_OPTIONS_MENU) {
 			if (new_state != GS_STATE_CONTROL_CONFIG && new_state != GS_STATE_HUD_CONFIG) {
