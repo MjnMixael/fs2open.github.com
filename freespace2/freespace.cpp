@@ -387,6 +387,7 @@ fix Photo_mode_saved_time_compression = F1_0;
 bool Photo_mode_saved_lock_state = false;
 bool Photo_mode_screenshot_queued_this_frame = false;
 bool Photo_mode_allowed = true;
+bool Photo_mode_audio_paused = false;
 
 const float Photo_mode_turn_rate = PI_2; // radians/sec
 constexpr float Photo_mode_move_speed = 90.0f;
@@ -433,6 +434,11 @@ void photo_mode_set_active(bool active)
 
 		set_time_compression(Photo_mode_time_compression, 0.0f);
 		lock_time_compression(true);
+
+		audiostream_pause_all();
+		message_pause_all();
+		Photo_mode_audio_paused = true;
+
 		Photo_mode_active = true;
 		HUD_printf("Photo Mode enabled.");
 		return;
@@ -444,6 +450,12 @@ void photo_mode_set_active(bool active)
 
 	set_time_compression(f2fl(Photo_mode_saved_time_compression), 0.0f);
 	lock_time_compression(Photo_mode_saved_lock_state);
+
+	if (Photo_mode_audio_paused) {
+		audiostream_unpause_all();
+		message_resume_all();
+		Photo_mode_audio_paused = false;
+	}
 
 	Photo_mode_active = false;
 	HUD_printf("Photo Mode disabled.");
