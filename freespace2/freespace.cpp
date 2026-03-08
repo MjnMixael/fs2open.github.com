@@ -466,9 +466,23 @@ void photo_mode_do_frame(float frame_time)
 	photo_mode->get_info(&cam_pos, &cam_orient);
 
 	angles delta_angles{};
-	delta_angles.p = (check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD)) * Photo_mode_turn_rate * frame_time;
-	delta_angles.h = (check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT)) * Photo_mode_turn_rate * frame_time;
-	delta_angles.b = (check_control_timef(BANK_RIGHT) - check_control_timef(BANK_LEFT)) * Photo_mode_turn_rate * frame_time;
+	float pitch = check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD);
+	float heading = check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT);
+	float bank = check_control_timef(BANK_RIGHT) - check_control_timef(BANK_LEFT);
+
+	int axis[Action::NUM_VALUES] = { 0 };
+	control_get_axes_readings(axis, flRealframetime);
+	pitch += -f2fl(axis[Action::PITCH]);
+	heading += f2fl(axis[Action::HEADING]);
+	bank += f2fl(axis[Action::BANK]);
+
+	CLAMP(pitch, -1.0f, 1.0f);
+	CLAMP(heading, -1.0f, 1.0f);
+	CLAMP(bank, -1.0f, 1.0f);
+
+	delta_angles.p = pitch * Photo_mode_turn_rate * frame_time;
+	delta_angles.h = heading * Photo_mode_turn_rate * frame_time;
+	delta_angles.b = bank * Photo_mode_turn_rate * frame_time;
 
 	matrix delta_orient = vmd_identity_matrix;
 	vm_angles_2_matrix(&delta_orient, &delta_angles);
