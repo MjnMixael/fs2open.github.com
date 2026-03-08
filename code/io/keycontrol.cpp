@@ -328,6 +328,7 @@ int Normal_key_set[] = {
 	MULTI_SELF_DESTRUCT,
 
 	TOGGLE_HUD,
+	TOGGLE_PHOTO_MODE,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -475,6 +476,7 @@ int Non_critical_key_set[] = {
 	MULTI_SELF_DESTRUCT,
 
 	TOGGLE_HUD,
+	TOGGLE_PHOTO_MODE,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -2580,6 +2582,10 @@ int button_function(int n)
 		case TOGGLE_HUD:
 			gamesnd_play_iface(InterfaceSounds::USER_SELECT);
 			hud_toggle_draw();
+			break;
+
+		case TOGGLE_PHOTO_MODE:
+			game_toggle_photo_mode();
 			break;
 
 		case HUD_TARGETBOX_TOGGLE_WIREFRAME:
