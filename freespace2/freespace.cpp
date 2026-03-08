@@ -405,7 +405,7 @@ void photo_mode_set_active(bool active)
 			return;
 		}
 
-		if ((Game_mode & GM_MULTIPLAYER) != 0 || Player_obj == nullptr || !game_in_mission()) {
+		if ((Game_mode & GM_MULTIPLAYER) != 0 || Player_obj == nullptr || !(Game_mode & GM_IN_MISSION)) {
 			HUD_printf("Photo Mode can only be enabled in singleplayer missions.");
 			return;
 		}
@@ -466,9 +466,9 @@ void photo_mode_do_frame(float frame_time)
 	photo_mode->get_info(&cam_pos, &cam_orient);
 
 	angles delta_angles{};
-	delta_angles.p = fl2f((check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD)) * Photo_mode_turn_rate * frame_time);
-	delta_angles.h = fl2f((check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT)) * Photo_mode_turn_rate * frame_time);
-	delta_angles.b = fl2f((check_control_timef(BANK_RIGHT) - check_control_timef(BANK_LEFT)) * Photo_mode_turn_rate * frame_time);
+	delta_angles.p = (check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD)) * Photo_mode_turn_rate * frame_time;
+	delta_angles.h = (check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT)) * Photo_mode_turn_rate * frame_time;
+	delta_angles.b = (check_control_timef(BANK_RIGHT) - check_control_timef(BANK_LEFT)) * Photo_mode_turn_rate * frame_time;
 
 	matrix delta_orient = vmd_identity_matrix;
 	vm_angles_2_matrix(&delta_orient, &delta_angles);
