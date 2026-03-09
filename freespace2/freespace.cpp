@@ -27,6 +27,7 @@
  #include <sys/stat.h>
 #endif
 
+#include <algorithm>
 #include <cmath>
 
 #include "globalincs/alphacolors.h"
@@ -411,6 +412,7 @@ struct photo_mode_filter_preset {
 
 SCP_vector<photo_mode_post_effect_state> Photo_mode_saved_post_effects;
 int Photo_mode_filter_index = 0;
+int Photo_mode_filter_strength = 100;
 
 constexpr photo_mode_filter_preset Photo_mode_filter_presets[] = {
 	{ 0, 0, 0 },
@@ -492,9 +494,13 @@ void photo_mode_apply_filter_index(int index)
 		photo_mode_apply_saved_post_effect_state(false);
 	} else {
 		const auto& preset = Photo_mode_filter_presets[Photo_mode_filter_index];
-		gr_post_process_set_effect("saturation", preset.saturation, nullptr);
-		gr_post_process_set_effect("brightness", preset.brightness, nullptr);
-		gr_post_process_set_effect("contrast", preset.contrast, nullptr);
+		auto scale_param = [](int value, int strength) {
+			return 100 + ((value - 100) * strength) / 100;
+		};
+
+		gr_post_process_set_effect("saturation", scale_param(preset.saturation, Photo_mode_filter_strength), nullptr);
+		gr_post_process_set_effect("brightness", scale_param(preset.brightness, Photo_mode_filter_strength), nullptr);
+		gr_post_process_set_effect("contrast", scale_param(preset.contrast, Photo_mode_filter_strength), nullptr);
 	}
 
 	if (Photo_mode_active) {
@@ -544,6 +550,7 @@ void photo_mode_set_active(bool active)
 		lock_time_compression(true);
 
 		photo_mode_capture_post_effect_state();
+		Photo_mode_filter_strength = 100;
 		photo_mode_apply_filter_index(0);
 
 		audiostream_pause_all();
@@ -570,6 +577,7 @@ void photo_mode_set_active(bool active)
 
 	photo_mode_apply_saved_post_effect_state(true);
 	Photo_mode_filter_index = 0;
+	Photo_mode_filter_strength = 100;
 
 	Photo_mode_active = false;
 	HUD_printf("Photo Mode disabled.");
@@ -668,6 +676,8 @@ void photo_mode_maybe_render_hud()
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Cam Pos: X %.1f  Y %.1f  Z %.1f", cam_pos.xyz.x, cam_pos.xyz.y, cam_pos.xyz.z);
 	line += line_height;
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Filter: %s", -1), photo_mode_get_filter_name(Photo_mode_filter_index));
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Filter Strength: %d%%", -1), Photo_mode_filter_strength);
 	line += line_height;
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Controls: Move/slide + pitch/yaw/bank (+afterburner boost)");
 }
@@ -2776,7 +2786,24 @@ void game_reset_photo_mode_filters()
 		return;
 	}
 
+	Photo_mode_filter_strength = 100;
 	photo_mode_apply_filter_index(0);
+}
+
+void game_adjust_photo_mode_filter_parameter(int delta)
+{
+	if (!Photo_mode_active) {
+		return;
+	}
+
+	if (Photo_mode_filter_index == 0) {
+		HUD_printf(XSTR("Select a non-default photo mode filter to adjust.", -1));
+		return;
+	}
+
+	Photo_mode_filter_strength = std::clamp(Photo_mode_filter_strength + delta, 0, 200);
+	photo_mode_apply_filter_index(Photo_mode_filter_index);
+	HUD_printf(XSTR("Photo Mode filter strength: %d%%", -1), Photo_mode_filter_strength);
 }
 
 DCF(photo_mode, "Toggles Photo Mode.")

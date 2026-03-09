@@ -332,6 +332,8 @@ int Normal_key_set[] = {
 	PHOTO_MODE_FILTER_PREV,
 	PHOTO_MODE_FILTER_NEXT,
 	PHOTO_MODE_FILTER_RESET,
+	PHOTO_MODE_PARAM_DECREASE,
+	PHOTO_MODE_PARAM_INCREASE,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -483,6 +485,8 @@ int Non_critical_key_set[] = {
 	PHOTO_MODE_FILTER_PREV,
 	PHOTO_MODE_FILTER_NEXT,
 	PHOTO_MODE_FILTER_RESET,
+	PHOTO_MODE_PARAM_DECREASE,
+	PHOTO_MODE_PARAM_INCREASE,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -2610,6 +2614,14 @@ int button_function(int n)
 
 		case PHOTO_MODE_FILTER_RESET:
 			game_reset_photo_mode_filters();
+			break;
+
+		case PHOTO_MODE_PARAM_DECREASE:
+			game_adjust_photo_mode_filter_parameter(-5);
+			break;
+
+		case PHOTO_MODE_PARAM_INCREASE:
+			game_adjust_photo_mode_filter_parameter(5);
 			break;
 
 		case HUD_TARGETBOX_TOGGLE_WIREFRAME:

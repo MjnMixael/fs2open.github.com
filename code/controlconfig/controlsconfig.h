@@ -312,6 +312,8 @@ enum IoActionId : int {
 	PHOTO_MODE_FILTER_PREV,
 	PHOTO_MODE_FILTER_NEXT,
 	PHOTO_MODE_FILTER_RESET,
+	PHOTO_MODE_PARAM_DECREASE,
+	PHOTO_MODE_PARAM_INCREASE,
 
 	/*!
 	 * This must always be below the last defined item
