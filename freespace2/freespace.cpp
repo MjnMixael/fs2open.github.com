@@ -547,22 +547,18 @@ void photo_mode_set_active(bool active)
 
 	if (active) {
 		if (!Photo_mode_allowed) {
-			HUD_printf("Photo Mode is disabled for this mission.");
 			return;
 		}
 
 		if ((Game_mode & GM_MULTIPLAYER) != 0 || Player_obj == nullptr || !(Game_mode & GM_IN_MISSION)) {
-			HUD_printf("Photo Mode can only be enabled in singleplayer missions.");
 			return;
 		}
 
 		if (Time_compression_locked) {
-			HUD_printf("Photo Mode unavailable while time compression is already locked.");
 			return;
 		}
 
 		if (Player_obj->type != OBJ_SHIP) {
-			HUD_printf("Photo Mode unavailable for current player object.");
 			return;
 		}
 
@@ -573,7 +569,6 @@ void photo_mode_set_active(bool active)
 		if (!Photo_mode_id.isValid() || !cam_set_camera(Photo_mode_id)) {
 			cam_delete(Photo_mode_id);
 			Photo_mode_id = camid();
-			HUD_printf("Failed to enable Photo Mode.");
 			return;
 		}
 
@@ -2808,7 +2803,6 @@ void game_cycle_photo_mode_filter(int direction)
 		Photo_mode_selected_parameter -= PHOTO_MODE_PARAM_COUNT;
 	}
 
-	HUD_printf(XSTR("Photo Mode selected parameter: %s", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter));
 }
 
 void game_reset_photo_mode_filters()
@@ -2819,7 +2813,6 @@ void game_reset_photo_mode_filters()
 
 	Photo_mode_parameter_values = Photo_mode_saved_parameter_values;
 	photo_mode_apply_parameter_values();
-	HUD_printf(XSTR("Photo Mode parameters reset.", -1));
 }
 
 void game_adjust_photo_mode_filter_parameter(int delta)
@@ -2830,7 +2823,6 @@ void game_adjust_photo_mode_filter_parameter(int delta)
 
 	Photo_mode_parameter_values[Photo_mode_selected_parameter] = std::clamp(Photo_mode_parameter_values[Photo_mode_selected_parameter] + delta, 0, 200);
 	photo_mode_apply_parameter_values();
-	HUD_printf(XSTR("%s: %d", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter), Photo_mode_parameter_values[Photo_mode_selected_parameter]);
 }
 
 DCF(photo_mode, "Toggles Photo Mode.")
