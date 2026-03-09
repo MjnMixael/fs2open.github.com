@@ -494,13 +494,31 @@ void photo_mode_apply_filter_index(int index)
 		photo_mode_apply_saved_post_effect_state(false);
 	} else {
 		const auto& preset = Photo_mode_filter_presets[Photo_mode_filter_index];
-		auto scale_param = [](int value, int strength) {
-			return 100 + ((value - 100) * strength) / 100;
+
+		auto blend_from_saved_value = [&](const char* effect_name, int target_value) {
+			int saved_value = target_value;
+
+			for (const auto& saved_state : Photo_mode_saved_post_effects) {
+				if (stricmp(saved_state.name.c_str(), effect_name) != 0) {
+					continue;
+				}
+
+				for (const auto& effect : graphics::Post_processing_manager->getPostEffects()) {
+					if (stricmp(effect.name.c_str(), effect_name) == 0) {
+						saved_value = static_cast<int>(std::lround((saved_state.intensity - effect.add) * effect.div));
+						break;
+					}
+				}
+
+				break;
+			}
+
+			return saved_value + ((target_value - saved_value) * Photo_mode_filter_strength) / 100;
 		};
 
-		gr_post_process_set_effect("saturation", scale_param(preset.saturation, Photo_mode_filter_strength), nullptr);
-		gr_post_process_set_effect("brightness", scale_param(preset.brightness, Photo_mode_filter_strength), nullptr);
-		gr_post_process_set_effect("contrast", scale_param(preset.contrast, Photo_mode_filter_strength), nullptr);
+		gr_post_process_set_effect("saturation", blend_from_saved_value("saturation", preset.saturation), nullptr);
+		gr_post_process_set_effect("brightness", blend_from_saved_value("brightness", preset.brightness), nullptr);
+		gr_post_process_set_effect("contrast", blend_from_saved_value("contrast", preset.contrast), nullptr);
 	}
 
 	if (Photo_mode_active) {
