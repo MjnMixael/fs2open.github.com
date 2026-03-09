@@ -637,7 +637,7 @@ void photo_mode_do_frame(float frame_time)
 	photo_mode->get_info(&cam_pos, &cam_orient);
 
 	angles delta_angles{};
-	float pitch = check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD);
+	float pitch = check_control_timef(PITCH_FORWARD) - check_control_timef(PITCH_BACK);
 	float heading = check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT);
 	float bank = check_control_timef(BANK_LEFT) - check_control_timef(BANK_RIGHT);
 
