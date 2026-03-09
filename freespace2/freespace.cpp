@@ -691,26 +691,40 @@ void photo_mode_maybe_render_hud()
 	}
 
 	hud_set_default_color();
-	int line = gr_screen.center_offset_y + 40;
+	const auto old_font = font::get_current_fontnum();
+	font::set_font(font::FONT1);
 	const int line_height = gr_get_font_height();
+	const int panel_padding = 8;
+	const int panel_width = 430;
+	const int panel_height = panel_padding * 2 + line_height * 8;
+	const int panel_x = gr_screen.center_offset_x + (gr_screen.center_w / 12);
+	const int panel_y = gr_screen.center_offset_y + gr_screen.center_h - panel_height - (gr_screen.center_h / 7);
 
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Photo Mode");
+	gr_line(panel_x, panel_y, panel_x + panel_width, panel_y, GR_RESIZE_NONE);
+	gr_line(panel_x, panel_y + panel_height, panel_x + panel_width, panel_y + panel_height, GR_RESIZE_NONE);
+	gr_line(panel_x, panel_y, panel_x, panel_y + panel_height, GR_RESIZE_NONE);
+	gr_line(panel_x + panel_width, panel_y, panel_x + panel_width, panel_y + panel_height, GR_RESIZE_NONE);
+	gr_line(panel_x, panel_y + line_height + panel_padding + 1, panel_x + panel_width, panel_y + line_height + panel_padding + 1, GR_RESIZE_NONE);
+
+	int line = panel_y + panel_padding;
+	const int text_x = panel_x + panel_padding;
+	gr_printf_no_resize(text_x, line, XSTR("Photo Mode", -1));
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Toggle: %s", keybind.c_str());
+	gr_printf_no_resize(text_x, line, XSTR("Toggle: %s", -1), keybind.c_str());
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Time Compression: %.2fx", f2fl(Game_time_compression));
+	gr_printf_no_resize(text_x, line, XSTR("Time Compression: %.2fx", -1), f2fl(Game_time_compression));
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Cam Pos: X %.1f  Y %.1f  Z %.1f", cam_pos.xyz.x, cam_pos.xyz.y, cam_pos.xyz.z);
+	gr_printf_no_resize(text_x, line, XSTR("Cam Pos: X %.1f  Y %.1f  Z %.1f", -1), cam_pos.xyz.x, cam_pos.xyz.y, cam_pos.xyz.z);
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Selected Parameter: %s", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter));
+	gr_printf_no_resize(text_x, line, XSTR("Selected Parameter: %s", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter));
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Saturation: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_SATURATION]);
+	gr_printf_no_resize(text_x, line, XSTR("Saturation: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_SATURATION]);
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Brightness: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_BRIGHTNESS]);
+	gr_printf_no_resize(text_x, line, XSTR("Brightness: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_BRIGHTNESS]);
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Contrast: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_CONTRAST]);
-	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Controls: Move/slide + pitch/yaw/bank (+afterburner boost)");
+	gr_printf_no_resize(text_x, line, XSTR("Contrast: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_CONTRAST]);
+
+	font::set_font(old_font);
 }
 }
 
