@@ -631,13 +631,13 @@ void photo_mode_do_frame(float frame_time)
 	angles delta_angles{};
 	float pitch = check_control_timef(PITCH_BACK) - check_control_timef(PITCH_FORWARD);
 	float heading = check_control_timef(YAW_RIGHT) - check_control_timef(YAW_LEFT);
-	float bank = check_control_timef(BANK_RIGHT) - check_control_timef(BANK_LEFT);
+	float bank = check_control_timef(BANK_LEFT) - check_control_timef(BANK_RIGHT);
 
 	int axis[Action::NUM_VALUES] = { 0 };
 	control_get_axes_readings(axis, flRealframetime);
 	pitch += -f2fl(axis[Action::PITCH]);
 	heading += f2fl(axis[Action::HEADING]);
-	bank += f2fl(axis[Action::BANK]);
+	bank -= f2fl(axis[Action::BANK]);
 
 	CLAMP(pitch, -1.0f, 1.0f);
 	CLAMP(heading, -1.0f, 1.0f);
@@ -659,7 +659,7 @@ void photo_mode_do_frame(float frame_time)
 
 	const float forward = check_control_timef(FORWARD_THRUST) - check_control_timef(REVERSE_THRUST);
 	const float right = check_control_timef(RIGHT_SLIDE_THRUST) - check_control_timef(LEFT_SLIDE_THRUST);
-	const float up = check_control_timef(UP_SLIDE_THRUST) - check_control_timef(DOWN_SLIDE_THRUST);
+	const float up = check_control_timef(DOWN_SLIDE_THRUST) - check_control_timef(UP_SLIDE_THRUST);
 
 	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.fvec, forward * speed * frame_time);
 	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.rvec, right * speed * frame_time);
