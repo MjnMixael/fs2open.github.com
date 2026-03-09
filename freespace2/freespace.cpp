@@ -671,7 +671,7 @@ void photo_mode_do_frame(float frame_time)
 
 void photo_mode_maybe_render_hud()
 {
-	if (!Photo_mode_active || Photo_mode_screenshot_queued_this_frame) {
+	if (!Photo_mode_active || Photo_mode_screenshot_queued_this_frame || gr_is_screenshot_requested()) {
 		return;
 	}
 
@@ -4617,10 +4617,10 @@ void game_do_full_frame(DEBUG_TIMER_SIG const vec3d* offset = nullptr, const mat
 	game_show_eye_pos(cid);
 
 	game_show_time_left();
-	photo_mode_maybe_render_hud();
 
 	gr_reset_clip();
 	game_render_post_frame();
+	photo_mode_maybe_render_hud();
 
 	game_tst_frame();
 
