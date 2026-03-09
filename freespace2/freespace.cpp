@@ -692,21 +692,38 @@ void photo_mode_maybe_render_hud()
 	matrix cam_orient = vmd_identity_matrix;
 	photo_mode->get_info(&cam_pos, &cam_orient);
 
-	auto keybind = Control_config[TOGGLE_PHOTO_MODE].first.textify();
-	if (keybind.empty()) {
-		keybind = Control_config[TOGGLE_PHOTO_MODE].second.textify();
-	}
-	if (keybind.empty()) {
-		keybind = "Unbound";
-	}
+	auto format_photo_mode_keybind = [](int action) {
+		auto primary = Control_config[action].first.textify();
+		auto secondary = Control_config[action].second.textify();
+
+		if (primary.empty() && secondary.empty()) {
+			return SCP_string("Unbound");
+		}
+		if (primary.empty()) {
+			return secondary;
+		}
+		if (secondary.empty()) {
+			return primary;
+		}
+
+		return primary + " / " + secondary;
+	};
+
+	const auto toggle_keybind = format_photo_mode_keybind(TOGGLE_PHOTO_MODE);
+	const auto prev_filter_keybind = format_photo_mode_keybind(PHOTO_MODE_FILTER_PREV);
+	const auto next_filter_keybind = format_photo_mode_keybind(PHOTO_MODE_FILTER_NEXT);
+	const auto reset_filter_keybind = format_photo_mode_keybind(PHOTO_MODE_FILTER_RESET);
+	const auto decrease_param_keybind = format_photo_mode_keybind(PHOTO_MODE_PARAM_DECREASE);
+	const auto increase_param_keybind = format_photo_mode_keybind(PHOTO_MODE_PARAM_INCREASE);
+	const auto grid_keybind = format_photo_mode_keybind(PHOTO_MODE_TOGGLE_GRID);
 
 	hud_set_default_color();
 	const auto old_font = font::get_current_fontnum();
 	font::set_font(font::FONT1);
 	const int line_height = gr_get_font_height();
 	const int panel_padding = 8;
-	const int panel_width = 430;
-	const int panel_height = panel_padding * 2 + line_height * 9;
+	const int panel_width = 530;
+	const int panel_height = panel_padding * 2 + line_height * 15;
 	const int panel_x = gr_screen.center_offset_x + (gr_screen.center_w / 4);
 	const int panel_y = gr_screen.center_offset_y + gr_screen.center_h - panel_height - (gr_screen.center_h / 6);
 
@@ -731,7 +748,19 @@ void photo_mode_maybe_render_hud()
 	const int text_x = panel_x + panel_padding;
 	gr_printf_no_resize(text_x, line, XSTR("Photo Mode", -1));
 	line += line_height;
-	gr_printf_no_resize(text_x, line, XSTR("Toggle: %s", -1), keybind.c_str());
+	gr_printf_no_resize(text_x, line, XSTR("Toggle: %s", -1), toggle_keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Previous Filter: %s", -1), prev_filter_keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Next Filter: %s", -1), next_filter_keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Reset Filters: %s", -1), reset_filter_keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Decrease Parameter: %s", -1), decrease_param_keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Increase Parameter: %s", -1), increase_param_keybind.c_str());
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Toggle Thirds Grid: %s", -1), grid_keybind.c_str());
 	line += line_height;
 	gr_printf_no_resize(text_x, line, XSTR("Time Compression: %.2fx", -1), f2fl(Game_time_compression));
 	line += line_height;
