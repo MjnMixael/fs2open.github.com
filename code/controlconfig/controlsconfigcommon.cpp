@@ -271,6 +271,7 @@ void control_config_common_init_bindings() {
 	(PHOTO_MODE_FILTER_RESET,                          KEY_ALTED | KEY_4, -1, COMPUTER_TAB, -1, "Photo Mode Reset Parameters",           CC_TYPE_TRIGGER)
 	(PHOTO_MODE_PARAM_DECREASE,                         KEY_ALTED | KEY_MINUS, -1, COMPUTER_TAB, -1, "Photo Mode Decrease Selected Parameter", CC_TYPE_TRIGGER)
 	(PHOTO_MODE_PARAM_INCREASE,                         KEY_ALTED | KEY_SHIFTED | KEY_EQUAL, -1, COMPUTER_TAB, -1, "Photo Mode Increase Selected Parameter", CC_TYPE_TRIGGER)
+	(PHOTO_MODE_TOGGLE_GRID,                            KEY_ALTED | KEY_5, -1, COMPUTER_TAB, -1, "Photo Mode Toggle Grid",               CC_TYPE_TRIGGER)
 
 	// Custom Controls
 	(CUSTOM_CONTROL_1,                  KEY_ALTED | KEY_SHIFTED | KEY_1, -1, COMPUTER_TAB, 1784, "Custom Control 1", CC_TYPE_TRIGGER, true)
@@ -449,6 +450,7 @@ SCP_unordered_map<SCP_string, IoActionId> old_text = {
 	{"Photo Mode Reset Filters",                  PHOTO_MODE_FILTER_RESET},
 	{"Photo Mode Decrease Filter Parameter",      PHOTO_MODE_PARAM_DECREASE},
 	{"Photo Mode Increase Filter Parameter",      PHOTO_MODE_PARAM_INCREASE},
+	{"Photo Mode Toggle Grid",                  PHOTO_MODE_TOGGLE_GRID},
 	{"Top-Down View",                           VIEW_TOPDOWN},
 	{"Target Padlock View",                     VIEW_TRACK_TARGET},
 
@@ -1174,6 +1176,7 @@ void LoadEnumsIntoActionMap() {
 	ADD_ENUM_TO_ACTION_MAP(PHOTO_MODE_FILTER_RESET)
 	ADD_ENUM_TO_ACTION_MAP(PHOTO_MODE_PARAM_DECREASE)
 	ADD_ENUM_TO_ACTION_MAP(PHOTO_MODE_PARAM_INCREASE)
+	ADD_ENUM_TO_ACTION_MAP(PHOTO_MODE_TOGGLE_GRID)
 	ADD_ENUM_TO_ACTION_MAP(VIEW_TOPDOWN)
 	ADD_ENUM_TO_ACTION_MAP(VIEW_TRACK_TARGET)
 

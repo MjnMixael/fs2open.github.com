@@ -251,3 +251,4 @@ bool game_is_photo_mode_active() { return false; }
 void game_cycle_photo_mode_filter(int) {}
 void game_reset_photo_mode_filters() {}
 void game_adjust_photo_mode_filter_parameter(int) {}
+void game_toggle_photo_mode_grid() {}

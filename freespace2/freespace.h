@@ -131,6 +131,7 @@ inline bool game_is_photo_mode_active() { return false; }
 inline void game_cycle_photo_mode_filter(int /*direction*/) {}
 inline void game_reset_photo_mode_filters() {}
 inline void game_adjust_photo_mode_filter_parameter(int /*delta*/) {}
+inline void game_toggle_photo_mode_grid() {}
 #else
 void game_toggle_photo_mode();
 
@@ -141,6 +142,7 @@ bool game_is_photo_mode_active();
 void game_cycle_photo_mode_filter(int direction);
 void game_reset_photo_mode_filters();
 void game_adjust_photo_mode_filter_parameter(int delta);
+void game_toggle_photo_mode_grid();
 #endif
 
 // call this to set frametime properly (once per frame)
