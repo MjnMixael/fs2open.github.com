@@ -667,7 +667,7 @@ void photo_mode_do_frame(float frame_time)
 
 	const float forward = check_control_timef(FORWARD_THRUST) - check_control_timef(REVERSE_THRUST);
 	const float right = check_control_timef(RIGHT_SLIDE_THRUST) - check_control_timef(LEFT_SLIDE_THRUST);
-	const float up = check_control_timef(DOWN_SLIDE_THRUST) - check_control_timef(UP_SLIDE_THRUST);
+	const float up = check_control_timef(UP_SLIDE_THRUST) - check_control_timef(DOWN_SLIDE_THRUST);
 
 	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.fvec, forward * speed * frame_time);
 	vm_vec_scale_add2(&cam_pos, &cam_orient.vec.rvec, right * speed * frame_time);
