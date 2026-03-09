@@ -586,6 +586,10 @@ void photo_mode_set_active(bool active)
 
 		Photo_mode_active = true;
 		HUD_printf("Photo Mode enabled.");
+
+		if (scripting::hooks::OnPhotoModeStarted->isActive()) {
+			scripting::hooks::OnPhotoModeStarted->run();
+		}
 		return;
 	}
 
@@ -610,6 +614,10 @@ void photo_mode_set_active(bool active)
 
 	Photo_mode_active = false;
 	HUD_printf("Photo Mode disabled.");
+
+	if (scripting::hooks::OnPhotoModeEnded->isActive()) {
+		scripting::hooks::OnPhotoModeEnded->run();
+	}
 }
 
 void photo_mode_do_frame(float frame_time)
