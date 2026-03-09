@@ -334,6 +334,7 @@ int Normal_key_set[] = {
 	PHOTO_MODE_FILTER_RESET,
 	PHOTO_MODE_PARAM_DECREASE,
 	PHOTO_MODE_PARAM_INCREASE,
+	PHOTO_MODE_TOGGLE_GRID,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -487,6 +488,7 @@ int Non_critical_key_set[] = {
 	PHOTO_MODE_FILTER_RESET,
 	PHOTO_MODE_PARAM_DECREASE,
 	PHOTO_MODE_PARAM_INCREASE,
+	PHOTO_MODE_TOGGLE_GRID,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -2622,6 +2624,10 @@ int button_function(int n)
 
 		case PHOTO_MODE_PARAM_INCREASE:
 			game_adjust_photo_mode_filter_parameter(5);
+			break;
+
+		case PHOTO_MODE_TOGGLE_GRID:
+			game_toggle_photo_mode_grid();
 			break;
 
 		case HUD_TARGETBOX_TOGGLE_WIREFRAME:

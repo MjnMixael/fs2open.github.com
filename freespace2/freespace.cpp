@@ -416,6 +416,7 @@ SCP_vector<photo_mode_post_effect_state> Photo_mode_saved_post_effects;
 std::array<int, PHOTO_MODE_PARAM_COUNT> Photo_mode_saved_parameter_values = { 100, 100, 100 };
 std::array<int, PHOTO_MODE_PARAM_COUNT> Photo_mode_parameter_values = { 100, 100, 100 };
 int Photo_mode_selected_parameter = PHOTO_MODE_PARAM_SATURATION;
+bool Photo_mode_grid_enabled = false;
 
 const char* photo_mode_get_parameter_effect_name(int index)
 {
@@ -605,6 +606,7 @@ void photo_mode_set_active(bool active)
 	Photo_mode_saved_parameter_values = { 100, 100, 100 };
 	Photo_mode_parameter_values = { 100, 100, 100 };
 	Photo_mode_selected_parameter = PHOTO_MODE_PARAM_SATURATION;
+	Photo_mode_grid_enabled = false;
 
 	Photo_mode_active = false;
 	HUD_printf("Photo Mode disabled.");
@@ -696,15 +698,26 @@ void photo_mode_maybe_render_hud()
 	const int line_height = gr_get_font_height();
 	const int panel_padding = 8;
 	const int panel_width = 430;
-	const int panel_height = panel_padding * 2 + line_height * 8;
-	const int panel_x = gr_screen.center_offset_x + (gr_screen.center_w / 12);
-	const int panel_y = gr_screen.center_offset_y + gr_screen.center_h - panel_height - (gr_screen.center_h / 7);
+	const int panel_height = panel_padding * 2 + line_height * 9;
+	const int panel_x = gr_screen.center_offset_x + (gr_screen.center_w / 4);
+	const int panel_y = gr_screen.center_offset_y + gr_screen.center_h - panel_height - (gr_screen.center_h / 6);
 
 	gr_line(panel_x, panel_y, panel_x + panel_width, panel_y, GR_RESIZE_NONE);
 	gr_line(panel_x, panel_y + panel_height, panel_x + panel_width, panel_y + panel_height, GR_RESIZE_NONE);
 	gr_line(panel_x, panel_y, panel_x, panel_y + panel_height, GR_RESIZE_NONE);
 	gr_line(panel_x + panel_width, panel_y, panel_x + panel_width, panel_y + panel_height, GR_RESIZE_NONE);
 	gr_line(panel_x, panel_y + line_height + panel_padding + 1, panel_x + panel_width, panel_y + line_height + panel_padding + 1, GR_RESIZE_NONE);
+
+	if (Photo_mode_grid_enabled) {
+		const int x1 = gr_screen.center_offset_x + gr_screen.center_w / 3;
+		const int x2 = gr_screen.center_offset_x + (gr_screen.center_w * 2) / 3;
+		const int y1 = gr_screen.center_offset_y + gr_screen.center_h / 3;
+		const int y2 = gr_screen.center_offset_y + (gr_screen.center_h * 2) / 3;
+		gr_line(x1, gr_screen.center_offset_y, x1, gr_screen.center_offset_y + gr_screen.center_h, GR_RESIZE_NONE);
+		gr_line(x2, gr_screen.center_offset_y, x2, gr_screen.center_offset_y + gr_screen.center_h, GR_RESIZE_NONE);
+		gr_line(gr_screen.center_offset_x, y1, gr_screen.center_offset_x + gr_screen.center_w, y1, GR_RESIZE_NONE);
+		gr_line(gr_screen.center_offset_x, y2, gr_screen.center_offset_x + gr_screen.center_w, y2, GR_RESIZE_NONE);
+	}
 
 	int line = panel_y + panel_padding;
 	const int text_x = panel_x + panel_padding;
@@ -723,6 +736,8 @@ void photo_mode_maybe_render_hud()
 	gr_printf_no_resize(text_x, line, XSTR("Brightness: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_BRIGHTNESS]);
 	line += line_height;
 	gr_printf_no_resize(text_x, line, XSTR("Contrast: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_CONTRAST]);
+	line += line_height;
+	gr_printf_no_resize(text_x, line, XSTR("Grid: %s", -1), Photo_mode_grid_enabled ? XSTR("On", -1) : XSTR("Off", -1));
 
 	font::set_font(old_font);
 }
@@ -2837,6 +2852,15 @@ void game_adjust_photo_mode_filter_parameter(int delta)
 
 	Photo_mode_parameter_values[Photo_mode_selected_parameter] = std::clamp(Photo_mode_parameter_values[Photo_mode_selected_parameter] + delta, 0, 200);
 	photo_mode_apply_parameter_values();
+}
+
+void game_toggle_photo_mode_grid()
+{
+	if (!Photo_mode_active) {
+		return;
+	}
+
+	Photo_mode_grid_enabled = !Photo_mode_grid_enabled;
 }
 
 DCF(photo_mode, "Toggles Photo Mode.")
