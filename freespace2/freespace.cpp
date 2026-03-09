@@ -28,6 +28,7 @@
 #endif
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 
 #include "globalincs/alphacolors.h"
@@ -404,34 +405,41 @@ struct photo_mode_post_effect_state {
 	vec3d rgb = vmd_zero_vector;
 };
 
-struct photo_mode_filter_preset {
-	int saturation;
-	int brightness;
-	int contrast;
+enum photo_mode_parameter {
+	PHOTO_MODE_PARAM_SATURATION = 0,
+	PHOTO_MODE_PARAM_BRIGHTNESS,
+	PHOTO_MODE_PARAM_CONTRAST,
+	PHOTO_MODE_PARAM_COUNT
 };
 
 SCP_vector<photo_mode_post_effect_state> Photo_mode_saved_post_effects;
-int Photo_mode_filter_index = 0;
-int Photo_mode_filter_strength = 100;
+std::array<int, PHOTO_MODE_PARAM_COUNT> Photo_mode_saved_parameter_values = { 100, 100, 100 };
+std::array<int, PHOTO_MODE_PARAM_COUNT> Photo_mode_parameter_values = { 100, 100, 100 };
+int Photo_mode_selected_parameter = PHOTO_MODE_PARAM_SATURATION;
 
-constexpr photo_mode_filter_preset Photo_mode_filter_presets[] = {
-	{ 0, 0, 0 },
-	{ 160, 105, 120 },
-	{ 0, 100, 135 },
-	{ 125, 135, 105 },
-};
-
-const char* photo_mode_get_filter_name(int index)
+const char* photo_mode_get_parameter_effect_name(int index)
 {
 	switch (index) {
-	case 0:
-		return XSTR("Mission Default", -1);
-	case 1:
-		return XSTR("Vivid", -1);
-	case 2:
-		return XSTR("Noir", -1);
-	case 3:
-		return XSTR("High Key", -1);
+	case PHOTO_MODE_PARAM_SATURATION:
+		return "saturation";
+	case PHOTO_MODE_PARAM_BRIGHTNESS:
+		return "brightness";
+	case PHOTO_MODE_PARAM_CONTRAST:
+		return "contrast";
+	default:
+		return nullptr;
+	}
+}
+
+const char* photo_mode_get_parameter_label(int index)
+{
+	switch (index) {
+	case PHOTO_MODE_PARAM_SATURATION:
+		return XSTR("Saturation", -1);
+	case PHOTO_MODE_PARAM_BRIGHTNESS:
+		return XSTR("Brightness", -1);
+	case PHOTO_MODE_PARAM_CONTRAST:
+		return XSTR("Contrast", -1);
 	default:
 		return XSTR("Unknown", -1);
 	}
@@ -482,47 +490,52 @@ void photo_mode_apply_saved_post_effect_state(bool clear_saved_state)
 	}
 }
 
-void photo_mode_apply_filter_index(int index)
+int photo_mode_get_saved_post_effect_value(const char* effect_name)
 {
-	if (index < 0 || index >= static_cast<int>(sizeof(Photo_mode_filter_presets) / sizeof(Photo_mode_filter_presets[0]))) {
-		return;
+	int value = 100;
+
+	if (effect_name == nullptr || graphics::Post_processing_manager == nullptr) {
+		return value;
 	}
 
-	Photo_mode_filter_index = index;
+	for (const auto& saved_state : Photo_mode_saved_post_effects) {
+		if (stricmp(saved_state.name.c_str(), effect_name) != 0) {
+			continue;
+		}
 
-	if (Photo_mode_filter_index == 0) {
-		photo_mode_apply_saved_post_effect_state(false);
-	} else {
-		const auto& preset = Photo_mode_filter_presets[Photo_mode_filter_index];
-
-		auto blend_from_saved_value = [&](const char* effect_name, int target_value) {
-			int saved_value = target_value;
-
-			for (const auto& saved_state : Photo_mode_saved_post_effects) {
-				if (stricmp(saved_state.name.c_str(), effect_name) != 0) {
-					continue;
-				}
-
-				for (const auto& effect : graphics::Post_processing_manager->getPostEffects()) {
-					if (stricmp(effect.name.c_str(), effect_name) == 0) {
-						saved_value = static_cast<int>(std::lround((saved_state.intensity - effect.add) * effect.div));
-						break;
-					}
-				}
-
+		for (const auto& effect : graphics::Post_processing_manager->getPostEffects()) {
+			if (stricmp(effect.name.c_str(), effect_name) == 0) {
+				value = static_cast<int>(std::lround((saved_state.intensity - effect.add) * effect.div));
 				break;
 			}
+		}
 
-			return saved_value + ((target_value - saved_value) * Photo_mode_filter_strength) / 100;
-		};
-
-		gr_post_process_set_effect("saturation", blend_from_saved_value("saturation", preset.saturation), nullptr);
-		gr_post_process_set_effect("brightness", blend_from_saved_value("brightness", preset.brightness), nullptr);
-		gr_post_process_set_effect("contrast", blend_from_saved_value("contrast", preset.contrast), nullptr);
+		break;
 	}
 
-	if (Photo_mode_active) {
-		HUD_printf(XSTR("Photo Mode filter: %s", -1), photo_mode_get_filter_name(Photo_mode_filter_index));
+	return value;
+}
+
+void photo_mode_sync_parameter_values_from_saved_state()
+{
+	for (int i = 0; i < PHOTO_MODE_PARAM_COUNT; ++i) {
+		const auto effect_name = photo_mode_get_parameter_effect_name(i);
+		Photo_mode_saved_parameter_values[i] = photo_mode_get_saved_post_effect_value(effect_name);
+		Photo_mode_parameter_values[i] = Photo_mode_saved_parameter_values[i];
+	}
+
+	Photo_mode_selected_parameter = PHOTO_MODE_PARAM_SATURATION;
+}
+
+void photo_mode_apply_parameter_values()
+{
+	for (int i = 0; i < PHOTO_MODE_PARAM_COUNT; ++i) {
+		const auto effect_name = photo_mode_get_parameter_effect_name(i);
+		if (effect_name == nullptr) {
+			continue;
+		}
+
+		gr_post_process_set_effect(effect_name, Photo_mode_parameter_values[i], nullptr);
 	}
 }
 
@@ -568,8 +581,8 @@ void photo_mode_set_active(bool active)
 		lock_time_compression(true);
 
 		photo_mode_capture_post_effect_state();
-		Photo_mode_filter_strength = 100;
-		photo_mode_apply_filter_index(0);
+		photo_mode_sync_parameter_values_from_saved_state();
+		photo_mode_apply_parameter_values();
 
 		audiostream_pause_all();
 		message_pause_all();
@@ -594,8 +607,9 @@ void photo_mode_set_active(bool active)
 	}
 
 	photo_mode_apply_saved_post_effect_state(true);
-	Photo_mode_filter_index = 0;
-	Photo_mode_filter_strength = 100;
+	Photo_mode_saved_parameter_values = { 100, 100, 100 };
+	Photo_mode_parameter_values = { 100, 100, 100 };
+	Photo_mode_selected_parameter = PHOTO_MODE_PARAM_SATURATION;
 
 	Photo_mode_active = false;
 	HUD_printf("Photo Mode disabled.");
@@ -693,9 +707,13 @@ void photo_mode_maybe_render_hud()
 	line += line_height;
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Cam Pos: X %.1f  Y %.1f  Z %.1f", cam_pos.xyz.x, cam_pos.xyz.y, cam_pos.xyz.z);
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Filter: %s", -1), photo_mode_get_filter_name(Photo_mode_filter_index));
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Selected Parameter: %s", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter));
 	line += line_height;
-	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Filter Strength: %d%%", -1), Photo_mode_filter_strength);
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Saturation: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_SATURATION]);
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Brightness: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_BRIGHTNESS]);
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Contrast: %d", -1), Photo_mode_parameter_values[PHOTO_MODE_PARAM_CONTRAST]);
 	line += line_height;
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Controls: Move/slide + pitch/yaw/bank (+afterburner boost)");
 }
@@ -2782,20 +2800,15 @@ void game_cycle_photo_mode_filter(int direction)
 		return;
 	}
 
-	const auto preset_count = static_cast<int>(sizeof(Photo_mode_filter_presets) / sizeof(Photo_mode_filter_presets[0]));
-	if (preset_count <= 0) {
-		return;
+	Photo_mode_selected_parameter += direction;
+	while (Photo_mode_selected_parameter < 0) {
+		Photo_mode_selected_parameter += PHOTO_MODE_PARAM_COUNT;
+	}
+	while (Photo_mode_selected_parameter >= PHOTO_MODE_PARAM_COUNT) {
+		Photo_mode_selected_parameter -= PHOTO_MODE_PARAM_COUNT;
 	}
 
-	int next = Photo_mode_filter_index + direction;
-	while (next < 0) {
-		next += preset_count;
-	}
-	while (next >= preset_count) {
-		next -= preset_count;
-	}
-
-	photo_mode_apply_filter_index(next);
+	HUD_printf(XSTR("Photo Mode selected parameter: %s", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter));
 }
 
 void game_reset_photo_mode_filters()
@@ -2804,8 +2817,9 @@ void game_reset_photo_mode_filters()
 		return;
 	}
 
-	Photo_mode_filter_strength = 100;
-	photo_mode_apply_filter_index(0);
+	Photo_mode_parameter_values = Photo_mode_saved_parameter_values;
+	photo_mode_apply_parameter_values();
+	HUD_printf(XSTR("Photo Mode parameters reset.", -1));
 }
 
 void game_adjust_photo_mode_filter_parameter(int delta)
@@ -2814,14 +2828,9 @@ void game_adjust_photo_mode_filter_parameter(int delta)
 		return;
 	}
 
-	if (Photo_mode_filter_index == 0) {
-		HUD_printf(XSTR("Select a non-default photo mode filter to adjust.", -1));
-		return;
-	}
-
-	Photo_mode_filter_strength = std::clamp(Photo_mode_filter_strength + delta, 0, 200);
-	photo_mode_apply_filter_index(Photo_mode_filter_index);
-	HUD_printf(XSTR("Photo Mode filter strength: %d%%", -1), Photo_mode_filter_strength);
+	Photo_mode_parameter_values[Photo_mode_selected_parameter] = std::clamp(Photo_mode_parameter_values[Photo_mode_selected_parameter] + delta, 0, 200);
+	photo_mode_apply_parameter_values();
+	HUD_printf(XSTR("%s: %d", -1), photo_mode_get_parameter_label(Photo_mode_selected_parameter), Photo_mode_parameter_values[Photo_mode_selected_parameter]);
 }
 
 DCF(photo_mode, "Toggles Photo Mode.")
