@@ -27,6 +27,8 @@
  #include <sys/stat.h>
 #endif
 
+#include <cmath>
+
 #include "globalincs/alphacolors.h"
 #include "globalincs/crashdump.h"
 #include "globalincs/mspdb_callstack.h"
@@ -63,6 +65,7 @@
 #include "gamesnd/gamesnd.h"
 #include "graphics/debug_sphere.h"
 #include "graphics/font.h"
+#include "graphics/grinternal.h"
 #include "graphics/light.h"
 #include "graphics/matrix.h"
 #include "graphics/openxr.h"
@@ -394,6 +397,111 @@ constexpr float Photo_mode_move_speed = 90.0f;
 constexpr float Photo_mode_boost_multiplier = 6.0f;
 constexpr float Photo_mode_time_compression = 0.01f;
 
+struct photo_mode_post_effect_state {
+	SCP_string name;
+	float intensity = 0.0f;
+	vec3d rgb = vmd_zero_vector;
+};
+
+struct photo_mode_filter_preset {
+	int saturation;
+	int brightness;
+	int contrast;
+};
+
+SCP_vector<photo_mode_post_effect_state> Photo_mode_saved_post_effects;
+int Photo_mode_filter_index = 0;
+
+constexpr photo_mode_filter_preset Photo_mode_filter_presets[] = {
+	{ 0, 0, 0 },
+	{ 160, 105, 120 },
+	{ 0, 100, 135 },
+	{ 125, 135, 105 },
+};
+
+const char* photo_mode_get_filter_name(int index)
+{
+	switch (index) {
+	case 0:
+		return XSTR("Mission Default", -1);
+	case 1:
+		return XSTR("Vivid", -1);
+	case 2:
+		return XSTR("Noir", -1);
+	case 3:
+		return XSTR("High Key", -1);
+	default:
+		return XSTR("Unknown", -1);
+	}
+}
+
+void photo_mode_capture_post_effect_state()
+{
+	Photo_mode_saved_post_effects.clear();
+
+	if (graphics::Post_processing_manager == nullptr) {
+		return;
+	}
+
+	const auto& post_effects = graphics::Post_processing_manager->getPostEffects();
+	Photo_mode_saved_post_effects.reserve(post_effects.size());
+
+	for (const auto& effect : post_effects) {
+		photo_mode_post_effect_state state;
+		state.name = effect.name;
+		state.intensity = effect.intensity;
+		state.rgb = effect.rgb;
+		Photo_mode_saved_post_effects.push_back(state);
+	}
+}
+
+void photo_mode_apply_saved_post_effect_state(bool clear_saved_state)
+{
+	if (graphics::Post_processing_manager == nullptr) {
+		if (clear_saved_state) {
+			Photo_mode_saved_post_effects.clear();
+		}
+		return;
+	}
+
+	const auto& post_effects = graphics::Post_processing_manager->getPostEffects();
+	for (const auto& saved_state : Photo_mode_saved_post_effects) {
+		for (const auto& effect : post_effects) {
+			if (!stricmp(effect.name.c_str(), saved_state.name.c_str())) {
+				const int value = static_cast<int>(std::lround((saved_state.intensity - effect.add) * effect.div));
+				gr_post_process_set_effect(saved_state.name.c_str(), value, &saved_state.rgb);
+				break;
+			}
+		}
+	}
+
+	if (clear_saved_state) {
+		Photo_mode_saved_post_effects.clear();
+	}
+}
+
+void photo_mode_apply_filter_index(int index)
+{
+	if (index < 0 || index >= static_cast<int>(sizeof(Photo_mode_filter_presets) / sizeof(Photo_mode_filter_presets[0]))) {
+		return;
+	}
+
+	Photo_mode_filter_index = index;
+
+	if (Photo_mode_filter_index == 0) {
+		photo_mode_apply_saved_post_effect_state(false);
+	} else {
+		const auto& preset = Photo_mode_filter_presets[Photo_mode_filter_index];
+		gr_post_process_set_effect("saturation", preset.saturation, nullptr);
+		gr_post_process_set_effect("brightness", preset.brightness, nullptr);
+		gr_post_process_set_effect("contrast", preset.contrast, nullptr);
+	}
+
+	if (Photo_mode_active) {
+		HUD_printf(XSTR("Photo Mode filter: %s", -1), photo_mode_get_filter_name(Photo_mode_filter_index));
+	}
+}
+
 void photo_mode_set_active(bool active)
 {
 	if (active == Photo_mode_active) {
@@ -435,6 +543,9 @@ void photo_mode_set_active(bool active)
 		set_time_compression(Photo_mode_time_compression, 0.0f);
 		lock_time_compression(true);
 
+		photo_mode_capture_post_effect_state();
+		photo_mode_apply_filter_index(0);
+
 		audiostream_pause_all();
 		message_pause_all();
 		Photo_mode_audio_paused = true;
@@ -456,6 +567,9 @@ void photo_mode_set_active(bool active)
 		message_resume_all();
 		Photo_mode_audio_paused = false;
 	}
+
+	photo_mode_apply_saved_post_effect_state(true);
+	Photo_mode_filter_index = 0;
 
 	Photo_mode_active = false;
 	HUD_printf("Photo Mode disabled.");
@@ -552,6 +666,8 @@ void photo_mode_maybe_render_hud()
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Time Compression: %.2fx", f2fl(Game_time_compression));
 	line += line_height;
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Cam Pos: X %.1f  Y %.1f  Z %.1f", cam_pos.xyz.x, cam_pos.xyz.y, cam_pos.xyz.z);
+	line += line_height;
+	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, XSTR("Filter: %s", -1), photo_mode_get_filter_name(Photo_mode_filter_index));
 	line += line_height;
 	gr_printf_no_resize(gr_screen.center_offset_x + 5, line, "Controls: Move/slide + pitch/yaw/bank (+afterburner boost)");
 }
@@ -2630,6 +2746,37 @@ bool game_get_photo_mode_allowed()
 bool game_is_photo_mode_active()
 {
 	return Photo_mode_active;
+}
+
+void game_cycle_photo_mode_filter(int direction)
+{
+	if (!Photo_mode_active) {
+		return;
+	}
+
+	const auto preset_count = static_cast<int>(sizeof(Photo_mode_filter_presets) / sizeof(Photo_mode_filter_presets[0]));
+	if (preset_count <= 0) {
+		return;
+	}
+
+	int next = Photo_mode_filter_index + direction;
+	while (next < 0) {
+		next += preset_count;
+	}
+	while (next >= preset_count) {
+		next -= preset_count;
+	}
+
+	photo_mode_apply_filter_index(next);
+}
+
+void game_reset_photo_mode_filters()
+{
+	if (!Photo_mode_active) {
+		return;
+	}
+
+	photo_mode_apply_filter_index(0);
 }
 
 DCF(photo_mode, "Toggles Photo Mode.")
