@@ -329,6 +329,9 @@ int Normal_key_set[] = {
 
 	TOGGLE_HUD,
 	TOGGLE_PHOTO_MODE,
+	PHOTO_MODE_FILTER_PREV,
+	PHOTO_MODE_FILTER_NEXT,
+	PHOTO_MODE_FILTER_RESET,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -477,6 +480,9 @@ int Non_critical_key_set[] = {
 
 	TOGGLE_HUD,
 	TOGGLE_PHOTO_MODE,
+	PHOTO_MODE_FILTER_PREV,
+	PHOTO_MODE_FILTER_NEXT,
+	PHOTO_MODE_FILTER_RESET,
 
 	HUD_TARGETBOX_TOGGLE_WIREFRAME,
 	AUTO_PILOT_TOGGLE,
@@ -2592,6 +2598,18 @@ int button_function(int n)
 
 		case TOGGLE_PHOTO_MODE:
 			game_toggle_photo_mode();
+			break;
+
+		case PHOTO_MODE_FILTER_PREV:
+			game_cycle_photo_mode_filter(-1);
+			break;
+
+		case PHOTO_MODE_FILTER_NEXT:
+			game_cycle_photo_mode_filter(1);
+			break;
+
+		case PHOTO_MODE_FILTER_RESET:
+			game_reset_photo_mode_filters();
 			break;
 
 		case HUD_TARGETBOX_TOGGLE_WIREFRAME:

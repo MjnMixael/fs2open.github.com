@@ -309,6 +309,9 @@ enum IoActionId : int {
 	CYCLE_PRIMARY_WEAPON_PATTERN,
 
 	TOGGLE_PHOTO_MODE,
+	PHOTO_MODE_FILTER_PREV,
+	PHOTO_MODE_FILTER_NEXT,
+	PHOTO_MODE_FILTER_RESET,
 
 	/*!
 	 * This must always be below the last defined item
