@@ -317,13 +317,21 @@ void RocketRenderingInterface::renderGeometry(gr_buffer_handle vertex_buffer,
 	transl.x = translation.x + renderOffset.x;
 	transl.y = translation.y + renderOffset.y;
 
+	vec2d briefing_pos;
+	briefing_pos.x = briefing_reveal_pos.x;
+	briefing_pos.y = briefing_reveal_pos.y;
+
+	vec2d briefing_size;
+	briefing_size.x = briefing_reveal_size.x;
+	briefing_size.y = briefing_reveal_size.y;
+
 	material_set_rocket_interface(&material,
 		bitmap,
 		transl,
 		horizontal_swipe_offset,
 		briefing_reveal_active,
-		briefing_reveal_pos,
-		briefing_reveal_size,
+		briefing_pos,
+		briefing_size,
 		briefing_reveal_progress,
 		briefing_reveal_angle,
 		briefing_reveal_cell_size,
