@@ -99,6 +99,20 @@ void BorderDecoratorInstancer::Release()
 // BriefingRevealDecoratorInstancer Implementation
 BriefingRevealDecoratorInstancer::BriefingRevealDecoratorInstancer()
 {
+	// RCSS usage example:
+	//
+	// .briefing-panel {
+	//   decorator: briefing-reveal;
+	//   decorator-duration: 1.0;
+	//   decorator-cell-size: 14;
+	//   decorator-angle: -32;
+	//   decorator-edge-width: 10;
+	//   decorator-edge-fade: 18;
+	//   decorator-overlay-color: rgba(0, 0, 0, 220);
+	//   decorator-edge-color: rgba(255, 255, 255, 255);
+	// }
+	//
+	// Note: The animation begins when the element first gets decorated.
 	RegisterProperty("duration", "0.9").AddParser("number");
 	RegisterProperty("cell-size", "16.0").AddParser("number");
 	RegisterProperty("angle", "-30.0").AddParser("number");
