@@ -350,4 +350,36 @@ void RocketRenderingInterface::setHorizontalSwipeOffset(float value) {
 	horizontal_swipe_offset = value;
 }
 
+void RocketRenderingInterface::setAnimationNoLoop(Rocket::Core::TextureHandle handle, bool noLoop)
+{
+	if (handle == 0) {
+		return;
+	}
+
+	auto tex = get_texture(handle);
+	if (!tex->is_animation) {
+		return;
+	}
+
+	if (noLoop) {
+		tex->animation.direction |= GENERIC_ANIM_DIRECTION_NOLOOP;
+	} else {
+		tex->animation.direction &= ~GENERIC_ANIM_DIRECTION_NOLOOP;
+	}
+}
+
+bool RocketRenderingInterface::isAnimationDone(Rocket::Core::TextureHandle handle)
+{
+	if (handle == 0) {
+		return false;
+	}
+
+	auto tex = get_texture(handle);
+	if (!tex->is_animation) {
+		return false;
+	}
+
+	return tex->animation.done_playing != 0;
+}
+
 } // namespace scpui

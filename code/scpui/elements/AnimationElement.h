@@ -56,8 +56,10 @@ class AnimationElement : public Rocket::Core::Element {
 	// Resets the values of the 'coords' attribute to mark them as unused.
 	void ResetCoords();
 
-	// The texture this element is rendering from.
+	// The primary texture this element is rendering from.
 	Texture texture;
+	// Optional static fallback texture that can be shown after the animation has finished.
+	Texture fallback_texture;
 	// True if we need to refetch the texture's source from the element's attributes.
 	bool texture_dirty;
 	// The element's computed intrinsic dimensions. If either of these values are set to -1, then
@@ -74,6 +76,8 @@ class AnimationElement : public Rocket::Core::Element {
 	bool geometry_dirty;
 
 	float animation_last_update_time = -1.0f;
+	bool has_fallback_texture      = false;
+	bool switched_to_fallback      = false;
 };
 
 } // namespace elements

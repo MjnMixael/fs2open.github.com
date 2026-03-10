@@ -96,12 +96,15 @@ void AnimationElement::OnAttributeChange(const Rocket::Core::AttributeNameList& 
 
 	// Check for a changed 'src' attribute. If this changes, the old texture handle is released,
 	// forcing a reload when the layout is regenerated.
-	if (changed_attributes.find("src") != changed_attributes.end()) {
+	if (changed_attributes.find("src") != changed_attributes.end() ||
+	    changed_attributes.find("src2") != changed_attributes.end()) {
 		texture_dirty = true;
 		dirty_layout  = true;
 
-		// Reset the animation timestamps to make sure the animation starts at the beginning
+		// Reset animation state to make sure the animation starts at the beginning
 		animation_last_update_time = -1.0f;
+		has_fallback_texture = false;
+		switched_to_fallback = false;
 	}
 
 	// Check for a changed 'width' attribute. If this changes, a layout is forced which will
@@ -212,10 +215,13 @@ void AnimationElement::GenerateGeometry()
 bool AnimationElement::LoadTexture()
 {
 	texture_dirty = false;
+	has_fallback_texture = false;
+	switched_to_fallback = false;
 
 	// Get the source URL for the image.
 	String image_source = GetAttribute<String>("src", "");
 	if (image_source.Empty()) {
+		geometry.SetTexture(nullptr);
 		return false;
 	}
 
@@ -227,6 +233,13 @@ bool AnimationElement::LoadTexture()
 	if (!texture.Load(image_source, source_url.GetPath())) {
 		geometry.SetTexture(nullptr);
 		return false;
+	}
+
+	scpui::RocketRenderingInterface::setAnimationNoLoop(texture.GetHandle(GetRenderInterface()), true);
+
+	String fallback_source = GetAttribute<String>("src2", "");
+	if (!fallback_source.Empty()) {
+		has_fallback_texture = fallback_texture.Load(fallback_source, source_url.GetPath());
 	}
 
 	// Set the texture onto our geometry object.
@@ -246,8 +259,8 @@ void AnimationElement::OnUpdate()
 {
 	Element::OnUpdate();
 
-	if (texture.GetHandle(GetRenderInterface()) == 0) {
-		// Make sure that the handle is valid
+	auto handle = texture.GetHandle(GetRenderInterface());
+	if (handle == 0 || switched_to_fallback) {
 		return;
 	}
 
@@ -256,11 +269,19 @@ void AnimationElement::OnUpdate()
 			Rocket::Core::GetSystemInterface()->GetElapsedTime() - animation_last_update_time;
 
 		// Set the advance time for the render call so that the generic anim inside the handle gets rendered correctly
-		scpui::RocketRenderingInterface::advanceAnimation(texture.GetHandle(GetRenderInterface()),
-			animation_frame_time);
+		scpui::RocketRenderingInterface::advanceAnimation(handle, animation_frame_time);
+
+		if (has_fallback_texture && scpui::RocketRenderingInterface::isAnimationDone(handle)) {
+			geometry.SetTexture(&fallback_texture);
+			switched_to_fallback = true;
+			geometry_dirty = true;
+			DirtyLayout();
+			return;
+		}
 	}
 	animation_last_update_time = Rocket::Core::GetSystemInterface()->GetElapsedTime();
 }
+
 
 } // namespace elements
 } // namespace scpui
