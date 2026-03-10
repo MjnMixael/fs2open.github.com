@@ -235,7 +235,6 @@ bool AnimationElement::LoadTexture()
 		return false;
 	}
 
-	scpui::RocketRenderingInterface::setAnimationNoLoop(texture.GetHandle(GetRenderInterface()), true);
 
 	String fallback_source = GetAttribute<String>("src2", "");
 	if (!fallback_source.Empty()) {

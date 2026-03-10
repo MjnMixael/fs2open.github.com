@@ -156,12 +156,6 @@ class RocketRenderingInterface : public Rocket::Core::RenderInterface {
 	 */
 	static void advanceAnimation(Rocket::Core::TextureHandle handle, float advanceTime);
 
-	/**
-	 * @brief Configures animation looping behavior on an animated texture
-	 * @param handle The libRocket texture handle to modify
-	 * @param noLoop If true the animation stops on the last frame instead of looping
-	 */
-	static void setAnimationNoLoop(Rocket::Core::TextureHandle handle, bool noLoop);
 
 	/**
 	 * @brief Checks if an animated texture has finished playback
