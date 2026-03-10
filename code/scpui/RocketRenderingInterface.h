@@ -57,6 +57,15 @@ class RocketRenderingInterface : public Rocket::Core::RenderInterface {
 
 	float horizontal_swipe_offset = std::numeric_limits<float>::infinity();
 
+	bool briefing_reveal_active = false;
+	Rocket::Core::Vector2f briefing_reveal_pos{0.f, 0.f};
+	Rocket::Core::Vector2f briefing_reveal_size{0.f, 0.f};
+	float briefing_reveal_progress = 1.0f;
+	float briefing_reveal_angle = -30.0f;
+	float briefing_reveal_cell_size = 16.0f;
+	float briefing_reveal_edge_width = 10.0f;
+	float briefing_reveal_edge_fade = 18.0f;
+
   public:
 	RocketRenderingInterface();
 	~RocketRenderingInterface() override;
@@ -141,6 +150,18 @@ class RocketRenderingInterface : public Rocket::Core::RenderInterface {
 	 * @param value The pixel location where the swipe is. Set to infinity to disable.
 	 */
 	void setHorizontalSwipeOffset(float value);
+
+	/**
+	 * @brief Set state for FS1-style briefing reveal rendering for subsequent operations.
+	 */
+	void setBriefingRevealState(bool active,
+		const Rocket::Core::Vector2f& position,
+		const Rocket::Core::Vector2f& size,
+		float progress,
+		float angle,
+		float cell_size,
+		float edge_width,
+		float edge_fade);
 
 	/**
 	 * @brief From a texture handle, get the bitmap number for bmpman

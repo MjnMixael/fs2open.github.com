@@ -149,11 +149,27 @@ void material_set_distortion(distortion_material *mat_info, int texture, bool th
 void material_set_rocket_interface(interface_material* mat_info,
 	int texture,
 	const vec2d& offset,
-	float horizontal_swipe)
+	float horizontal_swipe,
+	bool briefing_reveal_enabled,
+	const vec2d& briefing_reveal_pos,
+	const vec2d& briefing_reveal_size,
+	float briefing_reveal_progress,
+	float briefing_reveal_angle,
+	float briefing_reveal_cell_size,
+	float briefing_reveal_edge_width,
+	float briefing_reveal_edge_fade)
 {
 	mat_info->set_texture_map(TM_BASE_TYPE, texture);
 	mat_info->set_offset(offset);
 	mat_info->set_horizontal_swipe(horizontal_swipe);
+	mat_info->set_briefing_reveal(briefing_reveal_enabled,
+		briefing_reveal_pos,
+		briefing_reveal_size,
+		briefing_reveal_progress,
+		briefing_reveal_angle,
+		briefing_reveal_cell_size,
+		briefing_reveal_edge_width,
+		briefing_reveal_edge_fade);
 
 	mat_info->set_cull_mode(false);
 	mat_info->set_color(1.0f, 1.0f, 1.0f, 1.0f);
@@ -932,3 +948,31 @@ void interface_material::set_offset(const vec2d& new_offset) { this->offset = ne
 vec2d interface_material::get_offset() const { return offset; }
 void interface_material::set_horizontal_swipe(float hor_offset) { this->horizontalSwipeOff = hor_offset; }
 float interface_material::get_horizontal_swipe() const { return this->horizontalSwipeOff; }
+
+void interface_material::set_briefing_reveal(bool enabled,
+	const vec2d& pos,
+	const vec2d& size,
+	float progress,
+	float angle,
+	float cell_size,
+	float edge_width,
+	float edge_fade)
+{
+	briefingRevealEnabled = enabled;
+	briefingRevealPos = pos;
+	briefingRevealSize = size;
+	briefingRevealProgress = progress;
+	briefingRevealAngle = angle;
+	briefingRevealCellSize = cell_size;
+	briefingRevealEdgeWidth = edge_width;
+	briefingRevealEdgeFade = edge_fade;
+}
+
+bool interface_material::get_briefing_reveal_enabled() const { return briefingRevealEnabled; }
+const vec2d& interface_material::get_briefing_reveal_pos() const { return briefingRevealPos; }
+const vec2d& interface_material::get_briefing_reveal_size() const { return briefingRevealSize; }
+float interface_material::get_briefing_reveal_progress() const { return briefingRevealProgress; }
+float interface_material::get_briefing_reveal_angle() const { return briefingRevealAngle; }
+float interface_material::get_briefing_reveal_cell_size() const { return briefingRevealCellSize; }
+float interface_material::get_briefing_reveal_edge_width() const { return briefingRevealEdgeWidth; }
+float interface_material::get_briefing_reveal_edge_fade() const { return briefingRevealEdgeFade; }

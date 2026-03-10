@@ -77,5 +77,30 @@ class DecoratorCornerBorders : public Rocket::Core::Decorator {
 	Rocket::Core::Colourb border_color;
 };
 
+class DecoratorBriefingReveal : public Rocket::Core::Decorator {
+  public:
+	DecoratorBriefingReveal(float duration,
+		float cell_size,
+		float angle_deg,
+		float edge_width,
+		float edge_fade,
+		Rocket::Core::Colourb overlay_color,
+		Rocket::Core::Colourb edge_color);
+	~DecoratorBriefingReveal() override;
+
+	Rocket::Core::DecoratorDataHandle GenerateElementData(Rocket::Core::Element* element) override;
+	void ReleaseElementData(Rocket::Core::DecoratorDataHandle element_data) override;
+	void RenderElement(Rocket::Core::Element* element, Rocket::Core::DecoratorDataHandle element_data) override;
+
+  private:
+	float _duration;
+	float _cell_size;
+	float _angle_deg;
+	float _edge_width;
+	float _edge_fade;
+	Rocket::Core::Colourb _overlay_color;
+	Rocket::Core::Colourb _edge_color;
+};
+
 } // namespace decorators
 } // namespace scpui

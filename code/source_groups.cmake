@@ -1275,6 +1275,8 @@ add_file_folder("ScpUi\\\\Elements"
 	scpui/elements/AnimationElement.h
 	scpui/elements/ScrollingTextElement.cpp
 	scpui/elements/ScrollingTextElement.h
+	scpui/elements/BriefingRevealElement.cpp
+	scpui/elements/BriefingRevealElement.h
 )
 
 add_file_folder("Scripting"

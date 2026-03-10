@@ -24,6 +24,7 @@
 #include "scpui/SoundPlugin.h"
 #include "scpui/elements/AnimationElement.h"
 #include "scpui/elements/ScrollingTextElement.h"
+#include "scpui/elements/BriefingRevealElement.h"
 #include "scripting/scripting.h"
 
 // Our Assert conflicts with the definitions inside libRocket
@@ -579,6 +580,9 @@ void initialize()
 	Rocket::Core::Factory::RegisterElementInstancer("scrollingText",
 		new ElementInstancerGeneric<elements::ScrollingTextElement>())
 		->RemoveReference();
+	Rocket::Core::Factory::RegisterElementInstancer("briefingReveal",
+		new ElementInstancerGeneric<elements::BriefingRevealElement>())
+		->RemoveReference();
 
 	XMLParser::RegisterNodeHandler("include", new IncludeNodeHandler())->RemoveReference();
 
@@ -590,9 +594,14 @@ void initialize()
 	Rocket::Core::DecoratorInstancer* corner_borders_instancer = new scpui::decorators::BorderDecoratorInstancer();
 	Rocket::Core::Factory::RegisterDecoratorInstancer("corner-borders", corner_borders_instancer);
 
+	// Register custom briefing-reveal decorator for FS1-style panel draw-in effects
+	Rocket::Core::DecoratorInstancer* briefing_reveal_instancer = new scpui::decorators::BriefingRevealDecoratorInstancer();
+	Rocket::Core::Factory::RegisterDecoratorInstancer("briefing-reveal", briefing_reveal_instancer);
+
 	// Decrease the reference counts (as it is managed by libRocket after registration)
 	underline_instancer->RemoveReference();
 	corner_borders_instancer->RemoveReference();
+	briefing_reveal_instancer->RemoveReference();
 
 	// Setup the plugin a style sheet properties for the sound support
 	Rocket::Core::RegisterPlugin(new SoundPlugin());

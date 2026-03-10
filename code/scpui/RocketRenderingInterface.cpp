@@ -317,7 +317,18 @@ void RocketRenderingInterface::renderGeometry(gr_buffer_handle vertex_buffer,
 	transl.x = translation.x + renderOffset.x;
 	transl.y = translation.y + renderOffset.y;
 
-	material_set_rocket_interface(&material, bitmap, transl, horizontal_swipe_offset);
+	material_set_rocket_interface(&material,
+		bitmap,
+		transl,
+		horizontal_swipe_offset,
+		briefing_reveal_active,
+		briefing_reveal_pos,
+		briefing_reveal_size,
+		briefing_reveal_progress,
+		briefing_reveal_angle,
+		briefing_reveal_cell_size,
+		briefing_reveal_edge_width,
+		briefing_reveal_edge_fade);
 
 	gr_render_rocket_primitives(&material, PRIM_TYPE_TRIS, &layout, num_elements, vertex_buffer, index_buffer);
 }
@@ -348,6 +359,26 @@ void RocketRenderingInterface::advanceAnimation(Rocket::Core::TextureHandle hand
 }
 void RocketRenderingInterface::setHorizontalSwipeOffset(float value) {
 	horizontal_swipe_offset = value;
+}
+
+
+void RocketRenderingInterface::setBriefingRevealState(bool active,
+	const Rocket::Core::Vector2f& position,
+	const Rocket::Core::Vector2f& size,
+	float progress,
+	float angle,
+	float cell_size,
+	float edge_width,
+	float edge_fade)
+{
+	briefing_reveal_active = active;
+	briefing_reveal_pos = position;
+	briefing_reveal_size = size;
+	briefing_reveal_progress = progress;
+	briefing_reveal_angle = angle;
+	briefing_reveal_cell_size = cell_size;
+	briefing_reveal_edge_width = edge_width;
+	briefing_reveal_edge_fade = edge_fade;
 }
 
 } // namespace scpui

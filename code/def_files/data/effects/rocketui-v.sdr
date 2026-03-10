@@ -1,4 +1,3 @@
-
 in vec2 vertPosition;
 in vec4 vertColor;
 in vec2 vertTexCoord;
@@ -15,6 +14,16 @@ layout (std140) uniform genericData {
 	int baseMapIndex;
 
 	float horizontalSwipeOffset;
+	bool briefingRevealEnabled;
+	float briefingRevealProgress;
+	float briefingRevealAngle;
+
+	vec2 briefingRevealPos;
+	vec2 briefingRevealSize;
+
+	float briefingRevealCellSize;
+	float briefingRevealEdgeWidth;
+	float briefingRevealEdgeFade;
 };
 
 void main()

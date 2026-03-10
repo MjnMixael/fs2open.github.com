@@ -95,5 +95,52 @@ void BorderDecoratorInstancer::Release()
 	delete this;
 }
 
+
+// BriefingRevealDecoratorInstancer Implementation
+BriefingRevealDecoratorInstancer::BriefingRevealDecoratorInstancer()
+{
+	// NOTE: This decorator remains available for overlay effects, but FS1-style image reveal
+	// should use the <briefingReveal> element which drives rendering through RocketRenderingInterface.
+	RegisterProperty("duration", "0.9").AddParser("number");
+	RegisterProperty("cell-size", "16.0").AddParser("number");
+	RegisterProperty("angle", "-30.0").AddParser("number");
+	RegisterProperty("edge-width", "12.0").AddParser("number");
+	RegisterProperty("edge-fade", "18.0").AddParser("number");
+	RegisterProperty("overlay-color", "black").AddParser("color");
+	RegisterProperty("edge-color", "white").AddParser("color");
+
+	RegisterShorthand("shorthand", "duration, cell-size, angle, edge-width, edge-fade");
+}
+
+Rocket::Core::Decorator* BriefingRevealDecoratorInstancer::InstanceDecorator(const Rocket::Core::String& /*name*/,
+	const Rocket::Core::PropertyDictionary& prop_dict)
+{
+	auto duration = prop_dict.GetProperty("duration")->Get<float>();
+	auto cell_size = prop_dict.GetProperty("cell-size")->Get<float>();
+	auto angle = prop_dict.GetProperty("angle")->Get<float>();
+	auto edge_width = prop_dict.GetProperty("edge-width")->Get<float>();
+	auto edge_fade = prop_dict.GetProperty("edge-fade")->Get<float>();
+	auto overlay_color = prop_dict.GetProperty("overlay-color")->Get<Rocket::Core::Colourb>();
+	auto edge_color = prop_dict.GetProperty("edge-color")->Get<Rocket::Core::Colourb>();
+
+	return new DecoratorBriefingReveal(duration,
+		cell_size,
+		angle,
+		edge_width,
+		edge_fade,
+		overlay_color,
+		edge_color);
+}
+
+void BriefingRevealDecoratorInstancer::ReleaseDecorator(Rocket::Core::Decorator* decorator)
+{
+	delete decorator;
+}
+
+void BriefingRevealDecoratorInstancer::Release()
+{
+	delete this;
+}
+
 } // namespace decorators
 } // namespace scpui

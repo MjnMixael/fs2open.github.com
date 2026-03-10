@@ -258,8 +258,17 @@ struct rocketui_data {
 	int baseMapIndex;
 
 	float horizontalSwipeOffset;
+	int briefingRevealEnabled;
+	float briefingRevealProgress;
+	float briefingRevealAngle;
 
-	float pad[3];
+	vec2d briefingRevealPos;
+	vec2d briefingRevealSize;
+
+	float briefingRevealCellSize;
+	float briefingRevealEdgeWidth;
+	float briefingRevealEdgeFade;
+	float pad[1];
 };
 
 struct lightshaft_data {

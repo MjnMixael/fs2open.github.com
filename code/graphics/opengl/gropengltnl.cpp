@@ -1162,6 +1162,15 @@ void opengl_tnl_set_rocketui_material(interface_material* material_info)
 			data->baseMapIndex = baseMapIndex;
 
 			data->horizontalSwipeOffset = material_info->get_horizontal_swipe();
+
+			data->briefingRevealEnabled = material_info->get_briefing_reveal_enabled() ? GL_TRUE : GL_FALSE;
+			data->briefingRevealProgress = material_info->get_briefing_reveal_progress();
+			data->briefingRevealAngle = material_info->get_briefing_reveal_angle();
+			data->briefingRevealPos = material_info->get_briefing_reveal_pos();
+			data->briefingRevealSize = material_info->get_briefing_reveal_size();
+			data->briefingRevealCellSize = material_info->get_briefing_reveal_cell_size();
+			data->briefingRevealEdgeWidth = material_info->get_briefing_reveal_edge_width();
+			data->briefingRevealEdgeFade = material_info->get_briefing_reveal_edge_fade();
 		});
 }
 

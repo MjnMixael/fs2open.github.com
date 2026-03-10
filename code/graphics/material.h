@@ -343,6 +343,15 @@ class interface_material : public material {
 
 	float horizontalSwipeOff = -1.0f;
 
+	bool briefingRevealEnabled = false;
+	vec2d briefingRevealPos{0.0f, 0.0f};
+	vec2d briefingRevealSize{0.0f, 0.0f};
+	float briefingRevealProgress = 1.0f;
+	float briefingRevealAngle = -30.0f;
+	float briefingRevealCellSize = 16.0f;
+	float briefingRevealEdgeWidth = 10.0f;
+	float briefingRevealEdgeFade = 18.0f;
+
   public:
 	interface_material();
 
@@ -351,6 +360,23 @@ class interface_material : public material {
 
 	void set_horizontal_swipe(float hor_offset);
 	float get_horizontal_swipe() const;
+
+	void set_briefing_reveal(bool enabled,
+		const vec2d& pos,
+		const vec2d& size,
+		float progress,
+		float angle,
+		float cell_size,
+		float edge_width,
+		float edge_fade);
+	bool get_briefing_reveal_enabled() const;
+	const vec2d& get_briefing_reveal_pos() const;
+	const vec2d& get_briefing_reveal_size() const;
+	float get_briefing_reveal_progress() const;
+	float get_briefing_reveal_angle() const;
+	float get_briefing_reveal_cell_size() const;
+	float get_briefing_reveal_edge_width() const;
+	float get_briefing_reveal_edge_fade() const;
 };
 
 gr_alpha_blend material_determine_blend_mode(int base_bitmap, bool is_transparent);
@@ -361,7 +387,15 @@ void material_set_interface(material* mat_info, int texture, bool blended, float
 void material_set_rocket_interface(interface_material* mat_info,
 	int texture,
 	const vec2d& offset,
-	float horizontal_swipe);
+	float horizontal_swipe,
+	bool briefing_reveal_enabled,
+	const vec2d& briefing_reveal_pos,
+	const vec2d& briefing_reveal_size,
+	float briefing_reveal_progress,
+	float briefing_reveal_angle,
+	float briefing_reveal_cell_size,
+	float briefing_reveal_edge_width,
+	float briefing_reveal_edge_fade);
 void material_set_unlit(material* mat_info, int texture, float alpha, bool blending, bool depth_testing);
 void material_set_unlit_emissive(material* mat_info, int texture, float alpha, float color_scale);
 void material_set_unlit_color(material* mat_info, int texture, color *clr, bool blending, bool depth_testing);

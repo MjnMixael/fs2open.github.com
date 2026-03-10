@@ -1,4 +1,3 @@
-
 in vec2 fragTexCoord;
 in vec4 fragColor;
 in vec2 fragScreenPosition;
@@ -15,14 +14,22 @@ layout (std140) uniform genericData {
 	int baseMapIndex;
 
 	float horizontalSwipeOffset;
+	bool briefingRevealEnabled;
+	float briefingRevealProgress;
+	float briefingRevealAngle;
+
+	vec2 briefingRevealPos;
+	vec2 briefingRevealSize;
+
+	float briefingRevealCellSize;
+	float briefingRevealEdgeWidth;
+	float briefingRevealEdgeFade;
 };
 
 void main() {
 	if (fragScreenPosition.x > horizontalSwipeOffset) {
 		discard;
 	}
-
-	float distance = horizontalSwipeOffset - fragScreenPosition.x;
 
 	vec4 color;
 	if (textured) {
@@ -31,10 +38,53 @@ void main() {
 		color = fragColor;
 	}
 
-	// Hard-coded for now but can be easily made configurable should that be needed at some point
-	if (distance < 10.f) {
-		// Only change the colors but not the alpha channel to preserve the transparent part of text
-		color.xyz = vec3(1.0);
+	if (briefingRevealEnabled) {
+		vec2 panelPos = briefingRevealPos;
+		vec2 panelSize = briefingRevealSize;
+		float progress = clamp(briefingRevealProgress, 0.0, 1.0);
+		float angle = radians(briefingRevealAngle);
+		float cell = max(4.0, briefingRevealCellSize);
+		float edgeWidth = max(0.5, briefingRevealEdgeWidth);
+		float edgeFade = max(0.25, briefingRevealEdgeFade);
+
+		vec2 sweepDir = vec2(cos(angle), sin(angle));
+		vec2 orthoDir = vec2(-sweepDir.y, sweepDir.x);
+
+		vec2 c0 = panelPos;
+		vec2 c1 = panelPos + vec2(panelSize.x, 0.0);
+		vec2 c2 = panelPos + vec2(0.0, panelSize.y);
+		vec2 c3 = panelPos + panelSize;
+
+		float minProj = dot(c0, sweepDir);
+		float maxProj = minProj;
+		minProj = min(minProj, dot(c1, sweepDir));
+		minProj = min(minProj, dot(c2, sweepDir));
+		minProj = min(minProj, dot(c3, sweepDir));
+		maxProj = max(maxProj, dot(c1, sweepDir));
+		maxProj = max(maxProj, dot(c2, sweepDir));
+		maxProj = max(maxProj, dot(c3, sweepDir));
+
+		float revealFront = mix(minProj, maxProj, progress);
+		float localPhase = sin((dot(fragScreenPosition, orthoDir) / cell) * 1.5707963);
+		float cellJitter = localPhase * (cell * 0.35);
+		float dist = revealFront - (dot(fragScreenPosition, sweepDir) + cellJitter);
+
+		if (dist < 0.0) {
+			if (dist <= -edgeFade) {
+				discard;
+			}
+			color.a *= clamp((dist + edgeFade) / edgeFade, 0.0, 1.0);
+		}
+
+		if (dist >= 0.0 && dist < edgeWidth) {
+			float edgeFactor = 1.0 - (dist / edgeWidth);
+			color.rgb = mix(color.rgb, vec3(1.0), edgeFactor);
+		}
+	} else {
+		float distance = horizontalSwipeOffset - fragScreenPosition.x;
+		if (distance < 10.f) {
+			color.xyz = vec3(1.0);
+		}
 	}
 
 	fragOut0 = color;

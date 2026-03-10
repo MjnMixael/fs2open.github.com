@@ -39,5 +39,17 @@ class BorderDecoratorInstancer : public Rocket::Core::DecoratorInstancer {
 	void Release() override;
 };
 
+
+class BriefingRevealDecoratorInstancer : public Rocket::Core::DecoratorInstancer {
+  public:
+	BriefingRevealDecoratorInstancer();
+	~BriefingRevealDecoratorInstancer() override = default;
+
+	Rocket::Core::Decorator* InstanceDecorator(const Rocket::Core::String& name,
+		const Rocket::Core::PropertyDictionary& properties) override;
+	void ReleaseDecorator(Rocket::Core::Decorator* decorator) override;
+	void Release() override;
+};
+
 } // namespace decorators
 } // namespace scpui
