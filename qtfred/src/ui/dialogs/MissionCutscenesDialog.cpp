@@ -103,7 +103,7 @@ void MissionCutscenesDialog::recreate_tree()
 		}
 
 		auto h = ui->cutsceneEventTree->insert(scene.filename);
-		h->setData(0, sexp_tree::FormulaDataRole, scene.formula);
+		h->setData(0, sexp_tree_view::FormulaDataRole, scene.formula);
 		ui->cutsceneEventTree->add_sub_tree(scene.formula, h);
 	}
 
@@ -118,7 +118,7 @@ void MissionCutscenesDialog::createNewCutscene()
 	ui->cutsceneEventTree->setCurrentItemIndex(-1);
 	ui->cutsceneEventTree->add_operator("true", h);
 	auto index = scene.formula = ui->cutsceneEventTree->getCurrentItemIndex();
-	h->setData(0, sexp_tree::FormulaDataRole, index);
+	h->setData(0, sexp_tree_view::FormulaDataRole, index);
 
 	ui->cutsceneEventTree->setCurrentItem(h);
 }
