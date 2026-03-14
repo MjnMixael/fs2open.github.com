@@ -533,7 +533,8 @@ void HudGaugeReticle::pageIn()
 }
 
 HudGaugeThrottle::HudGaugeThrottle():
-HudGauge(HUD_OBJECT_THROTTLE, HUD_THROTTLE_GAUGE, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255)
+HudGauge(HUD_OBJECT_THROTTLE, HUD_THROTTLE_GAUGE, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255),
+Fill_angle(90.0f)
 {
 
 }
@@ -635,6 +636,12 @@ void HudGaugeThrottle::initMatchSpeedOffsets(int x, int y, bool custom)
 
 	gr_get_string_size(&Match_speed_icon_width, nullptr, iconStr.c_str());
 }
+
+void HudGaugeThrottle::initFillAngle(float angle)
+{
+	Fill_angle = angle;
+}
+
 
 void HudGaugeThrottle::initBitmaps(char *fname)
 {
@@ -868,7 +875,7 @@ void HudGaugeThrottle::renderThrottleLine(int y_unscaled, int y_scaled, bool con
 		config);
 }
 
-void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int y_scaled, bool config)
+void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int /*y_scaled*/, bool config)
 {
 	int x = position[0];
 	int y = position[1];
@@ -879,19 +886,10 @@ void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int y_scaled, bo
 	}
 
 	int w, h;
-	bm_get_info(throttle_frames.first_frame+1,&w,&h);
+	bm_get_info(throttle_frames.first_frame + 1, &w, &h);
 
-	if (y_unscaled < (x + static_cast<int>(h * scale) - 1)) {		
-		renderBitmapEx(throttle_frames.first_frame + 2,
-			x,
-			y_scaled,
-			w,
-			h - (y_unscaled - position[1]), // Explicitly unscaled
-			0,
-			y_unscaled - position[1], // Explicitly unscaled
-			scale,
-			config);
-	}
+	const float fill_pct = 1.0f - ((y_unscaled - position[1]) / static_cast<float>(h));
+	renderBitmapFill(throttle_frames.first_frame + 2, x, y, w, h, fill_pct, Fill_angle, scale, config);
 }
 
 void HudGaugeThrottle::renderThrottleBackground(int y_unscaled, bool config)

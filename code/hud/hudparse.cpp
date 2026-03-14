@@ -2442,6 +2442,7 @@ void load_gauge_throttle(gauge_settings* settings)
 	bool custom_match = false;
 	char fname[MAX_FILENAME_LEN];
 	bool show_background = false;
+	float fill_angle = 90.0f;
 	
 	settings->origin[0] = 0.5f;
 	settings->origin[1] = 0.5f;
@@ -2536,6 +2537,9 @@ void load_gauge_throttle(gauge_settings* settings)
 	if(optional_string("Afterburner Clip Height:")) {
 		stuff_int(&throttle_aburn_h);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 	if(optional_string("Show Background:")) {
 		stuff_boolean(&show_background);
 	}
@@ -2580,6 +2584,7 @@ void load_gauge_throttle(gauge_settings* settings)
 	hud_gauge->initThrottleStartY(bottom_offset_y);
 	hud_gauge->initThrottleSizes(throttle_w, throttle_h);
 	hud_gauge->initAburnHeight(throttle_aburn_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initMaxSpeedOffsets(max_speed_offset[0], max_speed_offset[1], show_max_speed);
 	hud_gauge->initZeroSpeedOffsets(zero_speed_offset[0], zero_speed_offset[1], show_min_speed);
 	hud_gauge->initOrbitCenterOffsets(orbit_center_offset[0], orbit_center_offset[1], orbit);
