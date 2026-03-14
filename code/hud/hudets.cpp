@@ -1020,14 +1020,16 @@ void HudGaugeEts::blitGauge(int index, int ix, int iy, float scale, bool config)
 			// hud_set_bright_color();
 		}
 		const float fill_pct = Energy_levels[index];
+		const float primary_fill_angle = Fill_angle;
+		const float opposite_fill_angle = Fill_angle + 180.0f;
 
 		x = ix + fl2i(Top_offsets[0] * scale);
 		y = iy + fl2i(Top_offsets[1] * scale);
-		renderBitmapFill(Ets_bar.first_frame + 1, x, y, w, ETS_bar_h, fill_pct, Fill_angle, scale, config);
+		renderBitmapFill(Ets_bar.first_frame + 1, x, y, w, ETS_bar_h, fill_pct, opposite_fill_angle, scale, config);
 
 		x = ix + fl2i(Bottom_offsets[0] * scale);
 		y = iy + fl2i(Bottom_offsets[1] * scale);
-		renderBitmapFill(Ets_bar.first_frame + 2, x, y, w, ETS_bar_h, fill_pct, Fill_angle, scale, config);
+		renderBitmapFill(Ets_bar.first_frame + 2, x, y, w, ETS_bar_h, fill_pct, primary_fill_angle, scale, config);
 	}
 }
 
