@@ -1898,6 +1898,7 @@ void load_gauge_weapon_energy(gauge_settings* settings)
 	int armed_weapon_h = 12;
 	HudAlignment weapon_alignment = HudAlignment::NONE;
 	bool show_weapons = false;
+	float fill_angle = 90.0f;
 	char fname[MAX_FILENAME_LEN];
 	
 	settings->origin[0] = 0.5f;
@@ -1944,6 +1945,9 @@ void load_gauge_weapon_energy(gauge_settings* settings)
 	if(optional_string("Foreground Clip Height:")) {
 		stuff_int(&Wenergy_h);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 	if(optional_string("Text Offsets:")) {
 		stuff_int_list(Wenergy_text_offsets, 2);
 
@@ -1980,6 +1984,7 @@ void load_gauge_weapon_energy(gauge_settings* settings)
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHiRes(fname);
 	hud_gauge->initEnergyHeight(Wenergy_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initTextOffsets(Wenergy_text_offsets[0], Wenergy_text_offsets[1]);
 	hud_gauge->initAlignments(text_alignment, weapon_alignment);
 	hud_gauge->initAlwaysShowText(always_show_text);
@@ -2151,6 +2156,7 @@ void load_gauge_escort_view(gauge_settings* settings)
 void load_gauge_afterburner(gauge_settings* settings)
 {
 	int energy_h;
+	float fill_angle = 90.0f;
 	char fname[MAX_FILENAME_LEN];
 	
 	settings->origin[0] = 0.5f;
@@ -2191,8 +2197,12 @@ void load_gauge_afterburner(gauge_settings* settings)
 	if(optional_string("Foreground Clip Height:")) {
 		stuff_int(&energy_h);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 
 	hud_gauge->initEnergyHeight(energy_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHiRes(fname);
 
@@ -2432,6 +2442,7 @@ void load_gauge_throttle(gauge_settings* settings)
 	bool custom_match = false;
 	char fname[MAX_FILENAME_LEN];
 	bool show_background = false;
+	float fill_angle = 90.0f;
 	
 	settings->origin[0] = 0.5f;
 	settings->origin[1] = 0.5f;
@@ -2526,6 +2537,9 @@ void load_gauge_throttle(gauge_settings* settings)
 	if(optional_string("Afterburner Clip Height:")) {
 		stuff_int(&throttle_aburn_h);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 	if(optional_string("Show Background:")) {
 		stuff_boolean(&show_background);
 	}
@@ -2570,6 +2584,7 @@ void load_gauge_throttle(gauge_settings* settings)
 	hud_gauge->initThrottleStartY(bottom_offset_y);
 	hud_gauge->initThrottleSizes(throttle_w, throttle_h);
 	hud_gauge->initAburnHeight(throttle_aburn_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initMaxSpeedOffsets(max_speed_offset[0], max_speed_offset[1], show_max_speed);
 	hud_gauge->initZeroSpeedOffsets(zero_speed_offset[0], zero_speed_offset[1], show_min_speed);
 	hud_gauge->initOrbitCenterOffsets(orbit_center_offset[0], orbit_center_offset[1], orbit);
@@ -2597,6 +2612,7 @@ void load_gauge_ets_retail(gauge_settings* settings)
 	char ets_letters[num_retail_ets_gauges];
 	char fname[MAX_FILENAME_LEN] = "energy1";
 	int gauge_offset; // distance between micro gauges
+	float fill_angle = 90.0f;
 	int i;
 	int gauge_positions[num_retail_ets_gauges];
 	
@@ -2651,6 +2667,9 @@ void load_gauge_ets_retail(gauge_settings* settings)
 	if(optional_string("Gauge Offset:")) {
 		stuff_int(&gauge_offset);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 
 	// calculate offsets for the three gauges from settings->coords[0], which was set by gauge_load_common
 	for (i = 0; i < num_retail_ets_gauges; ++i) {
@@ -2662,6 +2681,7 @@ void load_gauge_ets_retail(gauge_settings* settings)
 	hud_gauge->initTopOffsets(top_offsets[0], top_offsets[1]);
 	hud_gauge->initBottomOffsets(bottom_offsets[0], bottom_offsets[1]);
 	hud_gauge->initBarHeight(bar_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHiRes(fname);
 	hud_gauge->initGaugePositions(gauge_positions);
@@ -2671,6 +2691,7 @@ void load_gauge_ets_retail(gauge_settings* settings)
 
 void load_gauge_ets_weapons(gauge_settings* settings)
 {
+	float fill_angle = 90.0f;
 	int bar_h;
 	int letter_offsets[2];
 	int top_offsets[2];
@@ -2724,12 +2745,16 @@ void load_gauge_ets_weapons(gauge_settings* settings)
 	if(optional_string("Bottom Offsets:")) {
 		stuff_int_list(bottom_offsets, 2);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 
 	hud_gauge->initLetter(letter);
 	hud_gauge->initLetterOffsets(letter_offsets[0], letter_offsets[1]);
 	hud_gauge->initTopOffsets(top_offsets[0], top_offsets[1]);
 	hud_gauge->initBottomOffsets(bottom_offsets[0], bottom_offsets[1]);
 	hud_gauge->initBarHeight(bar_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHiRes(fname);
 
@@ -2738,6 +2763,7 @@ void load_gauge_ets_weapons(gauge_settings* settings)
 
 void load_gauge_ets_shields(gauge_settings* settings)
 {
+	float fill_angle = 90.0f;
 	int bar_h;
 	int letter_offsets[2];
 	int top_offsets[2];
@@ -2792,8 +2818,12 @@ void load_gauge_ets_shields(gauge_settings* settings)
 	if(optional_string("Bottom Offsets:")) {
 		stuff_int_list(bottom_offsets, 2);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 
 	hud_gauge->initBarHeight(bar_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHiRes(fname);
 	hud_gauge->initBottomOffsets(bottom_offsets[0], bottom_offsets[1]);
@@ -2806,6 +2836,7 @@ void load_gauge_ets_shields(gauge_settings* settings)
 
 void load_gauge_ets_engines(gauge_settings* settings)
 {
+	float fill_angle = 90.0f;
 	int bar_h;
 	int letter_offsets[2];
 	int top_offsets[2];
@@ -2861,8 +2892,12 @@ void load_gauge_ets_engines(gauge_settings* settings)
 	if(optional_string("Bottom Offsets:")) {
 		stuff_int_list(bottom_offsets, 2);
 	}
+	if(optional_string("Fill Angle:")) {
+		stuff_float(&fill_angle);
+	}
 
 	hud_gauge->initBarHeight(bar_h);
+	hud_gauge->initFillAngle(fill_angle);
 	hud_gauge->initBitmaps(fname);
 	hud_gauge->initHiRes(fname);
 	hud_gauge->initBottomOffsets(bottom_offsets[0], bottom_offsets[1]);

@@ -899,19 +899,26 @@ bool validate_ship_ets_indxes(const int &ship_idx, int (&ets_indexes)[num_retail
 
 HudGaugeEts::HudGaugeEts():
 HudGauge(HUD_OBJECT_ETS_ENGINES, HUD_ETS_GAUGE, false, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255),
-System_type(0)
+System_type(0),
+Fill_angle(90.0f)
 {
 }
 
 HudGaugeEts::HudGaugeEts(int _gauge_object, int _system_type):
 HudGauge(_gauge_object, HUD_ETS_GAUGE, false, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255),
-System_type(_system_type)
+System_type(_system_type),
+Fill_angle(90.0f)
 {
 }
 
 void HudGaugeEts::initBarHeight(int _ets_h)
 {
 	ETS_bar_h = _ets_h;
+}
+
+void HudGaugeEts::initFillAngle(float angle)
+{
+	Fill_angle = angle;
 }
 
 void HudGaugeEts::initLetterOffsets(int _x, int _y)
@@ -963,10 +970,9 @@ void HudGaugeEts::blitGauge(int index, int ix, int iy, float scale, bool config)
 		return;
 	}
 
-	int clip_h = fl2i( (1 - Energy_levels[index]) * ETS_bar_h );
 
-	int w, h;
-	bm_get_info(Ets_bar.first_frame,&w,&h);
+	int w;
+	bm_get_info(Ets_bar.first_frame,&w,nullptr);
 
 	int x, y;
 	if (HUD_shadows) {
@@ -984,7 +990,7 @@ void HudGaugeEts::blitGauge(int index, int ix, int iy, float scale, bool config)
 		x = ix + fl2i(Bottom_offsets[0] * scale);
 		y = iy + fl2i(Bottom_offsets[1] * scale);
 
-		renderBitmapEx(Ets_bar.first_frame, x, y, w, y + ETS_bar_h, 0, 0, scale, config);
+		renderBitmapEx(Ets_bar.first_frame, x, y, w, ETS_bar_h, 0, 0, scale, config);
 
 		if (!config) {
 			gr_set_color_fast(&cur);
@@ -993,26 +999,16 @@ void HudGaugeEts::blitGauge(int index, int ix, int iy, float scale, bool config)
 		}
 	}
 
-	int y_start, y_end;
 	if ( index < NUM_ENERGY_LEVELS-1 ) {
-		// some portion of dark needs to be drawn
-
 		setGaugeColor(HUD_C_NONE, config);
 
-		// draw the top portion
 		x = ix + fl2i(Top_offsets[0] * scale);
 		y = iy + fl2i(Top_offsets[1] * scale);
-		
-		renderBitmapEx(Ets_bar.first_frame,x,y,w,clip_h,0,0, scale, config);			
+		renderBitmapEx(Ets_bar.first_frame, x, y, w, ETS_bar_h, 0, 0, scale, config);
 
-		// draw the bottom portion
 		x = ix + fl2i(Bottom_offsets[0] * scale);
 		y = iy + fl2i(Bottom_offsets[1] * scale);
-
-		y_start = y + fl2i((ETS_bar_h - clip_h) * scale);
-		y_end = y + ETS_bar_h;
-		
-		renderBitmapEx(Ets_bar.first_frame, x, y_start, w, y_end-y_start, 0, ETS_bar_h-clip_h, scale, config);			
+		renderBitmapEx(Ets_bar.first_frame, x, y, w, ETS_bar_h, 0, 0, scale, config);
 	}
 
 	if ( index > 0 ) {
@@ -1023,22 +1019,17 @@ void HudGaugeEts::blitGauge(int index, int ix, int iy, float scale, bool config)
 			setGaugeColor(HUD_C_BRIGHT, config);
 			// hud_set_bright_color();
 		}
-		// some portion of recharge needs to be drawn
+		const float fill_pct = Energy_levels[index];
+		const float primary_fill_angle = Fill_angle;
+		const float opposite_fill_angle = Fill_angle + 180.0f;
 
-		// draw the top portion
 		x = ix + fl2i(Top_offsets[0] * scale);
 		y = iy + fl2i(Top_offsets[1] * scale);
+		renderBitmapFill(Ets_bar.first_frame + 1, x, y, w, ETS_bar_h, fill_pct, opposite_fill_angle, scale, config);
 
-		y_start = y + fl2i(clip_h * scale);
-		y_end = y + ETS_bar_h;
-		
-		renderBitmapEx(Ets_bar.first_frame+1, x, y_start, w, y_end-y_start, 0, clip_h, scale, config);			
-
-		// draw the bottom portion
 		x = ix + fl2i(Bottom_offsets[0] * scale);
 		y = iy + fl2i(Bottom_offsets[1] * scale);
-		
-		renderBitmapEx(Ets_bar.first_frame+2, x,y,w,ETS_bar_h-clip_h,0,0, scale, config);			
+		renderBitmapFill(Ets_bar.first_frame + 2, x, y, w, ETS_bar_h, fill_pct, primary_fill_angle, scale, config);
 	}
 }
 

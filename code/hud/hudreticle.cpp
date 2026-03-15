@@ -533,7 +533,8 @@ void HudGaugeReticle::pageIn()
 }
 
 HudGaugeThrottle::HudGaugeThrottle():
-HudGauge(HUD_OBJECT_THROTTLE, HUD_THROTTLE_GAUGE, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255)
+HudGauge(HUD_OBJECT_THROTTLE, HUD_THROTTLE_GAUGE, true, false, (VM_EXTERNAL | VM_DEAD_VIEW | VM_WARP_CHASE | VM_PADLOCK_ANY | VM_OTHER_SHIP), 255, 255, 255),
+Fill_angle(90.0f)
 {
 
 }
@@ -636,6 +637,12 @@ void HudGaugeThrottle::initMatchSpeedOffsets(int x, int y, bool custom)
 	gr_get_string_size(&Match_speed_icon_width, nullptr, iconStr.c_str());
 }
 
+void HudGaugeThrottle::initFillAngle(float angle)
+{
+	Fill_angle = angle;
+}
+
+
 void HudGaugeThrottle::initBitmaps(char *fname)
 {
 	throttle_frames.first_frame = bm_load_animation(fname, &throttle_frames.num_frames);
@@ -713,6 +720,14 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 		}
 	}
 
+	const float total_fill_height = i2fl(throttle_h + throttle_aburn_h);
+	const float fill_units = (percent_max * i2fl(throttle_h)) + (percent_aburn_max * i2fl(throttle_aburn_h));
+	float fill_pct = 0.0f;
+	if (total_fill_height > 0.0f) {
+		fill_pct = fill_units / total_fill_height;
+	}
+	CLAMP(fill_pct, 0.0f, 1.0f);
+
 	int y_end = y + fl2i(Bottom_offset_y * scale) - fl2i(std::lround(fl2i(throttle_h * scale) * percent_max));
 	int y_end_unscaled = position[1] + Bottom_offset_y - fl2i(std::lround(throttle_h * percent_max));
 	if ( percent_aburn_max > 0 ) {
@@ -763,7 +778,7 @@ void HudGaugeThrottle::render(float  /*frametime*/, bool config)
 	renderThrottleLine(desired_y_pos_unscaled, desired_y_pos, config);
 
 	// draw left arc (the bright portion of the throttle gauge)
-	renderThrottleForeground(y_end_unscaled, y_end, config);
+	renderThrottleForeground(fill_pct, config);
 
 	if (Show_max_speed ) {
 		renderPrintf(x + fl2i(Max_speed_offsets[0] * scale), y + fl2i(Max_speed_offsets[1] * scale), scale, config, "%d", (int)std::lround(max_displayed_speed));
@@ -868,7 +883,7 @@ void HudGaugeThrottle::renderThrottleLine(int y_unscaled, int y_scaled, bool con
 		config);
 }
 
-void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int y_scaled, bool config)
+void HudGaugeThrottle::renderThrottleForeground(float fill_pct, bool config)
 {
 	int x = position[0];
 	int y = position[1];
@@ -879,19 +894,9 @@ void HudGaugeThrottle::renderThrottleForeground(int y_unscaled, int y_scaled, bo
 	}
 
 	int w, h;
-	bm_get_info(throttle_frames.first_frame+1,&w,&h);
+	bm_get_info(throttle_frames.first_frame + 1, &w, &h);
 
-	if (y_unscaled < (x + static_cast<int>(h * scale) - 1)) {		
-		renderBitmapEx(throttle_frames.first_frame + 2,
-			x,
-			y_scaled,
-			w,
-			h - (y_unscaled - position[1]), // Explicitly unscaled
-			0,
-			y_unscaled - position[1], // Explicitly unscaled
-			scale,
-			config);
-	}
+	renderBitmapFill(throttle_frames.first_frame + 2, x, y, w, h, fill_pct, Fill_angle, scale, config);
 }
 
 void HudGaugeThrottle::renderThrottleBackground(int y_unscaled, bool config)

@@ -72,6 +72,7 @@ protected:
 	int	Bottom_offsets[2];
 
 	int ETS_bar_h;
+	float Fill_angle;
 public:
 	HudGaugeEts();
 	HudGaugeEts(int _gauge_object, int _system_type);
@@ -80,6 +81,7 @@ public:
 	void initBottomOffsets(int _x, int _y);
 	void initLetter(char _letter);	// obligatory PC Load Letter joke. (Swifty)
 	void initBarHeight(int _ets_bar_h);
+	void initFillAngle(float angle);
 	void initBitmaps(char *fname);
 	void blitGauge(int index, int ix, int iy, float scale, bool config);
 	void render(float frametime, bool config = false) override;

@@ -91,6 +91,7 @@ protected:
 	bool Match_speed_draw_background; // When true draw the match icon onto a rectangle
 
 	bool Show_background;
+	float Fill_angle;
 public:
 	HudGaugeThrottle();
 	void initThrottleStartY(int y);
@@ -103,13 +104,14 @@ public:
 	void initTargetSpeedOffsets(int x, int y, bool show, bool percent);
 	void initGlideOffsets(int x, int y, bool custom);
 	void initMatchSpeedOffsets(int x, int y, bool custom);
+	void initFillAngle(float angle);
 	void showBackground(bool show);
 	void initBitmaps(char *fname);
 
 	void render(float frametime, bool config = false) override;
 	void renderThrottleSpeed(float current_speed, int y_scaled, bool config);
 	void renderThrottleLine(int y_unscaled, int y_scaled, bool config);
-	void renderThrottleForeground(int y_unscaled, int y_scaled, bool config);
+	void renderThrottleForeground(float fill_pct, bool config);
 	void renderThrottleBackground(int y_unscaled, bool config);
 	void renderMatchSpeedIcon(int x, int y, float scale, bool config);
 
