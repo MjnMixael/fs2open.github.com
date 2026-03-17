@@ -30,6 +30,7 @@
 #include "sound/audiostr.h"
 #include "localization/localize.h"
 #include "mod_table/mod_table.h"
+#include "prop/prop.h"
 
 #ifdef _DEBUG
 #undef THIS_FILE
@@ -225,7 +226,9 @@ void briefing_editor_dlg::create()
 
 	box = (CComboBox *) GetDlgItem(IDC_SHIP_TYPE);
 	for (auto it = Ship_info.cbegin(); it != Ship_info.cend(); ++it)
-		box->AddString(it->name);
+		box->AddString(("Ship: " + SCP_string(it->name)).c_str());
+	for (auto it = Prop_info.cbegin(); it != Prop_info.cend(); ++it)
+		box->AddString(("Prop: " + it->name).c_str());
 
 	box = (CComboBox *) GetDlgItem(IDC_BRIEFING_MUSIC);
 	box->AddString("None");
@@ -525,13 +528,24 @@ void briefing_editor_dlg::update_data(int update)
 			}
 			ptr->icons[m_last_icon].team = m_icon_team;
 
-			if ((ptr->icons[m_last_icon].ship_class != m_ship_type) && !m_change_local) {
+			int selected_ship_class = -1;
+			int selected_prop_class = -1;
+			if (m_ship_type >= 0) {
+				if (m_ship_type < static_cast<int>(Ship_info.size()))
+					selected_ship_class = m_ship_type;
+				else
+					selected_prop_class = m_ship_type - static_cast<int>(Ship_info.size());
+			}
+			if (((ptr->icons[m_last_icon].ship_class != selected_ship_class) || (ptr->icons[m_last_icon].prop_class != selected_prop_class)) && !m_change_local) {
 				set_modified();
 				reset_icon_loop(m_last_stage);
-				while (get_next_icon(m_id))
-					iconp->ship_class = m_ship_type;
+				while (get_next_icon(m_id)) {
+					iconp->ship_class = selected_ship_class;
+					iconp->prop_class = selected_prop_class;
+				}
 			}
-			MODIFY(ptr->icons[m_last_icon].ship_class, m_ship_type);
+			MODIFY(ptr->icons[m_last_icon].ship_class, selected_ship_class);
+			MODIFY(ptr->icons[m_last_icon].prop_class, selected_prop_class);
 		}
 	}
 
@@ -609,7 +623,7 @@ void briefing_editor_dlg::update_data(int update)
 		m_icon_label = ptr->icons[m_cur_icon].label;
 		m_icon_closeup_label = ptr->icons[m_cur_icon].closeup_label;
 		m_icon_scale = static_cast<int>(ptr->icons[m_cur_icon].scale_factor * 100.0f);
-		m_ship_type = ptr->icons[m_cur_icon].ship_class;
+		m_ship_type = (ptr->icons[m_cur_icon].ship_class >= 0) ? ptr->icons[m_cur_icon].ship_class : ((ptr->icons[m_cur_icon].prop_class >= 0) ? static_cast<int>(Ship_info.size()) + ptr->icons[m_cur_icon].prop_class : -1);
 		m_id = ptr->icons[m_cur_icon].id;
 		enable = TRUE;
 
@@ -630,9 +644,10 @@ void briefing_editor_dlg::update_data(int update)
 	}
 
 	// see if icon is overridden by ships.tbl
-	int sip_bii_ship = (m_ship_type >= 0) ? Ship_info[m_ship_type].bii_index_ship : -1;
-	int sip_bii_wing = (sip_bii_ship >= 0) ? Ship_info[m_ship_type].bii_index_wing : -1;
-	int sip_bii_cargo = (sip_bii_ship >= 0) ? Ship_info[m_ship_type].bii_index_ship_with_cargo : -1;
+	int resolved_ship_type = (m_ship_type >= 0 && m_ship_type < static_cast<int>(Ship_info.size())) ? m_ship_type : -1;
+	int sip_bii_ship = (resolved_ship_type >= 0) ? Ship_info[resolved_ship_type].bii_index_ship : -1;
+	int sip_bii_wing = (sip_bii_ship >= 0) ? Ship_info[resolved_ship_type].bii_index_wing : -1;
+	int sip_bii_cargo = (sip_bii_ship >= 0) ? Ship_info[resolved_ship_type].bii_index_ship_with_cargo : -1;
 
 	GetDlgItem(IDC_USE_WING_ICON) -> ShowWindow(sip_bii_wing >= 0);
 	GetDlgItem(IDC_USE_CARGO_ICON) -> ShowWindow(sip_bii_cargo >= 0);
@@ -1097,6 +1112,7 @@ void briefing_editor_dlg::OnMakeIcon()
 
 	if (ship >= 0) {
 		biconp->ship_class = Ships[ship].ship_info_index;
+		biconp->prop_class = -1;
         ship_info* sip = &Ship_info[Ships[ship].ship_info_index];
 
         if (sip->flags[Ship::Info_Flags::Knossos_device])
@@ -1142,6 +1158,7 @@ void briefing_editor_dlg::OnMakeIcon()
 	else if (jnp != nullptr) {
 		// find the first navbuoy, by iterating through the ship classes
 		biconp->ship_class = -1;
+		biconp->prop_class = -1;
 		
 		for (auto it = Ship_info.cbegin(); it != Ship_info.cend(); ++it)
 		{
@@ -1158,6 +1175,7 @@ void briefing_editor_dlg::OnMakeIcon()
 	else {
 		// find the first navbuoy
 		biconp->ship_class = -1;
+		biconp->prop_class = -1;
 
 		for (auto it = Ship_info.cbegin(); it != Ship_info.cend(); ++it) 
 		{

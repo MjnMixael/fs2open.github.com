@@ -3,6 +3,7 @@
 #include "gamesnd/eventmusic.h"
 #include "mission/missionparse.h"      //TODO remove?
 #include "missionui/missioncmdbrief.h" //TODO remove?
+#include "prop/prop.h"
 #include "sound/audiostr.h"
 #include "iff_defs/iff_defs.h"
 
@@ -164,8 +165,8 @@ void BriefingEditorDialogModel::addStage()
 	if (_currentStage > 0) {
 		const brief_stage& prev = _wipBriefings[_currentTeam].stages[_currentStage - 1];
 
-		dst = prev; // start by copying everything…
-		// …then clear fields that should not carry over by default
+		dst = prev; // start by copying everythingâ€¦
+		// â€¦then clear fields that should not carry over by default
 		dst.text = "<Text here>";
 		dst.voice[0] = '\0';
 	} else {
@@ -665,7 +666,11 @@ int BriefingEditorDialogModel::getIconShipTypeIndex() const
 	const auto& s = b.stages[_currentStage];
 	if (_currentIcon < 0 || _currentIcon >= s.num_icons)
 		return -1;
-	return s.icons[_currentIcon].ship_class; // may be -1 for “unset” depending on icon type
+	if (s.icons[_currentIcon].ship_class >= 0)
+		return s.icons[_currentIcon].ship_class;
+	if (s.icons[_currentIcon].prop_class >= 0)
+		return static_cast<int>(Ship_info.size()) + s.icons[_currentIcon].prop_class;
+	return -1;
 }
 
 void BriefingEditorDialogModel::setIconShipTypeIndex(int idx)
@@ -677,7 +682,16 @@ void BriefingEditorDialogModel::setIconShipTypeIndex(int idx)
 	if (_currentIcon < 0 || _currentIcon >= s.num_icons)
 		return;
 
-	modify(s.icons[_currentIcon].ship_class, idx);
+	if (idx < 0) {
+		modify(s.icons[_currentIcon].ship_class, -1);
+		modify(s.icons[_currentIcon].prop_class, -1);
+	} else if (idx < static_cast<int>(Ship_info.size())) {
+		modify(s.icons[_currentIcon].ship_class, idx);
+		modify(s.icons[_currentIcon].prop_class, -1);
+	} else {
+		modify(s.icons[_currentIcon].ship_class, -1);
+		modify(s.icons[_currentIcon].prop_class, idx - static_cast<int>(Ship_info.size()));
+	}
 }
 
 int BriefingEditorDialogModel::getIconTeamIndex() const
@@ -1042,7 +1056,8 @@ void BriefingEditorDialogModel::makeIcon(const SCP_string& label, int typeIndex,
 			for (int i = 0; i < bs.num_icons; ++i)
 				maxId = std::max(maxId, bs.icons[i].id);
 		}
-		return maxId + 1; // unique within this team’s briefing
+	ic.prop_class = -1;
+		return maxId + 1; // unique within this teamâ€™s briefing
 	};
 
 	// Clamp incoming indices to safe ranges
@@ -1212,10 +1227,13 @@ SCP_vector<std::pair<int, SCP_string>> BriefingEditorDialogModel::getIconList()
 SCP_vector<std::pair<int, SCP_string>> BriefingEditorDialogModel::getShipList()
 {
 	SCP_vector<std::pair<int, SCP_string>> out;
-	out.reserve(static_cast<int>(Ship_info.size()));
+	out.reserve(static_cast<int>(Ship_info.size() + Prop_info.size()));
 	int idx = 0;
 	for (auto it = Ship_info.cbegin(); it != Ship_info.cend(); ++it, ++idx) {
-		out.emplace_back(idx, it->name);
+		out.emplace_back(idx, SCP_string("Ship: ") + it->name);
+	}
+	for (auto it = Prop_info.cbegin(); it != Prop_info.cend(); ++it, ++idx) {
+		out.emplace_back(idx, SCP_string("Prop: ") + it->name);
 	}
 	return out;
 }

@@ -17,6 +17,10 @@ typedef struct prop_info {
 	vec3d closeup_pos;                                          // position for camera when using prop in closeup view (eg briefing and techroom)
 	float closeup_zoom;                                         // zoom when using prop in closeup view (eg briefing and techroom)
 	int model_num;                                              // The model number of the loaded POF
+	int bii_index_ship;								// briefing icon override
+	int bii_index_ship_with_cargo;
+	int bii_index_wing;
+	int bii_index_wing_with_cargo;
 	int num_detail_levels;                                      // Detail levels of the model
 	int detail_distance[MAX_PROP_DETAIL_LEVELS];                // distance to change detail levels at
 	SCP_unordered_map<int, void*> glowpoint_bank_override_map;  // Glow point bank overrides currently unused

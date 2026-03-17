@@ -39,6 +39,7 @@
 #include "missionui/missionscreencommon.h"
 #include "missionui/missionshipchoice.h"
 #include "model/model.h"
+#include "prop/prop.h"
 #include "network/multi.h"
 #include "network/multimsgs.h"
 #include "network/multiteamselect.h"
@@ -1378,11 +1379,20 @@ int brief_setup_closeup(brief_icon *bi, bool api_access)
 		break;
 
 	default:
-		Assert( Closeup_icon->ship_class != -1 );
-		sip = &Ship_info[Closeup_icon->ship_class];
-		strcpy_s(Closeup_type_name, sip->name);
+		Assert(Closeup_icon->ship_class != -1 || Closeup_icon->prop_class != -1);
+		if (Closeup_icon->ship_class >= 0) {
+			sip = &Ship_info[Closeup_icon->ship_class];
+			strcpy_s(Closeup_type_name, sip->name);
+		} else {
+			auto* pip = &Prop_info[Closeup_icon->prop_class];
+			strcpy_s(Closeup_type_name, pip->name.c_str());
+			if (Closeup_icon->closeup_label[0] == '\0') {
+				strcpy_s(Closeup_icon->closeup_label, pip->name.c_str());
+			}
+		}
 
-		if (Closeup_icon->closeup_label[0] == '\0') {
+
+		if (sip && Closeup_icon->closeup_label[0] == '\0') {
 			strcpy_s(Closeup_icon->closeup_label, sip->get_display_name());
 
 			if ((sip->class_type < 0 || !Ship_types[sip->class_type].flags[Ship::Type_Info_Flags::No_class_display])
@@ -1396,7 +1406,12 @@ int brief_setup_closeup(brief_icon *bi, bool api_access)
 	if (!api_access) {
 		if (Closeup_icon->modelnum < 0) {
 			if (sip == nullptr) {
-				Closeup_icon->modelnum = model_load(pof_filename);
+				if (Closeup_icon->prop_class >= 0) {
+					auto* pip = &Prop_info[Closeup_icon->prop_class];
+					Closeup_icon->modelnum = model_load(pip->pof_file.c_str());
+				} else {
+					Closeup_icon->modelnum = model_load(pof_filename);
+				}
 			} else {
 				Closeup_icon->modelnum = model_load(sip, true);
 				Closeup_icon->model_instance_num = model_create_instance(model_objnum_special::OBJNUM_NONE, Closeup_icon->modelnum);
@@ -1419,9 +1434,13 @@ int brief_setup_closeup(brief_icon *bi, bool api_access)
 
 	brief_set_closeup_pos(bi);
 
-	if ( sip ) {
+	if (sip) {
 		Closeup_cam_pos = sip->closeup_pos;
 		Closeup_zoom = sip->closeup_zoom;
+	} else if (Closeup_icon->prop_class >= 0) {
+		auto* pip = &Prop_info[Closeup_icon->prop_class];
+		Closeup_cam_pos = pip->closeup_pos;
+		Closeup_zoom = pip->closeup_zoom;
 	}
 
 	return 0;

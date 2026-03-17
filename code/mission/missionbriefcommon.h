@@ -121,6 +121,7 @@ typedef struct brief_icon {
 	float	scale_factor;
 	int		hold_x, hold_y;	// 2D screen position of icon, used to place animations
 	int		ship_class;
+	int		prop_class;
 	int		modelnum;
 	int		model_instance_num;
 	float		radius;

@@ -4,6 +4,7 @@
 #include "debris/debris.h"
 #include "freespace.h"
 #include "model/model.h"
+#include "mission/missionbriefcommon.h"
 #include "model/modelreplace.h"
 #include "network/multiutil.h"
 #include "parse/parselo.h"
@@ -25,6 +26,43 @@ SCP_vector<std::optional<prop>> Props;
 SCP_vector<prop_category> Prop_categories;
 
 static SCP_vector<SCP_string> Removed_props;
+
+
+static int parse_and_add_briefing_icon_info()
+{
+	int bii_index = -1;
+	size_t icon;
+	char regular_temp[MAX_FILENAME_LEN];
+	char fade_temp[MAX_FILENAME_LEN];
+	char highlight_temp[MAX_FILENAME_LEN];
+
+	required_string("+Regular:");
+	stuff_string(regular_temp, F_NAME, MAX_FILENAME_LEN);
+	required_string("+Fade:");
+	stuff_string(fade_temp, F_NAME, MAX_FILENAME_LEN);
+	required_string("+Highlight:");
+	stuff_string(highlight_temp, F_NAME, MAX_FILENAME_LEN);
+
+	for (icon = 0; icon < Briefing_icon_info.size(); icon++) {
+		if (!stricmp(regular_temp, Briefing_icon_info[icon].regular.filename) &&
+			!stricmp(fade_temp, Briefing_icon_info[icon].fade.filename) &&
+			!stricmp(highlight_temp, Briefing_icon_info[icon].highlight.filename)) {
+			bii_index = (int)icon;
+			break;
+		}
+	}
+
+	if (bii_index < 0) {
+		briefing_icon_info bii;
+		generic_anim_init(&bii.regular, regular_temp);
+		hud_anim_init(&bii.fade, 0, 0, fade_temp);
+		hud_anim_init(&bii.highlight, 0, 0, highlight_temp);
+		bii_index = (int)Briefing_icon_info.size();
+		Briefing_icon_info.push_back(bii);
+	}
+
+	return bii_index;
+}
 
 flag_def_list_new<Prop::Info_Flags> Prop_flags[] = {
     { "no_collide",					Prop::Info_Flags::No_collide,				true, false },
@@ -220,6 +258,10 @@ void parse_prop_table(const char* filename)
 
 			pip->name = fname;
 			pip->category_index = -1;
+			pip->bii_index_ship = -1;
+			pip->bii_index_ship_with_cargo = -1;
+			pip->bii_index_wing = -1;
+			pip->bii_index_wing_with_cargo = -1;
 		}
 
 		if (optional_string("$POF file:")) {
@@ -277,6 +319,21 @@ void parse_prop_table(const char* filename)
 				pip->closeup_zoom = 0.5f;
 			}
 		}
+
+		if (optional_string("$Briefing icon:"))
+			pip->bii_index_ship = parse_and_add_briefing_icon_info();
+		if (optional_string("$Briefing icon with cargo:"))
+			pip->bii_index_ship_with_cargo = parse_and_add_briefing_icon_info();
+		if (optional_string("$Briefing wing icon:"))
+			pip->bii_index_wing = parse_and_add_briefing_icon_info();
+		if (optional_string("$Briefing wing icon with cargo:"))
+			pip->bii_index_wing_with_cargo = parse_and_add_briefing_icon_info();
+
+		if ((pip->bii_index_wing_with_cargo >= 0) && (pip->bii_index_wing < 0 || pip->bii_index_ship_with_cargo < 0))
+			Warning(LOCATION, "Prop '%s' has a wing-with-cargo briefing icon but is missing a wing briefing icon or a ship-with-cargo briefing icon!", pip->name.c_str());
+		if ((pip->bii_index_wing_with_cargo < 0) && (pip->bii_index_wing >= 0) && (pip->bii_index_ship_with_cargo >= 0))
+			Warning(LOCATION, "Prop '%s' has both a wing briefing icon and a ship-with-cargo briefing icon but does not have a wing-with-cargo briefing icon!", pip->name.c_str());
+
 
 		if(optional_string("$Detail distance:")) {
 			pip->num_detail_levels = (int)stuff_int_list(pip->detail_distance, MAX_PROP_DETAIL_LEVELS, ParseLookupType::RAW_INTEGER_TYPE);

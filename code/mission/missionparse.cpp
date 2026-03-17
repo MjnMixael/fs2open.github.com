@@ -1808,12 +1808,23 @@ void parse_briefing(mission * /*pm*/, int flags)
 
 				find_and_stuff("$team:", &bi->team, F_NAME, temp_team_names.get(), Iff_info.size(), "team name");
 
-				find_and_stuff("$class:", &bi->ship_class, F_NAME, Ship_class_names, Ship_info.size(), "ship class");
+				char icon_class[NAME_LENGTH];
+				required_string("$class:");
+				stuff_string(icon_class, F_NAME, NAME_LENGTH);
+				bi->ship_class = ship_info_lookup(icon_class);
+				bi->prop_class = -1;
+				if (bi->ship_class < 0) {
+					bi->prop_class = prop_info_lookup(icon_class);
+				}
+				if (bi->ship_class < 0 && bi->prop_class < 0) {
+					error_display(0, "Unknown briefing icon class '%s'", icon_class);
+					bi->ship_class = 0;
+				}
 				bi->modelnum = -1;
 				bi->model_instance_num = -1;
 
 				// Goober5000 - import
-				if (flags & MPF_IMPORT_FSM)
+				if ((flags & MPF_IMPORT_FSM) && bi->ship_class >= 0)
 				{
 					// the Faustus is a largeship
 					if (!strnicmp(Ship_info[bi->ship_class].name, "GTSC Faustus", 12))
@@ -6954,8 +6965,13 @@ bool post_process_mission(mission *pm)
 		for (i = 0; i < Briefings[team].num_stages; i++) {
 			const auto &stage = br[i];
 			for (int j = 0; j < stage.num_icons; j++) {
-				ship_info *sip = &Ship_info[stage.icons[j].ship_class];
-				stage.icons[j].modelnum = model_load(sip->pof_file, sip);
+				if (stage.icons[j].ship_class >= 0) {
+					ship_info *sip = &Ship_info[stage.icons[j].ship_class];
+					stage.icons[j].modelnum = model_load(sip->pof_file, sip);
+				} else if (stage.icons[j].prop_class >= 0) {
+					auto* pip = &Prop_info[stage.icons[j].prop_class];
+					stage.icons[j].modelnum = model_load(pip->pof_file.c_str());
+				}
 			}
 		}
 	}

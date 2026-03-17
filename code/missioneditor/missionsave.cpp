@@ -1221,10 +1221,13 @@ int Fred_mission_save::save_briefing()
 
 				required_string_fred("$class:");
 				parse_comments();
-				if (bi->ship_class < 0)
-					bi->ship_class = 0;
-
-				fout(" %s", Ship_info[bi->ship_class].name);
+				if (bi->ship_class >= 0) {
+					fout(" %s", Ship_info[bi->ship_class].name);
+				} else if (bi->prop_class >= 0 && SCP_vector_inbounds(Prop_info, bi->prop_class)) {
+					fout(" %s", Prop_info[bi->prop_class].name.c_str());
+				} else {
+					fout(" %s", Ship_info[0].name);
+				}
 
 				required_string_fred("$pos:");
 				parse_comments();

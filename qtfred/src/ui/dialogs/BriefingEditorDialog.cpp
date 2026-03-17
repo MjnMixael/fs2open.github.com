@@ -32,7 +32,7 @@ void BriefingEditorDialog::accept()
 	if (_model->apply()) {
 		QDialog::accept();
 	}
-	// else: validation failed, don’t close
+	// else: validation failed, donâ€™t close
 }
 
 void BriefingEditorDialog::reject()
@@ -118,6 +118,7 @@ void BriefingEditorDialog::updateUi()
 	ui->currentStageLabel->setText(stages.c_str());
 
 	// SEXP tree formula
+	ui->iconShipTypeComboBox->setCurrentIndex(ui->iconShipTypeComboBox->findData(_model->getIconShipTypeIndex()));
 	ui->formulaTreeView->load_tree(_model->getFormula());
 	if (ui->formulaTreeView->select_sexp_node != -1) {
 		ui->formulaTreeView->hilite_item(ui->formulaTreeView->select_sexp_node);
@@ -268,7 +269,7 @@ void BriefingEditorDialog::on_iconImageComboBox_currentIndexChanged(int index)
 
 void BriefingEditorDialog::on_iconShipTypeComboBox_currentIndexChanged(int index)
 {
-	_model->setIconShipTypeIndex(index);
+	_model->setIconShipTypeIndex(ui->iconShipTypeComboBox->itemData(index).toInt());
 }
 
 void BriefingEditorDialog::on_iconTeamComboBox_currentIndexChanged(int index)

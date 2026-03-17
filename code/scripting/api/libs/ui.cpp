@@ -974,7 +974,7 @@ ADE_FUNC(checkStageIcons,
 	"number xPos, number yPos",
 	"Sends the mouse position to the brief map rendering functions to properly highlight icons.",
 	"string, number, vector, string, number",
-	"If an icon is highlighted then this will return the ship name for ships or the pof to render for asteroid, jumpnode, or unknown icons. "
+	"If an icon is highlighted then this will return the ship name, prop class name, or the pof to render for asteroid, jumpnode, or unknown icons. "
 	"also returns the closeup zoom, the closeup position, the closeup label, and the icon id. Otherwise it returns nil")
 {
 	int x;
