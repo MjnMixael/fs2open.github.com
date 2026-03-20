@@ -6,6 +6,7 @@
 
 #include "globalincs/pstypes.h"
 #include "osapi/osapi.h"
+#include "ui/QtGraphicsOperations.h"
 
 namespace fso::fred::dialogs {
 class BriefingEditorDialogModel;
@@ -32,7 +33,7 @@ private:
 
 // Lightweight os::Viewport that wraps BriefingMapWindow so we can use
 // gr_use_viewport() / gr_flip() through FSO's normal rendering pipeline.
-class BriefingViewport : public os::Viewport {
+class BriefingViewport : public QtSurfaceViewport {
 public:
 	explicit BriefingViewport(BriefingMapWindow* window);
 
@@ -42,6 +43,7 @@ public:
 	void setState(os::ViewportState state) override;
 	void minimize() override;
 	void restore() override;
+	QSurface* getRenderSurface() override;
 
 private:
 	BriefingMapWindow* _window = nullptr;

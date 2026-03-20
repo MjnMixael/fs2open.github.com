@@ -87,6 +87,10 @@ void BriefingViewport::minimize() {
 void BriefingViewport::restore() {
 }
 
+QSurface* BriefingViewport::getRenderSurface() {
+	return _window;
+}
+
 // ---- BriefingMapWidget ----
 
 BriefingMapWidget::BriefingMapWidget(QWidget* parent,
