@@ -87,6 +87,12 @@ private:
 	int _currentStage = 0;
 	bool _initialized = false;
 	bool _rendering = false; // re-entrancy guard
+	bool _loggedNotInitialized = false;
+	bool _loggedNotExposed = false;
+	bool _loggedNoViewport = false;
+	bool _loggedInFrameSkip = false;
+	bool _loggedNoContext = false;
+	uint32_t _debugFrameCounter = 0;
 
 	// Mouse drag state
 	bool _draggingIcon = false;
