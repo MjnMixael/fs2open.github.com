@@ -146,6 +146,10 @@ add_file_folder("Source/UI/Dialogs"
 	src/ui/dialogs/BackgroundEditorDialog.cpp
     src/ui/dialogs/BriefingEditorDialog.cpp
     src/ui/dialogs/BriefingEditorDialog.h
+	src/ui/dialogs/CameraCoordinatesDialog.cpp
+	src/ui/dialogs/CameraCoordinatesDialog.h
+	src/ui/dialogs/IconFromShipDialog.cpp
+	src/ui/dialogs/IconFromShipDialog.h
 	src/ui/dialogs/CampaignEditorDialog.h
 	src/ui/dialogs/CampaignEditorDialog.cpp
 	src/ui/dialogs/CommandBriefingDialog.cpp
@@ -264,6 +268,8 @@ add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/NoWheelComboBox.h
 	src/ui/widgets/NoWheelSpinBox.cpp
 	src/ui/widgets/NoWheelSpinBox.h
+    src/ui/widgets/BriefingMapWidget.cpp
+    src/ui/widgets/BriefingMapWidget.h
     src/ui/widgets/renderwidget.cpp
     src/ui/widgets/renderwidget.h
 	src/ui/widgets/sexp_tree.cpp
