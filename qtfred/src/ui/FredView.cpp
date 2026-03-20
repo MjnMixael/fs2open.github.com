@@ -102,15 +102,12 @@ FredView::FredView(QWidget* parent) : QMainWindow(parent), ui(new Ui::FredView()
 	connect(propsAction, &QAction::triggered, this, &FredView::on_actionProps_triggered);
 	ui->menuObjects->insertAction(ui->actionWaypoint_Paths, propsAction);
 
-	auto preferencesMenu = new QMenu(tr("Preferences"), ui->menuFile);
-	auto controlsAction = preferencesMenu->addAction(tr("Controls"));
+	auto controlsAction = new QAction(tr("Controls"), ui->menuSeetings);
 	connect(controlsAction, &QAction::triggered, this, [this]() {
 		dialogs::ControlsDialog controlsDialog(this);
 		controlsDialog.exec();
 	});
-
-	ui->menuFile->insertMenu(ui->actionExit, preferencesMenu);
-	ui->menuFile->insertSeparator(ui->actionExit);
+	ui->menuSeetings->insertAction(ui->actionAdjust_Grid, controlsAction);
 }
 
 FredView::~FredView() {
