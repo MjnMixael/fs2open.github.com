@@ -80,6 +80,7 @@ private:
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;
 	std::unique_ptr<BriefingViewport> _briefingViewport; // our os::Viewport for gr_use_viewport
+	std::unique_ptr<QOpenGLContext> _diagnosticContext;
 
 	dialogs::BriefingEditorDialogModel* _model = nullptr;
 	EditorViewport* _viewport = nullptr;

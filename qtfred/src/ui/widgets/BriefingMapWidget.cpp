@@ -129,6 +129,20 @@ void BriefingMapWidget::initBriefingMap() {
 		_window->initializeGL(currentCtx->format());
 	}
 
+	_diagnosticContext.reset(new QOpenGLContext());
+	if (currentCtx) {
+		_diagnosticContext->setShareContext(currentCtx);
+		_diagnosticContext->setFormat(currentCtx->format());
+	} else {
+		_diagnosticContext->setFormat(_window->requestedFormat());
+	}
+	if (!_diagnosticContext->create()) {
+		mprintf(("BriefingMapWidget: failed to create dedicated diagnostic GL context.\n"));
+		_diagnosticContext.reset();
+	} else {
+		mprintf(("BriefingMapWidget: dedicated diagnostic GL context created.\n"));
+	}
+
 	// Create our os::Viewport wrapper so we can use gr_use_viewport() / gr_flip()
 	_briefingViewport = std::unique_ptr<BriefingViewport>(new BriefingViewport(_window));
 
@@ -230,10 +244,23 @@ void BriefingMapWidget::renderFrame() {
 
 	_rendering = true;
 
-	// Bind the OpenGL context to our briefing map surface.
-	gr_use_viewport(_briefingViewport.get());
+	QOpenGLContext* context = nullptr;
+	if (_diagnosticContext) {
+		if (!_diagnosticContext->makeCurrent(_window)) {
+			if (!_loggedMakeCurrentFailure) {
+				mprintf(("BriefingMapWidget: dedicated context makeCurrent(target surface) failed.\n"));
+				_loggedMakeCurrentFailure = true;
+			}
+			_rendering = false;
+			return;
+		}
+		context = _diagnosticContext.get();
+	} else {
+		// Fallback path: bind through graphics pipeline context switching
+		gr_use_viewport(_briefingViewport.get());
+		context = QOpenGLContext::currentContext();
+	}
 
-	auto* context = QOpenGLContext::currentContext();
 	if (context == nullptr) {
 		if (!_loggedNoContext) {
 			mprintf(("BriefingMapWidget: no current OpenGL context after gr_use_viewport().\n"));
@@ -245,19 +272,10 @@ void BriefingMapWidget::renderFrame() {
 
 	if (context->surface() != _window) {
 		if (!_loggedSurfaceMismatch) {
-			mprintf(("BriefingMapWidget: surface mismatch before clear (current=%p target=%p), forcing makeCurrent(target).\n",
+			mprintf(("BriefingMapWidget: surface mismatch before clear (current=%p target=%p).\n",
 				static_cast<void*>(context->surface()),
 				static_cast<void*>(_window)));
 			_loggedSurfaceMismatch = true;
-		}
-
-		if (!context->makeCurrent(_window)) {
-			if (!_loggedMakeCurrentFailure) {
-				mprintf(("BriefingMapWidget: makeCurrent(target surface) failed.\n"));
-				_loggedMakeCurrentFailure = true;
-			}
-			_rendering = false;
-			return;
 		}
 	}
 
@@ -288,7 +306,7 @@ void BriefingMapWidget::renderFrame() {
 			static_cast<unsigned>(pixel[3])));
 	}
 
-	_briefingViewport->swapBuffers();
+	context->swapBuffers(_window);
 	_debugFrameCounter++;
 
 	_rendering = false;
