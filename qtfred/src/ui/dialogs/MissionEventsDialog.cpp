@@ -14,6 +14,8 @@
 #include <QDebug>
 #include <QKeyEvent>
 #include <mission/missionmessage.h>
+#include <parse/parselo.h>
+#include <parse/sexp.h>
 
 namespace fso::fred::dialogs {
 
@@ -184,6 +186,10 @@ int MissionEventsDialog::getRootReturnType() const
 
 void MissionEventsDialog::accept()
 {
+	if (ui->advancedEditorButton->isChecked() && !applyAdvancedEditorText()) {
+		return;
+	}
+
 	// If apply() returns true, close the dialog
 	if (_model->apply()) {
 		QDialog::accept();
@@ -272,7 +278,113 @@ void MissionEventsDialog::rootNodeFormulaChanged(int old, int node) {
 
 void MissionEventsDialog::rootNodeSelectedByFormula(int formula) {
 	_model->setCurrentlySelectedEventByFormula(formula);
+	if (ui->advancedEditorButton->isChecked()) {
+		enterAdvancedEditorMode();
+	}
 	updateEventUi();
+}
+
+void MissionEventsDialog::on_advancedEditorButton_toggled(bool checked)
+{
+	if (checked) {
+		enterAdvancedEditorMode();
+		return;
+	}
+
+	leaveAdvancedEditorMode();
+}
+
+void MissionEventsDialog::enterAdvancedEditorMode()
+{
+	if (!_model->eventIsValid()) {
+		ui->advancedSexpText->clear();
+		ui->eventTree->setVisible(false);
+		ui->advancedSexpText->setVisible(true);
+		return;
+	}
+
+	SCP_string serialized_sexp;
+	const auto formula = _model->getFormula();
+	const auto sexp_root = ui->eventTree->_model.save_tree(formula);
+	convert_sexp_to_string(serialized_sexp, sexp_root, SEXP_SAVE_MODE);
+	free_sexp2(sexp_root);
+
+	ui->advancedSexpText->setPlainText(QString::fromStdString(serialized_sexp));
+	ui->eventTree->setVisible(false);
+	ui->advancedSexpText->setVisible(true);
+}
+
+bool MissionEventsDialog::applyAdvancedEditorText()
+{
+	if (!_model->eventIsValid()) {
+		return true;
+	}
+
+	auto text = ui->advancedSexpText->toPlainText().trimmed().toUtf8();
+	SCP_vector<char> parse_buffer(text.begin(), text.end());
+	parse_buffer.push_back('\0');
+
+	pause_parse();
+	reset_parse(parse_buffer.data());
+	const auto parsed_formula = get_sexp_main();
+	if (parsed_formula < 0) {
+		unpause_parse();
+		QMessageBox::warning(this, tr("Invalid SEXP"), tr("Failed to parse advanced SEXP text."));
+		return false;
+	}
+
+	int bad_node = -1;
+	const auto syntax_error = check_sexp_syntax(parsed_formula, getRootReturnType(), 1, &bad_node, sexp_mode::GENERAL);
+	if (syntax_error != 0) {
+		free_sexp2(parsed_formula);
+		unpause_parse();
+		QMessageBox::warning(this, tr("Invalid SEXP"), tr("SEXP syntax error: %1").arg(sexp_error_message(syntax_error)));
+		return false;
+	}
+
+	unpause_parse();
+
+	const auto old_formula = _model->getFormula();
+	const auto new_formula = ui->eventTree->_model.load_sub_tree(parsed_formula, true, "true");
+	free_sexp2(parsed_formula);
+
+	QTreeWidgetItem* root_item = nullptr;
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* it = ui->eventTree->topLevelItem(i);
+		if (it && it->data(0, sexp_tree_view::FormulaDataRole).toInt() == old_formula) {
+			root_item = it;
+			break;
+		}
+	}
+
+	if (root_item == nullptr) {
+		QMessageBox::warning(this, tr("SEXP Update Failed"), tr("Could not locate the current event root node."));
+		return false;
+	}
+
+	while (root_item->childCount() > 0) {
+		delete root_item->takeChild(0);
+	}
+
+	root_item->setData(0, sexp_tree_view::FormulaDataRole, new_formula);
+	ui->eventTree->add_sub_tree(new_formula, root_item);
+	ui->eventTree->setCurrentItem(root_item);
+	_model->changeRootNodeFormula(old_formula, new_formula);
+	_model->setCurrentlySelectedEventByFormula(new_formula);
+	_model->setModified();
+	return true;
+}
+
+void MissionEventsDialog::leaveAdvancedEditorMode()
+{
+	if (!applyAdvancedEditorText()) {
+		QSignalBlocker blocker(ui->advancedEditorButton);
+		ui->advancedEditorButton->setChecked(true);
+		return;
+	}
+
+	ui->advancedSexpText->setVisible(false);
+	ui->eventTree->setVisible(true);
 }
 
 void MissionEventsDialog::initMessageList() {

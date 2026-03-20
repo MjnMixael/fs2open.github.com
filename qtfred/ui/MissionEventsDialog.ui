@@ -19,10 +19,32 @@
      <item>
       <layout class="QVBoxLayout" name="verticalLayout">
        <item>
-        <widget class="fso::fred::sexp_tree_view" name="eventTree">
+       <widget class="fso::fred::sexp_tree_view" name="eventTree">
          <attribute name="headerVisible">
           <bool>false</bool>
          </attribute>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPushButton" name="advancedEditorButton">
+         <property name="text">
+          <string>Advanced SEXP Text Editor</string>
+         </property>
+         <property name="checkable">
+          <bool>true</bool>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QPlainTextEdit" name="advancedSexpText">
+         <property name="visible">
+          <bool>false</bool>
+         </property>
+         <property name="font">
+          <font>
+           <family>Monospace</family>
+          </font>
+         </property>
         </widget>
        </item>
        <item>

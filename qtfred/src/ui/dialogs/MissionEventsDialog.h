@@ -89,6 +89,7 @@ private slots:
 	void on_personaCombo_currentIndexChanged(int index);
 	void on_btnUpdateStuff_clicked();
 	void on_messageTeamCombo_currentIndexChanged(int index);
+	void on_advancedEditorButton_toggled(bool checked);
 
 
 private: // NOLINT(readability-redundant-access-specifiers)
@@ -121,9 +122,11 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void initMessageWidgets();
 	void initEventWidgets();
 	void updateEventBitmap();
+	bool applyAdvancedEditorText();
+	void enterAdvancedEditorMode();
+	void leaveAdvancedEditorMode();
 
 	static SCP_vector<int> read_root_formula_order(sexp_tree_view* tree);
 };
 
 } // namespace fso::fred::dialogs
-
