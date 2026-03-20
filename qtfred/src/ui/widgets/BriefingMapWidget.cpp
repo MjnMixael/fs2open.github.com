@@ -6,11 +6,9 @@
 
 #include "BriefingMapWidget.h"
 
-#include <algorithm>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QtGui/QOpenGLContext>
-#include <QtGui/QOpenGLFunctions>
 #include <QtWidgets/QHBoxLayout>
 
 #include "FredApplication.h"
@@ -283,31 +281,41 @@ void BriefingMapWidget::renderFrame() {
 	const int w = static_cast<int>(viewSize.first);
 	const int h = static_cast<int>(viewSize.second);
 
-	auto* funcs = context->functions();
-	funcs->glViewport(0, 0, w, h);
-	funcs->glClearColor(1.0f, 0.35f, 0.0f, 1.0f);
-	funcs->glClear(GL_COLOR_BUFFER_BIT);
-	funcs->glFinish();
+	gr_screen_resize(w, h);
 
-	if ((_debugFrameCounter % 120) == 0) {
-		ubyte pixel[4] = {0, 0, 0, 0};
-		funcs->glReadPixels(std::max(0, w / 2), std::max(0, h / 2), 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+	brief_screen savedBscreen = bscreen;
+	bscreen.map_x1 = 0;
+	bscreen.map_y1 = 0;
+	bscreen.map_x2 = w;
+	bscreen.map_y2 = h;
+	bscreen.resize = GR_RESIZE_NONE;
 
-		mprintf(("BriefingMapWidget: rendered frames=%u size=%dx%d current_surface=%p target_surface=%p\n",
-			_debugFrameCounter,
-			w,
-			h,
-			static_cast<void*>(context->surface()),
-			static_cast<void*>(_window)));
-		mprintf(("BriefingMapWidget: center pixel RGBA after clear = (%u, %u, %u, %u)\n",
-			static_cast<unsigned>(pixel[0]),
-			static_cast<unsigned>(pixel[1]),
-			static_cast<unsigned>(pixel[2]),
-			static_cast<unsigned>(pixel[3])));
+	briefing* savedBriefing = Briefing;
+	Briefing = _model->getWipBriefingPtr(_model->getCurrentTeam());
+
+	gr_reset_clip();
+	gr_clear();
+
+	if (Briefing != nullptr) {
+		const float frametime = 0.033f;
+		brief_camera_move(frametime, _currentStage);
+		brief_render_map(_currentStage, frametime);
+		cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
 	}
+
+	Briefing = savedBriefing;
+	bscreen = savedBscreen;
 
 	context->swapBuffers(_window);
 	_debugFrameCounter++;
+
+	if ((_debugFrameCounter % 120) == 0) {
+		mprintf(("BriefingMapWidget: rendered briefing frame=%u size=%dx%d current_surface=%p\n",
+			_debugFrameCounter,
+			w,
+			h,
+			static_cast<void*>(context->surface())));
+	}
 
 	_rendering = false;
 }
