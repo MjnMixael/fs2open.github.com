@@ -92,6 +92,8 @@ private:
 	bool _loggedNoViewport = false;
 	bool _loggedInFrameSkip = false;
 	bool _loggedNoContext = false;
+	bool _loggedSurfaceMismatch = false;
+	bool _loggedMakeCurrentFailure = false;
 	uint32_t _debugFrameCounter = 0;
 
 	// Mouse drag state

@@ -242,14 +242,32 @@ void BriefingMapWidget::renderFrame() {
 		return;
 	}
 
+	if (context->surface() != _window) {
+		if (!_loggedSurfaceMismatch) {
+			mprintf(("BriefingMapWidget: surface mismatch before clear (current=%p target=%p), forcing makeCurrent(target).\n",
+				static_cast<void*>(context->surface()),
+				static_cast<void*>(_window)));
+			_loggedSurfaceMismatch = true;
+		}
+
+		if (!context->makeCurrent(_window)) {
+			if (!_loggedMakeCurrentFailure) {
+				mprintf(("BriefingMapWidget: makeCurrent(target surface) failed.\n"));
+				_loggedMakeCurrentFailure = true;
+			}
+			_rendering = false;
+			return;
+		}
+	}
+
 	auto viewSize = _briefingViewport->getSize();
 	const int w = static_cast<int>(viewSize.first);
 	const int h = static_cast<int>(viewSize.second);
 
 	auto* funcs = context->functions();
 	funcs->glViewport(0, 0, w, h);
-	funcs->glClearColor(1.0f, 0.5f, 0.0f, 1.0f);
-	funcs->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+	funcs->glClearColor(1.0f, 0.35f, 0.0f, 1.0f);
+	funcs->glClear(GL_COLOR_BUFFER_BIT);
 
 	_briefingViewport->swapBuffers();
 	_debugFrameCounter++;
