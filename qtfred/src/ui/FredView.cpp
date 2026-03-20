@@ -4,6 +4,7 @@
 #include <QFileDialog>
 #include <QMessageBox>
 #include <QDebug>
+#include <QKeyEvent>
 #include <QSettings>
 
 #include <project.h>
@@ -41,6 +42,7 @@
 #include <ui/dialogs/MusicPlayerDialog.h>
 #include <ui/dialogs/RelativeCoordinatesDialog.h>
 #include <ui/dialogs/ControlsDialog.h>
+#include <ui/ControlBindings.h>
 #include <iff_defs/iff_defs.h>
 
 #include "mission/Editor.h"
@@ -582,6 +584,14 @@ void FredView::onUpdateEditingMode() {
 }
 bool FredView::event(QEvent* event) {
 	switch (event->type()) {
+	case QEvent::ShortcutOverride: {
+		auto* keyEvent = static_cast<QKeyEvent*>(event);
+		if (ControlBindings::instance().matches(keyEvent)) {
+			event->accept();
+			return true;
+		}
+		return QMainWindow::event(event);
+	}
 	case QEvent::WindowActivate:
 		windowActivated();
 		return true;

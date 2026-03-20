@@ -112,6 +112,11 @@ bool ControlBindings::handleKeyRelease(QKeyEvent* event) {
 	return true;
 }
 
+bool ControlBindings::matches(QKeyEvent* event) const {
+	auto code = normalizedCode(event);
+	return _actionByCode.find(code) != _actionByCode.end();
+}
+
 bool ControlBindings::isPressed(ControlAction action) const {
 	return _pressedActions.find(action) != _pressedActions.end();
 }

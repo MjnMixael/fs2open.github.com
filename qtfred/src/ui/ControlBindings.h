@@ -50,6 +50,7 @@ class ControlBindings {
 
 	bool handleKeyPress(QKeyEvent* event);
 	bool handleKeyRelease(QKeyEvent* event);
+	bool matches(QKeyEvent* event) const;
 
 	bool isPressed(ControlAction action) const;
 	bool takeTriggered(ControlAction action);
