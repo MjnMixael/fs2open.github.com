@@ -41,6 +41,7 @@
 #include <ui/dialogs/VariableDialog.h>
 #include <ui/dialogs/MusicPlayerDialog.h>
 #include <ui/dialogs/RelativeCoordinatesDialog.h>
+#include <ui/dialogs/ControlsDialog.h>
 #include <iff_defs/iff_defs.h>
 
 #include "mission/Editor.h"
@@ -99,6 +100,16 @@ FredView::FredView(QWidget* parent) : QMainWindow(parent), ui(new Ui::FredView()
 	auto propsAction = new QAction(tr("Props"), this);
 	connect(propsAction, &QAction::triggered, this, &FredView::on_actionProps_triggered);
 	ui->menuObjects->insertAction(ui->actionWaypoint_Paths, propsAction);
+
+	auto preferencesMenu = new QMenu(tr("Preferences"), ui->menuFile);
+	auto controlsAction = preferencesMenu->addAction(tr("Controls"));
+	connect(controlsAction, &QAction::triggered, this, [this]() {
+		dialogs::ControlsDialog controlsDialog(this);
+		controlsDialog.exec();
+	});
+
+	ui->menuFile->insertMenu(ui->actionExit, preferencesMenu);
+	ui->menuFile->insertSeparator(ui->actionExit);
 }
 
 FredView::~FredView() {

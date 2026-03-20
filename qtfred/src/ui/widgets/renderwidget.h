@@ -1,7 +1,6 @@
 #pragma once
 
 #include <memory>
-#include <unordered_map>
 
 #include <QWindow>
 #include <QWidget>
@@ -52,7 +51,6 @@ class RenderWidget: public QWidget {
 	std::unique_ptr<QCursor> _moveCursor;
 	std::unique_ptr<QCursor> _rotateCursor;
 
-	std::unordered_map<int, int> qt2fsKeys;
 	Editor* fred = nullptr;
 	EditorViewport* _viewport = nullptr;
 
