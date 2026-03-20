@@ -4,9 +4,8 @@
 #include <QWindow>
 #include <QTimer>
 
-class QOpenGLContext;
-
 #include "globalincs/pstypes.h"
+#include "osapi/osapi.h"
 
 namespace fso::fred::dialogs {
 class BriefingEditorDialogModel;
@@ -29,6 +28,23 @@ protected:
 
 private:
 	QWidget* _parentWidget = nullptr;
+};
+
+// Lightweight os::Viewport that wraps BriefingMapWindow so we can use
+// gr_use_viewport() / gr_flip() through FSO's normal rendering pipeline.
+class BriefingViewport : public os::Viewport {
+public:
+	explicit BriefingViewport(BriefingMapWindow* window);
+
+	SDL_Window* toSDLWindow() override;
+	std::pair<uint32_t, uint32_t> getSize() override;
+	void swapBuffers() override;
+	void setState(os::ViewportState state) override;
+	void minimize() override;
+	void restore() override;
+
+private:
+	BriefingMapWindow* _window = nullptr;
 };
 
 class BriefingMapWidget : public QWidget {
@@ -61,7 +77,7 @@ private:
 
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;
-	QOpenGLContext* _glContext = nullptr; // cached from init, since currentContext() may be null in modal dialog
+	std::unique_ptr<BriefingViewport> _briefingViewport; // our os::Viewport for gr_use_viewport
 
 	dialogs::BriefingEditorDialogModel* _model = nullptr;
 	EditorViewport* _viewport = nullptr;

@@ -58,6 +58,35 @@ void BriefingMapWindow::exposeEvent(QExposeEvent* event) {
 	}
 }
 
+// ---- BriefingViewport ----
+
+BriefingViewport::BriefingViewport(BriefingMapWindow* window) : _window(window) {
+}
+
+SDL_Window* BriefingViewport::toSDLWindow() {
+	return nullptr;
+}
+
+std::pair<uint32_t, uint32_t> BriefingViewport::getSize() {
+	return std::make_pair(static_cast<uint32_t>(_window->width()),
+		static_cast<uint32_t>(_window->height()));
+}
+
+void BriefingViewport::swapBuffers() {
+	if (_window->isExposed()) {
+		QOpenGLContext::currentContext()->swapBuffers(_window);
+	}
+}
+
+void BriefingViewport::setState(os::ViewportState /*state*/) {
+}
+
+void BriefingViewport::minimize() {
+}
+
+void BriefingViewport::restore() {
+}
+
 // ---- BriefingMapWidget ----
 
 BriefingMapWidget::BriefingMapWidget(QWidget* parent,
@@ -88,13 +117,14 @@ BriefingMapWidget::~BriefingMapWidget() {
 }
 
 void BriefingMapWidget::initBriefingMap() {
-	// Cache the GL context — during init, the main renderer has it current.
-	// We need this because QOpenGLContext::currentContext() may return null
-	// later when the modal dialog blocks the main render loop.
-	_glContext = QOpenGLContext::currentContext();
-	if (_glContext) {
-		_window->initializeGL(_glContext->format());
+	// Get the surface format from the current GL context and initialize our window
+	auto* currentCtx = QOpenGLContext::currentContext();
+	if (currentCtx) {
+		_window->initializeGL(currentCtx->format());
 	}
+
+	// Create our os::Viewport wrapper so we can use gr_use_viewport() / gr_flip()
+	_briefingViewport = std::unique_ptr<BriefingViewport>(new BriefingViewport(_window));
 
 	// Initialize the briefing rendering subsystem.
 	// This mirrors what brief_init(true) does in the Lua API path:
@@ -152,7 +182,7 @@ QWindow* BriefingMapWidget::getRenderWindow() const {
 }
 
 void BriefingMapWidget::renderFrame() {
-	if (!_initialized || !_window->isExposed())
+	if (!_initialized || !_window->isExposed() || !_briefingViewport)
 		return;
 
 	// Guard against re-entrancy: swapBuffers() can pump the Qt event loop on Windows,
@@ -161,22 +191,20 @@ void BriefingMapWidget::renderFrame() {
 		return;
 
 	// Skip if a 3D frame is already open (e.g. main renderer still active during init).
-	// The timer will try again on the next tick.
 	if (g3_in_frame())
 		return;
 
 	_rendering = true;
 
-	if (!_glContext) {
-		_rendering = false;
-		return;
-	}
+	// Switch FSO's rendering pipeline to target our window surface.
+	// This is the same approach FredRenderer uses for the main 3D viewport.
+	gr_use_viewport(_briefingViewport.get());
 
-	// Switch the shared GL context to render onto our surface
-	_glContext->makeCurrent(_window);
+	auto viewSize = _briefingViewport->getSize();
+	int w = static_cast<int>(viewSize.first);
+	int h = static_cast<int>(viewSize.second);
 
-	int w = _window->width();
-	int h = _window->height();
+	gr_screen_resize(w, h);
 
 	// Save and set bscreen to fill our widget
 	brief_screen savedBscreen = bscreen;
@@ -190,24 +218,19 @@ void BriefingMapWidget::renderFrame() {
 	briefing* savedBriefing = Briefing;
 	Briefing = _model->getWipBriefingPtr(_model->getCurrentTeam());
 
-	// Resize the graphics state for our surface
-	gr_screen_resize(w, h);
-
-	// Clear the surface
+	gr_reset_clip();
 	gr_clear();
 
-	// Update camera animation
+	// Update camera animation and render the map
 	float frametime = 0.033f; // fixed timestep matching our timer
 	brief_camera_move(frametime, _currentStage);
-
-	// Render the briefing map
 	brief_render_map(_currentStage, frametime);
 
 	// Emit camera position for any listeners
 	cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
 
-	// Swap buffers on our window
-	_glContext->swapBuffers(_window);
+	// Flush the frame through FSO's normal pipeline (handles FBO blit + swapBuffers)
+	gr_flip();
 
 	// Restore state
 	Briefing = savedBriefing;
