@@ -271,9 +271,6 @@ void BriefingMapWidget::renderFrame() {
 	funcs->glClear(GL_COLOR_BUFFER_BIT);
 	funcs->glFinish();
 
-	_briefingViewport->swapBuffers();
-	_debugFrameCounter++;
-
 	if ((_debugFrameCounter % 120) == 0) {
 		ubyte pixel[4] = {0, 0, 0, 0};
 		funcs->glReadPixels(std::max(0, w / 2), std::max(0, h / 2), 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
@@ -290,6 +287,9 @@ void BriefingMapWidget::renderFrame() {
 			static_cast<unsigned>(pixel[2]),
 			static_cast<unsigned>(pixel[3])));
 	}
+
+	_briefingViewport->swapBuffers();
+	_debugFrameCounter++;
 
 	_rendering = false;
 }
