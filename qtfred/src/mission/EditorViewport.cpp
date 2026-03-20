@@ -1280,8 +1280,11 @@ void EditorViewport::cancel_drag() {
 		Assert(objp->type != OBJ_NONE);
 		if (objp->flags[Object::Object_Flags::Marked]) {
 			const auto obj_index = OBJ_INDEX(objp);
-			objp->pos = rotation_backup[obj_index].pos;
-			objp->orient = rotation_backup[obj_index].orient;
+			if (!IS_VEC_NULL(&rotation_backup[obj_index].orient.vec.rvec) && !IS_VEC_NULL(&rotation_backup[obj_index].orient.vec.uvec)
+				&& !IS_VEC_NULL(&rotation_backup[obj_index].orient.vec.fvec)) {
+				objp->pos = rotation_backup[obj_index].pos;
+				objp->orient = rotation_backup[obj_index].orient;
+			}
 		}
 
 		objp = GET_NEXT(objp);
