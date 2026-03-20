@@ -9,6 +9,7 @@
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QtGui/QOpenGLContext>
+#include <QtGui/QOpenGLFunctions>
 #include <QtWidgets/QHBoxLayout>
 
 #include "FredApplication.h"
@@ -200,45 +201,25 @@ void BriefingMapWidget::renderFrame() {
 
 	_rendering = true;
 
-	// Switch FSO's rendering pipeline to target our window surface.
-	// This is the same approach FredRenderer uses for the main 3D viewport.
+	// Bind the OpenGL context to our briefing map surface.
 	gr_use_viewport(_briefingViewport.get());
 
+	auto* context = QOpenGLContext::currentContext();
+	if (context == nullptr) {
+		_rendering = false;
+		return;
+	}
+
 	auto viewSize = _briefingViewport->getSize();
-	int w = static_cast<int>(viewSize.first);
-	int h = static_cast<int>(viewSize.second);
+	const int w = static_cast<int>(viewSize.first);
+	const int h = static_cast<int>(viewSize.second);
 
-	gr_screen_resize(w, h);
+	auto* funcs = context->functions();
+	funcs->glViewport(0, 0, w, h);
+	funcs->glClearColor(1.0f, 0.5f, 0.0f, 1.0f);
+	funcs->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-	// Save and set bscreen to fill our widget
-	brief_screen savedBscreen = bscreen;
-	bscreen.map_x1 = 0;
-	bscreen.map_y1 = 0;
-	bscreen.map_x2 = w;
-	bscreen.map_y2 = h;
-	bscreen.resize = GR_RESIZE_NONE;
-
-	// Point Briefing at our WIP data
-	briefing* savedBriefing = Briefing;
-	Briefing = _model->getWipBriefingPtr(_model->getCurrentTeam());
-
-	gr_reset_clip();
-	gr_clear();
-
-	// Update camera animation and render the map
-	float frametime = 0.033f; // fixed timestep matching our timer
-	brief_camera_move(frametime, _currentStage);
-	brief_render_map(_currentStage, frametime);
-
-	// Emit camera position for any listeners
-	cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
-
-	// Flush the frame through FSO's normal pipeline (handles FBO blit + swapBuffers)
-	gr_flip();
-
-	// Restore state
-	Briefing = savedBriefing;
-	bscreen = savedBscreen;
+	_briefingViewport->swapBuffers();
 
 	_rendering = false;
 }
