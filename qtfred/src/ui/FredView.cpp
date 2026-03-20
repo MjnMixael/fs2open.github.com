@@ -7,7 +7,6 @@
 #include <QSettings>
 
 #include <project.h>
-#include <io/key.h>
 
 #include <qevent.h>
 #include <FredApplication.h>
@@ -594,8 +593,6 @@ bool FredView::event(QEvent* event) {
 	}
 }
 void FredView::windowActivated() {
-	key_got_focus();
-
 	_viewport->Cursor_over = -1;
 
 	// Track the last active viewport
@@ -604,8 +601,6 @@ void FredView::windowActivated() {
 	viewWindowActivated();
 }
 void FredView::windowDeactivated() {
-	key_lost_focus();
-
 	_viewport->Cursor_over = -1;
 }
 void FredView::on_actionHide_Marked_Objects_triggered(bool  /*enabled*/) {

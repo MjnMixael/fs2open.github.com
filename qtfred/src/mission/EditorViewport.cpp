@@ -304,7 +304,7 @@ void EditorViewport::process_controls(vec3d* pos, matrix* orient, float frametim
 	static std::unique_ptr<io::spacemouse::SpaceMouse> spacemouse = io::spacemouse::SpaceMouse::searchSpaceMice(0);
 
 	if (Flying_controls_mode) {
-		grid_read_camera_controls(&view_controls, frametime);
+		memset(&view_controls, 0, sizeof(control_info));
 
 		if (spacemouse != nullptr) {
 			auto spacemouse_movement = spacemouse->getMovement();
@@ -315,13 +315,6 @@ void EditorViewport::process_controls(vec3d* pos, matrix* orient, float frametim
 			view_controls.sideways += spacemouse_movement.translation.xyz.x;
 			view_controls.bank += spacemouse_movement.rotation.b;
 			view_controls.forward += spacemouse_movement.translation.xyz.y;
-		}
-
-		
-		if ((fabs(view_controls.pitch) > (frametime / 100)) || (fabs(view_controls.vertical) > (frametime / 100))
-			|| (fabs(view_controls.heading) > (frametime / 100)) || (fabs(view_controls.sideways) > (frametime / 100))
-			|| (fabs(view_controls.bank) > (frametime / 100)) || (fabs(view_controls.forward) > (frametime / 100))) {
-			needsUpdate();
 		}
 
 		auto& bindings = ControlBindings::instance();
@@ -345,6 +338,12 @@ void EditorViewport::process_controls(vec3d* pos, matrix* orient, float frametim
 			view_controls.sideways *= 5.0f;
 			view_controls.bank *= 5.0f;
 			view_controls.forward *= 5.0f;
+		}
+
+		if ((fabs(view_controls.pitch) > (frametime / 100)) || (fabs(view_controls.vertical) > (frametime / 100))
+			|| (fabs(view_controls.heading) > (frametime / 100)) || (fabs(view_controls.sideways) > (frametime / 100))
+			|| (fabs(view_controls.bank) > (frametime / 100)) || (fabs(view_controls.forward) > (frametime / 100))) {
+			needsUpdate();
 		}
 
 		//view_physics.flags |= (PF_ACCELERATES | PF_SLIDE_ENABLED);
