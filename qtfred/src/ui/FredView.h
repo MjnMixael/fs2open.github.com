@@ -239,6 +239,7 @@ class FredView: public QMainWindow, public IDialogProvider {
 
 	bool _inKeyPressHandler = false;
 	bool _inKeyReleaseHandler = false;
+	bool _missionModified = false;
 
 	void onUpdateConstrains();
 	void onUpdateEditingMode();

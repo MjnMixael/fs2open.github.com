@@ -53,8 +53,6 @@
 #include "mission/object.h"
 
 namespace {
-extern int Local_modified;
-
 template<typename T>
 void copyActionSettings(QAction* action, T* target) {
 	Q_ASSERT(action->isCheckable());
@@ -130,6 +128,7 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	connect(_propClassBox.get(), &PropComboBox::propClassSelected, this, &FredView::onPropClassSelected);
 
 	connect(fred, &Editor::missionLoaded, this, &FredView::on_mission_loaded);
+	connect(fred, &Editor::missionChanged, this, [this]() { _missionModified = true; });
 
 	// Sets the initial window title
 	on_mission_loaded("");
@@ -232,6 +231,7 @@ bool FredView::saveMissionToCurrentPath() {
 	}
 
 	save.save_mission_file(saveName.replace('/', DIR_SEPARATOR_CHAR).toUtf8().constData());
+	_missionModified = false;
 	return true;
 }
 bool FredView::saveMissionAs() {
@@ -258,6 +258,7 @@ bool FredView::saveMissionAs() {
 	}
 
 	save.save_mission_file(saveName.replace('/',DIR_SEPARATOR_CHAR).toUtf8().constData());
+	_missionModified = false;
 	return true;
 }
 
@@ -277,6 +278,8 @@ void FredView::on_mission_loaded(const std::string& filepath) {
 	if (!filepath.empty()) {
 		addToRecentFiles(QString::fromStdString(filepath));
 	}
+
+	_missionModified = false;
 }
 
 QSurface* FredView::getRenderSurface() {
@@ -408,7 +411,7 @@ void FredView::updateUI() {
 	viewIdle();
 }
 bool FredView::isMissionModified() const {
-	return Local_modified != 0;
+	return _missionModified;
 }
 
 bool FredView::maybePromptToSaveMissionChanges(const QString& actionDescription) {
