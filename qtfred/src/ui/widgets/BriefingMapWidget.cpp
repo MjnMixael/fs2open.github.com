@@ -8,6 +8,7 @@
 
 #include <QKeyEvent>
 #include <QMouseEvent>
+#include <QDebug>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 #include <QtWidgets/QHBoxLayout>
@@ -153,6 +154,7 @@ void BriefingMapWidget::initBriefingMap() {
 
 	_initialized = true;
 	_renderTimer->start();
+	qInfo() << "BriefingMapWidget: init complete, timer started for render diagnostics.";
 }
 
 void BriefingMapWidget::setStage(int stageNum) {
@@ -187,8 +189,29 @@ QWindow* BriefingMapWidget::getRenderWindow() const {
 }
 
 void BriefingMapWidget::renderFrame() {
-	if (!_initialized || !_window->isExposed() || !_briefingViewport)
+	if (!_initialized) {
+		if (!_loggedNotInitialized) {
+			qWarning() << "BriefingMapWidget: render skipped because widget is not initialized.";
+			_loggedNotInitialized = true;
+		}
 		return;
+	}
+
+	if (!_window->isExposed()) {
+		if (!_loggedNotExposed) {
+			qWarning() << "BriefingMapWidget: render skipped because window is not exposed.";
+			_loggedNotExposed = true;
+		}
+		return;
+	}
+
+	if (!_briefingViewport) {
+		if (!_loggedNoViewport) {
+			qWarning() << "BriefingMapWidget: render skipped because briefing viewport is null.";
+			_loggedNoViewport = true;
+		}
+		return;
+	}
 
 	// Guard against re-entrancy: swapBuffers() can pump the Qt event loop on Windows,
 	// which may fire our timer again while we're still mid-render.
@@ -196,8 +219,13 @@ void BriefingMapWidget::renderFrame() {
 		return;
 
 	// Skip if a 3D frame is already open (e.g. main renderer still active during init).
-	if (g3_in_frame())
+	if (g3_in_frame()) {
+		if (!_loggedInFrameSkip) {
+			qWarning() << "BriefingMapWidget: render skipped because g3_in_frame() is true.";
+			_loggedInFrameSkip = true;
+		}
 		return;
+	}
 
 	_rendering = true;
 
@@ -206,6 +234,10 @@ void BriefingMapWidget::renderFrame() {
 
 	auto* context = QOpenGLContext::currentContext();
 	if (context == nullptr) {
+		if (!_loggedNoContext) {
+			qWarning() << "BriefingMapWidget: no current OpenGL context after gr_use_viewport().";
+			_loggedNoContext = true;
+		}
 		_rendering = false;
 		return;
 	}
@@ -220,6 +252,14 @@ void BriefingMapWidget::renderFrame() {
 	funcs->glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
 	_briefingViewport->swapBuffers();
+	_debugFrameCounter++;
+
+	if ((_debugFrameCounter % 120) == 0) {
+		qInfo() << "BriefingMapWidget: rendered frames =" << _debugFrameCounter
+			<< "size =" << w << "x" << h
+			<< "current surface =" << context->surface()
+			<< "target surface =" << _window;
+	}
 
 	_rendering = false;
 }
