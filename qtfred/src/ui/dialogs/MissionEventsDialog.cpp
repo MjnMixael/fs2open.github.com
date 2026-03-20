@@ -14,8 +14,11 @@
 #include <QDebug>
 #include <QKeyEvent>
 #include <mission/missionmessage.h>
+#include <mission/missionparse.h>
 #include <parse/parselo.h>
 #include <parse/sexp.h>
+
+void parse_event(mission* pm);
 
 namespace fso::fred::dialogs {
 
@@ -309,7 +312,50 @@ void MissionEventsDialog::enterAdvancedEditorMode()
 	convert_sexp_to_string(serialized_sexp, sexp_root, SEXP_SAVE_MODE);
 	free_sexp2(sexp_root);
 
-	ui->advancedSexpText->setPlainText(QString::fromStdString(serialized_sexp));
+	const auto cur_event_index = _model->getCurrentlySelectedEvent();
+	const auto& event = _model->getEventList()[cur_event_index];
+
+	SCP_string event_text = "$Formula: " + serialized_sexp + "\n";
+	if (!event.name.empty()) {
+		event_text += "+Name: " + event.name + "\n";
+	}
+
+	event_text += "+Repeat Count: " + std::to_string(event.repeat_count) + "\n";
+	if (event.flags & MEF_USING_TRIGGER_COUNT) {
+		event_text += "+Trigger Count: " + std::to_string(event.trigger_count) + "\n";
+	}
+
+	event_text += "+Interval: " + std::to_string(event.interval) + "\n";
+	if (event.score != 0) {
+		event_text += "+Score: " + std::to_string(event.score) + "\n";
+	}
+	if (event.chain_delay >= 0) {
+		event_text += "+Chained: " + std::to_string(event.chain_delay) + "\n";
+	}
+	if (!event.objective_text.empty()) {
+		event_text += "+Objective: " + event.objective_text + "\n";
+	}
+	if (!event.objective_key_text.empty()) {
+		event_text += "+Objective key: " + event.objective_key_text + "\n";
+	}
+	if (event.team >= 0) {
+		event_text += "+Team: " + std::to_string(event.team) + "\n";
+	}
+
+	if (event.mission_log_flags != 0) {
+		event_text += "+Event Log Flags: (";
+		for (int i = 0; i < MAX_MISSION_EVENT_LOG_FLAGS; ++i) {
+			const auto bit = 1 << i;
+			if (event.mission_log_flags & bit) {
+				event_text += " \"";
+				event_text += Mission_event_log_flags[i];
+				event_text += "\"";
+			}
+		}
+		event_text += " )\n";
+	}
+
+	ui->advancedSexpText->setPlainText(QString::fromStdString(event_text));
 	ui->eventTree->setVisible(false);
 	ui->advancedSexpText->setVisible(true);
 }
@@ -320,33 +366,53 @@ bool MissionEventsDialog::applyAdvancedEditorText()
 		return true;
 	}
 
-	auto text = ui->advancedSexpText->toPlainText().trimmed().toUtf8();
-	SCP_vector<char> parse_buffer(text.begin(), text.end());
+	SCP_string wrapped_text = "#Events\n";
+	wrapped_text += ui->advancedSexpText->toPlainText().trimmed().toStdString();
+	wrapped_text += "\n#Goals\n";
+
+	SCP_vector<char> parse_buffer(wrapped_text.begin(), wrapped_text.end());
 	parse_buffer.push_back('\0');
 
+	const auto old_event_count = Mission_events.size();
+
+	mission_event parsed_event;
+	SCP_string parse_error;
 	pause_parse();
 	reset_parse(parse_buffer.data());
-	const auto parsed_formula = get_sexp_main();
-	if (parsed_formula < 0) {
-		unpause_parse();
-		QMessageBox::warning(this, tr("Invalid SEXP"), tr("Failed to parse advanced SEXP text."));
-		return false;
+	try {
+		required_string("#Events");
+		parse_event(nullptr);
+		required_string("#Goals");
+	} catch (const parse::ParseException& e) {
+		parse_error = e.what();
 	}
-
-	int bad_node = -1;
-	const auto syntax_error = check_sexp_syntax(parsed_formula, getRootReturnType(), 1, &bad_node, sexp_mode::GENERAL);
-	if (syntax_error != 0) {
-		free_sexp2(parsed_formula);
-		unpause_parse();
-		QMessageBox::warning(this, tr("Invalid SEXP"), tr("SEXP syntax error: %1").arg(sexp_error_message(syntax_error)));
-		return false;
-	}
-
 	unpause_parse();
 
+	if (!parse_error.empty() || Mission_events.size() <= old_event_count) {
+		while (Mission_events.size() > old_event_count) {
+			if (Mission_events.back().formula >= 0) {
+				free_sexp2(Mission_events.back().formula);
+			}
+			Mission_events.pop_back();
+		}
+		if (parse_error.empty()) {
+			parse_error = "Could not parse event data.";
+		}
+		QMessageBox::warning(this, tr("Invalid Event Data"), QString::fromStdString(parse_error));
+		return false;
+	}
+
+	parsed_event = Mission_events.back();
+	Mission_events.pop_back();
+
+	if (parsed_event.formula < 0) {
+		QMessageBox::warning(this, tr("Invalid Event Data"), tr("Event formula failed to parse."));
+		return false;
+	}
+
 	const auto old_formula = _model->getFormula();
-	const auto new_formula = ui->eventTree->_model.load_sub_tree(parsed_formula, true, "true");
-	free_sexp2(parsed_formula);
+	const auto new_formula = ui->eventTree->_model.load_sub_tree(parsed_event.formula, true, "true");
+	free_sexp2(parsed_event.formula);
 
 	QTreeWidgetItem* root_item = nullptr;
 	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
@@ -369,8 +435,41 @@ bool MissionEventsDialog::applyAdvancedEditorText()
 	root_item->setData(0, sexp_tree_view::FormulaDataRole, new_formula);
 	ui->eventTree->add_sub_tree(new_formula, root_item);
 	ui->eventTree->setCurrentItem(root_item);
+
+	const auto cur_event_idx = _model->getCurrentlySelectedEvent();
+	if (parsed_event.name != _model->getEventList()[cur_event_idx].name) {
+		root_item->setText(0, QString::fromStdString(parsed_event.name));
+		_model->renameEvent(cur_event_idx, parsed_event.name);
+	}
+
 	_model->changeRootNodeFormula(old_formula, new_formula);
 	_model->setCurrentlySelectedEventByFormula(new_formula);
+
+	_model->setRepeatCount(parsed_event.repeat_count);
+	if (parsed_event.flags & MEF_USING_TRIGGER_COUNT) {
+		_model->setTriggerCount(parsed_event.trigger_count);
+	} else {
+		_model->setTriggerCount(1);
+	}
+	_model->setIntervalTime(parsed_event.interval);
+	_model->setEventScore(parsed_event.score);
+	_model->setChained(parsed_event.chain_delay >= 0);
+	if (parsed_event.chain_delay >= 0) {
+		_model->setChainDelay(parsed_event.chain_delay);
+	}
+	_model->setEventDirectiveText(parsed_event.objective_text);
+	_model->setEventDirectiveKeyText(parsed_event.objective_key_text);
+	_model->setEventTeam(parsed_event.team);
+	_model->setLogTrue((parsed_event.mission_log_flags & MLF_SEXP_TRUE) != 0);
+	_model->setLogFalse((parsed_event.mission_log_flags & MLF_SEXP_FALSE) != 0);
+	_model->setLogLogPrevious((parsed_event.mission_log_flags & MLF_STATE_CHANGE) != 0);
+	_model->setLogAlwaysFalse((parsed_event.mission_log_flags & MLF_SEXP_KNOWN_FALSE) != 0);
+	_model->setLogFirstRepeat((parsed_event.mission_log_flags & MLF_FIRST_REPEAT_ONLY) != 0);
+	_model->setLogLastRepeat((parsed_event.mission_log_flags & MLF_LAST_REPEAT_ONLY) != 0);
+	_model->setLogFirstTrigger((parsed_event.mission_log_flags & MLF_FIRST_TRIGGER_ONLY) != 0);
+	_model->setLogLastTrigger((parsed_event.mission_log_flags & MLF_LAST_TRIGGER_ONLY) != 0);
+
+	updateEventUi();
 	_model->setModified();
 	return true;
 }
