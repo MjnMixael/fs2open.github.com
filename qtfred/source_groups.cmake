@@ -148,6 +148,10 @@ add_file_folder("Source/UI/Dialogs"
 	src/ui/dialogs/BackgroundEditorDialog.cpp
     src/ui/dialogs/BriefingEditorDialog.cpp
     src/ui/dialogs/BriefingEditorDialog.h
+	src/ui/dialogs/CameraCoordinatesDialog.cpp
+	src/ui/dialogs/CameraCoordinatesDialog.h
+	src/ui/dialogs/IconFromShipDialog.cpp
+	src/ui/dialogs/IconFromShipDialog.h
 	src/ui/dialogs/CampaignEditorDialog.h
 	src/ui/dialogs/CampaignEditorDialog.cpp
 	src/ui/dialogs/CommandBriefingDialog.cpp
@@ -256,6 +260,8 @@ add_file_folder("Source/UI/Util"
 add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/bankTree.cpp
 	src/ui/widgets/bankTree.h
+	src/ui/widgets/BriefingMapWidget.cpp
+    src/ui/widgets/BriefingMapWidget.h
 	src/ui/widgets/CampaignMissionGraph.cpp
 	src/ui/widgets/CampaignMissionGraph.h
 	src/ui/widgets/ColorComboBox.cpp
@@ -276,8 +282,8 @@ add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/NoWheelSpinBox.h
 	src/ui/widgets/PersonaColorComboBox.cpp
 	src/ui/widgets/PersonaColorComboBox.h
-	src/ui/widgets/renderwidget.cpp
-	src/ui/widgets/renderwidget.h
+    src/ui/widgets/renderwidget.cpp
+    src/ui/widgets/renderwidget.h
 	src/ui/widgets/sexp_tree.cpp
 	src/ui/widgets/sexp_tree.h
 	src/ui/widgets/ShipFlagCheckbox.h
