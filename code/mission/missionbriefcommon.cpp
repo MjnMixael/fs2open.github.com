@@ -1571,6 +1571,16 @@ void brief_reset_icons(int stage_num)
  * @param orient target orientation for the camera
  * @param time time in ms to reach target
  */
+vec3d brief_get_current_cam_pos()
+{
+	return Current_cam_pos;
+}
+
+matrix brief_get_current_cam_orient()
+{
+	return Current_cam_orient;
+}
+
 void brief_set_camera_target(vec3d *pos, matrix *orient, int time)
 {
 	float time_in_seconds;
