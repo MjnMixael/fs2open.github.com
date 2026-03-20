@@ -131,11 +131,16 @@ int ControlBindings::normalizedCode(const QKeySequence& sequence) {
 		return 0;
 	}
 	auto combined = sequence[0];
-	return combined & ~Qt::KeyboardModifierMask;
+	const auto key = combined & ~Qt::KeyboardModifierMask;
+	const auto mods = combined & Qt::KeyboardModifierMask;
+	constexpr auto relevant_mods = Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier | Qt::KeypadModifier;
+	return key | (mods & relevant_mods);
 }
 
 int ControlBindings::normalizedCode(const QKeyEvent* event) {
-	return static_cast<int>(event->key());
+	const auto key = static_cast<int>(event->key());
+	const auto mods = static_cast<int>(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier | Qt::KeypadModifier));
+	return key | mods;
 }
 
 void ControlBindings::rebuildReverseMap() {
