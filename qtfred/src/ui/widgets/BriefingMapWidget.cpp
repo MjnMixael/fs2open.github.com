@@ -8,7 +8,6 @@
 
 #include <QKeyEvent>
 #include <QMouseEvent>
-#include <QDebug>
 #include <QtGui/QOpenGLContext>
 #include <QtGui/QOpenGLFunctions>
 #include <QtWidgets/QHBoxLayout>
@@ -154,7 +153,7 @@ void BriefingMapWidget::initBriefingMap() {
 
 	_initialized = true;
 	_renderTimer->start();
-	qInfo() << "BriefingMapWidget: init complete, timer started for render diagnostics.";
+	mprintf(("BriefingMapWidget: init complete, timer started for render diagnostics.\n"));
 }
 
 void BriefingMapWidget::setStage(int stageNum) {
@@ -191,7 +190,7 @@ QWindow* BriefingMapWidget::getRenderWindow() const {
 void BriefingMapWidget::renderFrame() {
 	if (!_initialized) {
 		if (!_loggedNotInitialized) {
-			qWarning() << "BriefingMapWidget: render skipped because widget is not initialized.";
+			mprintf(("BriefingMapWidget: render skipped because widget is not initialized.\n"));
 			_loggedNotInitialized = true;
 		}
 		return;
@@ -199,7 +198,7 @@ void BriefingMapWidget::renderFrame() {
 
 	if (!_window->isExposed()) {
 		if (!_loggedNotExposed) {
-			qWarning() << "BriefingMapWidget: render skipped because window is not exposed.";
+			mprintf(("BriefingMapWidget: render skipped because window is not exposed.\n"));
 			_loggedNotExposed = true;
 		}
 		return;
@@ -207,7 +206,7 @@ void BriefingMapWidget::renderFrame() {
 
 	if (!_briefingViewport) {
 		if (!_loggedNoViewport) {
-			qWarning() << "BriefingMapWidget: render skipped because briefing viewport is null.";
+			mprintf(("BriefingMapWidget: render skipped because briefing viewport is null.\n"));
 			_loggedNoViewport = true;
 		}
 		return;
@@ -221,7 +220,7 @@ void BriefingMapWidget::renderFrame() {
 	// Skip if a 3D frame is already open (e.g. main renderer still active during init).
 	if (g3_in_frame()) {
 		if (!_loggedInFrameSkip) {
-			qWarning() << "BriefingMapWidget: render skipped because g3_in_frame() is true.";
+			mprintf(("BriefingMapWidget: render skipped because g3_in_frame() is true.\n"));
 			_loggedInFrameSkip = true;
 		}
 		return;
@@ -235,7 +234,7 @@ void BriefingMapWidget::renderFrame() {
 	auto* context = QOpenGLContext::currentContext();
 	if (context == nullptr) {
 		if (!_loggedNoContext) {
-			qWarning() << "BriefingMapWidget: no current OpenGL context after gr_use_viewport().";
+			mprintf(("BriefingMapWidget: no current OpenGL context after gr_use_viewport().\n"));
 			_loggedNoContext = true;
 		}
 		_rendering = false;
@@ -255,10 +254,12 @@ void BriefingMapWidget::renderFrame() {
 	_debugFrameCounter++;
 
 	if ((_debugFrameCounter % 120) == 0) {
-		qInfo() << "BriefingMapWidget: rendered frames =" << _debugFrameCounter
-			<< "size =" << w << "x" << h
-			<< "current surface =" << context->surface()
-			<< "target surface =" << _window;
+		mprintf(("BriefingMapWidget: rendered frames=%u size=%dx%d current_surface=%p target_surface=%p\n",
+			_debugFrameCounter,
+			w,
+			h,
+			static_cast<void*>(context->surface()),
+			static_cast<void*>(_window)));
 	}
 
 	_rendering = false;
