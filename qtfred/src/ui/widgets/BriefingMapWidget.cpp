@@ -6,6 +6,7 @@
 
 #include "BriefingMapWidget.h"
 
+#include <algorithm>
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QtGui/QOpenGLContext>
@@ -268,17 +269,26 @@ void BriefingMapWidget::renderFrame() {
 	funcs->glViewport(0, 0, w, h);
 	funcs->glClearColor(1.0f, 0.35f, 0.0f, 1.0f);
 	funcs->glClear(GL_COLOR_BUFFER_BIT);
+	funcs->glFinish();
 
 	_briefingViewport->swapBuffers();
 	_debugFrameCounter++;
 
 	if ((_debugFrameCounter % 120) == 0) {
+		ubyte pixel[4] = {0, 0, 0, 0};
+		funcs->glReadPixels(std::max(0, w / 2), std::max(0, h / 2), 1, 1, GL_RGBA, GL_UNSIGNED_BYTE, pixel);
+
 		mprintf(("BriefingMapWidget: rendered frames=%u size=%dx%d current_surface=%p target_surface=%p\n",
 			_debugFrameCounter,
 			w,
 			h,
 			static_cast<void*>(context->surface()),
 			static_cast<void*>(_window)));
+		mprintf(("BriefingMapWidget: center pixel RGBA after clear = (%u, %u, %u, %u)\n",
+			static_cast<unsigned>(pixel[0]),
+			static_cast<unsigned>(pixel[1]),
+			static_cast<unsigned>(pixel[2]),
+			static_cast<unsigned>(pixel[3])));
 	}
 
 	_rendering = false;
