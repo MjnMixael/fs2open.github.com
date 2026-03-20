@@ -74,6 +74,7 @@ bool RenderWindow::event(QEvent* evt) {
 	}
 	case QEvent::KeyPress:
 	case QEvent::KeyRelease:
+	case QEvent::ShortcutOverride:
 	case QEvent::MouseButtonDblClick:
 	case QEvent::MouseMove: {
 		// Redirect all the events to the render widget since we want to handle them in in the QtWidget related code
@@ -174,6 +175,17 @@ void RenderWidget::keyReleaseEvent(QKeyEvent* key) {
 		return;
 	}
 	key->accept();
+}
+bool RenderWidget::event(QEvent* evt) {
+	if (evt->type() == QEvent::ShortcutOverride) {
+		auto* keyEvent = static_cast<QKeyEvent*>(evt);
+		if (ControlBindings::instance().matches(keyEvent)) {
+			evt->accept();
+			return true;
+		}
+	}
+
+	return QWidget::event(evt);
 }
 void RenderWidget::mouseDoubleClickEvent(QMouseEvent* event) {
 	event->ignore();

@@ -75,6 +75,7 @@ class RenderWidget: public QWidget {
  protected:
 	void keyPressEvent(QKeyEvent*) override;
 	void keyReleaseEvent(QKeyEvent*) override;
+	bool event(QEvent* evt) override;
 
 	void mouseDoubleClickEvent(QMouseEvent* event) override;
 	void mouseMoveEvent(QMouseEvent* event) override;
