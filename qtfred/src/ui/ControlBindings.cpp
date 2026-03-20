@@ -6,7 +6,6 @@ namespace fso {
 namespace fred {
 namespace {
 constexpr auto SETTINGS_GROUP = "ControlBindings";
-constexpr auto KEYPAD = static_cast<int>(Qt::KeypadModifier);
 }
 
 ControlBindings& ControlBindings::instance() {
@@ -131,15 +130,11 @@ int ControlBindings::normalizedCode(const QKeySequence& sequence) {
 		return 0;
 	}
 	auto combined = sequence[0];
-	auto key = combined & ~Qt::KeyboardModifierMask;
-	auto mods = combined & Qt::KeyboardModifierMask;
-	return key | (mods & KEYPAD);
+	return combined & ~Qt::KeyboardModifierMask;
 }
 
 int ControlBindings::normalizedCode(const QKeyEvent* event) {
-	const auto key = static_cast<int>(event->key());
-	const auto mods = static_cast<int>(event->modifiers() & Qt::KeypadModifier);
-	return key | mods;
+	return static_cast<int>(event->key());
 }
 
 void ControlBindings::rebuildReverseMap() {
