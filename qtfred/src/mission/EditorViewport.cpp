@@ -61,19 +61,6 @@ void process_movement_keys(const fso::fred::ControlBindings& bindings, vec3d* mv
 	if (bindings.isPressed(fso::fred::ControlAction::PitchDown)) {
 		angs->p += 0.1f;
 	}
-	if (bindings.isPressed(fso::fred::ControlAction::RollLeft)) {
-		angs->b += -0.1f;
-	}
-	if (bindings.isPressed(fso::fred::ControlAction::RollRight)) {
-		angs->b += 0.1f;
-	}
-
-	if (bindings.isPressed(fso::fred::ControlAction::SpeedBoost)) {
-		vm_vec_scale(mvec, 5.0f);
-		angs->p *= 5.0f;
-		angs->b *= 5.0f;
-		angs->h *= 5.0f;
-	}
 }
 void align_vector_to_axis(vec3d* v) {
 	float x, y, z;
@@ -293,11 +280,6 @@ void EditorViewport::process_system_keys() {
 		Selection_lock = !Selection_lock;
 	}
 
-	if (bindings.takeTriggered(ControlAction::Cancel)) {
-		///! \todo Cancel drag.
-		//if (button_down)
-		//	cancel_drag();
-	}
 }
 
 void EditorViewport::process_controls(vec3d* pos, matrix* orient, float frametime, int mode) {
@@ -322,23 +304,12 @@ void EditorViewport::process_controls(vec3d* pos, matrix* orient, float frametim
 		view_controls.pitch += bindings.isPressed(ControlAction::PitchDown) ? 1.0f : 0.0f;
 		view_controls.heading += bindings.isPressed(ControlAction::YawLeft) ? -1.0f : 0.0f;
 		view_controls.heading += bindings.isPressed(ControlAction::YawRight) ? 1.0f : 0.0f;
-		view_controls.bank += bindings.isPressed(ControlAction::RollLeft) ? -1.0f : 0.0f;
-		view_controls.bank += bindings.isPressed(ControlAction::RollRight) ? 1.0f : 0.0f;
 		view_controls.sideways += bindings.isPressed(ControlAction::MoveLeft) ? -1.0f : 0.0f;
 		view_controls.sideways += bindings.isPressed(ControlAction::MoveRight) ? 1.0f : 0.0f;
 		view_controls.forward += bindings.isPressed(ControlAction::MoveForward) ? -1.0f : 0.0f;
 		view_controls.forward += bindings.isPressed(ControlAction::MoveBackward) ? 1.0f : 0.0f;
 		view_controls.vertical += bindings.isPressed(ControlAction::MoveUp) ? 1.0f : 0.0f;
 		view_controls.vertical += bindings.isPressed(ControlAction::MoveDown) ? -1.0f : 0.0f;
-
-		if (bindings.isPressed(ControlAction::SpeedBoost)) {
-			view_controls.pitch *= 5.0f;
-			view_controls.vertical *= 5.0f;
-			view_controls.heading *= 5.0f;
-			view_controls.sideways *= 5.0f;
-			view_controls.bank *= 5.0f;
-			view_controls.forward *= 5.0f;
-		}
 
 		if ((fabs(view_controls.pitch) > (frametime / 100)) || (fabs(view_controls.vertical) > (frametime / 100))
 			|| (fabs(view_controls.heading) > (frametime / 100)) || (fabs(view_controls.sideways) > (frametime / 100))

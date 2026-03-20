@@ -23,11 +23,7 @@ enum class ControlAction {
 	YawRight,
 	PitchUp,
 	PitchDown,
-	RollLeft,
-	RollRight,
-	SpeedBoost,
 	ToggleSelectionLock,
-	Cancel,
 };
 
 struct ControlBindingDefinition {

@@ -15,22 +15,18 @@ ControlBindings& ControlBindings::instance() {
 
 ControlBindings::ControlBindings() :
 	_definitions({
-		{ControlAction::MoveLeft, "move_left", "Move Left", QKeySequence(Qt::Key_1 | Qt::KeypadModifier)},
-		{ControlAction::MoveRight, "move_right", "Move Right", QKeySequence(Qt::Key_3 | Qt::KeypadModifier)},
-		{ControlAction::MoveForward, "move_forward", "Move Forward", QKeySequence(Qt::Key_Plus | Qt::KeypadModifier)},
-		{ControlAction::MoveBackward, "move_backward", "Move Backward", QKeySequence(Qt::Key_Minus | Qt::KeypadModifier)},
-		{ControlAction::MoveUp, "move_up", "Move Up", QKeySequence(Qt::Key_A)},
-		{ControlAction::MoveDown, "move_down", "Move Down", QKeySequence(Qt::Key_Z)},
-		{ControlAction::YawLeft, "yaw_left", "Yaw Left", QKeySequence(Qt::Key_4 | Qt::KeypadModifier)},
-		{ControlAction::YawRight, "yaw_right", "Yaw Right", QKeySequence(Qt::Key_6 | Qt::KeypadModifier)},
-		{ControlAction::PitchUp, "pitch_up", "Pitch Up", QKeySequence(Qt::Key_8 | Qt::KeypadModifier)},
-		{ControlAction::PitchDown, "pitch_down", "Pitch Down", QKeySequence(Qt::Key_2 | Qt::KeypadModifier)},
-		{ControlAction::RollLeft, "roll_left", "Roll Left", QKeySequence(Qt::Key_7 | Qt::KeypadModifier)},
-		{ControlAction::RollRight, "roll_right", "Roll Right", QKeySequence(Qt::Key_9 | Qt::KeypadModifier)},
-		{ControlAction::SpeedBoost, "speed_boost", "Speed Boost", QKeySequence(Qt::Key_Shift)},
-		{ControlAction::ToggleSelectionLock, "toggle_selection_lock", "Toggle Selection Lock", QKeySequence(Qt::Key_Space)},
-		{ControlAction::Cancel, "cancel", "Cancel", QKeySequence(Qt::Key_Escape)},
-	}) {
+			{ControlAction::MoveLeft, "move_left", "Move Left", QKeySequence(Qt::Key_1 | Qt::KeypadModifier)},
+			{ControlAction::MoveRight, "move_right", "Move Right", QKeySequence(Qt::Key_3 | Qt::KeypadModifier)},
+			{ControlAction::MoveForward, "move_forward", "Move Forward", QKeySequence(Qt::Key_A)},
+			{ControlAction::MoveBackward, "move_backward", "Move Backward", QKeySequence(Qt::Key_Z)},
+			{ControlAction::MoveUp, "move_up", "Move Up", QKeySequence(Qt::Key_Minus | Qt::KeypadModifier)},
+			{ControlAction::MoveDown, "move_down", "Move Down", QKeySequence(Qt::Key_Plus | Qt::KeypadModifier)},
+			{ControlAction::YawLeft, "yaw_left", "Yaw Left", QKeySequence(Qt::Key_4 | Qt::KeypadModifier)},
+			{ControlAction::YawRight, "yaw_right", "Yaw Right", QKeySequence(Qt::Key_6 | Qt::KeypadModifier)},
+			{ControlAction::PitchUp, "pitch_up", "Pitch Up", QKeySequence(Qt::Key_2 | Qt::KeypadModifier)},
+			{ControlAction::PitchDown, "pitch_down", "Pitch Down", QKeySequence(Qt::Key_8 | Qt::KeypadModifier)},
+			{ControlAction::ToggleSelectionLock, "toggle_selection_lock", "Toggle Selection Lock", QKeySequence(Qt::Key_Space)},
+		}) {
 	resetToDefaults();
 	load();
 }
