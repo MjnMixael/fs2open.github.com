@@ -13,12 +13,10 @@
 #include <QFileDialog>
 #include <QDebug>
 #include <QKeyEvent>
+#include <missioneditor/missionsave.h>
 #include <mission/missionmessage.h>
 #include <mission/missionparse.h>
-#include <parse/parselo.h>
 #include <parse/sexp.h>
-
-void parse_event(mission* pm);
 
 namespace fso::fred::dialogs {
 
@@ -306,54 +304,14 @@ void MissionEventsDialog::enterAdvancedEditorMode()
 		return;
 	}
 
-	SCP_string serialized_sexp;
 	const auto formula = _model->getFormula();
 	const auto sexp_root = ui->eventTree->_model.save_tree(formula);
-	convert_sexp_to_string(serialized_sexp, sexp_root, SEXP_SAVE_MODE);
-	free_sexp2(sexp_root);
 
 	const auto cur_event_index = _model->getCurrentlySelectedEvent();
-	const auto& event = _model->getEventList()[cur_event_index];
-
-	SCP_string event_text = "$Formula: " + serialized_sexp + "\n";
-	if (!event.name.empty()) {
-		event_text += "+Name: " + event.name + "\n";
-	}
-
-	event_text += "+Repeat Count: " + std::to_string(event.repeat_count) + "\n";
-	if (event.flags & MEF_USING_TRIGGER_COUNT) {
-		event_text += "+Trigger Count: " + std::to_string(event.trigger_count) + "\n";
-	}
-
-	event_text += "+Interval: " + std::to_string(event.interval) + "\n";
-	if (event.score != 0) {
-		event_text += "+Score: " + std::to_string(event.score) + "\n";
-	}
-	if (event.chain_delay >= 0) {
-		event_text += "+Chained: " + std::to_string(event.chain_delay) + "\n";
-	}
-	if (!event.objective_text.empty()) {
-		event_text += "+Objective: " + event.objective_text + "\n";
-	}
-	if (!event.objective_key_text.empty()) {
-		event_text += "+Objective key: " + event.objective_key_text + "\n";
-	}
-	if (event.team >= 0) {
-		event_text += "+Team: " + std::to_string(event.team) + "\n";
-	}
-
-	if (event.mission_log_flags != 0) {
-		event_text += "+Event Log Flags: (";
-		for (int i = 0; i < MAX_MISSION_EVENT_LOG_FLAGS; ++i) {
-			const auto bit = 1 << i;
-			if (event.mission_log_flags & bit) {
-				event_text += " \"";
-				event_text += Mission_event_log_flags[i];
-				event_text += "\"";
-			}
-		}
-		event_text += " )\n";
-	}
+	auto event = _model->getEventList()[cur_event_index];
+	event.formula = sexp_root;
+	auto event_text = fred_serialize_event_to_text(event, MissionFormat::STANDARD);
+	free_sexp2(sexp_root);
 
 	ui->advancedSexpText->setPlainText(QString::fromStdString(event_text));
 	ui->eventTree->setVisible(false);
@@ -366,44 +324,15 @@ bool MissionEventsDialog::applyAdvancedEditorText()
 		return true;
 	}
 
-	SCP_string wrapped_text = "#Events\n";
-	wrapped_text += ui->advancedSexpText->toPlainText().trimmed().toStdString();
-	wrapped_text += "\n#Goals\n";
-
-	SCP_vector<char> parse_buffer(wrapped_text.begin(), wrapped_text.end());
-	parse_buffer.push_back('\0');
-
-	const auto old_event_count = Mission_events.size();
-
 	mission_event parsed_event;
 	SCP_string parse_error;
-	pause_parse();
-	reset_parse(parse_buffer.data());
-	try {
-		required_string("#Events");
-		parse_event(nullptr);
-		required_string("#Goals");
-	} catch (const parse::ParseException& e) {
-		parse_error = e.what();
-	}
-	unpause_parse();
-
-	if (!parse_error.empty() || Mission_events.size() <= old_event_count) {
-		while (Mission_events.size() > old_event_count) {
-			if (Mission_events.back().formula >= 0) {
-				free_sexp2(Mission_events.back().formula);
-			}
-			Mission_events.pop_back();
-		}
+	if (!fred_parse_event_from_text(ui->advancedSexpText->toPlainText().trimmed().toStdString(), parsed_event, &parse_error)) {
 		if (parse_error.empty()) {
 			parse_error = "Could not parse event data.";
 		}
 		QMessageBox::warning(this, tr("Invalid Event Data"), QString::fromStdString(parse_error));
 		return false;
 	}
-
-	parsed_event = Mission_events.back();
-	Mission_events.pop_back();
 
 	if (parsed_event.formula < 0) {
 		QMessageBox::warning(this, tr("Invalid Event Data"), tr("Event formula failed to parse."));

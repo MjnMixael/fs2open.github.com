@@ -1899,6 +1899,86 @@ int Fred_mission_save::save_debriefing()
 	return err;
 }
 
+SCP_string fred_serialize_event_to_text(const mission_event& event, MissionFormat save_format)
+{
+	SCP_string sexp_out;
+	SCP_string event_text;
+
+	convert_sexp_to_string(sexp_out, event.formula, SEXP_SAVE_MODE);
+	event_text += "$Formula: " + sexp_out;
+
+	if (!event.name.empty()) {
+		event_text += "\n+Name: " + event.name;
+	}
+
+	// if we have a trigger count but no repeat count, we want the event to loop until it has triggered enough times
+	if (event.repeat_count == 1 && event.trigger_count != 1) {
+		event_text += "\n+Repeat Count: -1";
+	} else {
+		event_text += "\n+Repeat Count: " + std::to_string(event.repeat_count);
+	}
+
+	if (save_format != MissionFormat::RETAIL && event.trigger_count != 1) {
+		event_text += "\n+Trigger Count: " + std::to_string(event.trigger_count);
+	}
+
+	event_text += "\n+Interval: " + std::to_string(event.interval);
+
+	if (event.score != 0) {
+		event_text += "\n+Score: " + std::to_string(event.score);
+	}
+
+	if (event.chain_delay >= 0) {
+		event_text += "\n+Chained: " + std::to_string(event.chain_delay);
+	}
+
+	if (!event.objective_text.empty()) {
+		event_text += "\n+Objective: " + event.objective_text;
+	}
+
+	if (!event.objective_key_text.empty()) {
+		event_text += "\n+Objective key: " + event.objective_key_text;
+	}
+
+	if (event.team >= 0) {
+		event_text += "\n+Team: " + std::to_string(event.team);
+	}
+
+	if (save_format != MissionFormat::RETAIL) {
+		bool wrote_flag = false;
+		for (int j = 0; j < Num_mission_event_flags; ++j) {
+			if (event.flags & Mission_event_flags[j].def) {
+				if (!wrote_flag) {
+					event_text += "\n+Event Flags: (";
+					wrote_flag = true;
+				}
+				event_text += " \"";
+				event_text += Mission_event_flags[j].name;
+				event_text += "\"";
+			}
+		}
+		if (wrote_flag) {
+			event_text += " )";
+		}
+	}
+
+	if (save_format != MissionFormat::RETAIL && event.mission_log_flags != 0) {
+		event_text += "\n+Event Log Flags: (";
+		for (int j = 0; j < MAX_MISSION_EVENT_LOG_FLAGS; ++j) {
+			const auto add_flag = 1 << j;
+			if (event.mission_log_flags & add_flag) {
+				event_text += " \"";
+				event_text += Mission_event_log_flags[j];
+				event_text += "\"";
+			}
+		}
+		event_text += " )";
+	}
+
+	event_text += "\n";
+	return event_text;
+}
+
 int Fred_mission_save::save_events()
 {
 	SCP_string sexp_out;

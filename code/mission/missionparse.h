@@ -32,6 +32,7 @@
 
 struct wing;
 struct p_dock_instance;
+struct mission_event;
 enum class ArrivalLocation;
 enum class DepartureLocation;
 
@@ -50,6 +51,7 @@ enum class DepartureLocation;
 
 int get_special_anchor(const char *name);
 void check_anchor_for_hangar_bay(SCP_string &message, SCP_set<int> &anchor_shipnums_checked, int anchor_shipnum, const char *other_name, bool other_is_ship, bool is_arrival);
+bool fred_parse_event_from_text(const SCP_string& event_text, mission_event& out_event, SCP_string* parse_error = nullptr);
 
 // MISSION_VERSION should be the earliest version of FSO that can load the current mission format without
 // requiring version-specific comments.  It should be updated whenever the format changes, but it should
@@ -653,4 +655,3 @@ subsys_status *parse_get_subsys_status(p_object *pobjp, const char *subsys_name)
 custom_string* get_custom_string_by_name(SCP_string name);
 
 #endif
-

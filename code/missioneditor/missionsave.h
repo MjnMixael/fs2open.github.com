@@ -38,6 +38,8 @@ struct FredSaveConfig {
 	SCP_string mission_backup_name = MISSION_BACKUP_NAME; // TODO make user configurable
 };
 
+SCP_string fred_serialize_event_to_text(const mission_event& event, MissionFormat save_format = MissionFormat::STANDARD);
+
 /**
  * @class Fred_mission_save
  *

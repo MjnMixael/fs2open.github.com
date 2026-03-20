@@ -5665,6 +5665,54 @@ void parse_events(mission *pm)
 	}
 }
 
+bool fred_parse_event_from_text(const SCP_string& event_text, mission_event& out_event, SCP_string* parse_error)
+{
+	SCP_string wrapped_text = "#Events\n";
+	wrapped_text += event_text;
+	wrapped_text += "\n#Goals\n";
+
+	SCP_vector<char> parse_buffer(wrapped_text.begin(), wrapped_text.end());
+	parse_buffer.push_back('\0');
+
+	const auto old_event_count = Mission_events.size();
+	pause_parse();
+	reset_parse(parse_buffer.data());
+
+	SCP_string local_error;
+	try {
+		parse_events(nullptr);
+		required_string("#Goals");
+	} catch (const parse::ParseException& e) {
+		local_error = e.what();
+	}
+
+	unpause_parse();
+
+	const auto parsed_count = Mission_events.size() - old_event_count;
+	if (local_error.empty() && parsed_count != 1) {
+		local_error = "Expected exactly one event definition in advanced event text.";
+	}
+
+	if (!local_error.empty()) {
+		while (Mission_events.size() > old_event_count) {
+			if (Mission_events.back().formula >= 0) {
+				free_sexp2(Mission_events.back().formula);
+			}
+			Mission_events.pop_back();
+		}
+
+		if (parse_error != nullptr) {
+			*parse_error = local_error;
+		}
+		return false;
+	}
+
+	out_event = Mission_events.back();
+	Mission_events.pop_back();
+
+	return out_event.formula >= 0;
+}
+
 void parse_goal(mission *pm)
 {
 	SCP_UNUSED(pm);
