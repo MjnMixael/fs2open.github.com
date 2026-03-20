@@ -217,13 +217,14 @@ void BriefingMapWidget::renderFrame() {
 	if (_rendering)
 		return;
 
-	// Skip if a 3D frame is already open (e.g. main renderer still active during init).
+	// For diagnostics, do not skip when a 3D frame is already open.
+	// If this flag is always set, skipping here would prevent us from
+	// conclusively verifying whether this surface can be painted at all.
 	if (g3_in_frame()) {
 		if (!_loggedInFrameSkip) {
-			mprintf(("BriefingMapWidget: render skipped because g3_in_frame() is true.\n"));
+			mprintf(("BriefingMapWidget: g3_in_frame() is true; continuing diagnostic clear anyway.\n"));
 			_loggedInFrameSkip = true;
 		}
-		return;
 	}
 
 	_rendering = true;
