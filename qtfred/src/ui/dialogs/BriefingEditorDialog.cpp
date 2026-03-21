@@ -163,11 +163,11 @@ void BriefingEditorDialog::updateUi()
 		ui->iconImageComboBox->setCurrentIndex(_model->getIconTypeIndex());
 		ui->iconShipTypeComboBox->setCurrentIndex(_model->getIconShipTypeIndex());
 		ui->iconTeamComboBox->setCurrentIndex(_model->getIconTeamIndex());
-		ui->iconScaleDoubleSpinBox->setValue(_model->getIconScaleFactor());
+		ui->scaleDoubleSpinBox->setValue(_model->getIconScaleFactor());
 		ui->highlightCheckBox->setChecked(_model->getIconHighlighted());
 		ui->flipIconCheckBox->setChecked(_model->getIconFlipped());
-		ui->useWingCheckBox->setChecked(_model->getIconUseWing());
-		ui->useCargoCheckBox->setChecked(_model->getIconUseCargo());
+		ui->useWingIconCheckBox->setChecked(_model->getIconUseWing());
+		ui->useCargoIconCheckBox->setChecked(_model->getIconUseCargo());
 	}
 
 	enableDisableControls();
@@ -338,7 +338,7 @@ void BriefingEditorDialog::on_iconTeamComboBox_currentIndexChanged(int index)
 	_model->setIconTeamIndex(index);
 }
 
-void BriefingEditorDialog::on_iconScaleDoubleSpinBox_valueChanged(double arg1)
+void BriefingEditorDialog::on_scaleDoubleSpinBox_valueChanged(double arg1)
 {
 	_model->setIconScaleFactor(static_cast<float>(arg1));
 }
@@ -363,12 +363,12 @@ void BriefingEditorDialog::on_highlightCheckBox_toggled(bool checked)
 	_model->setIconHighlighted(checked);
 }
 
-void BriefingEditorDialog::on_useWingCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_useWingIconCheckBox_toggled(bool checked)
 {
 	_model->setIconUseWing(checked);
 }
 
-void BriefingEditorDialog::on_useCargoCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_useCargoIconCheckBox_toggled(bool checked)
 {
 	_model->setIconUseCargo(checked);
 }
