@@ -555,7 +555,7 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 	abortHighlightPlayback();
 
 	_lastMousePos = event->pos();
-	_dragStartMousePos = event->position();
+	_dragStartMousePos = event->localPos();
 
 	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
 	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages || _lastRenderWidth <= 0 || _lastRenderHeight <= 0 ||
@@ -565,8 +565,8 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 		return;
 	}
 
-	const auto mouseX = static_cast<float>(event->position().x()) * (static_cast<float>(_lastRenderWidth) / static_cast<float>(width()));
-	const auto mouseY = static_cast<float>(event->position().y()) * (static_cast<float>(_lastRenderHeight) / static_cast<float>(height()));
+	const auto mouseX = static_cast<float>(event->localPos().x()) * (static_cast<float>(_lastRenderWidth) / static_cast<float>(width()));
+	const auto mouseY = static_cast<float>(event->localPos().y()) * (static_cast<float>(_lastRenderHeight) / static_cast<float>(height()));
 
 	auto& stage = briefPtr->stages[_currentStage];
 	int hitIndex = -1;
@@ -590,7 +590,7 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 		_draggingIcon = true;
 		_dragIconIndex = hitIndex;
 		_dragStartIconPos = stage.icons[hitIndex].pos;
-		emit iconSelected(hitIndex);
+		Q_EMIT iconSelected(hitIndex);
 	} else {
 		_draggingIcon = false;
 		_dragIconIndex = -1;
@@ -609,8 +609,8 @@ void BriefingMapWidget::mouseMoveEvent(QMouseEvent* event) {
 
 	const auto scaleX = static_cast<float>(_lastRenderWidth) / static_cast<float>(width());
 	const auto scaleY = static_cast<float>(_lastRenderHeight) / static_cast<float>(height());
-	const auto deltaX = static_cast<float>(event->position().x() - _dragStartMousePos.x()) * scaleX;
-	const auto deltaY = static_cast<float>(event->position().y() - _dragStartMousePos.y()) * scaleY;
+	const auto deltaX = static_cast<float>(event->localPos().x() - _dragStartMousePos.x()) * scaleX;
+	const auto deltaY = static_cast<float>(event->localPos().y() - _dragStartMousePos.y()) * scaleY;
 
 	const auto camPos = brief_get_current_cam_pos();
 	const auto camOrient = brief_get_current_cam_orient();
