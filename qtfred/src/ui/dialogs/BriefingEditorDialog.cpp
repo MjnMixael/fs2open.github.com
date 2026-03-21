@@ -6,6 +6,7 @@
 #include "CameraCoordinatesDialog.h"
 #include "IconFromShipDialog.h"
 #include "mission/missionbriefcommon.h"
+#include "mission/missiongrid.h"
 
 #include <globalincs/linklist.h>
 #include <ui/util/SignalBlockers.h>
@@ -37,6 +38,7 @@ void BriefingEditorDialog::accept()
 	// If apply() returns true, close the dialog
 	if (_model->apply()) {
 		QDialog::accept();
+		create_default_grid(); // restore the grid back to the normal version
 	}
 	// else: validation failed, don�t close
 }
@@ -48,6 +50,7 @@ void BriefingEditorDialog::reject()
 	// If they don't, it runs _model->reject() and returns true
 	if (rejectOrCloseHandler(this, _model.get(), _viewport)) {
 		QDialog::reject(); // actually close
+		create_default_grid(); // restore the grid back to the normal version
 	}
 	// else: do nothing, don't close
 }
