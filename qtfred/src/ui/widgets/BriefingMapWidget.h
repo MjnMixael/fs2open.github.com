@@ -62,6 +62,7 @@ public:
 
 	void setStage(int stageNum);
 	int getCurrentStage() const;
+	void notifyIconVisualsChanged();
 
 	QWindow* getRenderWindow() const;
 
