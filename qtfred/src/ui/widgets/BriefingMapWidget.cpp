@@ -426,16 +426,14 @@ void BriefingMapWidget::renderFrame() {
 		return;
 
 	// brief_render_map() enters a 3D frame internally. If another frame is
-	// already active, it will assert (G3_count != 0), so skip this tick.
+	// already active (G3_count != 0), we must not render this tick — forcibly
+	// ending someone else's frame would leave the main viewport in a bad state.
 	if (g3_in_frame()) {
 		if (!_loggedInFrameSkip) {
-			mprintf(("BriefingMapWidget: g3_in_frame() is true; ending active frame before briefing render.\n"));
+			mprintf(("BriefingMapWidget: g3_in_frame() is true; skipping this tick.\n"));
 			_loggedInFrameSkip = true;
 		}
-		g3_end_frame();
-		if (g3_in_frame()) {
-			return;
-		}
+		return;
 	}
 
 	_rendering = true;
