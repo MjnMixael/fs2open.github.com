@@ -263,18 +263,28 @@ void BriefingMapWidget::applyStageTransition(int stageNum, int transitionTime) {
 }
 
 void BriefingMapWidget::stopStageHighlights() {
-	if (Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+	auto* briefPtr = Briefing;
+	if (briefPtr == nullptr) {
+		briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	}
+
+	if (briefPtr == nullptr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
 		return;
 	}
 
-	auto& stage = Briefing->stages[_currentStage];
+	auto& stage = briefPtr->stages[_currentStage];
 	for (int i = 0; i < stage.num_icons; ++i) {
 		stage.icons[i].flags &= ~BI_SHOWHIGHLIGHT;
 	}
 }
 
 void BriefingMapWidget::updateEditorHighlightPlayback() {
-	if (_suppressHighlights || Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+	if (_suppressHighlights) {
+		stopStageHighlights();
+		return;
+	}
+
+	if (Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
 		return;
 	}
 
