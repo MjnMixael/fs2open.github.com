@@ -320,15 +320,10 @@ void BriefingMapWidget::drawSelectedIconOutline() {
 	}
 
 	auto& icon = stage.icons[selected];
-	int iconW = 0, iconH = 0;
-	brief_common_get_icon_dimensions(&iconW, &iconH, &icon);
-	const auto scaledW = fl2i(static_cast<float>(iconW) * icon.scale_factor);
-	const auto scaledH = fl2i(static_cast<float>(iconH) * icon.scale_factor);
-
-	const auto left = icon.hold_x - 2;
-	const auto top = icon.hold_y - 2;
-	const auto right = left + scaledW + 4;
-	const auto bottom = top + scaledH + 4;
+	const auto left = icon.x - 2;
+	const auto top = icon.y - 2;
+	const auto right = left + icon.w + 4;
+	const auto bottom = top + icon.h + 4;
 
 	gr_set_color(0, 255, 0);
 	gr_line(left, top, right, top);
@@ -633,10 +628,10 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 
 		int iconW = 0, iconH = 0;
 		brief_common_get_icon_dimensions(&iconW, &iconH, &icon);
-		const auto scaledW = static_cast<float>(iconW) * icon.scale_factor;
-		const auto scaledH = static_cast<float>(iconH) * icon.scale_factor;
-		const auto left = static_cast<float>(icon.hold_x);
-		const auto top = static_cast<float>(icon.hold_y);
+		const auto scaledW = static_cast<float>((icon.w > 0) ? icon.w : fl2i(static_cast<float>(iconW) * icon.scale_factor));
+		const auto scaledH = static_cast<float>((icon.h > 0) ? icon.h : fl2i(static_cast<float>(iconH) * icon.scale_factor));
+		const auto left = static_cast<float>(icon.x);
+		const auto top = static_cast<float>(icon.y);
 
 		if (mouseX >= left && mouseX <= left + scaledW && mouseY >= top && mouseY <= top + scaledH) {
 			hitIndex = i;
@@ -648,6 +643,7 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 		_draggingIcon = true;
 		_dragIconIndex = hitIndex;
 		_dragStartIconPos = stage.icons[hitIndex].pos;
+		brief_move_icon_reset();
 		Q_EMIT iconSelected(hitIndex);
 	} else {
 		_draggingIcon = false;
