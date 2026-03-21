@@ -368,6 +368,34 @@ int BriefingMapWidget::getCurrentStage() const {
 	return _currentStage;
 }
 
+void BriefingMapWidget::notifyIconVisualsChanged() {
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
+		return;
+	}
+
+	briefing* savedBriefing = Briefing;
+	Briefing = briefPtr;
+
+	auto& stage = briefPtr->stages[_currentStage];
+	brief_reset_last_new_stage();
+	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, 0, _currentStage);
+	brief_reset_icons(_currentStage);
+
+	const auto selected = _model->getCurrentIconIndex();
+	if (selected >= 0 && selected < stage.num_icons) {
+		auto& icon = stage.icons[selected];
+		if (icon.flags & BI_HIGHLIGHT) {
+			icon.flags |= BI_SHOWHIGHLIGHT;
+		} else {
+			icon.flags &= ~BI_SHOWHIGHLIGHT;
+		}
+	}
+
+	_suppressHighlights = false;
+	Briefing = savedBriefing;
+}
+
 QWindow* BriefingMapWidget::getRenderWindow() const {
 	return _window;
 }

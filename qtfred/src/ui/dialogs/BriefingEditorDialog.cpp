@@ -131,6 +131,7 @@ void BriefingEditorDialog::updateUi()
 	ui->cutToNextStageCheckBox->setChecked(_model->getCutToNext());
 	ui->cutToPrevStageCheckBox->setChecked(_model->getCutFromPrev());
 	ui->disableGridCheckBox->setChecked(_model->getDisableGrid());
+	ui->changeLocallyCheckBox->setChecked(_model->getChangeLocally());
 
 	ui->stageTextPlainTextEdit->setPlainText(QString::fromStdString(_model->getStageText()));
 	ui->voiceFileLineEdit->setText(QString::fromStdString(_model->getSpeechFilename()));
@@ -351,26 +352,31 @@ void BriefingEditorDialog::on_drawLinesCheckBox_toggled(bool checked)
 void BriefingEditorDialog::on_changeLocallyCheckBox_toggled(bool checked)
 {
 	_model->setChangeLocally(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_flipIconCheckBox_toggled(bool checked)
 {
 	_model->setIconFlipped(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_highlightCheckBox_toggled(bool checked)
 {
 	_model->setIconHighlighted(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_useWingIconCheckBox_toggled(bool checked)
 {
 	_model->setIconUseWing(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_useCargoIconCheckBox_toggled(bool checked)
 {
 	_model->setIconUseCargo(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_makeIconButton_clicked()
