@@ -8,7 +8,7 @@
 #include "osapi/osapi.h"
 #include "ui/QtGraphicsOperations.h"
 
-struct briefing;
+class briefing;
 
 namespace fso::fred::dialogs {
 class BriefingEditorDialogModel;
