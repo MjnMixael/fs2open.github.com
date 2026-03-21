@@ -122,6 +122,15 @@ BriefingMapWidget::BriefingMapWidget(QWidget* parent,
 
 BriefingMapWidget::~BriefingMapWidget() {
 	_renderTimer->stop();
+
+	// On dialog close, clean up any active frame that belongs to this render
+	// surface so we don't leave G3 state dangling into the main editor viewport.
+	if (g3_in_frame()) {
+		auto* currentContext = QOpenGLContext::currentContext();
+		if (currentContext != nullptr && currentContext->surface() == _window) {
+			g3_end_frame();
+		}
+	}
 }
 
 void BriefingMapWidget::initBriefingMap() {
@@ -426,14 +435,27 @@ void BriefingMapWidget::renderFrame() {
 		return;
 
 	// brief_render_map() enters a 3D frame internally. If another frame is
-	// already active, it will assert (G3_count != 0), so skip this tick.
-	// Do NOT end the existing frame here; that frame may belong to another viewport.
+	// already active, it will assert (G3_count != 0).
 	if (g3_in_frame()) {
-		if (!_loggedInFrameSkip) {
-			mprintf(("BriefingMapWidget: g3_in_frame() is true; skipping briefing render tick.\n"));
-			_loggedInFrameSkip = true;
+		auto* currentContext = QOpenGLContext::currentContext();
+		const auto ownsActiveFrame = (currentContext != nullptr && currentContext->surface() == _window);
+
+		if (ownsActiveFrame) {
+			if (!_loggedInFrameSkip) {
+				mprintf(("BriefingMapWidget: g3_in_frame() is true on briefing surface; ending stale frame before render.\n"));
+				_loggedInFrameSkip = true;
+			}
+			g3_end_frame();
+			if (g3_in_frame()) {
+				return;
+			}
+		} else {
+			if (!_loggedInFrameSkip) {
+				mprintf(("BriefingMapWidget: g3_in_frame() belongs to another surface; skipping briefing render tick.\n"));
+				_loggedInFrameSkip = true;
+			}
+			return;
 		}
-		return;
 	}
 
 	_rendering = true;
