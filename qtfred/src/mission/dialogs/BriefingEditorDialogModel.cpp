@@ -910,21 +910,15 @@ bool BriefingEditorDialogModel::getIconHighlighted() const
 
 void BriefingEditorDialogModel::setIconHighlighted(bool enabled)
 {
-	const auto& b = _wipBriefings[_currentTeam];
-	if (b.num_stages <= 0 || _currentStage < 0 || _currentStage >= b.num_stages)
-		return;
-	const auto& s = b.stages[_currentStage];
-	if (_currentIcon < 0 || _currentIcon >= s.num_icons)
-		return;
-
-	auto ic = s.icons[_currentIcon];
-	int newFlags = ic.flags;
-	if (enabled) {
-		newFlags |= BI_HIGHLIGHT;
-	} else {
-		newFlags &= ~BI_HIGHLIGHT;
-	}
-	modify(ic.flags, newFlags);
+	applyToIconCurrentAndForward([&](brief_icon& ic) {
+		int newFlags = ic.flags;
+		if (enabled) {
+			newFlags |= BI_HIGHLIGHT;
+		} else {
+			newFlags &= ~BI_HIGHLIGHT;
+		}
+		modify(ic.flags, newFlags);
+	});
 }
 
 bool BriefingEditorDialogModel::getIconFlipped() const
@@ -940,21 +934,15 @@ bool BriefingEditorDialogModel::getIconFlipped() const
 
 void BriefingEditorDialogModel::setIconFlipped(bool enabled)
 {
-	const auto& b = _wipBriefings[_currentTeam];
-	if (b.num_stages <= 0 || _currentStage < 0 || _currentStage >= b.num_stages)
-		return;
-	const auto& s = b.stages[_currentStage];
-	if (_currentIcon < 0 || _currentIcon >= s.num_icons)
-		return;
-
-	auto ic = s.icons[_currentIcon];
-	int newFlags = ic.flags;
-	if (enabled) {
-		newFlags |= BI_MIRROR_ICON;
-	} else {
-		newFlags &= ~BI_MIRROR_ICON;
-	}
-	modify(ic.flags, newFlags);
+	applyToIconCurrentAndForward([&](brief_icon& ic) {
+		int newFlags = ic.flags;
+		if (enabled) {
+			newFlags |= BI_MIRROR_ICON;
+		} else {
+			newFlags &= ~BI_MIRROR_ICON;
+		}
+		modify(ic.flags, newFlags);
+	});
 }
 
 bool BriefingEditorDialogModel::getIconUseWing() const
@@ -970,21 +958,15 @@ bool BriefingEditorDialogModel::getIconUseWing() const
 
 void BriefingEditorDialogModel::setIconUseWing(bool enabled)
 {
-	const auto& b = _wipBriefings[_currentTeam];
-	if (b.num_stages <= 0 || _currentStage < 0 || _currentStage >= b.num_stages)
-		return;
-	const auto& s = b.stages[_currentStage];
-	if (_currentIcon < 0 || _currentIcon >= s.num_icons)
-		return;
-
-	auto ic = s.icons[_currentIcon];
-	int newFlags = ic.flags;
-	if (enabled) {
-		newFlags |= BI_USE_WING_ICON;
-	} else {
-		newFlags &= ~BI_USE_WING_ICON;
-	}
-	modify(ic.flags, newFlags);
+	applyToIconCurrentAndForward([&](brief_icon& ic) {
+		int newFlags = ic.flags;
+		if (enabled) {
+			newFlags |= BI_USE_WING_ICON;
+		} else {
+			newFlags &= ~BI_USE_WING_ICON;
+		}
+		modify(ic.flags, newFlags);
+	});
 }
 
 bool BriefingEditorDialogModel::getIconUseCargo() const
@@ -1000,21 +982,15 @@ bool BriefingEditorDialogModel::getIconUseCargo() const
 
 void BriefingEditorDialogModel::setIconUseCargo(bool enabled)
 {
-	const auto& b = _wipBriefings[_currentTeam];
-	if (b.num_stages <= 0 || _currentStage < 0 || _currentStage >= b.num_stages)
-		return;
-	const auto& s = b.stages[_currentStage];
-	if (_currentIcon < 0 || _currentIcon >= s.num_icons)
-		return;
-
-	auto ic = s.icons[_currentIcon];
-	int newFlags = ic.flags;
-	if (enabled) {
-		newFlags |= BI_USE_CARGO_ICON;
-	} else {
-		newFlags &= ~BI_USE_CARGO_ICON;
-	}
-	modify(ic.flags, newFlags);
+	applyToIconCurrentAndForward([&](brief_icon& ic) {
+		int newFlags = ic.flags;
+		if (enabled) {
+			newFlags |= BI_USE_CARGO_ICON;
+		} else {
+			newFlags &= ~BI_USE_CARGO_ICON;
+		}
+		modify(ic.flags, newFlags);
+	});
 }
 
 void BriefingEditorDialogModel::makeIcon(const SCP_string& label, int typeIndex, int teamIndex, int shipClassIndex)
