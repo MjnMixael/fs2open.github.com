@@ -5,7 +5,6 @@
 #include <QTimer>
 
 #include "globalincs/pstypes.h"
-#include "hud/hud.h"
 #include "osapi/osapi.h"
 #include "ui/QtGraphicsOperations.h"
 
@@ -80,7 +79,7 @@ private:
 	void renderFrame();
 	void initBriefingMap();
 	void applyStageTransition(int stageNum, int transitionTime);
-	void maybeRenderCutTransition(float frametime);
+	void maybeRenderCutTransition(float frametime, int width, int height);
 	bool shouldUseCutTransition(int fromStage, int toStage, const briefing* briefPtr) const;
 
 	BriefingMapWindow* _window = nullptr;
@@ -109,11 +108,9 @@ private:
 	QPoint _lastMousePos;
 
 	// Briefing cut transition state (forward/backward cut + jump cuts)
-	hud_anim _cutStaticAnim{};
-	bool _cutAnimInitialized = false;
-	bool _cutAnimSoundPlayed = false;
 	bool _cutFadeIn = false;
 	bool _cutFadeOut = false;
+	float _cutPhaseElapsed = 0.0f;
 	int _pendingCutStage = -1;
 };
 
