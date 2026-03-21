@@ -6,6 +6,7 @@
 
 #include "BriefingMapWidget.h"
 
+#include <cmath>
 #include <cstdlib>
 
 #include <QKeyEvent>
@@ -252,10 +253,83 @@ void BriefingMapWidget::applyStageTransition(int stageNum, int transitionTime) {
 
 	auto& stage = briefPtr->stages[stageNum];
 	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, transitionTime, stageNum);
+	// Editor behavior: start highlights as soon as the camera reaches its target
+	// instead of waiting for briefing text wipe timing.
+	Brief_text_wipe_time_elapsed = BRIEF_TEXT_WIPE_TIME + 1.0f;
 	brief_reset_icons(stageNum);
 	_currentStage = stageNum;
+	_suppressHighlights = false;
 
 	Briefing = savedBriefing;
+}
+
+void BriefingMapWidget::stopStageHighlights() {
+	auto* briefPtr = Briefing;
+	if (briefPtr == nullptr) {
+		briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	}
+
+	if (briefPtr == nullptr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
+		return;
+	}
+
+	auto& stage = briefPtr->stages[_currentStage];
+	for (int i = 0; i < stage.num_icons; ++i) {
+		stage.icons[i].flags &= ~BI_SHOWHIGHLIGHT;
+	}
+}
+
+void BriefingMapWidget::updateEditorHighlightPlayback() {
+	if (_suppressHighlights) {
+		stopStageHighlights();
+		return;
+	}
+
+	if (Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+		return;
+	}
+
+	auto& stage = Briefing->stages[_currentStage];
+	for (int i = 0; i < stage.num_icons; ++i) {
+		auto& icon = stage.icons[i];
+		if ((icon.flags & BI_SHOWHIGHLIGHT) == 0 || (icon.flags & BI_HIGHLIGHT) == 0) {
+			continue;
+		}
+
+		auto& anim = icon.highlight_anim;
+		if (anim.first_frame < 0 || anim.total_time <= 0.0f || anim.time_elapsed >= anim.total_time) {
+			icon.flags &= ~BI_SHOWHIGHLIGHT;
+		}
+	}
+}
+
+void BriefingMapWidget::abortHighlightPlayback() {
+	_suppressHighlights = true;
+	stopStageHighlights();
+}
+
+void BriefingMapWidget::drawSelectedIconOutline() {
+	if (Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+		return;
+	}
+
+	const auto selected = _model->getCurrentIconIndex();
+	auto& stage = Briefing->stages[_currentStage];
+	if (selected < 0 || selected >= stage.num_icons) {
+		return;
+	}
+
+	auto& icon = stage.icons[selected];
+	const auto left = icon.x - 2;
+	const auto top = icon.y - 2;
+	const auto right = left + icon.w + 4;
+	const auto bottom = top + icon.h + 4;
+
+	gr_set_color(0, 255, 0);
+	gr_line(left, top, right, top);
+	gr_line(left, bottom, right, bottom);
+	gr_line(left, top, left, bottom);
+	gr_line(right, top, right, bottom);
 }
 
 void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int height) {
@@ -287,6 +361,34 @@ void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int
 
 int BriefingMapWidget::getCurrentStage() const {
 	return _currentStage;
+}
+
+void BriefingMapWidget::notifyIconVisualsChanged() {
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
+		return;
+	}
+
+	briefing* savedBriefing = Briefing;
+	Briefing = briefPtr;
+
+	auto& stage = briefPtr->stages[_currentStage];
+	brief_reset_last_new_stage();
+	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, 0, _currentStage);
+	brief_reset_icons(_currentStage);
+
+	const auto selected = _model->getCurrentIconIndex();
+	if (selected >= 0 && selected < stage.num_icons) {
+		auto& icon = stage.icons[selected];
+		if (icon.flags & BI_HIGHLIGHT) {
+			icon.flags |= BI_SHOWHIGHLIGHT;
+		} else {
+			icon.flags &= ~BI_SHOWHIGHLIGHT;
+		}
+	}
+
+	_suppressHighlights = false;
+	Briefing = savedBriefing;
 }
 
 QWindow* BriefingMapWidget::getRenderWindow() const {
@@ -364,6 +466,8 @@ void BriefingMapWidget::renderFrame() {
 	auto viewSize = _briefingViewport->getSize();
 	const int w = static_cast<int>(viewSize.first);
 	const int h = static_cast<int>(viewSize.second);
+	_lastRenderWidth = w;
+	_lastRenderHeight = h;
 
 	gr_screen_resize(w, h);
 
@@ -397,13 +501,16 @@ void BriefingMapWidget::renderFrame() {
 				stage.camera_time));
 		}
 
-		const float frametime = 0.033f;
+			const float frametime = 0.033f;
 			Brief_text_wipe_time_elapsed += frametime;
 			brief_camera_move(frametime, _currentStage);
-			brief_render_map(_currentStage, frametime);
-			maybeRenderCutTransition(frametime, w, h);
-			cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
-		}
+				updateEditorHighlightPlayback();
+				brief_render_map(_currentStage, frametime);
+				updateEditorHighlightPlayback();
+				drawSelectedIconOutline();
+				maybeRenderCutTransition(frametime, w, h);
+				cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
+			}
 
 	Briefing = savedBriefing;
 	bscreen = savedBscreen;
@@ -473,6 +580,8 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 	}
 
 	if (moved) {
+		abortHighlightPlayback();
+
 		// Apply instant camera move by setting new stage with time=0
 		auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
 		if (briefPtr && _currentStage >= 0 && _currentStage < briefPtr->num_stages) {
@@ -496,22 +605,89 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 	if (!_initialized || event->button() != Qt::LeftButton)
 		return;
 
-	_lastMousePos = event->pos();
+	abortHighlightPlayback();
 
-	// Hit-test icons: check which icon (if any) is under the cursor
-	// For now, just store the click position for potential drag operations
-	// Full icon hit-testing will be implemented once we can retrieve projected icon positions
-	_draggingIcon = false;
-	_dragIconIndex = -1;
+	_lastMousePos = event->pos();
+	_dragStartMousePos = event->localPos();
+
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages || _lastRenderWidth <= 0 || _lastRenderHeight <= 0 ||
+		width() <= 0 || height() <= 0) {
+		_draggingIcon = false;
+		_dragIconIndex = -1;
+		return;
+	}
+
+	const auto mouseX = static_cast<float>(event->localPos().x()) * (static_cast<float>(_lastRenderWidth) / static_cast<float>(width()));
+	const auto mouseY = static_cast<float>(event->localPos().y()) * (static_cast<float>(_lastRenderHeight) / static_cast<float>(height()));
+
+	auto& stage = briefPtr->stages[_currentStage];
+	int hitIndex = -1;
+	for (int i = stage.num_icons - 1; i >= 0; --i) {
+		auto& icon = stage.icons[i];
+
+		int iconW = 0, iconH = 0;
+		brief_common_get_icon_dimensions(&iconW, &iconH, &icon);
+		const auto scaledW = static_cast<float>((icon.w > 0) ? icon.w : fl2i(static_cast<float>(iconW) * icon.scale_factor));
+		const auto scaledH = static_cast<float>((icon.h > 0) ? icon.h : fl2i(static_cast<float>(iconH) * icon.scale_factor));
+		const auto left = static_cast<float>(icon.x);
+		const auto top = static_cast<float>(icon.y);
+
+		if (mouseX >= left && mouseX <= left + scaledW && mouseY >= top && mouseY <= top + scaledH) {
+			hitIndex = i;
+			break;
+		}
+	}
+
+	if (hitIndex >= 0) {
+		_draggingIcon = true;
+		_dragIconIndex = hitIndex;
+		_dragStartIconPos = stage.icons[hitIndex].pos;
+		brief_move_icon_reset();
+		Q_EMIT iconSelected(hitIndex);
+	} else {
+		_draggingIcon = false;
+		_dragIconIndex = -1;
+	}
 }
 
 void BriefingMapWidget::mouseMoveEvent(QMouseEvent* event) {
-	if (!_initialized)
+	if (!_initialized || !_draggingIcon || _dragIconIndex < 0 || !(event->buttons() & Qt::LeftButton))
 		return;
 
-	_lastMousePos = event->pos();
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages || _dragIconIndex >= briefPtr->stages[_currentStage].num_icons ||
+		_lastRenderWidth <= 0 || _lastRenderHeight <= 0 || width() <= 0 || height() <= 0) {
+		return;
+	}
 
-	// Icon dragging will be implemented once we have icon screen positions from the renderer
+	const auto scaleX = static_cast<float>(_lastRenderWidth) / static_cast<float>(width());
+	const auto scaleY = static_cast<float>(_lastRenderHeight) / static_cast<float>(height());
+	const auto deltaX = static_cast<float>(event->localPos().x() - _dragStartMousePos.x()) * scaleX;
+	const auto deltaY = static_cast<float>(event->localPos().y() - _dragStartMousePos.y()) * scaleY;
+
+	const auto camPos = brief_get_current_cam_pos();
+	const auto camOrient = brief_get_current_cam_orient();
+	const auto& currentIcon = briefPtr->stages[_currentStage].icons[_dragIconIndex];
+
+	vec3d toIcon;
+	vm_vec_sub(&toIcon, &currentIcon.pos, &camPos);
+	const auto depth = vm_vec_dot(&toIcon, &camOrient.vec.fvec);
+	if (depth <= 1.0f) {
+		return;
+	}
+
+	const auto horizontalFov = g3_get_hfov(Proj_fov);
+	const auto worldPerPixelX = (2.0f * depth * std::tan(horizontalFov / 2.0f)) / static_cast<float>(_lastRenderWidth);
+	const auto worldPerPixelY = worldPerPixelX;
+	constexpr float DragResponseScale = 2.0f;
+
+	vec3d newPos = _dragStartIconPos;
+	vm_vec_scale_add2(&newPos, &camOrient.vec.rvec, deltaX * worldPerPixelX * DragResponseScale);
+	vm_vec_scale_add2(&newPos, &camOrient.vec.uvec, -deltaY * worldPerPixelY * DragResponseScale);
+	_model->setIconPosition(newPos);
+
+	_lastMousePos = event->pos();
 }
 
 void BriefingMapWidget::mouseReleaseEvent(QMouseEvent* event) {

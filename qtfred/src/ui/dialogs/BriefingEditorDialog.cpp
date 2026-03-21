@@ -131,6 +131,7 @@ void BriefingEditorDialog::updateUi()
 	ui->cutToNextStageCheckBox->setChecked(_model->getCutToNext());
 	ui->cutToPrevStageCheckBox->setChecked(_model->getCutFromPrev());
 	ui->disableGridCheckBox->setChecked(_model->getDisableGrid());
+	ui->changeLocallyCheckBox->setChecked(_model->getChangeLocally());
 
 	ui->stageTextPlainTextEdit->setPlainText(QString::fromStdString(_model->getStageText()));
 	ui->voiceFileLineEdit->setText(QString::fromStdString(_model->getSpeechFilename()));
@@ -154,6 +155,22 @@ void BriefingEditorDialog::updateUi()
 		ui->formulaTreeView->hilite_item(ui->formulaTreeView->select_sexp_node);
 	}
 
+	const bool stage_exists = _model->getTotalStages() > 0 && _model->getCurrentStage() >= 0;
+	const bool icon_selected = stage_exists && _model->getCurrentIconIndex() >= 0;
+	if (icon_selected) {
+		ui->iconIdSpinBox->setValue(_model->getIconId());
+		ui->iconLabelLineEdit->setText(QString::fromStdString(_model->getIconLabel()));
+		ui->iconCloseupLabelLineEdit->setText(QString::fromStdString(_model->getIconCloseupLabel()));
+		ui->iconImageComboBox->setCurrentIndex(_model->getIconTypeIndex());
+		ui->iconShipTypeComboBox->setCurrentIndex(_model->getIconShipTypeIndex());
+		ui->iconTeamComboBox->setCurrentIndex(_model->getIconTeamIndex());
+		ui->scaleDoubleSpinBox->setValue(_model->getIconScaleFactor());
+		ui->highlightCheckBox->setChecked(_model->getIconHighlighted());
+		ui->flipIconCheckBox->setChecked(_model->getIconFlipped());
+		ui->useWingIconCheckBox->setChecked(_model->getIconUseWing());
+		ui->useCargoIconCheckBox->setChecked(_model->getIconUseCargo());
+	}
+
 	enableDisableControls();
 }
 
@@ -170,6 +187,8 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->deleteStageButton->setEnabled(stage_exists);
 	ui->saveViewButton->setEnabled(stage_exists);
 	ui->gotoViewButton->setEnabled(stage_exists);
+	ui->makeIconButton->setEnabled(stage_exists);
+	ui->makeIconFromShipButton->setEnabled(stage_exists);
 
 	ui->teamComboBox->setEnabled(_model->getMissionIsMultiTeam());
 	ui->copyToOtherTeamsButton->setEnabled(_model->getMissionIsMultiTeam());
@@ -320,7 +339,7 @@ void BriefingEditorDialog::on_iconTeamComboBox_currentIndexChanged(int index)
 	_model->setIconTeamIndex(index);
 }
 
-void BriefingEditorDialog::on_iconScaleDoubleSpinBox_valueChanged(double arg1)
+void BriefingEditorDialog::on_scaleDoubleSpinBox_valueChanged(double arg1)
 {
 	_model->setIconScaleFactor(static_cast<float>(arg1));
 }
@@ -333,26 +352,31 @@ void BriefingEditorDialog::on_drawLinesCheckBox_toggled(bool checked)
 void BriefingEditorDialog::on_changeLocallyCheckBox_toggled(bool checked)
 {
 	_model->setChangeLocally(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_flipIconCheckBox_toggled(bool checked)
 {
 	_model->setIconFlipped(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_highlightCheckBox_toggled(bool checked)
 {
 	_model->setIconHighlighted(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
-void BriefingEditorDialog::on_useWingCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_useWingIconCheckBox_toggled(bool checked)
 {
 	_model->setIconUseWing(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
-void BriefingEditorDialog::on_useCargoCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_useCargoIconCheckBox_toggled(bool checked)
 {
 	_model->setIconUseCargo(checked);
+	_mapWidget->notifyIconVisualsChanged();
 }
 
 void BriefingEditorDialog::on_makeIconButton_clicked()
