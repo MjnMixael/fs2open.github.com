@@ -6,6 +6,8 @@
 #include "CameraCoordinatesDialog.h"
 #include "IconFromShipDialog.h"
 #include "mission/missionbriefcommon.h"
+#include "mission/missiongrid.h"
+#include "math/fvi.h"
 
 #include <globalincs/linklist.h>
 #include <ui/util/SignalBlockers.h>
@@ -15,6 +17,27 @@
 #include <QVBoxLayout>
 
 namespace fso::fred::dialogs {
+
+namespace {
+vec3d getNewIconPlacement()
+{
+	const vec3d camPos = brief_get_current_cam_pos();
+	const matrix camOrient = brief_get_current_cam_orient();
+
+	float distance = 500.0f;
+	if (The_grid != nullptr) {
+		vec3d gridHitPos;
+		const auto rayDist = fvi_ray_plane(&gridHitPos, &The_grid->center, &The_grid->gmatrix.vec.uvec, &camPos, &camOrient.vec.fvec, 0.0f);
+		if (rayDist >= 0.0f) {
+			distance = rayDist;
+		}
+	}
+
+	vec3d placement;
+	vm_vec_scale_add(&placement, &camPos, &camOrient.vec.fvec, distance);
+	return placement;
+}
+} // namespace
 
 BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* viewport)
 	: QDialog(parent), SexpTreeEditorInterface(flagset<TreeFlags>()), ui(new Ui::BriefingEditorDialog()),
@@ -37,6 +60,7 @@ void BriefingEditorDialog::accept()
 	// If apply() returns true, close the dialog
 	if (_model->apply()) {
 		QDialog::accept();
+		create_default_grid(); // restore the grid back to the normal version
 	}
 	// else: validation failed, don�t close
 }
@@ -48,6 +72,7 @@ void BriefingEditorDialog::reject()
 	// If they don't, it runs _model->reject() and returns true
 	if (rejectOrCloseHandler(this, _model.get(), _viewport)) {
 		QDialog::reject(); // actually close
+		create_default_grid(); // restore the grid back to the normal version
 	}
 	// else: do nothing, don't close
 }
@@ -200,7 +225,22 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->formulaTreeView->setEnabled(stage_exists);
 	
 	const bool icon_selected = stage_exists && _model->getCurrentIconIndex() >= 0;
-	ui->currentIconInfoGroupBox->setEnabled(icon_selected);
+	ui->currentIconInfoGroupBox->setEnabled(stage_exists);
+	ui->makeIconButton->setEnabled(stage_exists);
+	ui->makeIconFromShipButton->setEnabled(stage_exists);
+	ui->iconIdSpinBox->setEnabled(icon_selected);
+	ui->iconLabelLineEdit->setEnabled(icon_selected);
+	ui->iconCloseupLabelLineEdit->setEnabled(icon_selected);
+	ui->iconImageComboBox->setEnabled(icon_selected);
+	ui->iconShipTypeComboBox->setEnabled(icon_selected);
+	ui->iconTeamComboBox->setEnabled(icon_selected);
+	ui->scaleDoubleSpinBox->setEnabled(icon_selected);
+	ui->highlightCheckBox->setEnabled(icon_selected);
+	ui->flipIconCheckBox->setEnabled(icon_selected);
+	ui->useWingIconCheckBox->setEnabled(icon_selected);
+	ui->useCargoIconCheckBox->setEnabled(icon_selected);
+	ui->deleteIconButton->setEnabled(icon_selected);
+	ui->propagateIconButton->setEnabled(icon_selected);
 
 }
 
@@ -381,18 +421,8 @@ void BriefingEditorDialog::on_useCargoIconCheckBox_toggled(bool checked)
 
 void BriefingEditorDialog::on_makeIconButton_clicked()
 {
-	// Create a new icon at the camera's look-at point
-	vec3d camPos = brief_get_current_cam_pos();
-	matrix camOrient = brief_get_current_cam_orient();
-
-	// Compute look-at point: position + forward * some distance
-	vec3d lookAt;
-	vm_vec_scale_add(&lookAt, &camPos, &camOrient.vec.fvec, 500.0f);
-
-	_model->makeIcon("New Icon", 0, 0, -1);
-
-	// Set the new icon's position to the look-at point
-	_model->setIconPosition(lookAt);
+	_model->makeIcon("New Icon", 0, 0, 0);
+	_model->setIconPosition(getNewIconPlacement());
 	updateUi();
 }
 
@@ -401,6 +431,7 @@ void BriefingEditorDialog::on_makeIconFromShipButton_clicked()
 	IconFromShipDialog dlg(this, _model.get());
 	if (dlg.exec() == QDialog::Accepted && dlg.selectedShipIndex() >= 0) {
 		_model->makeIconFromShip(dlg.selectedShipIndex());
+		_model->setIconPosition(getNewIconPlacement());
 		updateUi();
 	}
 }

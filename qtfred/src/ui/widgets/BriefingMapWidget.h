@@ -63,6 +63,7 @@ public:
 	void setStage(int stageNum);
 	int getCurrentStage() const;
 	void notifyIconVisualsChanged();
+	void applyCameraToCurrentStage(const vec3d& pos, const matrix& orient);
 
 	QWindow* getRenderWindow() const;
 
@@ -86,6 +87,7 @@ private:
 	void updateEditorHighlightPlayback();
 	void abortHighlightPlayback();
 	void drawSelectedIconOutline();
+	void applyCameraPoseLikeKeyboardControls(const vec3d& camPos, const matrix& camOrient, bool updateModel);
 
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;

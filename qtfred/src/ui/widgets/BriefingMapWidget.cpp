@@ -324,12 +324,24 @@ void BriefingMapWidget::drawSelectedIconOutline() {
 	const auto top = icon.y - 2;
 	const auto right = left + icon.w + 4;
 	const auto bottom = top + icon.h + 4;
+	const auto width = right - left;
+	const auto height = bottom - top;
+	const auto cornerLen = std::max(3, std::min(width, height) / 4);
 
-	gr_set_color(0, 255, 0);
-	gr_line(left, top, right, top);
-	gr_line(left, bottom, right, bottom);
-	gr_line(left, top, left, bottom);
-	gr_line(right, top, right, bottom);
+	gr_set_color(255, 255, 255);
+
+	// Top-left
+	gr_line(left, top, left + cornerLen, top);
+	gr_line(left, top, left, top + cornerLen);
+	// Top-right
+	gr_line(right - cornerLen, top, right, top);
+	gr_line(right, top, right, top + cornerLen);
+	// Bottom-left
+	gr_line(left, bottom, left + cornerLen, bottom);
+	gr_line(left, bottom - cornerLen, left, bottom);
+	// Bottom-right
+	gr_line(right - cornerLen, bottom, right, bottom);
+	gr_line(right, bottom - cornerLen, right, bottom);
 }
 
 void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int height) {
@@ -389,6 +401,36 @@ void BriefingMapWidget::notifyIconVisualsChanged() {
 
 	_suppressHighlights = false;
 	Briefing = savedBriefing;
+}
+
+void BriefingMapWidget::applyCameraToCurrentStage(const vec3d& pos, const matrix& orient) {
+	applyCameraPoseLikeKeyboardControls(pos, orient, false);
+}
+
+void BriefingMapWidget::applyCameraPoseLikeKeyboardControls(const vec3d& camPos, const matrix& camOrient, bool updateModel) {
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
+		return;
+	}
+
+	abortHighlightPlayback();
+
+	auto& stage = briefPtr->stages[_currentStage];
+	stage.camera_pos = camPos;
+	stage.camera_orient = camOrient;
+
+	briefing* savedBriefing = Briefing;
+	Briefing = briefPtr;
+	brief_reset_last_new_stage();
+	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, 0, _currentStage);
+	Briefing = savedBriefing;
+
+	if (updateModel) {
+		_model->setCameraPosition(camPos);
+		_model->setCameraOrientation(camOrient);
+	}
+
+	cameraChanged(camPos, camOrient);
 }
 
 QWindow* BriefingMapWidget::getRenderWindow() const {
@@ -598,24 +640,7 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 	}
 
 	if (moved) {
-		abortHighlightPlayback();
-
-		// Apply instant camera move by setting new stage with time=0
-		auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
-		if (briefPtr && _currentStage >= 0 && _currentStage < briefPtr->num_stages) {
-			auto& stage = briefPtr->stages[_currentStage];
-			stage.camera_pos = camPos;
-
-			briefing* savedBriefing = Briefing;
-			Briefing = briefPtr;
-			// Reset Last_new_stage so brief_set_new_stage accepts the same stage
-			brief_reset_last_new_stage();
-			brief_set_new_stage(&camPos, &camOrient, 0, _currentStage);
-			Briefing = savedBriefing;
-
-			_model->setCameraPosition(camPos);
-			cameraChanged(camPos, camOrient);
-		}
+		applyCameraPoseLikeKeyboardControls(camPos, camOrient, true);
 	}
 }
 
@@ -698,7 +723,7 @@ void BriefingMapWidget::mouseMoveEvent(QMouseEvent* event) {
 	const auto horizontalFov = g3_get_hfov(Proj_fov);
 	const auto worldPerPixelX = (2.0f * depth * std::tan(horizontalFov / 2.0f)) / static_cast<float>(_lastRenderWidth);
 	const auto worldPerPixelY = worldPerPixelX;
-	constexpr float DragResponseScale = 2.0f;
+	constexpr float DragResponseScale = 1.5f; // This is kind hacky but it makes the drag feel more responsive without having to move the mouse as far, which is nice given the precision required to drag small icons.
 
 	vec3d newPos = _dragStartIconPos;
 	vm_vec_scale_add2(&newPos, &camOrient.vec.rvec, deltaX * worldPerPixelX * DragResponseScale);
