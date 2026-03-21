@@ -680,10 +680,11 @@ void BriefingMapWidget::mouseMoveEvent(QMouseEvent* event) {
 	const auto horizontalFov = g3_get_hfov(Proj_fov);
 	const auto worldPerPixelX = (2.0f * depth * std::tan(horizontalFov / 2.0f)) / static_cast<float>(_lastRenderWidth);
 	const auto worldPerPixelY = worldPerPixelX;
+	constexpr float DragResponseScale = 2.0f;
 
 	vec3d newPos = _dragStartIconPos;
-	vm_vec_scale_add2(&newPos, &camOrient.vec.rvec, deltaX * worldPerPixelX);
-	vm_vec_scale_add2(&newPos, &camOrient.vec.uvec, -deltaY * worldPerPixelY);
+	vm_vec_scale_add2(&newPos, &camOrient.vec.rvec, deltaX * worldPerPixelX * DragResponseScale);
+	vm_vec_scale_add2(&newPos, &camOrient.vec.uvec, -deltaY * worldPerPixelY * DragResponseScale);
 	_model->setIconPosition(newPos);
 
 	_lastMousePos = event->pos();
