@@ -109,8 +109,7 @@ private:
 
 	// Briefing cut transition state (forward/backward cut + jump cuts)
 	bool _cutFadeIn = false;
-	bool _cutFadeOut = false;
-	float _cutPhaseElapsed = 0.0f;
+	int _cutFadeFrame = 0;
 	int _pendingCutStage = -1;
 };
 

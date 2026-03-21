@@ -212,8 +212,7 @@ void BriefingMapWidget::setStage(int stageNum) {
 	if (shouldUseCutTransition(previousStage, stageNum, briefPtr)) {
 		_pendingCutStage = stageNum;
 		_cutFadeIn = true;
-		_cutFadeOut = false;
-		_cutPhaseElapsed = 0.0f;
+		_cutFadeFrame = 0;
 	} else {
 		applyStageTransition(stageNum, transitionTime);
 	}
@@ -260,31 +259,30 @@ void BriefingMapWidget::applyStageTransition(int stageNum, int transitionTime) {
 }
 
 void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int height) {
-	if (!_cutFadeIn && !_cutFadeOut) {
+	(void)frametime;
+
+	if (!_cutFadeIn) {
 		return;
 	}
 
-	constexpr float CutPhaseDuration = 0.12f;
-	_cutPhaseElapsed += frametime;
-	if (_cutPhaseElapsed > CutPhaseDuration) {
-		_cutPhaseElapsed = 0.0f;
+	constexpr int CutFadeFrameCount = 8;
+	const auto fadeProgress = static_cast<float>(_cutFadeFrame + 1) / static_cast<float>(CutFadeFrameCount);
+	color fadeColor;
+	gr_init_alphacolor(&fadeColor, 255, 255, 255, fl2i(fadeProgress * 255.0f));
+	gr_set_color_fast(&fadeColor);
+	gr_rect(0, 0, width, height, GR_RESIZE_NONE);
 
-		if (_cutFadeIn) {
-			_cutFadeIn = false;
-			_cutFadeOut = true;
+	_cutFadeFrame++;
+	if (_cutFadeFrame >= CutFadeFrameCount) {
+		_cutFadeIn = false;
+		_cutFadeFrame = 0;
 
-			if (_pendingCutStage >= 0) {
-				applyStageTransition(_pendingCutStage, 0);
-				_pendingCutStage = -1;
-			}
-		} else {
-			_cutFadeOut = false;
+		if (_pendingCutStage >= 0) {
+			applyStageTransition(_pendingCutStage, 0);
+			_pendingCutStage = -1;
 		}
 		return;
 	}
-
-	gr_set_color(255, 255, 255);
-	gr_rect(0, 0, width, height, GR_RESIZE_NONE);
 }
 
 int BriefingMapWidget::getCurrentStage() const {
