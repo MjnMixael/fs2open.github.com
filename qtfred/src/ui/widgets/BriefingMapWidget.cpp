@@ -305,6 +305,22 @@ void BriefingMapWidget::renderFrame() {
 	gr_clear();
 
 	if (Briefing != nullptr) {
+		const bool stage_valid = (_currentStage >= 0 && _currentStage < Briefing->num_stages);
+		if (!stage_valid) {
+			mprintf(("BriefingMapWidget: invalid stage index %d (num_stages=%d)\n", _currentStage, Briefing->num_stages));
+		}
+
+		if ((_debugFrameCounter % 120) == 0 && stage_valid) {
+			const auto& stage = Briefing->stages[_currentStage];
+			mprintf(("BriefingMapWidget: stage=%d/%d draw_grid=%d num_icons=%d num_lines=%d cam_time=%d\n",
+				_currentStage,
+				Briefing->num_stages,
+				stage.draw_grid ? 1 : 0,
+				stage.num_icons,
+				stage.num_lines,
+				stage.camera_time));
+		}
+
 		const float frametime = 0.033f;
 		brief_camera_move(frametime, _currentStage);
 		brief_render_map(_currentStage, frametime);
