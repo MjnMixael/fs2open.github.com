@@ -229,8 +229,13 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 
 	// select_object() uses g3_point_to_vec(), which requires an active 3D frame.
 	// During UI teardown (e.g. closing the briefing editor), queued input events
-	// can arrive while no frame is active.
-	_viewport->on_object = g3_in_frame() ? _viewport->select_object(event->x(), event->y()) : -1;
+	// can arrive while no frame is active. Ignore those transient events so we
+	// don't mutate selection/drag state from invalid input.
+	if (!g3_in_frame()) {
+		return;
+	}
+
+	_viewport->on_object = _viewport->select_object(event->x(), event->y());
 	_viewport->button_down = 1;
 
 	_viewport->drag_rotate_save_backup();
@@ -319,7 +324,11 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 
 	// select_object() uses g3_point_to_vec(), which requires an active 3D frame.
 	// Guard against transient event delivery while no frame is active.
-	_viewport->Cursor_over = g3_in_frame() ? _viewport->select_object(event->x(), event->y()) : -1;
+	if (!g3_in_frame()) {
+		return;
+	}
+
+	_viewport->Cursor_over = _viewport->select_object(event->x(), event->y());
 	updateCursor();
 
 	if (!event->buttons().testFlag(Qt::LeftButton)) {
