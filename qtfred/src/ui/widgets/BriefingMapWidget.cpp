@@ -425,15 +425,14 @@ void BriefingMapWidget::renderFrame() {
 	if (_rendering)
 		return;
 
-	// brief_render_map() enters a 3D frame internally. If another frame is
-	// already active (G3_count != 0), we must not render this tick — forcibly
-	// ending someone else's frame would leave the main viewport in a bad state.
-	if (g3_in_frame()) {
-		if (!_loggedInFrameSkip) {
-			mprintf(("BriefingMapWidget: g3_in_frame() is true; skipping this tick.\n"));
-			_loggedInFrameSkip = true;
-		}
-		return;
+	// The main viewport's FredRenderer intentionally leaves a g3 frame open
+	// after gr_flip() so that mouse-interaction helpers (select_object, etc.)
+	// can use g3_point_to_vec between renders.  We must end that persistent
+	// frame before brief_render_map() starts its own, then re-open it when
+	// we are done so the main viewport stays in the state it expects.
+	const bool mainFrameWasActive = (g3_in_frame() != 0);
+	if (mainFrameWasActive) {
+		g3_end_frame();
 	}
 
 	_rendering = true;
@@ -447,6 +446,15 @@ void BriefingMapWidget::renderFrame() {
 		if (!_loggedNoContext) {
 			mprintf(("BriefingMapWidget: no current OpenGL context after gr_use_viewport().\n"));
 			_loggedNoContext = true;
+		}
+		// Restore main viewport frame before bailing out
+		if (mainFrameWasActive) {
+			auto* mainView = _viewport->renderer->getTargetViewport();
+			auto mainSize = mainView->getSize();
+			gr_use_viewport(mainView);
+			gr_screen_resize(static_cast<int>(mainSize.first), static_cast<int>(mainSize.second));
+			g3_start_frame(0);
+			g3_set_view_matrix(&_viewport->eye_pos, &_viewport->eye_orient, 0.5f);
 		}
 		_rendering = false;
 		return;
@@ -522,6 +530,18 @@ void BriefingMapWidget::renderFrame() {
 			w,
 			h,
 			static_cast<void*>(context->surface())));
+	}
+
+	// Restore the main viewport's persistent frame so that mouse-interaction
+	// helpers (select_object → g3_point_to_vec) continue to work between the
+	// main viewport's own render calls.
+	if (mainFrameWasActive) {
+		auto* mainView = _viewport->renderer->getTargetViewport();
+		auto mainSize = mainView->getSize();
+		gr_use_viewport(mainView);
+		gr_screen_resize(static_cast<int>(mainSize.first), static_cast<int>(mainSize.second));
+		g3_start_frame(0);
+		g3_set_view_matrix(&_viewport->eye_pos, &_viewport->eye_orient, 0.5f);
 	}
 
 	_rendering = false;
