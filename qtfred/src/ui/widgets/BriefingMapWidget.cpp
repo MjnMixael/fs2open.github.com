@@ -234,10 +234,13 @@ void BriefingMapWidget::renderFrame() {
 	// already active, it will assert (G3_count != 0), so skip this tick.
 	if (g3_in_frame()) {
 		if (!_loggedInFrameSkip) {
-			mprintf(("BriefingMapWidget: g3_in_frame() is true; skipping frame to avoid nested g3_start_frame().\n"));
+			mprintf(("BriefingMapWidget: g3_in_frame() is true; ending active frame before briefing render.\n"));
 			_loggedInFrameSkip = true;
 		}
-		return;
+		g3_end_frame();
+		if (g3_in_frame()) {
+			return;
+		}
 	}
 
 	_rendering = true;
