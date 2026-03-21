@@ -308,6 +308,35 @@ void BriefingMapWidget::abortHighlightPlayback() {
 	stopStageHighlights();
 }
 
+void BriefingMapWidget::drawSelectedIconOutline() {
+	if (Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+		return;
+	}
+
+	const auto selected = _model->getCurrentIconIndex();
+	auto& stage = Briefing->stages[_currentStage];
+	if (selected < 0 || selected >= stage.num_icons) {
+		return;
+	}
+
+	auto& icon = stage.icons[selected];
+	int iconW = 0, iconH = 0;
+	brief_common_get_icon_dimensions(&iconW, &iconH, &icon);
+	const auto scaledW = fl2i(static_cast<float>(iconW) * icon.scale_factor);
+	const auto scaledH = fl2i(static_cast<float>(iconH) * icon.scale_factor);
+
+	const auto left = icon.hold_x - 2;
+	const auto top = icon.hold_y - 2;
+	const auto right = left + scaledW + 4;
+	const auto bottom = top + scaledH + 4;
+
+	gr_set_color(0, 255, 0);
+	gr_line(left, top, right, top);
+	gr_line(left, bottom, right, bottom);
+	gr_line(left, top, left, bottom);
+	gr_line(right, top, right, bottom);
+}
+
 void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int height) {
 	(void)frametime;
 
@@ -452,12 +481,13 @@ void BriefingMapWidget::renderFrame() {
 			const float frametime = 0.033f;
 			Brief_text_wipe_time_elapsed += frametime;
 			brief_camera_move(frametime, _currentStage);
-			updateEditorHighlightPlayback();
-			brief_render_map(_currentStage, frametime);
-			updateEditorHighlightPlayback();
-			maybeRenderCutTransition(frametime, w, h);
-			cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
-		}
+				updateEditorHighlightPlayback();
+				brief_render_map(_currentStage, frametime);
+				updateEditorHighlightPlayback();
+				drawSelectedIconOutline();
+				maybeRenderCutTransition(frametime, w, h);
+				cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
+			}
 
 	Briefing = savedBriefing;
 	bscreen = savedBscreen;

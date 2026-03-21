@@ -84,6 +84,7 @@ private:
 	void stopStageHighlights();
 	void updateEditorHighlightPlayback();
 	void abortHighlightPlayback();
+	void drawSelectedIconOutline();
 
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;

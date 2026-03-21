@@ -154,6 +154,22 @@ void BriefingEditorDialog::updateUi()
 		ui->formulaTreeView->hilite_item(ui->formulaTreeView->select_sexp_node);
 	}
 
+	const bool stage_exists = _model->getTotalStages() > 0 && _model->getCurrentStage() >= 0;
+	const bool icon_selected = stage_exists && _model->getCurrentIconIndex() >= 0;
+	if (icon_selected) {
+		ui->iconIdSpinBox->setValue(_model->getIconId());
+		ui->iconLabelLineEdit->setText(QString::fromStdString(_model->getIconLabel()));
+		ui->iconCloseupLabelLineEdit->setText(QString::fromStdString(_model->getIconCloseupLabel()));
+		ui->iconImageComboBox->setCurrentIndex(_model->getIconTypeIndex());
+		ui->iconShipTypeComboBox->setCurrentIndex(_model->getIconShipTypeIndex());
+		ui->iconTeamComboBox->setCurrentIndex(_model->getIconTeamIndex());
+		ui->iconScaleDoubleSpinBox->setValue(_model->getIconScaleFactor());
+		ui->highlightCheckBox->setChecked(_model->getIconHighlighted());
+		ui->flipIconCheckBox->setChecked(_model->getIconFlipped());
+		ui->useWingCheckBox->setChecked(_model->getIconUseWing());
+		ui->useCargoCheckBox->setChecked(_model->getIconUseCargo());
+	}
+
 	enableDisableControls();
 }
 
@@ -170,6 +186,8 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->deleteStageButton->setEnabled(stage_exists);
 	ui->saveViewButton->setEnabled(stage_exists);
 	ui->gotoViewButton->setEnabled(stage_exists);
+	ui->makeIconButton->setEnabled(stage_exists);
+	ui->makeIconFromShipButton->setEnabled(stage_exists);
 
 	ui->teamComboBox->setEnabled(_model->getMissionIsMultiTeam());
 	ui->copyToOtherTeamsButton->setEnabled(_model->getMissionIsMultiTeam());
