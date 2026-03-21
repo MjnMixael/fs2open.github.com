@@ -231,7 +231,7 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	// During UI teardown (e.g. closing the briefing editor), queued input events
 	// can arrive while no frame is active. Ignore those transient events so we
 	// don't mutate selection/drag state from invalid input.
-	if (!g3_in_frame()) {
+	if (g3_in_frame() != 1) {
 		return;
 	}
 
@@ -324,7 +324,7 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 
 	// select_object() uses g3_point_to_vec(), which requires an active 3D frame.
 	// Guard against transient event delivery while no frame is active.
-	if (!g3_in_frame()) {
+	if (g3_in_frame() != 1) {
 		return;
 	}
 
