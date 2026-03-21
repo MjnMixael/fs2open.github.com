@@ -698,7 +698,7 @@ void BriefingMapWidget::mouseMoveEvent(QMouseEvent* event) {
 	const auto horizontalFov = g3_get_hfov(Proj_fov);
 	const auto worldPerPixelX = (2.0f * depth * std::tan(horizontalFov / 2.0f)) / static_cast<float>(_lastRenderWidth);
 	const auto worldPerPixelY = worldPerPixelX;
-	constexpr float DragResponseScale = 2.0f;
+	constexpr float DragResponseScale = 1.5f; // This is kind hacky but it makes the drag feel more responsive without having to move the mouse as far, which is nice given the precision required to drag small icons.
 
 	vec3d newPos = _dragStartIconPos;
 	vm_vec_scale_add2(&newPos, &camOrient.vec.rvec, deltaX * worldPerPixelX * DragResponseScale);
