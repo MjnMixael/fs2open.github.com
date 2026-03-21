@@ -6,6 +6,8 @@
 
 #include "BriefingMapWidget.h"
 
+#include <cstdlib>
+
 #include <QKeyEvent>
 #include <QMouseEvent>
 #include <QtGui/QOpenGLContext>
@@ -186,10 +188,32 @@ void BriefingMapWidget::setStage(int stageNum) {
 	briefing* savedBriefing = Briefing;
 	Briefing = briefPtr;
 
+	const auto previousStage = _currentStage;
+	int transitionTime = briefPtr->stages[stageNum].camera_time;
+
+	// Mirror in-game transition timing logic so icon movement/fades and camera
+	// transitions behave as expected when stepping stages in the editor preview.
+	if (previousStage >= 0 && previousStage < briefPtr->num_stages && stageNum != previousStage) {
+		const auto& prev = briefPtr->stages[previousStage];
+
+		// Cut transitions (or large jumps) are immediate stage changes.
+		if (std::abs(stageNum - previousStage) > 1) {
+			transitionTime = 0;
+		} else if (stageNum > previousStage) {
+			if (prev.flags & BS_FORWARD_CUT) {
+				transitionTime = 0;
+			}
+		} else {
+			if (prev.flags & BS_BACKWARD_CUT) {
+				transitionTime = 0;
+			} else {
+				transitionTime = prev.camera_time;
+			}
+		}
+	}
+
 	auto& stage = briefPtr->stages[stageNum];
-	brief_reset_last_new_stage();
-	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient,
-		stage.camera_time, stageNum);
+	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, transitionTime, stageNum);
 	brief_reset_icons(stageNum);
 
 	_currentStage = stageNum;
@@ -310,6 +334,7 @@ void BriefingMapWidget::renderFrame() {
 		}
 
 		const float frametime = 0.033f;
+		Brief_text_wipe_time_elapsed += frametime;
 		brief_camera_move(frametime, _currentStage);
 		brief_render_map(_currentStage, frametime);
 		cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
