@@ -5,8 +5,11 @@
 #include <QTimer>
 
 #include "globalincs/pstypes.h"
+#include "hud/hud.h"
 #include "osapi/osapi.h"
 #include "ui/QtGraphicsOperations.h"
+
+struct briefing;
 
 namespace fso::fred::dialogs {
 class BriefingEditorDialogModel;
@@ -76,6 +79,9 @@ protected:
 private:
 	void renderFrame();
 	void initBriefingMap();
+	void applyStageTransition(int stageNum, int transitionTime);
+	void maybeRenderCutTransition(float frametime);
+	bool shouldUseCutTransition(int fromStage, int toStage, const briefing* briefPtr) const;
 
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;
@@ -101,6 +107,14 @@ private:
 	bool _draggingIcon = false;
 	int _dragIconIndex = -1;
 	QPoint _lastMousePos;
+
+	// Briefing cut transition state (forward/backward cut + jump cuts)
+	hud_anim _cutStaticAnim{};
+	bool _cutAnimInitialized = false;
+	bool _cutAnimSoundPlayed = false;
+	bool _cutFadeIn = false;
+	bool _cutFadeOut = false;
+	int _pendingCutStage = -1;
 };
 
 } // namespace fso::fred

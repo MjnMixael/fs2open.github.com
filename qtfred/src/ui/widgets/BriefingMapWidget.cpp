@@ -6,6 +6,7 @@
 
 #include "BriefingMapWidget.h"
 
+#include <algorithm>
 #include <cstdlib>
 
 #include <QKeyEvent>
@@ -19,6 +20,7 @@
 #include "mission/EditorViewport.h"
 
 #include "graphics/2d.h"
+#include "gamesnd/gamesnd.h"
 #include "render/3d.h"
 #include "mission/missionbriefcommon.h"
 
@@ -121,6 +123,11 @@ BriefingMapWidget::BriefingMapWidget(QWidget* parent,
 
 BriefingMapWidget::~BriefingMapWidget() {
 	_renderTimer->stop();
+
+	if (_cutStaticAnim.first_frame >= 0) {
+		bm_unload(_cutStaticAnim.first_frame);
+		_cutStaticAnim.first_frame = -1;
+	}
 }
 
 void BriefingMapWidget::initBriefingMap() {
@@ -191,12 +198,9 @@ void BriefingMapWidget::setStage(int stageNum) {
 	const auto previousStage = _currentStage;
 	int transitionTime = briefPtr->stages[stageNum].camera_time;
 
-	// Mirror in-game transition timing logic so icon movement/fades and camera
-	// transitions behave as expected when stepping stages in the editor preview.
 	if (previousStage >= 0 && previousStage < briefPtr->num_stages && stageNum != previousStage) {
 		const auto& prev = briefPtr->stages[previousStage];
 
-		// Cut transitions (or large jumps) are immediate stage changes.
 		if (std::abs(stageNum - previousStage) > 1) {
 			transitionTime = 0;
 		} else if (stageNum > previousStage) {
@@ -212,13 +216,98 @@ void BriefingMapWidget::setStage(int stageNum) {
 		}
 	}
 
+	if (shouldUseCutTransition(previousStage, stageNum, briefPtr)) {
+		_pendingCutStage = stageNum;
+		_cutFadeIn = true;
+		_cutFadeOut = false;
+		_cutAnimSoundPlayed = false;
+		_cutStaticAnim.time_elapsed = 0.0f;
+	} else {
+		applyStageTransition(stageNum, transitionTime);
+	}
+
+	Briefing = savedBriefing;
+}
+
+bool BriefingMapWidget::shouldUseCutTransition(int fromStage, int toStage, const briefing* briefPtr) const {
+	if (briefPtr == nullptr || fromStage < 0 || toStage < 0 || fromStage == toStage) {
+		return false;
+	}
+
+	if (fromStage >= briefPtr->num_stages || toStage >= briefPtr->num_stages) {
+		return false;
+	}
+
+	if (std::abs(toStage - fromStage) > 1) {
+		return true;
+	}
+
+	const auto& prev = briefPtr->stages[fromStage];
+	if (toStage > fromStage) {
+		return (prev.flags & BS_FORWARD_CUT) != 0;
+	}
+
+	return (prev.flags & BS_BACKWARD_CUT) != 0;
+}
+
+void BriefingMapWidget::applyStageTransition(int stageNum, int transitionTime) {
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || stageNum < 0 || stageNum >= briefPtr->num_stages) {
+		return;
+	}
+
+	briefing* savedBriefing = Briefing;
+	Briefing = briefPtr;
+
 	auto& stage = briefPtr->stages[stageNum];
 	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, transitionTime, stageNum);
 	brief_reset_icons(stageNum);
-
 	_currentStage = stageNum;
 
 	Briefing = savedBriefing;
+}
+
+void BriefingMapWidget::maybeRenderCutTransition(float frametime) {
+	if (!_cutFadeIn && !_cutFadeOut) {
+		return;
+	}
+
+	if (!_cutAnimInitialized) {
+		hud_anim_init(
+			&_cutStaticAnim, Brief_static_coords[gr_screen.res][0], Brief_static_coords[gr_screen.res][1], Brief_static_name[gr_screen.res]);
+		hud_anim_load(&_cutStaticAnim);
+		_cutAnimInitialized = true;
+	}
+
+	_cutStaticAnim.time_elapsed += frametime;
+
+	if (_cutFadeIn && _cutStaticAnim.first_frame >= 0 && !_cutAnimSoundPlayed) {
+		gamesnd_play_iface(InterfaceSounds::BRIEFING_STATIC);
+		_cutAnimSoundPlayed = true;
+	}
+
+	if (_cutStaticAnim.first_frame == -1 || _cutStaticAnim.time_elapsed > _cutStaticAnim.total_time) {
+		_cutStaticAnim.time_elapsed = 0.0f;
+
+		if (_cutFadeIn) {
+			_cutFadeIn = false;
+			_cutFadeOut = true;
+
+			if (_pendingCutStage >= 0) {
+				applyStageTransition(_pendingCutStage, 0);
+				_pendingCutStage = -1;
+			}
+		} else {
+			_cutFadeOut = false;
+		}
+		return;
+	}
+
+	auto frameNum = fl2i((_cutStaticAnim.time_elapsed * _cutStaticAnim.num_frames) / _cutStaticAnim.total_time);
+	frameNum = std::max(0, std::min(frameNum, _cutStaticAnim.num_frames - 1));
+
+	gr_set_bitmap(_cutStaticAnim.first_frame + (_cutFadeOut ? (_cutStaticAnim.num_frames - 1 - frameNum) : frameNum));
+	gr_bitmap(_cutStaticAnim.sx, _cutStaticAnim.sy, GR_RESIZE_MENU);
 }
 
 int BriefingMapWidget::getCurrentStage() const {
@@ -337,6 +426,7 @@ void BriefingMapWidget::renderFrame() {
 		Brief_text_wipe_time_elapsed += frametime;
 		brief_camera_move(frametime, _currentStage);
 		brief_render_map(_currentStage, frametime);
+		maybeRenderCutTransition(frametime);
 		cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
 	}
 
