@@ -109,6 +109,10 @@ private:
 	bool _draggingIcon = false;
 	int _dragIconIndex = -1;
 	QPoint _lastMousePos;
+	QPointF _dragStartMousePos;
+	vec3d _dragStartIconPos = ZERO_VECTOR;
+	int _lastRenderWidth = 0;
+	int _lastRenderHeight = 0;
 
 	// Briefing cut transition state (forward/backward cut + jump cuts)
 	bool _cutFadeIn = false;

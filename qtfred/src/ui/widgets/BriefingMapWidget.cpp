@@ -6,6 +6,7 @@
 
 #include "BriefingMapWidget.h"
 
+#include <cmath>
 #include <cstdlib>
 
 #include <QKeyEvent>
@@ -413,6 +414,8 @@ void BriefingMapWidget::renderFrame() {
 	auto viewSize = _briefingViewport->getSize();
 	const int w = static_cast<int>(viewSize.first);
 	const int h = static_cast<int>(viewSize.second);
+	_lastRenderWidth = w;
+	_lastRenderHeight = h;
 
 	gr_screen_resize(w, h);
 
@@ -552,21 +555,84 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 	abortHighlightPlayback();
 
 	_lastMousePos = event->pos();
+	_dragStartMousePos = event->position();
 
-	// Hit-test icons: check which icon (if any) is under the cursor
-	// For now, just store the click position for potential drag operations
-	// Full icon hit-testing will be implemented once we can retrieve projected icon positions
-	_draggingIcon = false;
-	_dragIconIndex = -1;
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages || _lastRenderWidth <= 0 || _lastRenderHeight <= 0 ||
+		width() <= 0 || height() <= 0) {
+		_draggingIcon = false;
+		_dragIconIndex = -1;
+		return;
+	}
+
+	const auto mouseX = static_cast<float>(event->position().x()) * (static_cast<float>(_lastRenderWidth) / static_cast<float>(width()));
+	const auto mouseY = static_cast<float>(event->position().y()) * (static_cast<float>(_lastRenderHeight) / static_cast<float>(height()));
+
+	auto& stage = briefPtr->stages[_currentStage];
+	int hitIndex = -1;
+	for (int i = stage.num_icons - 1; i >= 0; --i) {
+		auto& icon = stage.icons[i];
+
+		int iconW = 0, iconH = 0;
+		brief_common_get_icon_dimensions(&iconW, &iconH, &icon);
+		const auto scaledW = static_cast<float>(iconW) * icon.scale_factor;
+		const auto scaledH = static_cast<float>(iconH) * icon.scale_factor;
+		const auto left = static_cast<float>(icon.hold_x);
+		const auto top = static_cast<float>(icon.hold_y);
+
+		if (mouseX >= left && mouseX <= left + scaledW && mouseY >= top && mouseY <= top + scaledH) {
+			hitIndex = i;
+			break;
+		}
+	}
+
+	if (hitIndex >= 0) {
+		_draggingIcon = true;
+		_dragIconIndex = hitIndex;
+		_dragStartIconPos = stage.icons[hitIndex].pos;
+		emit iconSelected(hitIndex);
+	} else {
+		_draggingIcon = false;
+		_dragIconIndex = -1;
+	}
 }
 
 void BriefingMapWidget::mouseMoveEvent(QMouseEvent* event) {
-	if (!_initialized)
+	if (!_initialized || !_draggingIcon || _dragIconIndex < 0 || !(event->buttons() & Qt::LeftButton))
 		return;
 
-	_lastMousePos = event->pos();
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages || _dragIconIndex >= briefPtr->stages[_currentStage].num_icons ||
+		_lastRenderWidth <= 0 || _lastRenderHeight <= 0 || width() <= 0 || height() <= 0) {
+		return;
+	}
 
-	// Icon dragging will be implemented once we have icon screen positions from the renderer
+	const auto scaleX = static_cast<float>(_lastRenderWidth) / static_cast<float>(width());
+	const auto scaleY = static_cast<float>(_lastRenderHeight) / static_cast<float>(height());
+	const auto deltaX = static_cast<float>(event->position().x() - _dragStartMousePos.x()) * scaleX;
+	const auto deltaY = static_cast<float>(event->position().y() - _dragStartMousePos.y()) * scaleY;
+
+	const auto camPos = brief_get_current_cam_pos();
+	const auto camOrient = brief_get_current_cam_orient();
+	const auto& currentIcon = briefPtr->stages[_currentStage].icons[_dragIconIndex];
+
+	vec3d toIcon;
+	vm_vec_sub(&toIcon, &currentIcon.pos, &camPos);
+	const auto depth = vm_vec_dot(&toIcon, &camOrient.vec.fvec);
+	if (depth <= 1.0f) {
+		return;
+	}
+
+	const auto horizontalFov = g3_get_hfov(Proj_fov);
+	const auto worldPerPixelX = (2.0f * depth * std::tan(horizontalFov / 2.0f)) / static_cast<float>(_lastRenderWidth);
+	const auto worldPerPixelY = worldPerPixelX;
+
+	vec3d newPos = _dragStartIconPos;
+	vm_vec_scale_add2(&newPos, &camOrient.vec.rvec, deltaX * worldPerPixelX);
+	vm_vec_scale_add2(&newPos, &camOrient.vec.uvec, -deltaY * worldPerPixelY);
+	_model->setIconPosition(newPos);
+
+	_lastMousePos = event->pos();
 }
 
 void BriefingMapWidget::mouseReleaseEvent(QMouseEvent* event) {
