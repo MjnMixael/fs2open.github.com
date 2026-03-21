@@ -12,6 +12,7 @@
 #include <QtWidgets/QHBoxLayout>
 
 #include "FredApplication.h"
+#include "anim/animplay.h"
 #include "mission/dialogs/BriefingEditorDialogModel.h"
 #include "mission/EditorViewport.h"
 
@@ -126,6 +127,10 @@ void BriefingMapWidget::initBriefingMap() {
 	if (currentCtx) {
 		_window->initializeGL(currentCtx->format());
 	}
+
+	// brief_render_map() calls anim_render_all(), which requires anim_init()
+	// to have initialized the render/free lists.
+	anim_init();
 
 	_diagnosticContext.reset(new QOpenGLContext());
 	if (currentCtx) {
