@@ -1149,8 +1149,6 @@ void brief_render_icon(int stage_num, int icon_num, float frametime, int selecte
 		bx = fl2i(bxf);
 		by = fl2i(byf);
 		bc = fl2i(sx);
-		bi->hold_x = bx;
-		bi->hold_y = by;
 
 		// render highlight anim frame
 		if ( (bi->flags & BI_SHOWHIGHLIGHT) && (bi->flags & BI_HIGHLIGHT) ) {
