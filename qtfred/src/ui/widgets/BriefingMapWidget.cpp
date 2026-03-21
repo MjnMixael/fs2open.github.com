@@ -250,22 +250,10 @@ void BriefingMapWidget::renderFrame() {
 
 	_rendering = true;
 
-	QOpenGLContext* context = nullptr;
-	if (_diagnosticContext) {
-		if (!_diagnosticContext->makeCurrent(_window)) {
-			if (!_loggedMakeCurrentFailure) {
-				mprintf(("BriefingMapWidget: dedicated context makeCurrent(target surface) failed.\n"));
-				_loggedMakeCurrentFailure = true;
-			}
-			_rendering = false;
-			return;
-		}
-		context = _diagnosticContext.get();
-	} else {
-		// Fallback path: bind through graphics pipeline context switching
-		gr_use_viewport(_briefingViewport.get());
-		context = QOpenGLContext::currentContext();
-	}
+	// Render briefing content through the normal graphics pipeline so gr_flip()
+	// performs any required FBO resolve/blit before presenting.
+	gr_use_viewport(_briefingViewport.get());
+	auto* context = QOpenGLContext::currentContext();
 
 	if (context == nullptr) {
 		if (!_loggedNoContext) {
@@ -330,7 +318,7 @@ void BriefingMapWidget::renderFrame() {
 	Briefing = savedBriefing;
 	bscreen = savedBscreen;
 
-	context->swapBuffers(_window);
+	gr_flip();
 	_debugFrameCounter++;
 
 	if ((_debugFrameCounter % 120) == 0) {
