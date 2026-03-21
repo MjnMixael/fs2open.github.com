@@ -252,10 +252,49 @@ void BriefingMapWidget::applyStageTransition(int stageNum, int transitionTime) {
 
 	auto& stage = briefPtr->stages[stageNum];
 	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, transitionTime, stageNum);
+	// Editor behavior: start highlights as soon as the camera reaches its target
+	// instead of waiting for briefing text wipe timing.
+	Brief_text_wipe_time_elapsed = BRIEF_TEXT_WIPE_TIME + 1.0f;
 	brief_reset_icons(stageNum);
 	_currentStage = stageNum;
+	_suppressHighlights = false;
 
 	Briefing = savedBriefing;
+}
+
+void BriefingMapWidget::stopStageHighlights() {
+	if (Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+		return;
+	}
+
+	auto& stage = Briefing->stages[_currentStage];
+	for (int i = 0; i < stage.num_icons; ++i) {
+		stage.icons[i].flags &= ~BI_SHOWHIGHLIGHT;
+	}
+}
+
+void BriefingMapWidget::updateEditorHighlightPlayback() {
+	if (_suppressHighlights || Briefing == nullptr || _currentStage < 0 || _currentStage >= Briefing->num_stages) {
+		return;
+	}
+
+	auto& stage = Briefing->stages[_currentStage];
+	for (int i = 0; i < stage.num_icons; ++i) {
+		auto& icon = stage.icons[i];
+		if ((icon.flags & BI_SHOWHIGHLIGHT) == 0 || (icon.flags & BI_HIGHLIGHT) == 0) {
+			continue;
+		}
+
+		auto& anim = icon.highlight_anim;
+		if (anim.first_frame < 0 || anim.total_time <= 0.0f || anim.time_elapsed >= anim.total_time) {
+			icon.flags &= ~BI_SHOWHIGHLIGHT;
+		}
+	}
+}
+
+void BriefingMapWidget::abortHighlightPlayback() {
+	_suppressHighlights = true;
+	stopStageHighlights();
 }
 
 void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int height) {
@@ -397,10 +436,12 @@ void BriefingMapWidget::renderFrame() {
 				stage.camera_time));
 		}
 
-		const float frametime = 0.033f;
+			const float frametime = 0.033f;
 			Brief_text_wipe_time_elapsed += frametime;
 			brief_camera_move(frametime, _currentStage);
+			updateEditorHighlightPlayback();
 			brief_render_map(_currentStage, frametime);
+			updateEditorHighlightPlayback();
 			maybeRenderCutTransition(frametime, w, h);
 			cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
 		}
@@ -473,6 +514,8 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 	}
 
 	if (moved) {
+		abortHighlightPlayback();
+
 		// Apply instant camera move by setting new stage with time=0
 		auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
 		if (briefPtr && _currentStage >= 0 && _currentStage < briefPtr->num_stages) {
@@ -495,6 +538,8 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 	if (!_initialized || event->button() != Qt::LeftButton)
 		return;
+
+	abortHighlightPlayback();
 
 	_lastMousePos = event->pos();
 

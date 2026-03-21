@@ -81,6 +81,9 @@ private:
 	void applyStageTransition(int stageNum, int transitionTime);
 	void maybeRenderCutTransition(float frametime, int width, int height);
 	bool shouldUseCutTransition(int fromStage, int toStage, const briefing* briefPtr) const;
+	void stopStageHighlights();
+	void updateEditorHighlightPlayback();
+	void abortHighlightPlayback();
 
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;
@@ -111,6 +114,7 @@ private:
 	bool _cutFadeIn = false;
 	int _cutFadeFrame = 0;
 	int _pendingCutStage = -1;
+	bool _suppressHighlights = false;
 };
 
 } // namespace fso::fred
