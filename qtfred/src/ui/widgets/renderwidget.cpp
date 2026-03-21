@@ -25,6 +25,7 @@
 #include "osapi/osapi.h"
 #include "io/key.h"
 #include "io/timer.h"
+#include "render/3d.h"
 #include "starfield/starfield.h"
 
 #include "mission/Editor.h"
@@ -226,7 +227,10 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	_markingBox.y1 = event->y();
 	_viewport->Dup_drag = 0;
 
-	_viewport->on_object = _viewport->select_object(event->x(), event->y());
+	// select_object() uses g3_point_to_vec(), which requires an active 3D frame.
+	// During UI teardown (e.g. closing the briefing editor), queued input events
+	// can arrive while no frame is active.
+	_viewport->on_object = g3_in_frame() ? _viewport->select_object(event->x(), event->y()) : -1;
 	_viewport->button_down = 1;
 
 	_viewport->drag_rotate_save_backup();
@@ -313,7 +317,9 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 
 	// RT point
 
-	_viewport->Cursor_over = _viewport->select_object(event->x(), event->y());
+	// select_object() uses g3_point_to_vec(), which requires an active 3D frame.
+	// Guard against transient event delivery while no frame is active.
+	_viewport->Cursor_over = g3_in_frame() ? _viewport->select_object(event->x(), event->y()) : -1;
 	updateCursor();
 
 	if (!event->buttons().testFlag(Qt::LeftButton)) {
