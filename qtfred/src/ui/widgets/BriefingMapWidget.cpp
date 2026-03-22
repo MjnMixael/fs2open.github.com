@@ -26,6 +26,32 @@
 
 namespace fso::fred {
 
+namespace {
+void ensure_highlight_anim_loaded(brief_icon& icon) {
+	if ((icon.flags & BI_HIGHLIGHT) == 0) {
+		return;
+	}
+
+	auto* iconInfo = brief_get_icon_info(&icon);
+	if (iconInfo == nullptr) {
+		return;
+	}
+
+	auto& sourceAnim = iconInfo->highlight;
+	if (sourceAnim.filename[0] == '\0' || !stricmp(NOX("none"), sourceAnim.filename)) {
+		return;
+	}
+
+	if (sourceAnim.first_frame < 0) {
+		hud_anim_load(&sourceAnim);
+	}
+
+	if (sourceAnim.first_frame >= 0) {
+		icon.highlight_anim = sourceAnim;
+	}
+}
+}
+
 // ---- BriefingMapWindow ----
 
 BriefingMapWindow::BriefingMapWindow(QWidget* parentWidget)
@@ -277,6 +303,13 @@ void BriefingMapWidget::updateEditorHighlightPlayback() {
 
 		auto& anim = icon.highlight_anim;
 		if (anim.first_frame < 0) {
+			ensure_highlight_anim_loaded(icon);
+			if (icon.highlight_anim.first_frame < 0) {
+				continue;
+			}
+		}
+
+		if (anim.filename[0] == '\0') {
 			continue;
 		}
 
@@ -380,6 +413,7 @@ void BriefingMapWidget::notifyIconVisualsChanged() {
 	if (selected >= 0 && selected < stage.num_icons) {
 		auto& icon = stage.icons[selected];
 		if (icon.flags & BI_HIGHLIGHT) {
+			ensure_highlight_anim_loaded(icon);
 			icon.flags |= BI_SHOWHIGHLIGHT;
 		} else {
 			icon.flags &= ~BI_SHOWHIGHLIGHT;
