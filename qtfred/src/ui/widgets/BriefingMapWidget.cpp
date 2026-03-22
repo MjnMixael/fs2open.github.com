@@ -414,7 +414,9 @@ void BriefingMapWidget::notifyIconVisualsChanged() {
 		auto& icon = stage.icons[selected];
 		if (icon.flags & BI_HIGHLIGHT) {
 			ensure_highlight_anim_loaded(icon);
+			icon.highlight_anim.time_elapsed = 0.0f;
 			icon.flags |= BI_SHOWHIGHLIGHT;
+			brief_cancel_pending_highlight_anims();
 		} else {
 			icon.flags &= ~BI_SHOWHIGHLIGHT;
 		}
