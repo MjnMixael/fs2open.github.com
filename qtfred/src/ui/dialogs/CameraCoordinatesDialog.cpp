@@ -12,7 +12,6 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QLabel>
-#include <QApplication>
 
 namespace fso::fred::dialogs {
 
@@ -25,12 +24,8 @@ CameraCoordinatesDialog::CameraCoordinatesDialog(QWidget* parent,
 	setAttribute(Qt::WA_DeleteOnClose);
 	setupUi();
 
-	// Connect to the map widget's camera changed signal for live updates
-	connect(_mapWidget, &fso::fred::BriefingMapWidget::cameraChanged,
-		this, &CameraCoordinatesDialog::onCameraChanged);
-
-	// Initialize with current values
-	onCameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
+	// Initialize with current camera values once.
+	populateFromCurrentCamera();
 }
 
 void CameraCoordinatesDialog::setupUi()
@@ -85,18 +80,10 @@ void CameraCoordinatesDialog::setupUi()
 	setMinimumWidth(280);
 }
 
-void CameraCoordinatesDialog::onCameraChanged(vec3d pos, matrix orient)
+void CameraCoordinatesDialog::populateFromCurrentCamera()
 {
-	auto* focused = QApplication::focusWidget();
-	const bool editingCameraInputs = focused != nullptr &&
-		((_posX == focused) || _posX->isAncestorOf(focused) || (_posY == focused) || _posY->isAncestorOf(focused) ||
-			(_posZ == focused) || _posZ->isAncestorOf(focused) || (_heading == focused) || _heading->isAncestorOf(focused) ||
-			(_pitch == focused) || _pitch->isAncestorOf(focused) || (_bank == focused) || _bank->isAncestorOf(focused));
-	if (editingCameraInputs) {
-		return;
-	}
-
-	_updatingFromCamera = true;
+	const auto pos = brief_get_current_cam_pos();
+	const auto orient = brief_get_current_cam_orient();
 
 	_posX->setValue(pos.xyz.x);
 	_posY->setValue(pos.xyz.y);
@@ -109,8 +96,6 @@ void CameraCoordinatesDialog::onCameraChanged(vec3d pos, matrix orient)
 	_heading->setValue(fl_degrees(a.h));
 	_pitch->setValue(fl_degrees(a.p));
 	_bank->setValue(fl_degrees(a.b));
-
-	_updatingFromCamera = false;
 }
 
 void CameraCoordinatesDialog::onApplyClicked()
@@ -128,11 +113,7 @@ void CameraCoordinatesDialog::onApplyClicked()
 	matrix orient;
 	vm_angles_2_matrix(&orient, &a);
 
-	// Update the model's stage camera
-	_model->setCameraPosition(pos);
-	_model->setCameraOrientation(orient);
-
-	// Apply to the map widget immediately for the current stage.
+	// Apply through the same path used by keyboard camera controls.
 	_mapWidget->applyCameraToCurrentStage(pos, orient);
 }
 

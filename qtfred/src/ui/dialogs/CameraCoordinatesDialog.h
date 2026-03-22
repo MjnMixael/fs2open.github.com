@@ -21,14 +21,12 @@ public:
 		BriefingEditorDialogModel* model,
 		fso::fred::BriefingMapWidget* mapWidget);
 
-public slots:
-	void onCameraChanged(vec3d pos, matrix orient);
-
 private slots:
 	void onApplyClicked();
 
 private:
 	void setupUi();
+	void populateFromCurrentCamera();
 
 	BriefingEditorDialogModel* _model;
 	fso::fred::BriefingMapWidget* _mapWidget;
@@ -40,7 +38,6 @@ private:
 	QDoubleSpinBox* _pitch;
 	QDoubleSpinBox* _bank;
 
-	bool _updatingFromCamera = false;
 };
 
 } // namespace fso::fred::dialogs
