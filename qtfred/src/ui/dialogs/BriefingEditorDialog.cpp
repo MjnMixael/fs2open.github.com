@@ -10,7 +10,6 @@
 #include "mission/missiongrid.h"
 #include "math/fvi.h"
 #include "mod_table/mod_table.h"
-#include "ui/ControlBindings.h"
 
 #include <globalincs/linklist.h>
 #include <ui/util/SignalBlockers.h>
@@ -23,6 +22,8 @@
 #include <QVBoxLayout>
 
 namespace fso::fred::dialogs {
+
+int BriefingEditorDialog::_openDialogCount = 0;
 
 namespace {
 vec3d getNewIconPlacement()
@@ -49,7 +50,7 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 	: QDialog(parent), SexpTreeEditorInterface(flagset<TreeFlags>()), ui(new Ui::BriefingEditorDialog()),
 	  _model(new BriefingEditorDialogModel(this, viewport)), _viewport(viewport)
 {
-	ControlBindings::instance().pushInputSuppression();
+	++_openDialogCount;
 
 	this->setFocus();
 	ui->setupUi(this);
@@ -67,7 +68,11 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 }
 
 BriefingEditorDialog::~BriefingEditorDialog() {
-	ControlBindings::instance().popInputSuppression();
+	_openDialogCount = std::max(0, _openDialogCount - 1);
+}
+
+bool BriefingEditorDialog::isAnyDialogOpen() {
+	return _openDialogCount > 0;
 }
 
 void BriefingEditorDialog::accept()

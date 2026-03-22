@@ -125,24 +125,6 @@ bool ControlBindings::takeTriggered(ControlAction action) {
 	return true;
 }
 
-void ControlBindings::pushInputSuppression() {
-	++_inputSuppressionDepth;
-	_pressedActions.clear();
-	_triggeredActions.clear();
-}
-
-void ControlBindings::popInputSuppression() {
-	if (_inputSuppressionDepth > 0) {
-		--_inputSuppressionDepth;
-	}
-	_pressedActions.clear();
-	_triggeredActions.clear();
-}
-
-bool ControlBindings::isInputSuppressed() const {
-	return _inputSuppressionDepth > 0;
-}
-
 int ControlBindings::normalizedCode(const QKeySequence& sequence) {
 	if (sequence.isEmpty()) {
 		return 0;
