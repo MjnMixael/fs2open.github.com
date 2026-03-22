@@ -13,6 +13,7 @@
 #include <ui/util/SignalBlockers.h>
 
 #include <QCloseEvent>
+#include <QCheckBox>
 #include <QFileDialog>
 #include <QVBoxLayout>
 
@@ -45,6 +46,11 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 {
 	this->setFocus();
 	ui->setupUi(this);
+	connect(ui->changeLocallyCheckBox,
+		&QCheckBox::toggled,
+		this,
+		&BriefingEditorDialog::on_changeLocallyCheckBox_toggled,
+		Qt::UniqueConnection);
 
 	setupMapWidget();
 	initializeUi();
