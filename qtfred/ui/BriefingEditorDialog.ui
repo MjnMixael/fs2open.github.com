@@ -254,16 +254,6 @@
                <string>Move Speed: 1.0x</string>
               </property>
              </item>
-             <item>
-              <property name="text">
-               <string>Move Speed: 2.0x</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Move Speed: 4.0x</string>
-              </property>
-             </item>
              <property name="currentIndex">
               <number>2</number>
              </property>
@@ -284,16 +274,6 @@
              <item>
               <property name="text">
                <string>Rotate Speed: 1.0x</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Rotate Speed: 2.0x</string>
-              </property>
-             </item>
-             <item>
-              <property name="text">
-               <string>Rotate Speed: 4.0x</string>
               </property>
              </item>
              <property name="currentIndex">

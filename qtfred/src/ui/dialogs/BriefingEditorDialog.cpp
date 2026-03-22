@@ -26,16 +26,24 @@ namespace fso::fred::dialogs {
 int BriefingEditorDialog::_openDialogCount = 0;
 
 namespace {
-float speedScaleForIndex(int index) {
+float movementSpeedScaleForIndex(int index) {
+	switch (index) {
+	case 0:
+		return 4.0f;
+	case 1:
+		return 8.0f;
+	case 2:
+	default:
+		return 16.0f;
+	}
+}
+
+float rotationSpeedScaleForIndex(int index) {
 	switch (index) {
 	case 0:
 		return 0.25f;
 	case 1:
 		return 0.5f;
-	case 3:
-		return 2.0f;
-	case 4:
-		return 4.0f;
 	case 2:
 	default:
 		return 1.0f;
@@ -464,14 +472,14 @@ void BriefingEditorDialog::on_cameraTransitionTimeSpinBox_valueChanged(int arg1)
 void BriefingEditorDialog::on_movementSpeedComboBox_currentIndexChanged(int index)
 {
 	if (_mapWidget != nullptr) {
-		_mapWidget->setMovementSpeedScale(speedScaleForIndex(index));
+		_mapWidget->setMovementSpeedScale(movementSpeedScaleForIndex(index));
 	}
 }
 
 void BriefingEditorDialog::on_rotationSpeedComboBox_currentIndexChanged(int index)
 {
 	if (_mapWidget != nullptr) {
-		_mapWidget->setRotationSpeedScale(speedScaleForIndex(index));
+		_mapWidget->setRotationSpeedScale(rotationSpeedScaleForIndex(index));
 	}
 }
 
