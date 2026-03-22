@@ -324,12 +324,24 @@ void BriefingMapWidget::drawSelectedIconOutline() {
 	const auto top = icon.y - 2;
 	const auto right = left + icon.w + 4;
 	const auto bottom = top + icon.h + 4;
+	const auto width = right - left;
+	const auto height = bottom - top;
+	const auto cornerLen = std::max(3, std::min(width, height) / 4);
 
-	gr_set_color(0, 255, 0);
-	gr_line(left, top, right, top);
-	gr_line(left, bottom, right, bottom);
-	gr_line(left, top, left, bottom);
-	gr_line(right, top, right, bottom);
+	gr_set_color(255, 255, 255);
+
+	// Top-left
+	gr_line(left, top, left + cornerLen, top);
+	gr_line(left, top, left, top + cornerLen);
+	// Top-right
+	gr_line(right - cornerLen, top, right, top);
+	gr_line(right, top, right, top + cornerLen);
+	// Bottom-left
+	gr_line(left, bottom, left + cornerLen, bottom);
+	gr_line(left, bottom - cornerLen, left, bottom);
+	// Bottom-right
+	gr_line(right - cornerLen, bottom, right, bottom);
+	gr_line(right, bottom - cornerLen, right, bottom);
 }
 
 void BriefingMapWidget::maybeRenderCutTransition(float frametime, int width, int height) {

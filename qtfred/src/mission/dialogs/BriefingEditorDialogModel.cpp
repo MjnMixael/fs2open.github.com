@@ -7,6 +7,7 @@
 #include "iff_defs/iff_defs.h"
 #include "ship/ship.h"
 #include "object/object.h"
+#include "mission/missiongrid.h"
 
 #include <QMessageBox>
 
@@ -174,8 +175,12 @@ void BriefingEditorDialogModel::addStage()
 		// First stage in an empty briefing
 		dst.text = "<Text here>";
 		dst.voice[0] = '\0';
-		dst.camera_pos = vmd_zero_vector;
-		dst.camera_orient = vmd_identity_matrix;
+		dst.camera_pos = (The_grid != nullptr) ? The_grid->center : vmd_zero_vector;
+		dst.camera_pos.xyz.y += 1000.0f;
+
+		vec3d down = {{0.0f, -1.0f, 0.0f}};
+		vec3d up_hint = {{0.0f, 0.0f, 1.0f}};
+		vm_vector_2_matrix_norm(&dst.camera_orient, &down, &up_hint, nullptr);
 		dst.camera_time = 500;
 		dst.flags = 0;
 		dst.draw_grid = true;
@@ -1260,15 +1265,6 @@ void BriefingEditorDialogModel::makeIconFromShip(int shipIndex)
 	int teamIndex = shipp.team;
 
 	makeIcon(SCP_string(shipp.ship_name), iconType, teamIndex, shipp.ship_info_index);
-
-	// Set the icon's position to the ship's world position
-	auto& briefing_ref = _wipBriefings[_currentTeam];
-	if (briefing_ref.num_stages > 0 && _currentStage >= 0 && _currentStage < briefing_ref.num_stages) {
-		auto& s = briefing_ref.stages[_currentStage];
-		if (_currentIcon >= 0 && _currentIcon < s.num_icons) {
-			s.icons[_currentIcon].pos = Objects[shipp.objnum].pos;
-		}
-	}
 }
 
 SCP_vector<BriefingEditorDialogModel::WingTreeEntry> BriefingEditorDialogModel::getWingShipTree()
