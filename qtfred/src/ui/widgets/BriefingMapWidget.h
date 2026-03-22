@@ -87,6 +87,7 @@ private:
 	void updateEditorHighlightPlayback();
 	void abortHighlightPlayback();
 	void drawSelectedIconOutline();
+	void applyCameraPoseLikeKeyboardControls(const vec3d& camPos, const matrix& camOrient, bool updateModel);
 
 	BriefingMapWindow* _window = nullptr;
 	QTimer* _renderTimer = nullptr;

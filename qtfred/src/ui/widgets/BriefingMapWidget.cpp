@@ -404,23 +404,33 @@ void BriefingMapWidget::notifyIconVisualsChanged() {
 }
 
 void BriefingMapWidget::applyCameraToCurrentStage(const vec3d& pos, const matrix& orient) {
+	applyCameraPoseLikeKeyboardControls(pos, orient, false);
+}
+
+void BriefingMapWidget::applyCameraPoseLikeKeyboardControls(const vec3d& camPos, const matrix& camOrient, bool updateModel) {
 	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
 	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
 		return;
 	}
 
+	abortHighlightPlayback();
+
 	auto& stage = briefPtr->stages[_currentStage];
-	stage.camera_pos = pos;
-	stage.camera_orient = orient;
+	stage.camera_pos = camPos;
+	stage.camera_orient = camOrient;
 
 	briefing* savedBriefing = Briefing;
 	Briefing = briefPtr;
 	brief_reset_last_new_stage();
-	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, 0, _currentStage);
+	brief_set_new_stage(&camPos, &camOrient, 0, _currentStage);
 	Briefing = savedBriefing;
 
-	abortHighlightPlayback();
-	cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
+	if (updateModel) {
+		_model->setCameraPosition(camPos);
+		_model->setCameraOrientation(camOrient);
+	}
+
+	cameraChanged(camPos, camOrient);
 }
 
 QWindow* BriefingMapWidget::getRenderWindow() const {
@@ -630,24 +640,7 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 	}
 
 	if (moved) {
-		abortHighlightPlayback();
-
-		// Apply instant camera move by setting new stage with time=0
-		auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
-		if (briefPtr && _currentStage >= 0 && _currentStage < briefPtr->num_stages) {
-			auto& stage = briefPtr->stages[_currentStage];
-			stage.camera_pos = camPos;
-
-			briefing* savedBriefing = Briefing;
-			Briefing = briefPtr;
-			// Reset Last_new_stage so brief_set_new_stage accepts the same stage
-			brief_reset_last_new_stage();
-			brief_set_new_stage(&camPos, &camOrient, 0, _currentStage);
-			Briefing = savedBriefing;
-
-			_model->setCameraPosition(camPos);
-			cameraChanged(camPos, camOrient);
-		}
+		applyCameraPoseLikeKeyboardControls(camPos, camOrient, true);
 	}
 }
 
