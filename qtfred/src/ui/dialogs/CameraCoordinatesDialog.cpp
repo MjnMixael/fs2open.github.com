@@ -43,6 +43,7 @@ void CameraCoordinatesDialog::setupUi()
 		sb->setRange(min, max);
 		sb->setDecimals(decimals);
 		sb->setSingleStep(10.0);
+		sb->setKeyboardTracking(false);
 		return sb;
 	};
 
@@ -77,12 +78,12 @@ void CameraCoordinatesDialog::setupUi()
 
 	connect(okBtn, &QPushButton::clicked, this, &QDialog::accept);
 	connect(cancelBtn, &QPushButton::clicked, this, &CameraCoordinatesDialog::onCancelClicked);
-	connect(_posX, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
-	connect(_posY, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
-	connect(_posZ, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
-	connect(_heading, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
-	connect(_pitch, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
-	connect(_bank, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_posX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_posY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_posZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_heading, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_pitch, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_bank, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
 
 	setLayout(mainLayout);
 	setMinimumWidth(280);
