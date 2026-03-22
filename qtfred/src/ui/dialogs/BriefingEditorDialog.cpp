@@ -23,6 +23,8 @@
 
 namespace fso::fred::dialogs {
 
+int BriefingEditorDialog::_openDialogCount = 0;
+
 namespace {
 vec3d getNewIconPlacement()
 {
@@ -48,6 +50,8 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 	: QDialog(parent), SexpTreeEditorInterface(flagset<TreeFlags>()), ui(new Ui::BriefingEditorDialog()),
 	  _model(new BriefingEditorDialogModel(this, viewport)), _viewport(viewport)
 {
+	++_openDialogCount;
+
 	this->setFocus();
 	ui->setupUi(this);
 	connect(ui->changeLocallyCheckBox,
@@ -63,7 +67,13 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 	resize(QDialog::sizeHint());
 }
 
-BriefingEditorDialog::~BriefingEditorDialog() = default;
+BriefingEditorDialog::~BriefingEditorDialog() {
+	_openDialogCount = std::max(0, _openDialogCount - 1);
+}
+
+bool BriefingEditorDialog::isAnyDialogOpen() {
+	return _openDialogCount > 0;
+}
 
 void BriefingEditorDialog::accept()
 {
@@ -105,6 +115,7 @@ void BriefingEditorDialog::setupMapWidget()
 	ui->leftPaneLayout->removeWidget(ui->mapView);
 	ui->mapView->hide();
 	ui->leftPaneLayout->insertWidget(idx, _mapWidget);
+	_mapWidget->setFocus(Qt::OtherFocusReason);
 
 	// Wire icon selection from the map widget to our UI update
 	connect(_mapWidget, &fso::fred::BriefingMapWidget::iconSelected, this, [this](int index) {

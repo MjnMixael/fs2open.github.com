@@ -11,6 +11,7 @@
 #include "object.h"
 
 #include "EditorViewport.h"
+#include "ui/dialogs/BriefingEditorDialog.h"
 #include <math/fvi.h>
 #include <jumpnode/jumpnode.h>
 #include <prop/prop.h>
@@ -276,6 +277,9 @@ void EditorViewport::move_mouse(int btn, int mdx, int mdy) {
 ///////////////////////////////////////////////////
 void EditorViewport::process_system_keys() {
 	auto& bindings = ControlBindings::instance();
+	if (dialogs::BriefingEditorDialog::isAnyDialogOpen()) {
+		return;
+	}
 	if (bindings.takeTriggered(ControlAction::ToggleSelectionLock)) {
 		Selection_lock = !Selection_lock;
 	}
@@ -284,6 +288,9 @@ void EditorViewport::process_system_keys() {
 
 void EditorViewport::process_controls(vec3d* pos, matrix* orient, float frametime, int mode) {
 	static std::unique_ptr<io::spacemouse::SpaceMouse> spacemouse = io::spacemouse::SpaceMouse::searchSpaceMice(0);
+	if (dialogs::BriefingEditorDialog::isAnyDialogOpen()) {
+		return;
+	}
 
 	if (Flying_controls_mode) {
 		memset(&view_controls, 0, sizeof(control_info));
