@@ -21,7 +21,6 @@ CameraCoordinatesDialog::CameraCoordinatesDialog(QWidget* parent,
 	: QDialog(parent), _model(model), _mapWidget(mapWidget)
 {
 	setWindowTitle("Camera Coordinates");
-	setAttribute(Qt::WA_DeleteOnClose);
 	setupUi();
 
 	// Initialize with current camera values once.
