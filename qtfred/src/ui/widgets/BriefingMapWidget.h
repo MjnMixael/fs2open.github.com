@@ -63,6 +63,7 @@ public:
 	void setStage(int stageNum);
 	int getCurrentStage() const;
 	void notifyIconVisualsChanged();
+	void applyCameraToCurrentStage(const vec3d& pos, const matrix& orient);
 
 	QWindow* getRenderWindow() const;
 

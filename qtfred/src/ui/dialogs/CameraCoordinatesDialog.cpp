@@ -80,12 +80,6 @@ void CameraCoordinatesDialog::setupUi()
 
 	connect(applyBtn, &QPushButton::clicked, this, &CameraCoordinatesDialog::onApplyClicked);
 	connect(closeBtn, &QPushButton::clicked, this, &QDialog::close);
-	connect(_posX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
-	connect(_posY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
-	connect(_posZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
-	connect(_heading, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
-	connect(_pitch, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
-	connect(_bank, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
 
 	setLayout(mainLayout);
 	setMinimumWidth(280);
@@ -119,13 +113,6 @@ void CameraCoordinatesDialog::onCameraChanged(vec3d pos, matrix orient)
 	_updatingFromCamera = false;
 }
 
-void CameraCoordinatesDialog::onSpinBoxChanged()
-{
-	if (_updatingFromCamera)
-		return;
-	onApplyClicked();
-}
-
 void CameraCoordinatesDialog::onApplyClicked()
 {
 	vec3d pos;
@@ -145,8 +132,8 @@ void CameraCoordinatesDialog::onApplyClicked()
 	_model->setCameraPosition(pos);
 	_model->setCameraOrientation(orient);
 
-	// Apply to the map widget with instant transition
-	_mapWidget->setStage(_model->getCurrentStage());
+	// Apply to the map widget immediately for the current stage.
+	_mapWidget->applyCameraToCurrentStage(pos, orient);
 }
 
 } // namespace fso::fred::dialogs
