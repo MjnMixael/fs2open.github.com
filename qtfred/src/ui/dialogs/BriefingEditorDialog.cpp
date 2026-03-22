@@ -10,6 +10,7 @@
 #include "mission/missiongrid.h"
 #include "math/fvi.h"
 #include "mod_table/mod_table.h"
+#include "ui/ControlBindings.h"
 
 #include <globalincs/linklist.h>
 #include <ui/util/SignalBlockers.h>
@@ -48,6 +49,8 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 	: QDialog(parent), SexpTreeEditorInterface(flagset<TreeFlags>()), ui(new Ui::BriefingEditorDialog()),
 	  _model(new BriefingEditorDialogModel(this, viewport)), _viewport(viewport)
 {
+	ControlBindings::instance().pushInputSuppression();
+
 	this->setFocus();
 	ui->setupUi(this);
 	connect(ui->changeLocallyCheckBox,
@@ -63,7 +66,9 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 	resize(QDialog::sizeHint());
 }
 
-BriefingEditorDialog::~BriefingEditorDialog() = default;
+BriefingEditorDialog::~BriefingEditorDialog() {
+	ControlBindings::instance().popInputSuppression();
+}
 
 void BriefingEditorDialog::accept()
 {

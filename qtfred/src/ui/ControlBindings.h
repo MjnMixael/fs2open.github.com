@@ -49,6 +49,9 @@ class ControlBindings {
 
 	bool isPressed(ControlAction action) const;
 	bool takeTriggered(ControlAction action);
+	void pushInputSuppression();
+	void popInputSuppression();
+	bool isInputSuppressed() const;
 
  private:
 	ControlBindings();
@@ -62,6 +65,7 @@ class ControlBindings {
 	std::unordered_map<int, std::vector<ControlAction>> _actionByCode;
 	std::set<ControlAction> _pressedActions;
 	std::set<ControlAction> _triggeredActions;
+	int _inputSuppressionDepth = 0;
 };
 
 } // namespace fso::fred
