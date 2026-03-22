@@ -12,6 +12,7 @@
 #include <QPushButton>
 #include <QGroupBox>
 #include <QLabel>
+#include <QApplication>
 
 namespace fso::fred::dialogs {
 
@@ -79,6 +80,12 @@ void CameraCoordinatesDialog::setupUi()
 
 	connect(applyBtn, &QPushButton::clicked, this, &CameraCoordinatesDialog::onApplyClicked);
 	connect(closeBtn, &QPushButton::clicked, this, &QDialog::close);
+	connect(_posX, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
+	connect(_posY, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
+	connect(_posZ, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
+	connect(_heading, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
+	connect(_pitch, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
+	connect(_bank, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, &CameraCoordinatesDialog::onSpinBoxChanged);
 
 	setLayout(mainLayout);
 	setMinimumWidth(280);
@@ -86,6 +93,15 @@ void CameraCoordinatesDialog::setupUi()
 
 void CameraCoordinatesDialog::onCameraChanged(vec3d pos, matrix orient)
 {
+	auto* focused = QApplication::focusWidget();
+	const bool editingCameraInputs = focused != nullptr &&
+		((_posX == focused) || _posX->isAncestorOf(focused) || (_posY == focused) || _posY->isAncestorOf(focused) ||
+			(_posZ == focused) || _posZ->isAncestorOf(focused) || (_heading == focused) || _heading->isAncestorOf(focused) ||
+			(_pitch == focused) || _pitch->isAncestorOf(focused) || (_bank == focused) || _bank->isAncestorOf(focused));
+	if (editingCameraInputs) {
+		return;
+	}
+
 	_updatingFromCamera = true;
 
 	_posX->setValue(pos.xyz.x);
