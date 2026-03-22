@@ -422,7 +422,7 @@ void BriefingMapWidget::applyCameraPoseLikeKeyboardControls(const vec3d& camPos,
 	briefing* savedBriefing = Briefing;
 	Briefing = briefPtr;
 	brief_reset_last_new_stage();
-	brief_set_new_stage(&camPos, &camOrient, 0, _currentStage);
+	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, 0, _currentStage);
 	Briefing = savedBriefing;
 
 	if (updateModel) {
