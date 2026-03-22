@@ -105,6 +105,7 @@ void BriefingEditorDialog::setupMapWidget()
 	ui->leftPaneLayout->removeWidget(ui->mapView);
 	ui->mapView->hide();
 	ui->leftPaneLayout->insertWidget(idx, _mapWidget);
+	_mapWidget->setFocus(Qt::OtherFocusReason);
 
 	// Wire icon selection from the map widget to our UI update
 	connect(_mapWidget, &fso::fred::BriefingMapWidget::iconSelected, this, [this](int index) {
