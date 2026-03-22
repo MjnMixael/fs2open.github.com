@@ -375,7 +375,11 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->formulaTreeView->setEnabled(stage_exists);
 	
 	const bool icon_selected = stage_exists && !_model->getLineSelection().empty();
+	const bool single_icon_selected = stage_exists && _model->getLineSelection().size() == 1;
 	ui->currentIconInfoGroupBox->setEnabled(icon_selected);
+	ui->iconCoordinatesButton->setEnabled(single_icon_selected);
+	ui->deleteIconButton->setEnabled(single_icon_selected);
+	ui->propagateIconButton->setEnabled(single_icon_selected);
 	/*ui->iconIdSpinBox->setEnabled(icon_selected);
 	ui->iconLabelLineEdit->setEnabled(icon_selected);
 	ui->iconCloseupLabelLineEdit->setEnabled(icon_selected);
@@ -595,6 +599,8 @@ void BriefingEditorDialog::on_scaleDoubleSpinBox_valueChanged(double arg1)
 void BriefingEditorDialog::on_drawLinesCheckBox_toggled(bool checked)
 {
 	if (ui->drawLinesCheckBox->checkState() == Qt::PartiallyChecked) {
+		_model->applyDrawLines(true);
+		ui->drawLinesCheckBox->setCheckState(Qt::Checked);
 		return;
 	}
 	_model->applyDrawLines(checked); // Assumes multi selection has already been set by the renderer
