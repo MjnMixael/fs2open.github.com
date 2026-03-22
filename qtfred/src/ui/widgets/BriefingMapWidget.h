@@ -9,6 +9,7 @@
 #include "ui/QtGraphicsOperations.h"
 
 class briefing;
+struct brief_icon;
 
 namespace fso::fred::dialogs {
 class BriefingEditorDialogModel;
@@ -83,9 +84,9 @@ private:
 	void applyStageTransition(int stageNum, int transitionTime);
 	void maybeRenderCutTransition(float frametime, int width, int height);
 	bool shouldUseCutTransition(int fromStage, int toStage, const briefing* briefPtr) const;
-	void stopStageHighlights();
-	void updateEditorHighlightPlayback();
-	void abortHighlightPlayback();
+	bool ensureIconHighlightAnimLoaded(brief_icon& icon);
+	void syncStageHighlightState();
+	void syncHighlightPositionsToIcons();
 	void drawSelectedIconOutline();
 	void applyCameraPoseLikeKeyboardControls(const vec3d& camPos, const matrix& camOrient, bool updateModel);
 
@@ -122,7 +123,6 @@ private:
 	bool _cutFadeIn = false;
 	int _cutFadeFrame = 0;
 	int _pendingCutStage = -1;
-	bool _suppressHighlights = false;
 };
 
 } // namespace fso::fred
