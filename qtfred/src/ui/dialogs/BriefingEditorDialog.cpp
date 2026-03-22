@@ -342,7 +342,6 @@ void BriefingEditorDialog::on_pasteViewButton_clicked()
 	_model->pasteClipboardViewToStage();
 	const auto stageView = _model->getStageView();
 	_mapWidget->applyCameraToCurrentStage(stageView.first, stageView.second);
-	captureResetCameraForCurrentStage();
 }
 
 void BriefingEditorDialog::on_copyToOtherTeamsButton_clicked()
