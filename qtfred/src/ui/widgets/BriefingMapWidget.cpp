@@ -403,6 +403,26 @@ void BriefingMapWidget::notifyIconVisualsChanged() {
 	Briefing = savedBriefing;
 }
 
+void BriefingMapWidget::applyCameraToCurrentStage(const vec3d& pos, const matrix& orient) {
+	auto* briefPtr = _model->getWipBriefingPtr(_model->getCurrentTeam());
+	if (!briefPtr || _currentStage < 0 || _currentStage >= briefPtr->num_stages) {
+		return;
+	}
+
+	auto& stage = briefPtr->stages[_currentStage];
+	stage.camera_pos = pos;
+	stage.camera_orient = orient;
+
+	briefing* savedBriefing = Briefing;
+	Briefing = briefPtr;
+	brief_reset_last_new_stage();
+	brief_set_new_stage(&stage.camera_pos, &stage.camera_orient, 0, _currentStage);
+	Briefing = savedBriefing;
+
+	abortHighlightPlayback();
+	cameraChanged(brief_get_current_cam_pos(), brief_get_current_cam_orient());
+}
+
 QWindow* BriefingMapWidget::getRenderWindow() const {
 	return _window;
 }
