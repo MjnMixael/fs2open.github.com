@@ -41,12 +41,12 @@ float movementSpeedScaleForIndex(int index) {
 float rotationSpeedScaleForIndex(int index) {
 	switch (index) {
 	case 0:
-		return 0.25f;
+		return 0.0625f;
 	case 1:
-		return 0.5f;
+		return 0.125f;
 	case 2:
 	default:
-		return 1.0f;
+		return 0.25f;
 	}
 }
 
@@ -305,6 +305,8 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->pasteViewButton->setEnabled(stage_exists);
 	ui->cameraCoordinatesButton->setEnabled(stage_exists);
 	ui->cameraTransitionTimeSpinBox->setEnabled(stage_exists);
+	ui->movementSpeedComboBox->setEnabled(stage_exists);
+	ui->rotationSpeedComboBox->setEnabled(stage_exists);
 	ui->cutToNextStageCheckBox->setEnabled(stage_exists);
 	ui->cutToPrevStageCheckBox->setEnabled(stage_exists);
 	ui->disableGridCheckBox->setEnabled(stage_exists);
