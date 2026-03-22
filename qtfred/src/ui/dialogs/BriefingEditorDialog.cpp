@@ -225,7 +225,22 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->formulaTreeView->setEnabled(stage_exists);
 	
 	const bool icon_selected = stage_exists && _model->getCurrentIconIndex() >= 0;
-	ui->currentIconInfoGroupBox->setEnabled(icon_selected);
+	ui->currentIconInfoGroupBox->setEnabled(stage_exists);
+	ui->makeIconButton->setEnabled(stage_exists);
+	ui->makeIconFromShipButton->setEnabled(stage_exists);
+	ui->iconIdSpinBox->setEnabled(icon_selected);
+	ui->iconLabelLineEdit->setEnabled(icon_selected);
+	ui->iconCloseupLabelLineEdit->setEnabled(icon_selected);
+	ui->iconImageComboBox->setEnabled(icon_selected);
+	ui->iconShipTypeComboBox->setEnabled(icon_selected);
+	ui->iconTeamComboBox->setEnabled(icon_selected);
+	ui->scaleDoubleSpinBox->setEnabled(icon_selected);
+	ui->highlightCheckBox->setEnabled(icon_selected);
+	ui->flipIconCheckBox->setEnabled(icon_selected);
+	ui->useWingIconCheckBox->setEnabled(icon_selected);
+	ui->useCargoIconCheckBox->setEnabled(icon_selected);
+	ui->deleteIconButton->setEnabled(icon_selected);
+	ui->propagateIconButton->setEnabled(icon_selected);
 
 }
 
