@@ -406,7 +406,7 @@ void BriefingEditorDialog::on_useCargoIconCheckBox_toggled(bool checked)
 
 void BriefingEditorDialog::on_makeIconButton_clicked()
 {
-	_model->makeIcon("New Icon", 0, 0, -1);
+	_model->makeIcon("New Icon", 0, 0, 0);
 	_model->setIconPosition(getNewIconPlacement());
 	updateUi();
 }
