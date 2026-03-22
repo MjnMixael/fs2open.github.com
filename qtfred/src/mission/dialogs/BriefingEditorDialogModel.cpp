@@ -183,7 +183,7 @@ void BriefingEditorDialogModel::addStage()
 		a.p = fl_radians(90.0f);
 		a.b = fl_radians(90.0f);
 		vm_angles_2_matrix(&dst.camera_orient, &a);
-		dst.camera_time = 500;
+		dst.camera_time = 0;
 		dst.flags = 0;
 		dst.draw_grid = true;
 		dst.grid_color = Color_briefing_grid;
