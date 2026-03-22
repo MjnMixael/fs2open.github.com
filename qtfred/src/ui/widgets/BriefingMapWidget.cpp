@@ -272,9 +272,20 @@ void BriefingMapWidget::syncStageHighlightState() {
 	for (int i = 0; i < stage.num_icons; ++i) {
 		auto& icon = stage.icons[i];
 		if ((icon.flags & BI_HIGHLIGHT) != 0) {
+			auto& anim = icon.highlight_anim;
+			const bool hasHighlightAnim = anim.filename[0] != '\0' && anim.num_frames > 0;
+			if (!hasHighlightAnim) {
+				// New or copied briefing icons may still have default-initialized highlight_anim
+				// values (empty filename/zero frames). Keep highlight rendering disabled for
+				// those cases to avoid attempting to load an empty animation name.
+				icon.flags &= ~BI_SHOWHIGHLIGHT;
+				anim.first_frame = -1;
+				continue;
+			}
+
 			if ((icon.flags & BI_SHOWHIGHLIGHT) == 0) {
 				icon.flags |= BI_SHOWHIGHLIGHT;
-				icon.highlight_anim.time_elapsed = 0.0f;
+				anim.time_elapsed = 0.0f;
 			}
 		} else {
 			icon.flags &= ~BI_SHOWHIGHLIGHT;
@@ -295,7 +306,7 @@ void BriefingMapWidget::syncHighlightPositionsToIcons() {
 		}
 
 		auto& anim = icon.highlight_anim;
-		if (anim.first_frame < 0) {
+		if (anim.first_frame < 0 || anim.num_frames <= 0 || anim.filename[0] == '\0') {
 			continue;
 		}
 
