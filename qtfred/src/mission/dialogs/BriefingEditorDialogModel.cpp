@@ -1073,24 +1073,22 @@ void BriefingEditorDialogModel::propagateCurrentIconForward()
 	for (int st = _currentStage + 1; st < briefing.num_stages; ++st) {
 		auto& s = briefing.stages[st];
 
-		// Find all icons with the same id in this later stage
-		int foundCount = 0;
+		// Match original FRED behavior: only add missing icons to later stages.
+		// If an icon with the same id already exists in a stage, leave it unchanged.
+		bool found = false;
 		for (int i = 0; i < s.num_icons; ++i) {
 			if (s.icons[i].id == src.id) {
-				// Overwrite the existing icon with current state
-				s.icons[i] = src;
-				++foundCount;
-				changed = true;
+				found = true;
+				break;
 			}
 		}
 
-		// If none found, append a copy (if capacity allows)
-		if (foundCount == 0 && s.num_icons < MAX_STAGE_ICONS) {
+		if (!found && s.num_icons < MAX_STAGE_ICONS) {
 			s.icons[s.num_icons] = src;
 			s.num_icons++;
 			changed = true;
 		}
-		// If at capacity and missing, we silently skip that stage.
+		// If at capacity and missing, skip this stage.
 	}
 
 	if (changed)
