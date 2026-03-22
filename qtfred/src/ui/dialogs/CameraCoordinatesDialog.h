@@ -22,11 +22,13 @@ public:
 		fso::fred::BriefingMapWidget* mapWidget);
 
 private slots:
-	void onApplyClicked();
+	void onSpinBoxEditingFinished();
+	void onCancelClicked();
 
 private:
 	void setupUi();
 	void populateFromCurrentCamera();
+	void applyCurrentInputsToCamera();
 
 	BriefingEditorDialogModel* _model;
 	fso::fred::BriefingMapWidget* _mapWidget;
@@ -37,6 +39,10 @@ private:
 	QDoubleSpinBox* _heading;
 	QDoubleSpinBox* _pitch;
 	QDoubleSpinBox* _bank;
+
+	vec3d _initialCameraPos {};
+	matrix _initialCameraOrient {};
+	bool _populatingUi = false;
 
 };
 

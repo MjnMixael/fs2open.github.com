@@ -25,6 +25,8 @@ CameraCoordinatesDialog::CameraCoordinatesDialog(QWidget* parent,
 	setupUi();
 
 	// Initialize with current camera values once.
+	_initialCameraPos = brief_get_current_cam_pos();
+	_initialCameraOrient = brief_get_current_cam_orient();
 	populateFromCurrentCamera();
 }
 
@@ -66,15 +68,21 @@ void CameraCoordinatesDialog::setupUi()
 
 	// Apply button
 	auto* buttonLayout = new QHBoxLayout();
-	auto* applyBtn = new QPushButton("Apply", this);
-	auto* closeBtn = new QPushButton("Close", this);
+	auto* okBtn = new QPushButton("OK", this);
+	auto* cancelBtn = new QPushButton("Cancel", this);
 	buttonLayout->addStretch();
-	buttonLayout->addWidget(applyBtn);
-	buttonLayout->addWidget(closeBtn);
+	buttonLayout->addWidget(okBtn);
+	buttonLayout->addWidget(cancelBtn);
 	mainLayout->addLayout(buttonLayout);
 
-	connect(applyBtn, &QPushButton::clicked, this, &CameraCoordinatesDialog::onApplyClicked);
-	connect(closeBtn, &QPushButton::clicked, this, &QDialog::close);
+	connect(okBtn, &QPushButton::clicked, this, &QDialog::accept);
+	connect(cancelBtn, &QPushButton::clicked, this, &CameraCoordinatesDialog::onCancelClicked);
+	connect(_posX, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_posY, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_posZ, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_heading, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_pitch, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
+	connect(_bank, &QDoubleSpinBox::editingFinished, this, &CameraCoordinatesDialog::onSpinBoxEditingFinished);
 
 	setLayout(mainLayout);
 	setMinimumWidth(280);
@@ -82,8 +90,9 @@ void CameraCoordinatesDialog::setupUi()
 
 void CameraCoordinatesDialog::populateFromCurrentCamera()
 {
-	const auto pos = brief_get_current_cam_pos();
-	const auto orient = brief_get_current_cam_orient();
+	_populatingUi = true;
+	const auto pos = _initialCameraPos;
+	const auto orient = _initialCameraOrient;
 
 	_posX->setValue(pos.xyz.x);
 	_posY->setValue(pos.xyz.y);
@@ -96,9 +105,10 @@ void CameraCoordinatesDialog::populateFromCurrentCamera()
 	_heading->setValue(fl_degrees(a.h));
 	_pitch->setValue(fl_degrees(a.p));
 	_bank->setValue(fl_degrees(a.b));
+	_populatingUi = false;
 }
 
-void CameraCoordinatesDialog::onApplyClicked()
+void CameraCoordinatesDialog::applyCurrentInputsToCamera()
 {
 	vec3d pos;
 	pos.xyz.x = static_cast<float>(_posX->value());
@@ -115,6 +125,21 @@ void CameraCoordinatesDialog::onApplyClicked()
 
 	// Apply through the same path used by keyboard camera controls.
 	_mapWidget->applyCameraToCurrentStage(pos, orient);
+}
+
+void CameraCoordinatesDialog::onSpinBoxEditingFinished()
+{
+	if (_populatingUi) {
+		return;
+	}
+
+	applyCurrentInputsToCamera();
+}
+
+void CameraCoordinatesDialog::onCancelClicked()
+{
+	_mapWidget->applyCameraToCurrentStage(_initialCameraPos, _initialCameraOrient);
+	reject();
 }
 
 } // namespace fso::fred::dialogs
