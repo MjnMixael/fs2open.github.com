@@ -26,6 +26,22 @@ namespace fso::fred::dialogs {
 int BriefingEditorDialog::_openDialogCount = 0;
 
 namespace {
+float speedScaleForIndex(int index) {
+	switch (index) {
+	case 0:
+		return 0.25f;
+	case 1:
+		return 0.5f;
+	case 3:
+		return 2.0f;
+	case 4:
+		return 4.0f;
+	case 2:
+	default:
+		return 1.0f;
+	}
+}
+
 vec3d getNewIconPlacement()
 {
 	const vec3d camPos = brief_get_current_cam_pos();
@@ -205,6 +221,9 @@ void BriefingEditorDialog::initializeUi()
 
 	// Initialize the formula tree editor
 	ui->formulaTreeView->initializeEditor(_viewport->editor, this);
+
+	on_movementSpeedComboBox_currentIndexChanged(ui->movementSpeedComboBox->currentIndex());
+	on_rotationSpeedComboBox_currentIndexChanged(ui->rotationSpeedComboBox->currentIndex());
 }
 
 void BriefingEditorDialog::updateUi()
@@ -440,6 +459,20 @@ void BriefingEditorDialog::captureResetCameraForCurrentStage()
 void BriefingEditorDialog::on_cameraTransitionTimeSpinBox_valueChanged(int arg1)
 {
 	_model->setCameraTransitionTime(arg1);
+}
+
+void BriefingEditorDialog::on_movementSpeedComboBox_currentIndexChanged(int index)
+{
+	if (_mapWidget != nullptr) {
+		_mapWidget->setMovementSpeedScale(speedScaleForIndex(index));
+	}
+}
+
+void BriefingEditorDialog::on_rotationSpeedComboBox_currentIndexChanged(int index)
+{
+	if (_mapWidget != nullptr) {
+		_mapWidget->setRotationSpeedScale(speedScaleForIndex(index));
+	}
 }
 
 void BriefingEditorDialog::on_cutToNextStageCheckBox_toggled(bool checked)
