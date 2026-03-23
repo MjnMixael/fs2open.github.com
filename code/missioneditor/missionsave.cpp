@@ -2489,20 +2489,6 @@ int Fred_mission_save::save_mission_info()
 	required_string_fred("$end_multi_text");
 	parse_comments(0);
 
-	if (save_config.save_format != MissionFormat::RETAIL && !The_mission.fred_layers.empty()) {
-		if (optional_string_fred("$Layers:")) {
-			parse_comments();
-		} else {
-			fout("\n$Layers:");
-		}
-
-		fout(" (");
-		for (const auto& layerName : The_mission.fred_layers) {
-			fout(" \"%s\"", layerName.c_str());
-		}
-		fout(" )");
-	}
-
 #if 0
 	if (optional_string_fred("+Game Type:"))
 		parse_comments(2);

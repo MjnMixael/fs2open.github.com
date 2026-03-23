@@ -119,7 +119,6 @@ int Num_unknown_ship_classes;
 int Num_unknown_prop_classes;
 int Num_unknown_weapon_classes;
 int Num_unknown_loadout_classes;
-bool Mission_layers_explicitly_defined = false;
 
 ushort Current_file_checksum = 0;
 ushort Last_file_checksum = 0;
@@ -767,27 +766,6 @@ void parse_mission_info(mission *pm, bool basic = false)
 
 	if (optional_string("$Mission Desc:"))
 		stuff_string(pm->mission_desc, F_MULTITEXT, MISSION_DESC_LENGTH);		
-
-	if (optional_string("$Layers:")) {
-		SCP_vector<SCP_string> parsedLayers;
-		stuff_string_list(parsedLayers);
-		Mission_layers_explicitly_defined = true;
-
-		pm->fred_layers.clear();
-		pm->fred_layers.emplace_back("Default");
-		for (const auto& layerName : parsedLayers) {
-			if (layerName.empty() || stricmp(layerName.c_str(), "Default") == 0) {
-				continue;
-			}
-
-			if (mission_has_layer_name(pm, layerName)) {
-				Warning(LOCATION, "Duplicate layer name '%s' in mission layer list. Ignoring duplicate entry.", layerName.c_str());
-				continue;
-			}
-
-			pm->fred_layers.push_back(layerName);
-		}
-	}
 
 	if ( optional_string("+Game Type:")) {
 		// HACK HACK HACK -- stuff_string was changed to *not* ignore carriage returns.  Since the
@@ -3808,14 +3786,10 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 	if (optional_string("+Layer:")) {
 		stuff_string(p_objp->fred_layer, F_NAME);
 		if (!mission_has_layer_name(&The_mission, p_objp->fred_layer)) {
-			if (!Mission_layers_explicitly_defined) {
-				The_mission.fred_layers.push_back(p_objp->fred_layer);
-			} else {
-				Warning(LOCATION,
-					"Ship '%s' references unknown layer '%s'. Assigning to Default layer.",
-					p_objp->name,
-					p_objp->fred_layer.c_str());
+			if (p_objp->fred_layer.empty()) {
 				p_objp->fred_layer = "Default";
+			} else {
+				The_mission.fred_layers.push_back(p_objp->fred_layer);
 			}
 		}
 	}
@@ -5231,14 +5205,10 @@ void parse_prop(mission* /*pm*/)
 	if (optional_string("+Layer:")) {
 		stuff_string(p.fred_layer, F_NAME);
 		if (!mission_has_layer_name(&The_mission, p.fred_layer)) {
-			if (!Mission_layers_explicitly_defined) {
-				The_mission.fred_layers.push_back(p.fred_layer);
-			} else {
-				Warning(LOCATION,
-					"Prop '%s' references unknown layer '%s'. Assigning to Default layer.",
-					p.name,
-					p.fred_layer.c_str());
+			if (p.fred_layer.empty()) {
 				p.fred_layer = "Default";
+			} else {
+				The_mission.fred_layers.push_back(p.fred_layer);
 			}
 		}
 	}
@@ -7167,7 +7137,6 @@ void mission::Reset()
 	custom_strings.clear();
 	fred_layers.clear();
 	fred_layers.emplace_back("Default");
-	Mission_layers_explicitly_defined = false;
 }
 
 void support_ship_info::reset()
