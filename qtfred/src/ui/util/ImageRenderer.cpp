@@ -1,7 +1,6 @@
 #include "ImageRenderer.h"
 
-#include <bmpman/bmpman.h> // bm_load, bm_get_info, bm_has_alpha_channel
-#include <graphics/2d.h>
+#include <bmpman/bmpman.h> // bm_load, bm_get_info, bm_lock
 
 #include <QtGlobal>
 
@@ -38,29 +37,15 @@ bool loadHandleToQImage(int bmHandle, QImage& outImage, QString* outError)
 		return false;
 	}
 
-	const bool hasAlpha = bm_has_alpha_channel(bmHandle);
-	const int channels = hasAlpha ? 4 : 3;
-	const size_t bufSize = static_cast<size_t>(w) * static_cast<size_t>(h) * channels;
-
-	// Allocate a temporary buffer and let the renderer copy pixels into it
-	QByteArray buffer;
-	buffer.resize(static_cast<int>(bufSize));
-	if (buffer.size() != static_cast<int>(bufSize)) {
-		setError(outError, QStringLiteral("Out of memory allocating pixel buffer."));
+	auto* bmp = bm_lock(bmHandle, 32, BMP_TEX_XPARENT);
+	if (bmp == nullptr || bmp->data == 0) {
+		setError(outError, QStringLiteral("bm_lock failed."));
 		return false;
 	}
-
-	// Copy RGBA pixels into the buffer
-	gr_get_bitmap_from_texture(buffer.data(), bmHandle);
-
-	// Build QImage by copying to own memory
-	if (hasAlpha) {
-		QImage tmp(reinterpret_cast<const uchar*>(buffer.constData()), w, h, QImage::Format_RGBA8888);
-		outImage = tmp.copy();
-	} else {
-		QImage tmp(reinterpret_cast<const uchar*>(buffer.constData()), w, h, QImage::Format_RGB888);
-		outImage = tmp.copy();
-	}
+	const int bytesPerLine = static_cast<int>(bmp->rowsize);
+	QImage tmp(reinterpret_cast<const uchar*>(bmp->data), w, h, bytesPerLine, QImage::Format_ARGB32);
+	outImage = tmp.copy();
+	bm_unlock(bmHandle);
 
 	if (outImage.isNull()) {
 		setError(outError, QStringLiteral("Failed to construct QImage."));
