@@ -171,40 +171,40 @@ HeadAnimationPickerDialog::PreviewData* HeadAnimationPickerDialog::ensurePreview
 		return &it.value();
 	}
 
-	PreviewData data;
+	PreviewData previewInfo;
 	if (!displayName.compare("<None>", Qt::CaseInsensitive) || displayName.trimmed().isEmpty()) {
-		_cache.insert(displayName, data);
+		_cache.insert(displayName, previewInfo);
 		return &_cache[displayName];
 	}
 
-	data.sourceName = findPreviewSource(displayName);
-	if (data.sourceName.isEmpty()) {
-		_cache.insert(displayName, data);
+	previewInfo.sourceName = findPreviewSource(displayName);
+	if (previewInfo.sourceName.isEmpty()) {
+		_cache.insert(displayName, previewInfo);
 		return &_cache[displayName];
 	}
 
 	int nframes = 1;
 	int fps = 15;
-	const auto sourceName = data.sourceName.toStdString();
-	int firstFrame = bm_load_animation(sourceName.c_str(), &nframes, &fps);
+	const auto sourceName = previewInfo.sourceName.toUtf8();
+	int firstFrame = bm_load_animation(sourceName.constData(), &nframes, &fps);
 	if (firstFrame < 0) {
-		firstFrame = bm_load(sourceName.c_str());
+		firstFrame = bm_load(sourceName.constData());
 		nframes = 1;
 		fps = 15;
 	}
 
 	if (firstFrame >= 0) {
-		data.firstFrame = firstFrame;
-		data.numFrames = std::max(1, nframes);
-		data.fps = std::max(1, fps);
+		previewInfo.firstFrame = firstFrame;
+		previewInfo.numFrames = std::max(1, nframes);
+		previewInfo.fps = std::max(1, fps);
 
 		QImage img;
 		if (loadHandleToQImage(firstFrame, img, nullptr) && !img.isNull()) {
-			data.firstPixmap = QPixmap::fromImage(img);
+			previewInfo.firstPixmap = QPixmap::fromImage(img);
 		}
 	}
 
-	_cache.insert(displayName, data);
+	_cache.insert(displayName, previewInfo);
 	return &_cache[displayName];
 }
 
@@ -223,17 +223,17 @@ void HeadAnimationPickerDialog::updatePreview()
 		return;
 	}
 
-	auto* data = ensurePreview(displayName);
-	if (!data || data->firstFrame < 0) {
+	auto* preview = ensurePreview(displayName);
+	if (!preview || preview->firstFrame < 0) {
 		_previewLabel->setPixmap(QPixmap());
 		_previewLabel->setText("No preview available");
 		return;
 	}
 
-	int handle = data->firstFrame;
-	if (data->numFrames > 1) {
-		const int frameOffset = bm_get_anim_frame(data->firstFrame, _previewElapsedSeconds, 0.0f, true);
-		handle = data->firstFrame + frameOffset;
+	int handle = preview->firstFrame;
+	if (preview->numFrames > 1) {
+		const int frameOffset = bm_get_anim_frame(preview->firstFrame, _previewElapsedSeconds, 0.0f, true);
+		handle = preview->firstFrame + frameOffset;
 	}
 
 	QImage frame;
@@ -290,8 +290,8 @@ QString HeadAnimationPickerDialog::findPreviewSource(const QString& displayName)
 			continue;
 		}
 
-		const auto candidateName = candidate.toStdString();
-		if (bm_load_animation(candidateName.c_str()) >= 0 || bm_load(candidateName.c_str()) >= 0) {
+		const auto candidateName = candidate.toUtf8();
+		if (bm_load_animation(candidateName.constData()) >= 0 || bm_load(candidateName.constData()) >= 0) {
 			return candidate;
 		}
 	}
