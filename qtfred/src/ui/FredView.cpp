@@ -42,6 +42,7 @@
 #include <ui/dialogs/MusicPlayerDialog.h>
 #include <ui/dialogs/RelativeCoordinatesDialog.h>
 #include <ui/dialogs/ControlsDialog.h>
+#include <ui/dialogs/LayerManagerDialog.h>
 #include <ui/ControlBindings.h>
 #include <iff_defs/iff_defs.h>
 
@@ -509,6 +510,12 @@ void FredView::showContextMenu(const QPoint& globalPos) {
 	auto obj = _viewport->select_object(localPos.x(), localPos.y());
 	if (obj >= 0) {
 		fred->selectObject(obj);
+		const auto objType = Objects[obj].type;
+		const bool canAssignLayer = (objType == OBJ_SHIP) || (objType == OBJ_START) || (objType == OBJ_PROP);
+		_moveToLayerMenu->menuAction()->setVisible(canAssignLayer);
+		if (canAssignLayer) {
+			populateMoveToLayerMenu(obj);
+		}
 
 		// There is an object under the cursor
 		SCP_string objName;
@@ -551,6 +558,9 @@ void FredView::initializePopupMenus() {
 	_viewPopup->addMenu(_controlModeMenu);
 	_viewPopup->addMenu(ui->menuViewpoint);
 	_viewPopup->addSeparator();
+	auto* manageLayersViewAction = new QAction(tr("Manage Layers..."), _viewPopup);
+	connect(manageLayersViewAction, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
+	_viewPopup->addAction(manageLayersViewAction);
 
 	// Begin construction edit popup
 	_editPopup = new QMenu(this);
@@ -565,6 +575,50 @@ void FredView::initializePopupMenus() {
 
 	_editWingAction = new QAction(tr("Edit Wing"), _editPopup);
 	_editPopup->addAction(_editWingAction);
+	_editPopup->addSeparator();
+	_moveToLayerMenu = new QMenu(tr("Move to Layer"), _editPopup);
+	_editPopup->addMenu(_moveToLayerMenu);
+	_manageLayersAction = new QAction(tr("Manage Layers..."), _editPopup);
+	connect(_manageLayersAction, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
+	_editPopup->addAction(_manageLayersAction);
+}
+
+void FredView::populateMoveToLayerMenu(int targetObject) {
+	_moveToLayerMenu->clear();
+
+	const auto layerNames = _viewport->getLayerNames();
+	for (const auto& layerName : layerNames) {
+		bool visible = true;
+		_viewport->getLayerVisibility(layerName, &visible);
+
+		auto* layerAction = new QAction(QString::fromStdString(layerName), _moveToLayerMenu);
+		layerAction->setCheckable(true);
+		layerAction->setChecked(_viewport->getObjectLayerName(targetObject) == layerName);
+		layerAction->setEnabled(visible);
+
+		connect(layerAction, &QAction::triggered, this, [this, layerName, targetObject]() {
+			SCP_string error;
+			if (Objects[targetObject].flags[Object::Object_Flags::Marked] && fred->getNumMarked() > 1) {
+				_viewport->moveMarkedObjectsToLayer(layerName, &error);
+			} else {
+				_viewport->moveObjectToLayer(targetObject, layerName, &error);
+			}
+
+			if (!error.empty()) {
+				showButtonDialog(DialogType::Error, "Layer Error", error);
+			}
+		});
+		_moveToLayerMenu->addAction(layerAction);
+	}
+
+	_moveToLayerMenu->addSeparator();
+	auto* manageAction = _moveToLayerMenu->addAction(tr("Manage Layers..."));
+	connect(manageAction, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
+}
+
+void FredView::openLayerManagerDialog() {
+	dialogs::LayerManagerDialog dialog(_viewport, this);
+	dialog.exec();
 }
 
 void FredView::onUpdateConstrains() {

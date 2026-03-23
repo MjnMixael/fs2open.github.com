@@ -1032,6 +1032,9 @@ void FredRenderer::render_models(int cur_object_index,
 	enable_htl();
 
 	auto render_function = [&](object* objp) {
+		if (!_viewport->isObjectVisibleInLayer(objp)) {
+			return;
+		}
 		this->render_one_model_htl(objp,
 								   cur_object_index,
 								   Bg_bitmap_dialog);
