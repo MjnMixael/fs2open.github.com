@@ -67,8 +67,6 @@ class EditorViewport {
 
 	void initialSetup();
 
-	static const char* DefaultLayerName;
-
 	SCP_vector<SCP_string> _layerNames;
 	SCP_vector<bool> _layerVisibility;
 	std::unordered_map<int, size_t> _objectLayers;
@@ -77,6 +75,8 @@ class EditorViewport {
 	size_t getObjectLayerIndex(int objectIndex) const;
 	bool isLayerVisible(size_t layerIndex) const;
  public:
+	static const char* DefaultLayerName;
+
 	enum {
 		DUP_DRAG_OF_WING = 2
 	};

@@ -604,10 +604,10 @@ void FredView::populateMoveToLayerMenu(int targetObject) {
 				_viewport->moveObjectToLayer(targetObject, layerName, &error);
 			}
 
-			if (!error.empty()) {
-				showButtonDialog(DialogType::Error, "Layer Error", error);
-			}
-		});
+				if (!error.empty()) {
+					showButtonDialog(DialogType::Error, "Layer Error", error, { DialogButton::Ok });
+				}
+			});
 		_moveToLayerMenu->addAction(layerAction);
 	}
 
