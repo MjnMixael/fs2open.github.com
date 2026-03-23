@@ -483,6 +483,9 @@ void FredRenderer::display_ship_info(int cur_object_index) {
 		if (objp->flags[Object::Object_Flags::Hidden]) {
 			render = 0;
 		}
+		if (!_viewport->isObjectVisibleInLayer(objp)) {
+			render = 0;
+		}
 
 		g3_rotate_vertex(&v, &objp->pos);
 		if (!(v.codes & CC_BEHIND) && render) {
@@ -555,6 +558,9 @@ void FredRenderer::display_active_ship_subsystem(subsys_to_render& Render_subsys
 	if (cur_object_index != -1) {
 		if (Objects[cur_object_index].type == OBJ_SHIP) {
 			object* objp = &Objects[cur_object_index];
+			if (!_viewport->isObjectVisibleInLayer(objp)) {
+				return;
+			}
 
 			// if this option is checked, we want to render info for all subsystems, not just the ones we select with K and Shift-K
 			if (view().Highlight_selectable_subsys) {
@@ -1154,7 +1160,7 @@ void FredRenderer::render_frame(int cur_object_index,
 	display_active_ship_subsystem(Render_subsys, cur_object_index);
 	render_active_rect(box_marking, marking_box);
 
-	if (query_valid_object(_viewport->Cursor_over)) { // display a tool-tip like infobox
+	if (query_valid_object(_viewport->Cursor_over) && _viewport->isObjectVisibleInLayer(&Objects[_viewport->Cursor_over])) { // display a tool-tip like infobox
 		pos = Objects[_viewport->Cursor_over].pos;
 		inst = Objects[_viewport->Cursor_over].instance;
 		if ((Objects[_viewport->Cursor_over].type == OBJ_SHIP) || (Objects[_viewport->Cursor_over].type == OBJ_START)) {
