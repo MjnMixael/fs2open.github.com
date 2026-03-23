@@ -1228,6 +1228,13 @@ void FredRenderer::render_frame(int cur_object_index,
 	gr_set_color_fast(&colour_white);
 	gr_string(gr_screen.max_w - w - 2, 2, buf);
 
+	const auto hiddenLayerCount = _viewport->getHiddenLayerCount();
+	if (hiddenLayerCount > 0) {
+		gr_set_color(255, 0, 0);
+		sprintf(buf, "%d Layers Hidden", hiddenLayerCount);
+		gr_string(8, 8, buf);
+	}
+
 	g3_end_frame(); // ** Accounted for
 	render_compass();
 

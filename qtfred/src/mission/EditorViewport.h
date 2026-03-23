@@ -104,6 +104,8 @@ class EditorViewport {
 	bool deleteLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
 	bool setLayerVisibility(const SCP_string& name, bool visible, SCP_string* errorMessage = nullptr);
 	bool getLayerVisibility(const SCP_string& name, bool* visible, SCP_string* errorMessage = nullptr) const;
+	void showAllLayers();
+	int getHiddenLayerCount() const;
 
 	SCP_string getObjectLayerName(int objectIndex) const;
 	bool moveObjectToLayer(int objectIndex, const SCP_string& layerName, SCP_string* errorMessage = nullptr);

@@ -109,6 +109,20 @@ FredView::FredView(QWidget* parent) : QMainWindow(parent), ui(new Ui::FredView()
 		controlsDialog.exec();
 	});
 	ui->menuSeetings->insertAction(ui->actionAdjust_Grid, controlsAction);
+
+	auto* manageLayersToolbarAction = new QAction(tr("Manage Layers"), this);
+	manageLayersToolbarAction->setToolTip(tr("Manage View Layers"));
+	connect(manageLayersToolbarAction, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
+	ui->toolBar->addAction(manageLayersToolbarAction);
+
+	auto* unhideLayersToolbarAction = new QAction(tr("Unhide Layers"), this);
+	unhideLayersToolbarAction->setToolTip(tr("Show all view layers"));
+	connect(unhideLayersToolbarAction, &QAction::triggered, this, [this]() {
+		if (_viewport != nullptr) {
+			_viewport->showAllLayers();
+		}
+	});
+	ui->toolBar->addAction(unhideLayersToolbarAction);
 }
 
 FredView::~FredView() {
@@ -578,9 +592,6 @@ void FredView::initializePopupMenus() {
 	_editPopup->addSeparator();
 	_moveToLayerMenu = new QMenu(tr("Move to Layer"), _editPopup);
 	_editPopup->addMenu(_moveToLayerMenu);
-	_manageLayersAction = new QAction(tr("Manage Layers..."), _editPopup);
-	connect(_manageLayersAction, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
-	_editPopup->addAction(_manageLayersAction);
 }
 
 void FredView::populateMoveToLayerMenu(int targetObject) {

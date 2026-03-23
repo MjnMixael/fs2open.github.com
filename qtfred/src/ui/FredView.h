@@ -222,7 +222,6 @@ class FredView: public QMainWindow, public IDialogProvider {
 	QAction* _editOrientPositionAction = nullptr;
 	QAction* _editWingAction = nullptr;
 	QMenu* _moveToLayerMenu = nullptr;
-	QAction* _manageLayersAction = nullptr;
 
 	QMenu* _controlModeMenu = nullptr;
 	QAction* _controlModeCamera = nullptr;

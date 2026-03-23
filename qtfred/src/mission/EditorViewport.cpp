@@ -15,6 +15,7 @@
 #include <jumpnode/jumpnode.h>
 #include <prop/prop.h>
 #include <FredApplication.h>
+#include <algorithm>
 
 namespace {
 
@@ -953,6 +954,17 @@ bool EditorViewport::getLayerVisibility(const SCP_string& name, bool* visible, S
 		*visible = isLayerVisible(layerIndex);
 	}
 	return true;
+}
+
+void EditorViewport::showAllLayers() {
+	for (auto& visible : _layerVisibility) {
+		visible = true;
+	}
+	needsUpdate();
+}
+
+int EditorViewport::getHiddenLayerCount() const {
+	return static_cast<int>(std::count(_layerVisibility.begin(), _layerVisibility.end(), false));
 }
 
 SCP_string EditorViewport::getObjectLayerName(int objectIndex) const {
