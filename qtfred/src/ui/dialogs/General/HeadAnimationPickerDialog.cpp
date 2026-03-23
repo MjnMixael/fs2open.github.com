@@ -185,9 +185,10 @@ HeadAnimationPickerDialog::PreviewData* HeadAnimationPickerDialog::ensurePreview
 
 	int nframes = 1;
 	int fps = 15;
-	int firstFrame = bm_load_animation(data.sourceName.toStdString().c_str(), &nframes, &fps);
+	const auto sourceName = data.sourceName.toStdString();
+	int firstFrame = bm_load_animation(sourceName.c_str(), &nframes, &fps);
 	if (firstFrame < 0) {
-		firstFrame = bm_load(data.sourceName.toStdString().c_str());
+		firstFrame = bm_load(sourceName.c_str());
 		nframes = 1;
 		fps = 15;
 	}
@@ -289,7 +290,8 @@ QString HeadAnimationPickerDialog::findPreviewSource(const QString& displayName)
 			continue;
 		}
 
-		if (bm_load_animation(candidate.toStdString().c_str()) >= 0 || bm_load(candidate.toStdString().c_str()) >= 0) {
+		const auto candidateName = candidate.toStdString();
+		if (bm_load_animation(candidateName.c_str()) >= 0 || bm_load(candidateName.c_str()) >= 0) {
 			return candidate;
 		}
 	}
