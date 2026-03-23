@@ -1231,7 +1231,9 @@ void FredRenderer::render_frame(int cur_object_index,
 	const auto hiddenLayerCount = _viewport->getHiddenLayerCount();
 	if (hiddenLayerCount > 0) {
 		gr_set_color(255, 0, 0);
-		sprintf(buf, "%d Layers Hidden", hiddenLayerCount);
+		sprintf(buf, "%d %s Hidden",
+				hiddenLayerCount,
+				hiddenLayerCount == 1 ? "Layer" : "Layers");
 		gr_string(8, 8, buf);
 	}
 

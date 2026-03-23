@@ -110,19 +110,12 @@ FredView::FredView(QWidget* parent) : QMainWindow(parent), ui(new Ui::FredView()
 	});
 	ui->menuSeetings->insertAction(ui->actionAdjust_Grid, controlsAction);
 
-	auto* manageLayersToolbarAction = new QAction(tr("Manage Layers"), this);
-	manageLayersToolbarAction->setToolTip(tr("Manage View Layers"));
-	connect(manageLayersToolbarAction, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
-	ui->toolBar->addAction(manageLayersToolbarAction);
-
-	auto* unhideLayersToolbarAction = new QAction(tr("Unhide Layers"), this);
-	unhideLayersToolbarAction->setToolTip(tr("Show all view layers"));
-	connect(unhideLayersToolbarAction, &QAction::triggered, this, [this]() {
+	connect(ui->actionManage_Layers, &QAction::triggered, this, [this]() { openLayerManagerDialog(); });
+	connect(ui->actionUnhide_Layers, &QAction::triggered, this, [this]() {
 		if (_viewport != nullptr) {
 			_viewport->showAllLayers();
 		}
 	});
-	ui->toolBar->addAction(unhideLayersToolbarAction);
 }
 
 FredView::~FredView() {
