@@ -38,10 +38,8 @@ bool loadHandleToQImage(int bmHandle, QImage& outImage, QString* outError)
 		return false;
 	}
 
-	// gr_get_bitmap_from_texture writes RGBA pixel data.
-	// Always allocate 4 channels to avoid underruns when bitmap metadata does not
-	// match the texture extraction path (e.g. some animation frames).
-	constexpr int channels = 4;
+	const bool hasAlpha = bm_has_alpha_channel(bmHandle);
+	const int channels = hasAlpha ? 4 : 3;
 	const size_t bufSize = static_cast<size_t>(w) * static_cast<size_t>(h) * channels;
 
 	// Allocate a temporary buffer and let the renderer copy pixels into it
@@ -56,8 +54,13 @@ bool loadHandleToQImage(int bmHandle, QImage& outImage, QString* outError)
 	gr_get_bitmap_from_texture(buffer.data(), bmHandle);
 
 	// Build QImage by copying to own memory
-	QImage tmp(reinterpret_cast<const uchar*>(buffer.constData()), w, h, QImage::Format_RGBA8888);
-	outImage = tmp.copy();
+	if (hasAlpha) {
+		QImage tmp(reinterpret_cast<const uchar*>(buffer.constData()), w, h, QImage::Format_RGBA8888);
+		outImage = tmp.copy();
+	} else {
+		QImage tmp(reinterpret_cast<const uchar*>(buffer.constData()), w, h, QImage::Format_RGB888);
+		outImage = tmp.copy();
+	}
 
 	if (outImage.isNull()) {
 		setError(outError, QStringLiteral("Failed to construct QImage."));

@@ -133,6 +133,11 @@ void HeadAnimationPickerDialog::onTick()
 		return;
 	}
 
+	auto* preview = ensurePreview(_previewingName);
+	if (!preview || preview->numFrames <= 1) {
+		return;
+	}
+
 	_previewElapsedSeconds += 0.033f;
 	updatePreview();
 }
@@ -233,7 +238,9 @@ void HeadAnimationPickerDialog::updatePreview()
 	int handle = preview->firstFrame;
 	if (preview->numFrames > 1) {
 		const int frameOffset = bm_get_anim_frame(preview->firstFrame, _previewElapsedSeconds, 0.0f, true);
-		handle = preview->firstFrame + frameOffset;
+		if (frameOffset >= 0 && frameOffset < preview->numFrames) {
+			handle = preview->firstFrame + frameOffset;
+		}
 	}
 
 	QImage frame;
