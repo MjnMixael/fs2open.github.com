@@ -848,7 +848,7 @@ int EditorViewport::select_object(int cx, int cy) {
 
 size_t EditorViewport::getLayerIndex(const SCP_string& name) const {
 	for (size_t i = 0; i < _layerNames.size(); ++i) {
-		if (_layerNames[i] == name) {
+		if (stricmp(_layerNames[i].c_str(), name.c_str()) == 0) {
 			return i;
 		}
 	}

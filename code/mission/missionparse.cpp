@@ -181,7 +181,9 @@ path_restriction_t Path_restrictions[MAX_PATH_RESTRICTIONS];
 extern int debrief_find_persona_index();
 
 static bool mission_has_layer_name(const mission* pm, const SCP_string& layerName) {
-	return std::find(pm->fred_layers.begin(), pm->fred_layers.end(), layerName) != pm->fred_layers.end();
+	return std::any_of(pm->fred_layers.begin(), pm->fred_layers.end(), [&layerName](const SCP_string& existingLayer) {
+		return stricmp(existingLayer.c_str(), layerName.c_str()) == 0;
+	});
 }
 
 //XSTR:OFF
