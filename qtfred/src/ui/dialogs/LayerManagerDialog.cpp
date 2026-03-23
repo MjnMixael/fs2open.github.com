@@ -74,7 +74,7 @@ void LayerManagerDialog::onLayerItemChanged(QListWidgetItem* item) {
 		return;
 	}
 
-	const auto layerName = item->text().toStdString();
+	const SCP_string layerName = item->text().toUtf8().constData();
 	const auto visible = item->checkState() == Qt::Checked;
 	SCP_string error;
 	if (!_viewport->setLayerVisibility(layerName, visible, &error)) {
@@ -96,7 +96,7 @@ void LayerManagerDialog::onAddLayer() {
 	}
 
 	SCP_string error;
-	if (!_viewport->addLayer(name.toStdString(), &error)) {
+	if (!_viewport->addLayer(name.toUtf8().constData(), &error)) {
 		QMessageBox::warning(this, tr("Layer Error"), QString::fromStdString(error));
 		return;
 	}
@@ -116,7 +116,7 @@ void LayerManagerDialog::onDeleteLayer() {
 		return;
 	}
 
-	const auto layerName = item->text().toStdString();
+	const SCP_string layerName = item->text().toUtf8().constData();
 	if (layerName == EditorViewport::DefaultLayerName) {
 		QMessageBox::warning(this, tr("Layer Error"), tr("The default layer cannot be deleted."));
 		return;
