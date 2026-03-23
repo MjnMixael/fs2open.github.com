@@ -184,12 +184,6 @@ static bool mission_has_layer_name(const mission* pm, const SCP_string& layerNam
 	return std::find(pm->fred_layers.begin(), pm->fred_layers.end(), layerName) != pm->fred_layers.end();
 }
 
-static void normalize_layer_name(SCP_string& layerName) {
-	if (layerName.size() >= 2 && layerName.front() == '"' && layerName.back() == '"') {
-		layerName = layerName.substr(1, layerName.size() - 2);
-	}
-}
-
 //XSTR:OFF
 
 const char *Nebula_filenames[NUM_NEBULAS] = {
@@ -3791,7 +3785,6 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 
 	if (optional_string("+Layer:")) {
 		stuff_string(p_objp->fred_layer, F_NAME);
-		normalize_layer_name(p_objp->fred_layer);
 		if (!mission_has_layer_name(&The_mission, p_objp->fred_layer)) {
 			if (p_objp->fred_layer.empty()) {
 				p_objp->fred_layer = "Default";
@@ -5211,7 +5204,6 @@ void parse_prop(mission* /*pm*/)
 
 	if (optional_string("+Layer:")) {
 		stuff_string(p.fred_layer, F_NAME);
-		normalize_layer_name(p.fred_layer);
 		if (!mission_has_layer_name(&The_mission, p.fred_layer)) {
 			if (p.fred_layer.empty()) {
 				p.fred_layer = "Default";

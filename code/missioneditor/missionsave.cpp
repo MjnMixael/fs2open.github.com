@@ -4065,7 +4065,7 @@ int Fred_mission_save::save_objects()
 			else
 				fout("\n+Layer:");
 
-			fout(" \"%s\"", shipp->fred_layer.c_str());
+			fout(" %s", shipp->fred_layer.c_str());
 		}
 
 		// always write out the score to ensure backwards compatibility. If the score is the same as the value
@@ -5178,7 +5178,7 @@ int Fred_mission_save::save_props()
 					else
 						fout("\n+Layer:");
 
-					fout(" \"%s\"", p->fred_layer.c_str());
+					fout(" %s", p->fred_layer.c_str());
 				}
 
 				fso_comment_pop();
