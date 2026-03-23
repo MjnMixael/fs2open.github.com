@@ -1007,7 +1007,12 @@ void EditorViewport::reloadLayersFromMission() {
 	_layerVisibility.resize(_layerNames.size(), true);
 	syncMissionLayerNames();
 
-	for (auto objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
+	for (int objectIndex = 0; objectIndex < MAX_OBJECTS; ++objectIndex) {
+		auto* objp = &Objects[objectIndex];
+		if (objp->type == OBJ_NONE) {
+			continue;
+		}
+
 		size_t layerIndex = 0;
 		if (objp->type == OBJ_SHIP || objp->type == OBJ_START) {
 			const auto found = getLayerIndex(Ships[objp->instance].fred_layer);
@@ -1020,7 +1025,7 @@ void EditorViewport::reloadLayersFromMission() {
 			}
 		}
 
-		setObjectLayerByIndex(OBJ_INDEX(objp), layerIndex);
+		setObjectLayerByIndex(objectIndex, layerIndex);
 	}
 
 	needsUpdate();
