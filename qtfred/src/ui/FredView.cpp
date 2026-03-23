@@ -281,6 +281,10 @@ bool FredView::saveMissionAs() {
 }
 
 void FredView::on_mission_loaded(const std::string& filepath) {
+	if (_viewport != nullptr) {
+		_viewport->reloadLayersFromMission();
+	}
+
 	QString filename = "Untitled";
 	if (!filepath.empty()) {
 		filename = QFileInfo(QString::fromStdString(filepath)).fileName();

@@ -13,6 +13,7 @@
 #include <cassert>
 #include <cstdarg>
 #include <csetjmp>
+#include <algorithm>
 
 
 #include "ai/aigoals.h"
@@ -178,6 +179,10 @@ int Num_path_restrictions;
 path_restriction_t Path_restrictions[MAX_PATH_RESTRICTIONS];
 
 extern int debrief_find_persona_index();
+
+static bool mission_has_layer_name(const mission* pm, const SCP_string& layerName) {
+	return std::find(pm->fred_layers.begin(), pm->fred_layers.end(), layerName) != pm->fred_layers.end();
+}
 
 //XSTR:OFF
 
@@ -761,6 +766,26 @@ void parse_mission_info(mission *pm, bool basic = false)
 
 	if (optional_string("$Mission Desc:"))
 		stuff_string(pm->mission_desc, F_MULTITEXT, MISSION_DESC_LENGTH);		
+
+	if (optional_string("$Layers:")) {
+		SCP_vector<SCP_string> parsedLayers;
+		stuff_string_list(parsedLayers);
+
+		pm->fred_layers.clear();
+		pm->fred_layers.emplace_back("Default");
+		for (const auto& layerName : parsedLayers) {
+			if (layerName.empty() || stricmp(layerName.c_str(), "Default") == 0) {
+				continue;
+			}
+
+			if (mission_has_layer_name(pm, layerName)) {
+				Warning(LOCATION, "Duplicate layer name '%s' in mission layer list. Ignoring duplicate entry.", layerName.c_str());
+				continue;
+			}
+
+			pm->fred_layers.push_back(layerName);
+		}
+	}
 
 	if ( optional_string("+Game Type:")) {
 		// HACK HACK HACK -- stuff_string was changed to *not* ignore carriage returns.  Since the
@@ -2247,6 +2272,7 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 	}
 
 	shipp->group = p_objp->group;
+	shipp->fred_layer = p_objp->fred_layer;
 	shipp->escort_priority = p_objp->escort_priority;
 	shipp->ship_guardian_threshold = p_objp->ship_guardian_threshold;
 	shipp->use_special_explosion = p_objp->use_special_explosion;
@@ -3777,6 +3803,17 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 	if (optional_string("+Group:"))
 		stuff_int(&p_objp->group);
 
+	if (optional_string("+Layer:")) {
+		stuff_string(p_objp->fred_layer, F_NAME);
+		if (!mission_has_layer_name(&The_mission, p_objp->fred_layer)) {
+			Warning(LOCATION,
+				"Ship '%s' references unknown layer '%s'. Assigning to Default layer.",
+				p_objp->name,
+				p_objp->fred_layer.c_str());
+			p_objp->fred_layer = "Default";
+		}
+	}
+
 	bool table_score = false; 
 	if (optional_string("+Use Table Score:")) {
 		table_score = true; 
@@ -5185,6 +5222,17 @@ void parse_prop(mission* /*pm*/)
 		}
 	}
 
+	if (optional_string("+Layer:")) {
+		stuff_string(p.fred_layer, F_NAME);
+		if (!mission_has_layer_name(&The_mission, p.fred_layer)) {
+			Warning(LOCATION,
+				"Prop '%s' references unknown layer '%s'. Assigning to Default layer.",
+				p.name,
+				p.fred_layer.c_str());
+			p.fred_layer = "Default";
+		}
+	}
+
 	// if idx is still -1 then we have an empty props.tbl so we parse
 	// everything here and just discard it. A warning has already been generated above.
 	if (idx < 0) {
@@ -5365,6 +5413,11 @@ void post_process_mission_props()
 
 			if (propp.flags[Mission::Parse_Object_Flags::OF_No_collide]) {
 				obj.flags.remove(Object::Object_Flags::Collides);
+			}
+
+			auto createdProp = prop_id_lookup(obj.instance);
+			if (createdProp != nullptr) {
+				createdProp->fred_layer = propp.fred_layer;
 			}
 		}
 	}
@@ -7102,6 +7155,8 @@ void mission::Reset()
 
 	custom_data.clear();
 	custom_strings.clear();
+	fred_layers.clear();
+	fred_layers.emplace_back("Default");
 }
 
 void support_ship_info::reset()

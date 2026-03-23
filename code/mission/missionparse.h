@@ -234,6 +234,7 @@ typedef struct mission {
 	SCP_map<SCP_string, SCP_string> custom_data;
 
 	SCP_vector<custom_string> custom_strings;
+	SCP_vector<SCP_string> fred_layers;
 
 	void Reset( );
 
@@ -474,6 +475,7 @@ public:
 	object *created_object = nullptr;					// Goober5000
 	int collision_group_id = 0;							// Goober5000
 	int	group = -1;								// group object is within or -1 if none.
+	SCP_string fred_layer = "Default";
 	int	persona_index = -1;
 	int	kamikaze_damage = 0;					// base damage for a kamikaze attack
 
@@ -652,4 +654,3 @@ subsys_status *parse_get_subsys_status(p_object *pobjp, const char *subsys_name)
 custom_string* get_custom_string_by_name(SCP_string name);
 
 #endif
-
