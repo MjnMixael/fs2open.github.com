@@ -129,17 +129,8 @@ void HeadAnimationPickerDialog::onOk()
 
 void HeadAnimationPickerDialog::onTick()
 {
-	if (_previewingName.isEmpty()) {
-		return;
-	}
-
-	auto* preview = ensurePreview(_previewingName);
-	if (!preview || preview->numFrames <= 1) {
-		return;
-	}
-
-	_previewElapsedSeconds += 0.033f;
-	updatePreview();
+	// Disabled for now: timer-driven frame readback caused instability on some systems.
+	// Keep static preview rendering only.
 }
 
 void HeadAnimationPickerDialog::rebuildList()
@@ -235,22 +226,13 @@ void HeadAnimationPickerDialog::updatePreview()
 		return;
 	}
 
-	int handle = preview->firstFrame;
-	if (preview->numFrames > 1) {
-		const int frameOffset = bm_get_anim_frame(preview->firstFrame, _previewElapsedSeconds, 0.0f, true);
-		if (frameOffset >= 0 && frameOffset < preview->numFrames) {
-			handle = preview->firstFrame + frameOffset;
-		}
-	}
-
-	QImage frame;
-	if (!loadHandleToQImage(handle, frame, nullptr) || frame.isNull()) {
+	if (preview->firstPixmap.isNull()) {
 		_previewLabel->setPixmap(QPixmap());
 		_previewLabel->setText("No preview available");
 		return;
 	}
 
-	const auto scaled = QPixmap::fromImage(frame).scaled(_previewLabel->size() - QSize(8, 8), Qt::KeepAspectRatio, Qt::SmoothTransformation);
+	const auto scaled = preview->firstPixmap.scaled(_previewLabel->size() - QSize(8, 8), Qt::KeepAspectRatio, Qt::SmoothTransformation);
 	_previewLabel->setPixmap(scaled);
 }
 
