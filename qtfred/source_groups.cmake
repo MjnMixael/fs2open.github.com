@@ -86,8 +86,6 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/ReinforcementsEditorDialogModel.h
 	src/mission/dialogs/RelativeCoordinatesDialogModel.cpp
 	src/mission/dialogs/RelativeCoordinatesDialogModel.h
-	src/mission/dialogs/SelectionDialogModel.cpp
-	src/mission/dialogs/SelectionDialogModel.h
 	src/mission/dialogs/ShieldSystemDialogModel.cpp
 	src/mission/dialogs/ShieldSystemDialogModel.h
 	src/mission/dialogs/TeamLoadoutDialogModel.cpp
@@ -194,8 +192,6 @@ add_file_folder("Source/UI/Dialogs"
 	src/ui/dialogs/RelativeCoordinatesDialog.h
 	src/ui/dialogs/SaveAsTemplateDialog.cpp
 	src/ui/dialogs/SaveAsTemplateDialog.h
-	src/ui/dialogs/SelectionDialog.cpp
-	src/ui/dialogs/SelectionDialog.h
 	src/ui/dialogs/ShieldSystemDialog.h
 	src/ui/dialogs/ShieldSystemDialog.cpp
 	src/ui/dialogs/TableViewerDialog.cpp
@@ -339,7 +335,6 @@ add_file_folder("UI"
 	ui/PropEditorDialog.ui
 	ui/ReinforcementsDialog.ui
 	ui/RelativeCoordinatesDialog.ui
-	ui/SelectionDialog.ui
 	ui/ShieldSystemDialog.ui
 	ui/SoundEnvironmentDialog.ui
 	ui/TableViewerDialog.ui
