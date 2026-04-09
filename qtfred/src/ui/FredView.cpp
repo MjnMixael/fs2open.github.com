@@ -18,7 +18,7 @@
 #include <ui/dialogs/ShipEditor/ShipEditorDialog.h>
 #include <ui/dialogs/WingEditorDialog.h>
 #include <ui/dialogs/PropEditorDialog.h>
-#include <ui/panels/SceneOutlinerPanel.h>
+#include <ui/panels/SceneBrowserPanel.h>
 #include <ui/dialogs/MissionEventsDialog.h>
 #include <mission/dialogs/MissionEventsDialogModel.h>
 #include <ui/dialogs/AsteroidEditorDialog.h>
@@ -194,16 +194,16 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	connect(this, &FredView::viewIdle, this, [this]() { ui->actionDisable_Undo->setChecked(fred->autosaveDisabled != 0); });
 
 	// Scene Browser dock panel
-	_outlinerPanel = new SceneOutlinerPanel(this, _viewport);
-	addDockWidget(Qt::LeftDockWidgetArea, _outlinerPanel);
+	_browserPanel = new SceneBrowserPanel(this, _viewport);
+	addDockWidget(Qt::LeftDockWidgetArea, _browserPanel);
 	enforceSideDockAreas();
 
 	// Reuse the existing toolbar/menu Selection List action as a Scene Browser toggle
 	ui->actionSelectionList->setCheckable(true);
 	ui->actionSelectionList->setText(tr("Scene Browser"));
 	ui->actionSelectionList->setToolTip(tr("Toggle Scene Browser (H)"));
-	ui->actionSelectionList->setChecked(_outlinerPanel->isVisible());
-	connect(_outlinerPanel, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+	ui->actionSelectionList->setChecked(_browserPanel->isVisible());
+	connect(_browserPanel, &QDockWidget::visibilityChanged, this, [this](bool visible) {
 		QSignalBlocker blocker(ui->actionSelectionList);
 		ui->actionSelectionList->setChecked(visible);
 	});
@@ -1632,8 +1632,8 @@ bool FredView::showModalDialog(IBaseDialog* dlg) {
 	return ret == QDialog::Accepted;
 }
 void FredView::on_actionSelectionList_triggered(bool checked) {
-	if (_outlinerPanel != nullptr) {
-		_outlinerPanel->setVisible(checked);
+	if (_browserPanel != nullptr) {
+		_browserPanel->setVisible(checked);
 	}
 }
 void FredView::on_actionOrbitSelected_triggered(bool enabled) {

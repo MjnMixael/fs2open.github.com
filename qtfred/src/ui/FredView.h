@@ -30,7 +30,7 @@ class WingEditorDialog;
 class PropEditorDialog;
 }
 
-class SceneOutlinerPanel;
+class SceneBrowserPanel;
 
 namespace Ui {
 class FredView;
@@ -230,7 +230,7 @@ class FredView: public QMainWindow, public IDialogProvider {
 	QLabel* _statusBarViewmode = nullptr;
 	QLabel* _statusBarUnitsLabel = nullptr;
 
-	SceneOutlinerPanel* _outlinerPanel = nullptr;
+	SceneBrowserPanel* _browserPanel = nullptr;
 
 	QMenu* _viewPopup = nullptr;
 
