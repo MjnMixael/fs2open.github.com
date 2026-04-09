@@ -12,7 +12,7 @@
 namespace fso::fred {
 
 SceneOutlinerPanel::SceneOutlinerPanel(FredView* fredView, EditorViewport* viewport)
-	: QDockWidget(tr("Scene Outliner"), fredView)
+	: QDockWidget(tr("Scene Browser"), fredView)
 	, ui(new ::Ui::SceneOutlinerPanel())
 	, _fredView(fredView)
 {

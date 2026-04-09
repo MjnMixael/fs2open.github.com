@@ -193,15 +193,15 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	connect(this, &FredView::viewIdle, this, [this]() { ui->actionUndo->setEnabled(fred->undoAvailable != 0); });
 	connect(this, &FredView::viewIdle, this, [this]() { ui->actionDisable_Undo->setChecked(fred->autosaveDisabled != 0); });
 
-	// Scene Outliner dock panel
+	// Scene Browser dock panel
 	_outlinerPanel = new SceneOutlinerPanel(this, _viewport);
 	addDockWidget(Qt::LeftDockWidgetArea, _outlinerPanel);
 	enforceSideDockAreas();
 
-	// Reuse the existing toolbar/menu Selection List action as a Scene Outliner toggle
+	// Reuse the existing toolbar/menu Selection List action as a Scene Browser toggle
 	ui->actionSelectionList->setCheckable(true);
-	ui->actionSelectionList->setText(tr("Scene Outliner"));
-	ui->actionSelectionList->setToolTip(tr("Toggle Scene Outliner (H)"));
+	ui->actionSelectionList->setText(tr("Scene Browser"));
+	ui->actionSelectionList->setToolTip(tr("Toggle Scene Browser (H)"));
 	ui->actionSelectionList->setChecked(_outlinerPanel->isVisible());
 	connect(_outlinerPanel, &QDockWidget::visibilityChanged, this, [this](bool visible) {
 		QSignalBlocker blocker(ui->actionSelectionList);
