@@ -8,6 +8,7 @@
 #include <QDebug>
 #include <QKeyEvent>
 #include <QProcess>
+#include <QSignalBlocker>
 #include <QSettings>
 
 #include <project.h>
@@ -38,7 +39,6 @@
 #include <ui/dialogs/GlobalShipFlagsDialog.h>
 #include <ui/dialogs/VoiceActingManager.h>
 #include <globalincs/linklist.h>
-#include <ui/dialogs/SelectionDialog.h>
 #include <ui/dialogs/FictionViewerDialog.h>
 #include <ui/dialogs/CommandBriefingDialog.h>
 #include <ui/dialogs/DebriefingDialog.h>
@@ -198,11 +198,15 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	addDockWidget(Qt::LeftDockWidgetArea, _outlinerPanel);
 	enforceSideDockAreas();
 
-	// Add a View menu toggle for the outliner
-	auto* outlinerAction = _outlinerPanel->toggleViewAction();
-	outlinerAction->setText(tr("Scene Outliner"));
-	ui->menuView->insertAction(ui->menuView->actions().first(), outlinerAction);
-	ui->menuView->insertSeparator(ui->menuView->actions().at(1));
+	// Reuse the existing toolbar/menu Selection List action as a Scene Outliner toggle
+	ui->actionSelectionList->setCheckable(true);
+	ui->actionSelectionList->setText(tr("Scene Outliner"));
+	ui->actionSelectionList->setToolTip(tr("Toggle Scene Outliner (H)"));
+	ui->actionSelectionList->setChecked(_outlinerPanel->isVisible());
+	connect(_outlinerPanel, &QDockWidget::visibilityChanged, this, [this](bool visible) {
+		QSignalBlocker blocker(ui->actionSelectionList);
+		ui->actionSelectionList->setChecked(visible);
+	});
 
 	// Restore dock layout from last session
 	QSettings settings;
@@ -1627,11 +1631,10 @@ bool FredView::showModalDialog(IBaseDialog* dlg) {
 
 	return ret == QDialog::Accepted;
 }
-void FredView::on_actionSelectionList_triggered(bool) {
-	auto dialog = new dialogs::SelectionDialog(this, _viewport);
-	// This is a modal dialog
-	dialog->setAttribute(Qt::WA_DeleteOnClose);
-	dialog->exec();
+void FredView::on_actionSelectionList_triggered(bool checked) {
+	if (_outlinerPanel != nullptr) {
+		_outlinerPanel->setVisible(checked);
+	}
 }
 void FredView::on_actionOrbitSelected_triggered(bool enabled) {
 	_viewport->Lookat_mode = enabled;
