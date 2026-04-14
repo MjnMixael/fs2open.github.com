@@ -8,7 +8,7 @@ SET(QT5_INSTALL_ROOT "" CACHE PATH
 
 list(APPEND CMAKE_PREFIX_PATH "${QT5_INSTALL_ROOT}")
 
-find_package(Qt5 COMPONENTS Widgets OpenGL REQUIRED)
+find_package(Qt5 COMPONENTS Widgets OpenGL Help REQUIRED)
 
 include(source_groups.cmake)
 
@@ -56,7 +56,7 @@ set(CMAKE_MAP_IMPORTED_CONFIG_FASTDEBUG Release Debug)
 target_link_libraries(qtfred
     PUBLIC
     code
-    Qt5::Widgets Qt5::OpenGL)
+    Qt5::Widgets Qt5::OpenGL Qt5::Help)
 
 include(CreateLaunchers)
 create_target_launcher(qtfred

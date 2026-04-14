@@ -170,6 +170,8 @@ add_file_folder("Source/UI/Dialogs"
 	src/ui/dialogs/FormWingDialog.h
 	src/ui/dialogs/GlobalShipFlagsDialog.cpp
 	src/ui/dialogs/GlobalShipFlagsDialog.h
+	src/ui/dialogs/HelpTopicsDialog.cpp
+	src/ui/dialogs/HelpTopicsDialog.h
 	src/ui/dialogs/JumpNodeEditorDialog.cpp
 	src/ui/dialogs/JumpNodeEditorDialog.h
 	src/ui/dialogs/LayerManagerDialog.cpp
