@@ -9,7 +9,7 @@
 
 namespace fso::fred {
 
-// Apply the Fusion-compatible light or dark palette and button stylesheet.
+// Apply the Fusion-compatible light or dark palette and editor stylesheet.
 void applyEditorTheme(bool darkMode);
 
 // Draw a palette-aware icon for a standard Qt pixmap using QPainter.
