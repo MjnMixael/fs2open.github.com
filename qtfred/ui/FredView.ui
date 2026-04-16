@@ -195,6 +195,7 @@
     <addaction name="actionShips"/>
     <addaction name="actionWings"/>
     <addaction name="actionObjects"/>
+    <addaction name="actionProps"/>
     <addaction name="actionWaypoint_Paths"/>
     <addaction name="actionJump_Nodes"/>
     <addaction name="separator"/>
@@ -1028,6 +1029,11 @@
    </property>
    <property name="shortcut">
     <string>Shift+O</string>
+   </property>
+  </action>
+  <action name="actionProps">
+   <property name="text">
+    <string>Pro&amp;ps</string>
    </property>
   </action>
   <action name="actionWaypoint_Paths">
