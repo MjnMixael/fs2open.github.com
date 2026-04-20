@@ -1,7 +1,15 @@
 #include <cstdio>
 #include <cstdlib>
 
+#ifdef _WIN32
+#define SDL_MAIN_HANDLED
+#endif
+
 #include "parse/sexp.h"
+
+#ifdef main
+#undef main
+#endif
 
 int main(int argc, char** argv) {
 	if (argc != 2) {
