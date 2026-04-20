@@ -1569,6 +1569,8 @@ extern SCP_vector<op_menu_struct> op_submenu;
 //WMC
 //Outputs sexp.html file
 bool output_sexps(const char *filepath);
+// Outputs QtFRED help-optimized SEXP operator reference HTML and a keyword XML fragment.
+bool output_sexps_qtfred_help(const char* html_filepath, const char* keyword_fragment_filepath);
 
 void multi_sexp_eval();
 

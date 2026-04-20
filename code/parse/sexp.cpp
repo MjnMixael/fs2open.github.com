@@ -43106,3 +43106,162 @@ bool output_sexps(const char *filepath)
 
 	return true;
 }
+
+static SCP_string sexp_help_escape_html(const SCP_string& input)
+{
+	SCP_string out;
+	out.reserve(input.size() * 2);
+	for (const auto ch : input) {
+		switch (ch) {
+		case '&': out += "&amp;"; break;
+		case '<': out += "&lt;"; break;
+		case '>': out += "&gt;"; break;
+		case '"': out += "&quot;"; break;
+		default: out.push_back(ch); break;
+		}
+	}
+	return out;
+}
+
+static SCP_string sexp_help_make_anchor(const SCP_string& op_name)
+{
+	SCP_string anchor = "sexp-";
+	anchor.reserve(op_name.size() + 8);
+	bool last_dash = true;
+	for (const auto ch : op_name) {
+		if (std::isalnum(static_cast<unsigned char>(ch)) != 0) {
+			anchor.push_back(static_cast<char>(std::tolower(static_cast<unsigned char>(ch))));
+			last_dash = false;
+		} else if (!last_dash) {
+			anchor.push_back('-');
+			last_dash = true;
+		}
+	}
+	if (!anchor.empty() && anchor.back() == '-') {
+		anchor.pop_back();
+	}
+	return anchor;
+}
+
+static SCP_string sexp_help_find_text(int sexp_idx)
+{
+	for (const auto& help : Sexp_help) {
+		if (help.id == Operators[sexp_idx].value) {
+			return help.help;
+		}
+	}
+
+	char fallback[128];
+	sprintf(fallback, "Min arguments: %d, Max arguments: %d", Operators[sexp_idx].min, Operators[sexp_idx].max);
+	return fallback;
+}
+
+static void output_sexp_qtfred_html(int sexp_idx, FILE* html_fp, FILE* keyword_fp)
+{
+	if (sexp_idx < 0 || sexp_idx > (int)Operators.size()) {
+		return;
+	}
+
+	const auto op_name_raw = Operators[sexp_idx].text;
+	const auto op_name     = sexp_help_escape_html(op_name_raw);
+	const auto anchor      = sexp_help_make_anchor(op_name_raw);
+	auto help_text         = sexp_help_find_text(sexp_idx);
+
+	for (auto& c : help_text) {
+		if (c == '\r') {
+			c = '\n';
+		}
+	}
+
+	auto escaped_help = sexp_help_escape_html(help_text);
+	SCP_string help_with_breaks;
+	help_with_breaks.reserve(escaped_help.size() * 2);
+	for (const auto c : escaped_help) {
+		if (c == '\n') {
+			help_with_breaks += "<br>\n";
+		} else {
+			help_with_breaks.push_back(c);
+		}
+	}
+
+	fprintf(html_fp, "<dt id=\"%s\"><b>%s</b></dt>\n<dd>%s</dd>\n", anchor.c_str(), op_name.c_str(), help_with_breaks.c_str());
+	fprintf(keyword_fp, "            <keyword name=\"%s\" id=\"sexp.op.%s\" ref=\"concepts/sexp-operators.html#%s\"/>\n",
+	        op_name.c_str(), anchor.c_str(), anchor.c_str());
+}
+
+bool output_sexps_qtfred_help(const char* html_filepath, const char* keyword_fragment_filepath)
+{
+	FILE* html_fp = fopen(html_filepath, "w");
+	if (html_fp == nullptr) {
+		os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, "Error creating QtFRED SEXP operator reference HTML");
+		return false;
+	}
+
+	FILE* keyword_fp = fopen(keyword_fragment_filepath, "w");
+	if (keyword_fp == nullptr) {
+		fclose(html_fp);
+		os::dialogs::Message(os::dialogs::MESSAGEBOX_ERROR, "Error creating QtFRED SEXP keyword fragment");
+		return false;
+	}
+
+	fprintf(html_fp, "<!DOCTYPE html>\n<html>\n<head>\n\t<title>SEXP Operator Reference - FSO v%s</title>\n</head>\n<body>\n",
+	        FS_VERSION_FULL);
+	fprintf(html_fp, "\t<h1>SEXP Operator Reference - FSO v%s</h1>\n", FS_VERSION_FULL);
+	fputs("<p><strong>Scope:</strong> This page lists built-in (C++) SEXP operators compiled into the engine.</p>\n", html_fp);
+	fputs("<p><strong>Note:</strong> Lua-defined SEXP operators are created at runtime and are not included in this reference.</p>\n", html_fp);
+
+	// Overview
+	fputs("<dl>", html_fp);
+	for (auto x = 0; x < (int)op_menu.size(); ++x) {
+		fprintf(html_fp, "<dt><a href=\"#cat-%d\">%s</a></dt>", op_menu[x].id, op_menu[x].name.c_str());
+		for (auto y = 0; y < (int)op_submenu.size(); ++y) {
+			if (category_of_subcategory(op_submenu[y].id) == op_menu[x].id) {
+				fprintf(html_fp, "<dd><a href=\"#subcat-%d\">%s</a></dd>", op_submenu[y].id, op_submenu[y].name.c_str());
+			}
+		}
+	}
+	fputs("</dl>", html_fp);
+
+	// Full descriptions
+	fputs("<dl>", html_fp);
+	for (auto x = 0; x < (int)op_menu.size(); ++x) {
+		fprintf(html_fp, "<dt id=\"cat-%d\"><h2>%s</h2></dt>\n", op_menu[x].id, op_menu[x].name.c_str());
+		fputs("<dd><dl>", html_fp);
+
+		for (auto y = 0; y < (int)op_submenu.size(); ++y) {
+			if (category_of_subcategory(op_submenu[y].id) != op_menu[x].id) {
+				continue;
+			}
+			fprintf(html_fp, "<dt id=\"subcat-%d\"><h3>%s</h3></dt>\n", op_submenu[y].id, op_submenu[y].name.c_str());
+			fputs("<dd><dl>", html_fp);
+			for (auto z = 0; z < (int)Operators.size(); ++z) {
+				if ((get_category(Operators[z].value) == op_menu[x].id) &&
+				    (get_subcategory(Operators[z].value) != OP_SUBCATEGORY_NONE) &&
+				    (get_subcategory(Operators[z].value) == op_submenu[y].id)) {
+					output_sexp_qtfred_html(z, html_fp, keyword_fp);
+				}
+			}
+			fputs("</dl></dd>", html_fp);
+		}
+
+		for (auto z = 0; z < (int)Operators.size(); ++z) {
+			if ((get_category(Operators[z].value) == op_menu[x].id) &&
+			    (get_subcategory(Operators[z].value) == OP_SUBCATEGORY_NONE)) {
+				output_sexp_qtfred_html(z, html_fp, keyword_fp);
+			}
+		}
+
+		fputs("</dl></dd>", html_fp);
+	}
+
+	for (auto z = 0; z < (int)Operators.size(); ++z) {
+		if (get_category(Operators[z].value) == OP_CATEGORY_NONE) {
+			output_sexp_qtfred_html(z, html_fp, keyword_fp);
+		}
+	}
+	fputs("</dl>\n</body>\n</html>\n", html_fp);
+
+	fclose(html_fp);
+	fclose(keyword_fp);
+	return true;
+}

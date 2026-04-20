@@ -92,6 +92,7 @@ set(QTFRED_HELP_QCH "${CMAKE_CURRENT_BINARY_DIR}/qtfred_help.qch")
 set(QTFRED_HELP_STAGING_DIR "${CMAKE_CURRENT_BINARY_DIR}/qtfred_help_doc")
 set(QTFRED_HELP_STAGING_QHP "${QTFRED_HELP_STAGING_DIR}/qtfred.qhp")
 set(QTFRED_HELP_GENERATED_SEXPS "${QTFRED_HELP_STAGING_DIR}/concepts/sexp-operators.html")
+set(QTFRED_HELP_GENERATED_SEXP_KEYWORDS "${CMAKE_CURRENT_BINARY_DIR}/qtfred_help_sexp_keywords.xml")
 
 add_executable(qtfred_sexp_help_gen
     "${CMAKE_CURRENT_SOURCE_DIR}/src/help/GenerateSexpHelp.cpp"
@@ -117,7 +118,10 @@ add_custom_command(
         "LD_LIBRARY_PATH=${_QTFRED_QT_LIBS}"
         ${CMAKE_COMMAND} -E rm -rf "${QTFRED_HELP_STAGING_DIR}"
     COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/help-src/doc" "${QTFRED_HELP_STAGING_DIR}"
-    COMMAND "$<TARGET_FILE:qtfred_sexp_help_gen>" "${QTFRED_HELP_GENERATED_SEXPS}"
+    COMMAND "$<TARGET_FILE:qtfred_sexp_help_gen>"
+        "${QTFRED_HELP_GENERATED_SEXPS}"
+        "${QTFRED_HELP_GENERATED_SEXP_KEYWORDS}"
+        "${QTFRED_HELP_STAGING_QHP}"
     COMMAND ${CMAKE_COMMAND} -E env
         "QT_QPA_PLATFORM=offscreen"
         "LD_LIBRARY_PATH=${_QTFRED_QT_LIBS}"
