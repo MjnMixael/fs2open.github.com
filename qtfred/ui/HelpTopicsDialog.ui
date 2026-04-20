@@ -82,6 +82,36 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QLineEdit" name="findLineEdit">
+           <property name="placeholderText">
+            <string>Find in page</string>
+           </property>
+           <property name="clearButtonEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="findPreviousButton">
+           <property name="toolTip">
+            <string>Find previous</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QToolButton" name="findNextButton">
+           <property name="toolTip">
+            <string>Find next</string>
+           </property>
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>

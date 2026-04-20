@@ -14,7 +14,6 @@
 #include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
-#include <QInputDialog>
 #include <QShortcut>
 #include <QSplitter>
 #include <QStandardItem>
@@ -112,6 +111,8 @@ HelpTopicsDialog::HelpTopicsDialog(QWidget* parent)
 
 	bindStandardIcon(ui->backButton,    QStyle::SP_ArrowLeft);
 	bindStandardIcon(ui->forwardButton, QStyle::SP_ArrowRight);
+	bindStandardIcon(ui->findPreviousButton, QStyle::SP_ArrowUp);
+	bindStandardIcon(ui->findNextButton,     QStyle::SP_ArrowDown);
 
 	if (!HelpTopicsDialogModel::ensureEngineReady()) {
 		ui->splitter->setDisabled(true);
@@ -181,11 +182,23 @@ HelpTopicsDialog::HelpTopicsDialog(QWidget* parent)
 	        this, &HelpTopicsDialog::loadHelpPage);
 
 	auto* findShortcut = new QShortcut(QKeySequence::Find, this);
-	connect(findShortcut, &QShortcut::activated, this, &HelpTopicsDialog::promptFindInPage);
+	connect(findShortcut, &QShortcut::activated, this, [this] {
+		ui->findLineEdit->setFocus();
+		ui->findLineEdit->selectAll();
+	});
 	auto* findNextShortcut = new QShortcut(QKeySequence::FindNext, this);
 	connect(findNextShortcut, &QShortcut::activated, this, [this] { findInPage(false); });
 	auto* findPreviousShortcut = new QShortcut(QKeySequence::FindPrevious, this);
 	connect(findPreviousShortcut, &QShortcut::activated, this, [this] { findInPage(true); });
+
+	connect(ui->findLineEdit, &QLineEdit::textChanged, this, [this](const QString& text) {
+		const bool hasQuery = !text.trimmed().isEmpty();
+		ui->findPreviousButton->setEnabled(hasQuery);
+		ui->findNextButton->setEnabled(hasQuery);
+	});
+	connect(ui->findLineEdit, &QLineEdit::returnPressed, this, [this] { findInPage(false); });
+	connect(ui->findPreviousButton, &QToolButton::clicked, this, [this] { findInPage(true); });
+	connect(ui->findNextButton, &QToolButton::clicked, this, [this] { findInPage(false); });
 
 	// Load the help home page.
 	const auto registeredDocuments = engine->registeredDocumentations();
@@ -204,39 +217,24 @@ void HelpTopicsDialog::prewarm() {
 	HelpTopicsDialogModel::prewarm();
 }
 
-void HelpTopicsDialog::promptFindInPage() {
-	bool ok = false;
-	const QString term = QInputDialog::getText(this,
-	                                           tr("Find in page"),
-	                                           tr("Find:"),
-	                                           QLineEdit::Normal,
-	                                           _inPageSearchTerm,
-	                                           &ok);
-	if (!ok)
-		return;
-	_inPageSearchTerm = term.trimmed();
-	findInPage(false);
-}
-
 void HelpTopicsDialog::findInPage(bool backward) {
-	if (_inPageSearchTerm.isEmpty()) {
-		promptFindInPage();
+	const QString query = ui->findLineEdit->text().trimmed();
+	if (query.isEmpty())
 		return;
-	}
 
 	const QTextDocument::FindFlags flags = backward ? QTextDocument::FindBackward
 	                                                : QTextDocument::FindFlags{};
-	if (ui->helpBrowser->find(_inPageSearchTerm, flags))
+	if (ui->helpBrowser->find(query, flags))
 		return;
 
 	// Wrap around when no further match is found from the current cursor.
 	QTextCursor cursor = ui->helpBrowser->textCursor();
 	cursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
 	ui->helpBrowser->setTextCursor(cursor);
-	if (!ui->helpBrowser->find(_inPageSearchTerm, flags)) {
+	if (!ui->helpBrowser->find(query, flags)) {
 		QMessageBox::information(this,
 		                         tr("Find in page"),
-		                         tr("No matches found for \"%1\".").arg(_inPageSearchTerm));
+		                         tr("No matches found for \"%1\".").arg(query));
 	}
 }
 
