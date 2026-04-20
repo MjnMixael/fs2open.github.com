@@ -89,6 +89,14 @@ find_program(QHELPGENERATOR_EXECUTABLE
 
 set(QTFRED_HELP_QHP "${CMAKE_CURRENT_SOURCE_DIR}/help-src/doc/qtfred.qhp")
 set(QTFRED_HELP_QCH "${CMAKE_CURRENT_BINARY_DIR}/qtfred_help.qch")
+set(QTFRED_HELP_STAGING_DIR "${CMAKE_CURRENT_BINARY_DIR}/qtfred_help_doc")
+set(QTFRED_HELP_STAGING_QHP "${QTFRED_HELP_STAGING_DIR}/qtfred.qhp")
+set(QTFRED_HELP_GENERATED_SEXPS "${QTFRED_HELP_STAGING_DIR}/concepts/sexp-operators.html")
+
+add_executable(qtfred_sexp_help_gen
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/help/GenerateSexpHelp.cpp")
+target_link_libraries(qtfred_sexp_help_gen PRIVATE code)
+target_compile_features(qtfred_sexp_help_gen PUBLIC cxx_std_17)
 
 file(GLOB_RECURSE QTFRED_HELP_SOURCES
     "${CMAKE_CURRENT_SOURCE_DIR}/help-src/doc/*.html"
@@ -105,8 +113,14 @@ add_custom_command(
     COMMAND ${CMAKE_COMMAND} -E env
         "QT_QPA_PLATFORM=offscreen"
         "LD_LIBRARY_PATH=${_QTFRED_QT_LIBS}"
-        "${QHELPGENERATOR_EXECUTABLE}" "${QTFRED_HELP_QHP}" -o "${QTFRED_HELP_QCH}"
-    DEPENDS ${QTFRED_HELP_SOURCES}
+        ${CMAKE_COMMAND} -E rm -rf "${QTFRED_HELP_STAGING_DIR}"
+    COMMAND ${CMAKE_COMMAND} -E copy_directory "${CMAKE_CURRENT_SOURCE_DIR}/help-src/doc" "${QTFRED_HELP_STAGING_DIR}"
+    COMMAND "$<TARGET_FILE:qtfred_sexp_help_gen>" "${QTFRED_HELP_GENERATED_SEXPS}"
+    COMMAND ${CMAKE_COMMAND} -E env
+        "QT_QPA_PLATFORM=offscreen"
+        "LD_LIBRARY_PATH=${_QTFRED_QT_LIBS}"
+        "${QHELPGENERATOR_EXECUTABLE}" "${QTFRED_HELP_STAGING_QHP}" -o "${QTFRED_HELP_QCH}"
+    DEPENDS ${QTFRED_HELP_SOURCES} qtfred_sexp_help_gen
     COMMENT "Compiling QtFRED help (qtfred_help.qch)"
     VERBATIM)
 

@@ -142,6 +142,7 @@ QList<TutorialEntry> HelpTopicsDialogModel::discoverTutorials() {
 
 	SCP_vector<SCP_string> filenames;
 	cf_get_file_list(filenames, CF_TYPE_FREDDOCS, "*.html");
+	_tutorialContent.clear();
 
 	QList<TutorialEntry> result;
 	for (const auto& filename : filenames) {
@@ -166,6 +167,7 @@ QList<TutorialEntry> HelpTopicsDialogModel::discoverTutorials() {
 		_tutorialContent[urlPath] = f.readAll();
 		result.append({extractHtmlTitle(fullPath), fullPath, urlPath});
 	}
+
 	return result;
 }
 

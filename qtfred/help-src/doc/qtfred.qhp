@@ -12,7 +12,9 @@
                     <section title="Campaign Flow"   ref="concepts/campaign-flow.html"/>
                     <section title="IFF &amp; Teams" ref="concepts/iff.html"/>
                     <section title="Messages"        ref="concepts/messages.html"/>
-                    <section title="SEXPs"           ref="concepts/sexps.html"/>
+                    <section title="SEXPs"           ref="concepts/sexps.html">
+                        <section title="Operator Reference" ref="concepts/sexp-operators.html"/>
+                    </section>
                 </section>
                 <section title="General">
                     <section title="Layer Manager"  ref="general/LayerManagerDialog.html"/>
@@ -87,6 +89,7 @@
         <keywords>
             <!-- Conceptual pages — dot-namespaced to avoid collision with class names -->
             <keyword name="SEXPs"                   id="concept.sexp"               ref="concepts/sexps.html"/>
+            <keyword name="SEXP Operator Reference" id="concept.sexp.operators"     ref="concepts/sexp-operators.html"/>
             <keyword name="IFF &amp; Teams"         id="concept.iff"                ref="concepts/iff.html"/>
             <keyword name="AI"                      id="concept.ai"                 ref="concepts/ai.html"/>
             <keyword name="Messages"                id="concept.messages"           ref="concepts/messages.html"/>
@@ -150,6 +153,7 @@
             <file>quickstart.html</file>
             <file>fundamentals.html</file>
             <file>concepts/sexps.html</file>
+            <file>concepts/sexp-operators.html</file>
             <file>concepts/iff.html</file>
             <file>concepts/ai.html</file>
             <file>concepts/messages.html</file>
