@@ -7,14 +7,13 @@
         <toc>
             <section title="Quickstart" ref="quickstart.html"/>
                 <section title="Fundamentals" ref="fundamentals.html"/>
+                <section title="SEXP Operator Reference" ref="concepts/sexp-operators.html"/>
                 <section title="Concepts">
                     <section title="AI"              ref="concepts/ai.html"/>
                     <section title="Campaign Flow"   ref="concepts/campaign-flow.html"/>
                     <section title="IFF &amp; Teams" ref="concepts/iff.html"/>
                     <section title="Messages"        ref="concepts/messages.html"/>
-                    <section title="SEXPs"           ref="concepts/sexps.html">
-                        <section title="Operator Reference" ref="concepts/sexp-operators.html"/>
-                    </section>
+                    <section title="SEXPs"           ref="concepts/sexps.html"/>
                 </section>
                 <section title="General">
                     <section title="Layer Manager"  ref="general/LayerManagerDialog.html"/>
