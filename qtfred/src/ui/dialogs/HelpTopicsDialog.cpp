@@ -11,12 +11,17 @@
 #include <QHelpSearchQueryWidget>
 #include <QHelpSearchResultWidget>
 #include <QLabel>
+#include <QLineEdit>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QInputDialog>
+#include <QShortcut>
 #include <QSplitter>
 #include <QStandardItem>
 #include <QStandardItemModel>
 #include <QTabWidget>
+#include <QTextCursor>
+#include <QTextDocument>
 #include <QTreeView>
 #include <QVBoxLayout>
 
@@ -175,6 +180,13 @@ HelpTopicsDialog::HelpTopicsDialog(QWidget* parent)
 	connect(ui->helpBrowser, &QTextBrowser::anchorClicked,
 	        this, &HelpTopicsDialog::loadHelpPage);
 
+	auto* findShortcut = new QShortcut(QKeySequence::Find, this);
+	connect(findShortcut, &QShortcut::activated, this, &HelpTopicsDialog::promptFindInPage);
+	auto* findNextShortcut = new QShortcut(QKeySequence::FindNext, this);
+	connect(findNextShortcut, &QShortcut::activated, this, [this] { findInPage(false); });
+	auto* findPreviousShortcut = new QShortcut(QKeySequence::FindPrevious, this);
+	connect(findPreviousShortcut, &QShortcut::activated, this, [this] { findInPage(true); });
+
 	// Load the help home page.
 	const auto registeredDocuments = engine->registeredDocumentations();
 	if (!registeredDocuments.isEmpty()) {
@@ -190,6 +202,42 @@ HelpTopicsDialog::~HelpTopicsDialog() = default;
 // ---------------------------------------------------------------------------
 void HelpTopicsDialog::prewarm() {
 	HelpTopicsDialogModel::prewarm();
+}
+
+void HelpTopicsDialog::promptFindInPage() {
+	bool ok = false;
+	const QString term = QInputDialog::getText(this,
+	                                           tr("Find in page"),
+	                                           tr("Find:"),
+	                                           QLineEdit::Normal,
+	                                           _inPageSearchTerm,
+	                                           &ok);
+	if (!ok)
+		return;
+	_inPageSearchTerm = term.trimmed();
+	findInPage(false);
+}
+
+void HelpTopicsDialog::findInPage(bool backward) {
+	if (_inPageSearchTerm.isEmpty()) {
+		promptFindInPage();
+		return;
+	}
+
+	const QTextDocument::FindFlags flags = backward ? QTextDocument::FindBackward
+	                                                : QTextDocument::FindFlags{};
+	if (ui->helpBrowser->find(_inPageSearchTerm, flags))
+		return;
+
+	// Wrap around when no further match is found from the current cursor.
+	QTextCursor cursor = ui->helpBrowser->textCursor();
+	cursor.movePosition(backward ? QTextCursor::End : QTextCursor::Start);
+	ui->helpBrowser->setTextCursor(cursor);
+	if (!ui->helpBrowser->find(_inPageSearchTerm, flags)) {
+		QMessageBox::information(this,
+		                         tr("Find in page"),
+		                         tr("No matches found for \"%1\".").arg(_inPageSearchTerm));
+	}
 }
 
 void HelpTopicsDialog::buildContentsTab() {
