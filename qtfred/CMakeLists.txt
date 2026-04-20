@@ -94,7 +94,9 @@ set(QTFRED_HELP_STAGING_QHP "${QTFRED_HELP_STAGING_DIR}/qtfred.qhp")
 set(QTFRED_HELP_GENERATED_SEXPS "${QTFRED_HELP_STAGING_DIR}/concepts/sexp-operators.html")
 
 add_executable(qtfred_sexp_help_gen
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/help/GenerateSexpHelp.cpp")
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/help/GenerateSexpHelp.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/help/GenerateSexpHelpStubs.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/fredstubs.cpp")
 target_link_libraries(qtfred_sexp_help_gen PRIVATE code)
 target_compile_features(qtfred_sexp_help_gen PUBLIC cxx_std_17)
 
