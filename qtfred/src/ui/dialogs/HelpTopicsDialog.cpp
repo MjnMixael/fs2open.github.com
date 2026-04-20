@@ -129,7 +129,7 @@ HelpTopicsDialog::HelpTopicsDialog(QWidget* parent)
 		layout->addWidget(searchEngine->queryWidget());
 		layout->addWidget(searchEngine->resultWidget(), 1);
 
-		_tutorialSearchLabel = new QLabel(tr("Also found in tutorials:"), container);
+		_tutorialSearchLabel = new QLabel(tr("Also found in custom pages:"), container);
 		_tutorialSearchLabel->setVisible(false);
 		layout->addWidget(_tutorialSearchLabel);
 
@@ -294,7 +294,11 @@ void HelpTopicsDialog::searchTutorials(const QString& query) {
 	_tutorialSearchResults->clear();
 
 	const QString trimmed = query.trimmed();
-	if (trimmed.isEmpty() || HelpTopicsDialogModel::tutorials().isEmpty()) {
+	QList<TutorialEntry> searchablePages = HelpTopicsDialogModel::tutorials();
+	if (const TutorialEntry* sexpReference = HelpTopicsDialogModel::sexpOperatorReference())
+		searchablePages.append(*sexpReference);
+
+	if (trimmed.isEmpty() || searchablePages.isEmpty()) {
 		_tutorialSearchLabel->setVisible(false);
 		_tutorialSearchResults->setVisible(false);
 		return;
@@ -303,7 +307,7 @@ void HelpTopicsDialog::searchTutorials(const QString& query) {
 	static const QRegularExpression tagRe(QStringLiteral("<[^>]+>"));
 	const QStringList terms = trimmed.split(QLatin1Char(' '), QString::SkipEmptyParts);
 
-	for (const auto& t : HelpTopicsDialogModel::tutorials()) {
+	for (const auto& t : searchablePages) {
 		const auto& content = HelpTopicsDialogModel::tutorialContent();
 		const auto  it      = content.constFind(t.urlPath);
 		if (it == content.constEnd())
