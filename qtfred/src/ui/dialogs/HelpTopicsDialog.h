@@ -7,6 +7,7 @@
 class QLabel;
 class QListWidget;
 class QListWidgetItem;
+class QHelpContentItem;
 class QStandardItem;
 class QStandardItemModel;
 class QTreeView;
@@ -57,7 +58,7 @@ public slots: // NOLINT(readability-redundant-access-specifiers)
 private:
 	void loadHelpPage(const QUrl& url);
 	void buildContentsTab();
-	void addHelpContentItem(QStandardItem* parent, class QHelpContentItem* contentItem);
+	void addHelpContentItem(QStandardItem* parent, QHelpContentItem* contentItem);
 	QStandardItem* findContentItemByTitle(QStandardItem* root, const QString& title) const;
 	void buildTutorialsTab();
 	void searchTutorials(const QString& query);
