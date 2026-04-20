@@ -222,7 +222,10 @@ void HelpTopicsDialog::buildContentsTab() {
 			auto* extraItem = new QStandardItem(sexpReference->title);
 			extraItem->setData(QUrl(QStringLiteral("fredtutorial://") + sexpReference->urlPath),
 			                   Qt::UserRole);
-			fundamentals->appendRow(extraItem);
+			QStandardItem* parentItem = fundamentals->parent();
+			if (parentItem == nullptr)
+				parentItem = _contentsModel->invisibleRootItem();
+			parentItem->insertRow(fundamentals->row() + 1, extraItem);
 		}
 	}
 
