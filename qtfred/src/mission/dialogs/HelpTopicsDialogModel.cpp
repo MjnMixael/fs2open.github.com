@@ -23,6 +23,8 @@ namespace fso::fred::dialogs {
 QHelpEngine*               HelpTopicsDialogModel::_helpEngine    = nullptr;
 QList<TutorialEntry>       HelpTopicsDialogModel::_tutorials;
 QHash<QString, QByteArray> HelpTopicsDialogModel::_tutorialContent;
+TutorialEntry              HelpTopicsDialogModel::_sexpOperatorReference;
+bool                       HelpTopicsDialogModel::_hasSexpOperatorReference = false;
 
 // ---------------------------------------------------------------------------
 HelpTopicsDialogModel::HelpTopicsDialogModel(QObject* parent) : QObject(parent) {}
@@ -31,6 +33,8 @@ HelpTopicsDialogModel::HelpTopicsDialogModel(QObject* parent) : QObject(parent) 
 void HelpTopicsDialogModel::prewarm() {
 	if (ensureEngineReady())
 		_helpEngine->searchEngine()->scheduleIndexDocumentation();
+	_tutorialContent.clear();
+	_hasSexpOperatorReference = false;
 	_tutorials = discoverTutorials();
 }
 
@@ -44,6 +48,10 @@ const QList<TutorialEntry>& HelpTopicsDialogModel::tutorials() {
 
 const QHash<QString, QByteArray>& HelpTopicsDialogModel::tutorialContent() {
 	return _tutorialContent;
+}
+
+const TutorialEntry* HelpTopicsDialogModel::sexpOperatorReference() {
+	return _hasSexpOperatorReference ? &_sexpOperatorReference : nullptr;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,6 +172,15 @@ QList<TutorialEntry> HelpTopicsDialogModel::discoverTutorials() {
 			continue;
 
 		_tutorialContent[urlPath] = f.readAll();
+
+		if (QString::compare(QString::fromStdString(fullFilename),
+		                     QStringLiteral("sexps.html"),
+		                     Qt::CaseInsensitive) == 0) {
+			_sexpOperatorReference = {QStringLiteral("SEXP Operator Reference"), fullPath, urlPath};
+			_hasSexpOperatorReference = true;
+			continue;
+		}
+
 		result.append({extractHtmlTitle(fullPath), fullPath, urlPath});
 	}
 	return result;

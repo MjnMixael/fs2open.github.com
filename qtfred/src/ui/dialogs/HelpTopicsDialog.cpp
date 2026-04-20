@@ -4,6 +4,7 @@
 #include <QApplication>
 #include <QDesktopServices>
 #include <QHelpContentWidget>
+#include <QHelpContentModel>
 #include <QHelpEngine>
 #include <QHelpIndexWidget>
 #include <QHelpSearchEngine>
@@ -13,6 +14,8 @@
 #include <QListWidget>
 #include <QMessageBox>
 #include <QSplitter>
+#include <QStandardItem>
+#include <QStandardItemModel>
 #include <QTabWidget>
 #include <QTreeView>
 #include <QVBoxLayout>
@@ -113,7 +116,7 @@ HelpTopicsDialog::HelpTopicsDialog(QWidget* parent)
 
 	QHelpEngine* engine = HelpTopicsDialogModel::helpEngine();
 
-	ui->navigationTabs->addTab(engine->contentWidget(), tr("Contents"));
+	buildContentsTab();
 	ui->navigationTabs->addTab(engine->indexWidget(),   tr("Index"));
 
 	// Search tab: full-text search of built-in help, plus tutorial matches below.
@@ -167,15 +170,6 @@ HelpTopicsDialog::HelpTopicsDialog(QWidget* parent)
 	connect(ui->helpBrowser,   &QTextBrowser::backwardAvailable, ui->backButton,    &QToolButton::setEnabled);
 	connect(ui->helpBrowser,   &QTextBrowser::forwardAvailable,  ui->forwardButton, &QToolButton::setEnabled);
 
-	connect(engine->contentWidget(), &QTreeView::clicked,
-	        this, [this](const QModelIndex& index) {
-		auto* model = qobject_cast<QHelpContentModel*>(
-		    HelpTopicsDialogModel::helpEngine()->contentWidget()->model());
-		if (!model) return;
-		QHelpContentItem* item = model->contentItemAt(index);
-		if (item && item->url().isValid())
-			loadHelpPage(item->url());
-	});
 	connect(engine->indexWidget(), &QHelpIndexWidget::linkActivated,
 	        this, &HelpTopicsDialog::loadHelpPage);
 	connect(ui->helpBrowser, &QTextBrowser::anchorClicked,
@@ -196,6 +190,85 @@ HelpTopicsDialog::~HelpTopicsDialog() = default;
 // ---------------------------------------------------------------------------
 void HelpTopicsDialog::prewarm() {
 	HelpTopicsDialogModel::prewarm();
+}
+
+void HelpTopicsDialog::buildContentsTab() {
+	QHelpEngine* engine = HelpTopicsDialogModel::helpEngine();
+	if (engine == nullptr)
+		return;
+
+	auto* container = new QWidget(ui->navigationTabs);
+	auto* layout    = new QVBoxLayout(container);
+	layout->setContentsMargins(0, 0, 0, 0);
+
+	_contentsTree = new QTreeView(container);
+	_contentsTree->setHeaderHidden(true);
+	_contentsModel = new QStandardItemModel(_contentsTree);
+
+	auto* helpContentModel = qobject_cast<QHelpContentModel*>(engine->contentWidget()->model());
+	if (helpContentModel != nullptr) {
+		for (int row = 0; row < helpContentModel->rowCount(); ++row) {
+			const QModelIndex index = helpContentModel->index(row, 0);
+			addHelpContentItem(_contentsModel->invisibleRootItem(),
+			                   helpContentModel->contentItemAt(index));
+		}
+	}
+
+	const TutorialEntry* sexpReference = HelpTopicsDialogModel::sexpOperatorReference();
+	if (sexpReference != nullptr) {
+		QStandardItem* fundamentals = findContentItemByTitle(_contentsModel->invisibleRootItem(),
+		                                                     QStringLiteral("Fundamentals"));
+		if (fundamentals != nullptr) {
+			auto* extraItem = new QStandardItem(sexpReference->title);
+			extraItem->setData(QUrl(QStringLiteral("fredtutorial://") + sexpReference->urlPath),
+			                   Qt::UserRole);
+			fundamentals->appendRow(extraItem);
+		}
+	}
+
+	_contentsTree->setModel(_contentsModel);
+	layout->addWidget(_contentsTree);
+
+	ui->navigationTabs->addTab(container, tr("Contents"));
+
+	connect(_contentsTree, &QTreeView::clicked, this, [this](const QModelIndex& index) {
+		if (!index.isValid() || _contentsModel == nullptr)
+			return;
+		const auto* item = _contentsModel->itemFromIndex(index);
+		if (item == nullptr)
+			return;
+		const QUrl url = item->data(Qt::UserRole).toUrl();
+		if (url.isValid())
+			loadHelpPage(url);
+	});
+}
+
+void HelpTopicsDialog::addHelpContentItem(QStandardItem* parent, QHelpContentItem* contentItem) {
+	if (parent == nullptr || contentItem == nullptr)
+		return;
+
+	auto* item = new QStandardItem(contentItem->title());
+	item->setData(contentItem->url(), Qt::UserRole);
+	parent->appendRow(item);
+
+	for (int i = 0; i < contentItem->childCount(); ++i)
+		addHelpContentItem(item, contentItem->child(i));
+}
+
+QStandardItem* HelpTopicsDialog::findContentItemByTitle(QStandardItem* root, const QString& title) const {
+	if (root == nullptr)
+		return nullptr;
+
+	for (int i = 0; i < root->rowCount(); ++i) {
+		QStandardItem* child = root->child(i);
+		if (child == nullptr)
+			continue;
+		if (child->text() == title)
+			return child;
+		if (QStandardItem* nested = findContentItemByTitle(child, title))
+			return nested;
+	}
+	return nullptr;
 }
 
 void HelpTopicsDialog::buildTutorialsTab() {
