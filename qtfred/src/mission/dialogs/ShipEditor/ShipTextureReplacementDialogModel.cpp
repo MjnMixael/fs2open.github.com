@@ -1,11 +1,34 @@
 #include "ShipTextureReplacementDialogModel.h"
 
 #include "mission/object.h"
+#include "model/model.h"
 
-// Sub-texture type suffixes, mirroring the strcat_s calls in modelread.cpp.
-// Used both when detecting sub-texture slots in initSubTypes and when parsing
-// new_texture strings on dialog reload.
-static const SCP_string SUBTEXTURE_SUFFIXES[] = { "misc", "shine", "glow", "normal", "height", "ao", "reflect" };
+namespace {
+bool has_trailing_transparency_suffix(const SCP_string& texture_name)
+{
+	const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+	if (texture_name.length() <= trans_suffix.length()) {
+		return false;
+	}
+
+	return lcase_equal(texture_name.substr(texture_name.length() - trans_suffix.length()), trans_suffix);
+}
+
+SCP_string build_subtype_texture_name(const SCP_string& texture_name, const SCP_string& type)
+{
+	if (texture_name == "invisible") {
+		return texture_name;
+	}
+
+	const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+	if (has_trailing_transparency_suffix(texture_name)) {
+		auto base_name = texture_name.substr(0, texture_name.length() - trans_suffix.length());
+		return base_name + "-" + type + "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+	}
+
+	return texture_name + "-" + type;
+}
+}
 
 namespace fso {
 	namespace fred {
@@ -116,16 +139,25 @@ namespace fso {
 									SCP_string newText = Fred_texture_replacement.new_texture;
 									SCP_string type;
 									{
-										auto npos = newText.find_last_of('-');
+										SCP_string typeParseText = newText;
+										const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+										if (has_trailing_transparency_suffix(typeParseText)) {
+											typeParseText = typeParseText.substr(0, typeParseText.length() - trans_suffix.length());
+										}
+
+										auto npos = typeParseText.find_last_of('-');
 										if (npos != SCP_string::npos) {
-											SCP_string possibleType = newText.substr(npos + 1);
+											SCP_string possibleType = typeParseText.substr(npos + 1);
 											// Only treat the suffix as a type if it's a known sub-texture type.
 											// Texture names themselves can contain hyphens (e.g. "fighter01-01a"),
 											// so we must not blindly strip the last segment.
-											for (const auto& kt : SUBTEXTURE_SUFFIXES) {
+											for (const auto& kt : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
 												if (lcase_equal(possibleType, kt)) {
 													type = possibleType;
-													newText = newText.substr(0, npos);
+													newText = typeParseText.substr(0, npos);
+													if (has_trailing_transparency_suffix(Fred_texture_replacement.new_texture)) {
+														newText += "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+													}
 													break;
 												}
 											}
@@ -187,37 +219,12 @@ namespace fso {
 			}
 			void ShipTextureReplacementDialogModel::initSubTypes(polymodel* model, int MapNum)
 			{
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("misc", false));
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("shine", false));
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("glow", false));
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("normal", false));
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("height", false));
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("ao", false));
-				subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>("reflect", false));
-
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("misc", ""));
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("shine", ""));
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("glow", ""));
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("normal", ""));
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("height", ""));
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("ao", ""));
-				currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>("reflect", ""));
-
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("misc", false));
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("shine", false));
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("glow", false));
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("normal", false));
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("height", false));
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("ao", false));
-				replaceMap[MapNum].insert(std::pair<SCP_string, bool>("reflect", false));
-
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("misc", true));
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("shine", true));
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("glow", true));
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("normal", true));
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("height", true));
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("ao", true));
-				inheritMap[MapNum].insert(std::pair<SCP_string, bool>("reflect", true));
+				for (const auto& subtype : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
+					subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>(subtype, false));
+					currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>(subtype, ""));
+					replaceMap[MapNum].insert(std::pair<SCP_string, bool>(subtype, false));
+					inheritMap[MapNum].insert(std::pair<SCP_string, bool>(subtype, true));
+				}
 				char subMap[MAX_FILENAME_LEN];
 				//init saftly, probly not necessary
 				for (int j = 1; j < TM_NUM_TYPES; j++) {
@@ -230,6 +237,10 @@ namespace fso {
 					}
 					SCP_string subMapClean = subMap;
 					SCP_tolower(subMapClean);
+					const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+					if (has_trailing_transparency_suffix(subMapClean)) {
+						subMapClean = subMapClean.substr(0, subMapClean.length() - trans_suffix.length());
+					}
 					SCP_string type;
 					auto npos = subMapClean.find_last_of('-');
 					if (npos != SCP_string::npos) {
@@ -239,20 +250,16 @@ namespace fso {
 						continue;
 					}
 					if (!type.empty()) {
-						if (type == "trans") {
-							// transparency map, not a replaceable subtype
-						} else {
-							bool known = false;
-							for (const auto& kt : SUBTEXTURE_SUFFIXES) {
-								if (lcase_equal(type, kt)) {
-									subTypesAvailable[MapNum][kt] = true;
-									known = true;
-									break;
-								}
+						bool known = false;
+						for (const auto& kt : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
+							if (lcase_equal(type, kt)) {
+								subTypesAvailable[MapNum][kt] = true;
+								known = true;
+								break;
 							}
-							if (!known) {
-								error_display(1, "Invalid Map type %s. Check your model's texture names or get a programmer", type.c_str());
-							}
+						}
+						if (!known) {
+							error_display(1, "Invalid Map type %s. Check your model's texture names or get a programmer", type.c_str());
 						}
 					}
 				}
@@ -347,13 +354,9 @@ namespace fso {
 								}
 							}
 						}
-						saveSubMap(i, "misc");
-						saveSubMap(i, "shine");
-						saveSubMap(i, "glow");
-						saveSubMap(i, "normal");
-						saveSubMap(i, "height");
-						saveSubMap(i, "ao");
-						saveSubMap(i, "reflect");	
+						for (const auto& subtype : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
+							saveSubMap(i, subtype);
+						}
 						_editor->missionChanged();
 					}
 					_editor->missionChanged();
@@ -382,15 +385,10 @@ namespace fso {
 				if (replaceMap[index][type]) {
 					if (inheritMap[index][type]) {
 						if (mainChanged) {
-							if (!currentTextures[index]["main"].empty()) {
-								if (currentTextures[index]["main"] != "invisible") {
-									fullName = currentTextures[index]["main"] + "-" + type;
-								}
-								else {
-									fullName = currentTextures[index]["main"];
-								}
-								if (testTexture(fullName)) {
-									SCP_vector<texture_replace>::iterator ii, end;
+								if (!currentTextures[index]["main"].empty()) {
+									fullName = build_subtype_texture_name(currentTextures[index]["main"], type);
+									if (testTexture(fullName)) {
+										SCP_vector<texture_replace>::iterator ii, end;
 									end = Fred_texture_replacements.end();
 									if (!m_multi) {
 										end = Fred_texture_replacements.end();
@@ -480,12 +478,7 @@ namespace fso {
 					}
 					else {
 						if (!currentTextures[index][type].empty()) {
-							if (currentTextures[index][type] != "invisible") {
-								fullName = currentTextures[index][type] + "-" + type;
-							}
-							else {
-								fullName = currentTextures[index][type];
-							}
+							fullName = build_subtype_texture_name(currentTextures[index][type], type);
 							if (testTexture(fullName)) {
 								SCP_vector<texture_replace>::iterator ii, end;
 								end = Fred_texture_replacements.end();

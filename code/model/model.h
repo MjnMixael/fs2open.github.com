@@ -14,6 +14,7 @@
 
 #include "globalincs/globals.h" // for NAME_LENGTH
 #include "globalincs/pstypes.h"
+#include <algorithm>
 #include <array>
  
 #include "actions/Program.h"
@@ -164,6 +165,38 @@ struct submodel_instance
 #define TM_NUM_TYPES		8		//WMC - Number of texture_info objects in texture_map
 									//Used by scripting - if you change this, do a search
 									//to update switch() statement in lua.cpp
+
+inline const SCP_string MODEL_TEXTURE_SUFFIX_MISC = "misc";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_SHINE = "shine";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_GLOW = "glow";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_NORMAL = "normal";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_HEIGHT = "height";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_AO = "ao";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_REFLECT = "reflect";
+inline const SCP_string MODEL_TEXTURE_SUFFIX_TRANS = "trans";
+
+inline const std::array<SCP_string, 7> MODEL_REPLACEABLE_TEXTURE_SUFFIXES = {MODEL_TEXTURE_SUFFIX_MISC,
+	MODEL_TEXTURE_SUFFIX_SHINE,
+	MODEL_TEXTURE_SUFFIX_GLOW,
+	MODEL_TEXTURE_SUFFIX_NORMAL,
+	MODEL_TEXTURE_SUFFIX_HEIGHT,
+	MODEL_TEXTURE_SUFFIX_AO,
+	MODEL_TEXTURE_SUFFIX_REFLECT};
+
+inline const std::array<SCP_string, 8> MODEL_KNOWN_TEXTURE_SUFFIXES = {MODEL_TEXTURE_SUFFIX_MISC,
+	MODEL_TEXTURE_SUFFIX_SHINE,
+	MODEL_TEXTURE_SUFFIX_GLOW,
+	MODEL_TEXTURE_SUFFIX_NORMAL,
+	MODEL_TEXTURE_SUFFIX_HEIGHT,
+	MODEL_TEXTURE_SUFFIX_AO,
+	MODEL_TEXTURE_SUFFIX_REFLECT,
+	MODEL_TEXTURE_SUFFIX_TRANS};
+
+inline const SCP_string& model_texture_longest_suffix_name() {
+	return *std::max_element(MODEL_KNOWN_TEXTURE_SUFFIXES.begin(),
+		MODEL_KNOWN_TEXTURE_SUFFIXES.end(),
+		[](const SCP_string& left, const SCP_string& right) { return left.size() < right.size(); });
+}
 
 #define MAX_REPLACEMENT_TEXTURES MAX_MODEL_TEXTURES * TM_NUM_TYPES
 
