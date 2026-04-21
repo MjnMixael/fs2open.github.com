@@ -14,7 +14,9 @@
 
 #include "globalincs/globals.h" // for NAME_LENGTH
 #include "globalincs/pstypes.h"
+#include <algorithm>
 #include <array>
+#include <map>
  
 #include "actions/Program.h"
 #include "gamesnd/gamesnd.h"
@@ -164,6 +166,26 @@ struct submodel_instance
 #define TM_NUM_TYPES		8		//WMC - Number of texture_info objects in texture_map
 									//Used by scripting - if you change this, do a search
 									//to update switch() statement in lua.cpp
+
+inline const SCP_map<int, SCP_string> MODEL_TEXTURE_SUFFIXES = {
+	{ TM_GLOW_TYPE, "-glow" },
+	{ TM_SPECULAR_TYPE, "-shine" },
+	{ TM_NORMAL_TYPE, "-normal" },
+	{ TM_HEIGHT_TYPE, "-height" },
+	{ TM_MISC_TYPE, "-misc" },
+	{ TM_SPEC_GLOSS_TYPE, "-reflect" },
+	{ TM_AMBIENT_TYPE, "-ao" }
+};
+
+inline const SCP_string MODEL_TEXTURE_SUFFIX_TRANS = "-trans"; // -trans is a special case and can be appended to other suffixes
+
+inline const SCP_string& model_texture_longest_suffix() {
+	return std::max_element(MODEL_TEXTURE_SUFFIXES.begin(),
+		MODEL_TEXTURE_SUFFIXES.end(),
+		[](const std::pair<int, SCP_string>& left, const std::pair<int, SCP_string>& right) {
+			return left.second.size() < right.second.size();
+		})->second;
+}
 
 #define MAX_REPLACEMENT_TEXTURES MAX_MODEL_TEXTURES * TM_NUM_TYPES
 
