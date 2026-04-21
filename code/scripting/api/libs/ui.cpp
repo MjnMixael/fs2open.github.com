@@ -1500,7 +1500,7 @@ ADE_FUNC(get3dOverheadChoices,
 	nullptr,
 	"Gets the 3d select choices from game_settings.tbl relating to weapon select overhead view.",
 	"boolean, number",
-	"3d overhead select choice(true for on, false for off), default overhead style(0 for top view, 1 for rotate, 2 for left view, 3 for right view)")
+	"3d overhead select choice(true for on, false for off), default overhead style(0 for top view, 1 for rotate, 2 for left view, 3 for right view, 4 for bottom view, 5 for isometric view)")
 {
 
 	return ade_set_args(L,

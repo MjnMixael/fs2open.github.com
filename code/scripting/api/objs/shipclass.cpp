@@ -1503,8 +1503,8 @@ ADE_FUNC(renderOverheadModel,
 	selectedWeapon--;
 	hoverSlot--;
 
-	if ((style < 0) || (style > 3))
-		LuaError(L, "Overhead style can only be 0 (top), 1 (rotate), 2 (left), or 3 (right)!");
+	if ((style < 0) || (style > 5))
+		LuaError(L, "Overhead style can only be 0 (top), 1 (rotate), 2 (left), 3 (right), 4 (bottom), or 5 (isometric)!");
 
 	if (selectedWeapon < 0 || selectedWeapon >= weapon_info_size())
 		selectedWeapon = -1;
