@@ -1405,35 +1405,10 @@ ADE_FUNC(renderOverheadModel,
 	int weapon_list[MAX_SHIP_WEAPONS] = {-1, -1, -1, -1, -1, -1, -1};
 
 	int tc_idx = -1;
+	const auto style_arg_is_enum = lua_gettop(L) >= 23 && lua_isuserdata(L, 23);
 
 	if (lua_isnumber(L, 6)) {
-
-		if (!ade_get_args(L,
-				"oii|iiiiiiiiiiiiiiiiiiiio",
-				l_Shipclass.Get(&idx),
-				&x1,
-				&y1,
-				&x2,
-				&y2,
-				&selectedSlot,
-				&selectedWeapon,
-				&hoverSlot,
-				&bank1_x,
-				&bank1_y,
-				&bank2_x,
-				&bank2_y,
-				&bank3_x,
-				&bank3_y,
-				&bank4_x,
-				&bank4_y,
-				&bank5_x,
-				&bank5_y,
-				&bank6_x,
-				&bank6_y,
-				&bank7_x,
-				&bank7_y,
-				&style,
-				l_TeamColor.Get(&tc_idx))) {
+		if (style_arg_is_enum) {
 			if (!ade_get_args(L,
 					"oii|iiiiiiiiiiiiiiiiiiioo",
 					l_Shipclass.Get(&idx),
@@ -1463,6 +1438,34 @@ ADE_FUNC(renderOverheadModel,
 				return ADE_RETURN_NIL;
 			}
 			style_is_enum = true;
+		} else {
+			if (!ade_get_args(L,
+					"oii|iiiiiiiiiiiiiiiiiiiio",
+					l_Shipclass.Get(&idx),
+					&x1,
+					&y1,
+					&x2,
+					&y2,
+					&selectedSlot,
+					&selectedWeapon,
+					&hoverSlot,
+					&bank1_x,
+					&bank1_y,
+					&bank2_x,
+					&bank2_y,
+					&bank3_x,
+					&bank3_y,
+					&bank4_x,
+					&bank4_y,
+					&bank5_x,
+					&bank5_y,
+					&bank6_x,
+					&bank6_y,
+					&bank7_x,
+					&bank7_y,
+					&style,
+					l_TeamColor.Get(&tc_idx)))
+				return ADE_RETURN_NIL;
 		}
 
 		// Convert this from the Lua index
@@ -1475,32 +1478,7 @@ ADE_FUNC(renderOverheadModel,
 			weapon_list[i] = Wss_slots[selectedSlot].wep[i];
 		}
 	} else {
-		if (!ade_get_args(L,
-				"oii|iitiiiiiiiiiiiiiiiiio",
-				l_Shipclass.Get(&idx),
-				&x1,
-				&y1,
-				&x2,
-				&y2,
-				&weapon_table,
-				&selectedWeapon,
-				&hoverSlot,
-				&bank1_x,
-				&bank1_y,
-				&bank2_x,
-				&bank2_y,
-				&bank3_x,
-				&bank3_y,
-				&bank4_x,
-				&bank4_y,
-				&bank5_x,
-				&bank5_y,
-				&bank6_x,
-				&bank6_y,
-				&bank7_x,
-				&bank7_y,
-				&style,
-				l_TeamColor.Get(&tc_idx))) {
+		if (style_arg_is_enum) {
 			if (!ade_get_args(L,
 					"oii|iitiiiiiiiiiiiiiiiiioo",
 					l_Shipclass.Get(&idx),
@@ -1530,6 +1508,34 @@ ADE_FUNC(renderOverheadModel,
 				return ADE_RETURN_NIL;
 			}
 			style_is_enum = true;
+		} else {
+			if (!ade_get_args(L,
+					"oii|iitiiiiiiiiiiiiiiiiio",
+					l_Shipclass.Get(&idx),
+					&x1,
+					&y1,
+					&x2,
+					&y2,
+					&weapon_table,
+					&selectedWeapon,
+					&hoverSlot,
+					&bank1_x,
+					&bank1_y,
+					&bank2_x,
+					&bank2_y,
+					&bank3_x,
+					&bank3_y,
+					&bank4_x,
+					&bank4_y,
+					&bank5_x,
+					&bank5_y,
+					&bank6_x,
+					&bank6_y,
+					&bank7_x,
+					&bank7_y,
+					&style,
+					l_TeamColor.Get(&tc_idx)))
+				return ADE_RETURN_NIL;
 		}
 
 		int count = 0;
