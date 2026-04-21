@@ -26,6 +26,7 @@ class GameStateExecutionContext : public IExecutionContext, public std::enable_s
   private:
 	GS_STATE m_contextState = GS_STATE_INVALID;
 	int m_stateInstanceId = -1;
+	bool m_hasGameState = false;
 };
 
 } // namespace executor

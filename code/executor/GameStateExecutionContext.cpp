@@ -5,13 +5,18 @@
 namespace executor {
 
 GameStateExecutionContext::GameStateExecutionContext(GS_STATE contextState, int stateInstance)
-	: m_contextState(contextState), m_stateInstanceId(stateInstance)
+	: m_contextState(contextState), m_stateInstanceId(stateInstance), m_hasGameState(GameState_Stack_Valid())
 {
 }
 GameStateExecutionContext::~GameStateExecutionContext() = default;
 
 IExecutionContext::State GameStateExecutionContext::determineContextState() const
 {
+	if (!m_hasGameState) {
+		// Captured in an environment that has no game-sequence stack (e.g. FRED). Keep running.
+		return IExecutionContext::State::Valid;
+	}
+
 	const auto depth = gameseq_get_state_idx(m_contextState);
 
 	if (depth < 0) {
@@ -35,6 +40,10 @@ IExecutionContext::State GameStateExecutionContext::determineContextState() cons
 
 std::shared_ptr<IExecutionContext> GameStateExecutionContext::captureContext()
 {
+	if (!GameState_Stack_Valid()) {
+		return std::make_shared<GameStateExecutionContext>(GS_STATE_INVALID, -1);
+	}
+
 	return std::make_shared<GameStateExecutionContext>(static_cast<GS_STATE>(gameseq_get_state()),
 		gameseq_get_state_instance_id());
 }
