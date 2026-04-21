@@ -1830,6 +1830,34 @@ bool mission_campaign_jump_to_mission(const char* filename, bool no_skip, bool p
 		// based on player feedback, let's NOT restart the campaign but rather fail gracefully
 		return false;
 	} else {
+		// Determine if this jump target is a loop mission and set loop state accordingly.
+		// This keeps loop-dependent UI/script behavior consistent with normal campaign flow.
+		Campaign.loop_enabled = 0;
+		Campaign.loop_reentry = 0;
+		int evaluated_reentry = -1;
+		const int saved_current = Campaign.current_mission;
+		const int saved_next = Campaign.next_mission;
+		const int saved_loop_mission = Campaign.loop_mission;
+		for (i = 0; i < mission_num; i++) {
+			if (!(Campaign.missions[i].flags & CMISSION_FLAG_HAS_LOOP)) {
+				continue;
+			}
+
+			Campaign.current_mission = i;
+			mission_campaign_eval_next_mission();
+			if (Campaign.loop_mission == mission_num) {
+				evaluated_reentry = Campaign.next_mission;
+				break;
+			}
+		}
+		Campaign.current_mission = saved_current;
+		Campaign.next_mission = saved_next;
+		Campaign.loop_mission = saved_loop_mission;
+		if (evaluated_reentry != -1) {
+			Campaign.loop_enabled = 1;
+			Campaign.loop_reentry = evaluated_reentry;
+		}
+
 		if (!preserve_loadout) {
 			for (auto it = Ship_info.begin(); it != Ship_info.end(); it++) {
 				i = static_cast<int>(std::distance(Ship_info.begin(), it));
