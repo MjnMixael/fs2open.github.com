@@ -2584,8 +2584,8 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 				{
 					char tmp_name[127];
 					cfread_string_len(tmp_name,127,fp);
-					const auto max_buffer_size = MAX_FILENAME_LEN - 1 - 1 -
-						static_cast<int>(model_texture_longest_suffix_name().size()); // trailing NUL + '-' + longest known suffix
+					const auto max_buffer_size = MAX_FILENAME_LEN - 1 -
+						static_cast<int>(model_texture_longest_suffix_name().size()); // trailing NUL + longest known suffix
 					if (strlen(tmp_name) >= max_buffer_size)
 					{
 						Warning(LOCATION, "Model '%s', texture '%s' filename is too long!  Truncating to %d characters.", pm->filename, tmp_name, max_buffer_size - 1);
@@ -3075,7 +3075,8 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 	else
 	{
 		// check if we should be transparent, include "-trans" but make sure to skip anything that might be "-transport"
-		if ((strstr(tmp_name, "-trans") && !strstr(tmp_name, "-transpo")) || strstr(tmp_name, "shockwave") || !strcmp(tmp_name, "nameplate")) {
+		const auto transpo_suffix = MODEL_TEXTURE_SUFFIX_TRANS + "po";
+		if ((strstr(tmp_name, MODEL_TEXTURE_SUFFIX_TRANS.c_str()) && !strstr(tmp_name, transpo_suffix.c_str())) || strstr(tmp_name, "shockwave") || !strcmp(tmp_name, "nameplate")) {
 			tmap->is_transparent = true;
 		}
 
@@ -3100,7 +3101,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 	else
 	{
 		strcpy_s(tmp_name, file);
-		strcat_s(tmp_name, "-");
 		strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_GLOW.c_str());
 		strlwr(tmp_name);
 
@@ -3120,7 +3120,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 	{
 		// look for reflectance map
 		strcpy_s(tmp_name, file);
-		strcat_s(tmp_name, "-");
 		strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_REFLECT.c_str());
 		strlwr(tmp_name);
 
@@ -3128,7 +3127,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 
 		// look for a legacy shine map as well
 		strcpy_s(tmp_name, file);
-		strcat_s(tmp_name, "-");
 		strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_SHINE.c_str());
 		strlwr(tmp_name);
 
@@ -3143,7 +3141,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 		tnorm->clear();
 	} else {
 		strcpy_s(tmp_name, file);
-		strcat_s(tmp_name, "-");
 		strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_NORMAL.c_str());
 		strlwr(tmp_name);
 
@@ -3156,7 +3153,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 		theight->clear();
 	} else {
 		strcpy_s(tmp_name, file);
-		strcat_s(tmp_name, "-");
 		strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_HEIGHT.c_str());
 		strlwr(tmp_name);
 
@@ -3167,7 +3163,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 	texture_info *tambient = &tmap->textures[TM_AMBIENT_TYPE];
 
 	strcpy_s(tmp_name, file);
-	strcat_s(tmp_name, "-");
 	strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_AO.c_str());
 	strlwr(tmp_name);
 
@@ -3177,7 +3172,6 @@ void model_load_texture(polymodel *pm, int i, const char *file)
 	texture_info *tmisc = &tmap->textures[TM_MISC_TYPE];
 
 	strcpy_s(tmp_name, file);
-	strcat_s(tmp_name, "-");
 	strcat_s(tmp_name, MODEL_TEXTURE_SUFFIX_MISC.c_str());
 	strlwr(tmp_name);
 

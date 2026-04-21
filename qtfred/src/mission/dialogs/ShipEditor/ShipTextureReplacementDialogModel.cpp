@@ -6,12 +6,17 @@
 namespace {
 bool has_trailing_transparency_suffix(const SCP_string& texture_name)
 {
-	const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
-	if (texture_name.length() <= trans_suffix.length()) {
+	if (texture_name.length() <= MODEL_TEXTURE_SUFFIX_TRANS.length()) {
 		return false;
 	}
 
-	return lcase_equal(texture_name.substr(texture_name.length() - trans_suffix.length()), trans_suffix);
+	return lcase_equal(texture_name.substr(texture_name.length() - MODEL_TEXTURE_SUFFIX_TRANS.length()),
+		MODEL_TEXTURE_SUFFIX_TRANS);
+}
+
+SCP_string texture_suffix_to_type_name(const SCP_string& suffix)
+{
+	return suffix.substr(1);
 }
 
 SCP_string build_subtype_texture_name(const SCP_string& texture_name, const SCP_string& type)
@@ -20,10 +25,9 @@ SCP_string build_subtype_texture_name(const SCP_string& texture_name, const SCP_
 		return texture_name;
 	}
 
-	const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
 	if (has_trailing_transparency_suffix(texture_name)) {
-		auto base_name = texture_name.substr(0, texture_name.length() - trans_suffix.length());
-		return base_name + "-" + type + "-" + MODEL_TEXTURE_SUFFIX_TRANS;
+		auto base_name = texture_name.substr(0, texture_name.length() - MODEL_TEXTURE_SUFFIX_TRANS.length());
+		return base_name + "-" + type + MODEL_TEXTURE_SUFFIX_TRANS;
 	}
 
 	return texture_name + "-" + type;
@@ -140,26 +144,23 @@ namespace fso {
 									SCP_string type;
 									{
 										SCP_string typeParseText = newText;
-										const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
-										if (has_trailing_transparency_suffix(typeParseText)) {
-											typeParseText = typeParseText.substr(0, typeParseText.length() - trans_suffix.length());
+										auto has_trans_suffix = has_trailing_transparency_suffix(typeParseText);
+										if (has_trans_suffix) {
+											typeParseText = typeParseText.substr(0, typeParseText.length() - MODEL_TEXTURE_SUFFIX_TRANS.length());
 										}
 
-										auto npos = typeParseText.find_last_of('-');
-										if (npos != SCP_string::npos) {
-											SCP_string possibleType = typeParseText.substr(npos + 1);
-											// Only treat the suffix as a type if it's a known sub-texture type.
-											// Texture names themselves can contain hyphens (e.g. "fighter01-01a"),
-											// so we must not blindly strip the last segment.
-											for (const auto& kt : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
-												if (lcase_equal(possibleType, kt)) {
-													type = possibleType;
-													newText = typeParseText.substr(0, npos);
-													if (has_trailing_transparency_suffix(Fred_texture_replacement.new_texture)) {
-														newText += "-" + MODEL_TEXTURE_SUFFIX_TRANS;
-													}
-													break;
+										// Only treat the suffix as a type if it's a known sub-texture type.
+										// Texture names themselves can contain hyphens (e.g. "fighter01-01a"),
+										// so we must not blindly strip the last segment.
+										for (const auto& suffix : MODEL_KNOWN_TEXTURE_SUFFIXES) {
+											if (typeParseText.length() > suffix.length()
+												&& lcase_equal(typeParseText.substr(typeParseText.length() - suffix.length()), suffix)) {
+												type = texture_suffix_to_type_name(suffix);
+												newText = typeParseText.substr(0, typeParseText.length() - suffix.length());
+												if (has_trans_suffix) {
+													newText += MODEL_TEXTURE_SUFFIX_TRANS;
 												}
+												break;
 											}
 										}
 									}
@@ -219,11 +220,12 @@ namespace fso {
 			}
 			void ShipTextureReplacementDialogModel::initSubTypes(polymodel* model, int MapNum)
 			{
-				for (const auto& subtype : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
-					subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>(subtype, false));
-					currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>(subtype, ""));
-					replaceMap[MapNum].insert(std::pair<SCP_string, bool>(subtype, false));
-					inheritMap[MapNum].insert(std::pair<SCP_string, bool>(subtype, true));
+				for (const auto& subtype : MODEL_KNOWN_TEXTURE_SUFFIXES) {
+					auto type_name = texture_suffix_to_type_name(subtype);
+					subTypesAvailable[MapNum].insert(std::pair<SCP_string, bool>(type_name, false));
+					currentTextures[MapNum].insert(std::pair<SCP_string, SCP_string>(type_name, ""));
+					replaceMap[MapNum].insert(std::pair<SCP_string, bool>(type_name, false));
+					inheritMap[MapNum].insert(std::pair<SCP_string, bool>(type_name, true));
 				}
 				char subMap[MAX_FILENAME_LEN];
 				//init saftly, probly not necessary
@@ -237,30 +239,21 @@ namespace fso {
 					}
 					SCP_string subMapClean = subMap;
 					SCP_tolower(subMapClean);
-					const SCP_string trans_suffix = "-" + MODEL_TEXTURE_SUFFIX_TRANS;
 					if (has_trailing_transparency_suffix(subMapClean)) {
-						subMapClean = subMapClean.substr(0, subMapClean.length() - trans_suffix.length());
+						subMapClean = subMapClean.substr(0, subMapClean.length() - MODEL_TEXTURE_SUFFIX_TRANS.length());
 					}
-					SCP_string type;
-					auto npos = subMapClean.find_last_of('-');
-					if (npos != SCP_string::npos) {
-						type = subMapClean.substr(npos + 1);
-					}
-					else {
-						continue;
-					}
-					if (!type.empty()) {
-						bool known = false;
-						for (const auto& kt : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
-							if (lcase_equal(type, kt)) {
-								subTypesAvailable[MapNum][kt] = true;
-								known = true;
-								break;
-							}
+					bool known = false;
+					for (const auto& suffix : MODEL_KNOWN_TEXTURE_SUFFIXES) {
+						if (subMapClean.length() > suffix.length()
+							&& lcase_equal(subMapClean.substr(subMapClean.length() - suffix.length()), suffix)) {
+							subTypesAvailable[MapNum][texture_suffix_to_type_name(suffix)] = true;
+							known = true;
+							break;
 						}
-						if (!known) {
-							error_display(1, "Invalid Map type %s. Check your model's texture names or get a programmer", type.c_str());
-						}
+					}
+					if (!known) {
+						error_display(1, "Invalid Map type in texture %s. Check your model's texture names or get a programmer",
+							subMapClean.c_str());
 					}
 				}
 			}
@@ -354,8 +347,8 @@ namespace fso {
 								}
 							}
 						}
-						for (const auto& subtype : MODEL_REPLACEABLE_TEXTURE_SUFFIXES) {
-							saveSubMap(i, subtype);
+						for (const auto& subtype : MODEL_KNOWN_TEXTURE_SUFFIXES) {
+							saveSubMap(i, texture_suffix_to_type_name(subtype));
 						}
 						_editor->missionChanged();
 					}
