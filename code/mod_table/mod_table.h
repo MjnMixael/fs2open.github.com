@@ -17,7 +17,12 @@
 // Typedef for Overhead View styles
 typedef enum {
 	OH_TOP_VIEW,
-	OH_ROTATING
+	OH_ROTATING,
+	OH_LEFT_VIEW,
+	OH_RIGHT_VIEW,
+	OH_BOTTOM_VIEW,
+	OH_FRONT_VIEW,
+	OH_BACK_VIEW
 } overhead_style;
 
 // Typedef for Escape key behavior --wookieejedi

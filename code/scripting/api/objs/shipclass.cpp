@@ -17,6 +17,7 @@
 #include "missionui/missionweaponchoice.h"
 #include "graphics/matrix.h"
 #include "missionui/missionscreencommon.h"
+#include "scripting/api/objs/enums.h"
 #include "scripting/api/objs/weaponclass.h"
 #include "scripting/lua/LuaTable.h"
 #include "model/modelrender.h"
@@ -1359,7 +1360,7 @@ ADE_FUNC(renderOverheadModel,
 	"number x, number y, [number width = 467, number height = 362, number|table /* selectedSlot = -1 or empty table */, number selectedWeapon = -1, number hoverSlot = -1, "
 	"number bank1_x = 170, number bank1_y = 203, number bank2_x = 170, number bank2_y = 246, number bank3_x = 170, number bank3_y = 290, "
 	"number bank4_x = 552, number bank4_y = 203, number bank5_x = 552, number bank5_y = 246, number bank6_x = 552, number bank6_y = 290, "
-	"number bank7_x = 552, number bank7_y = 333, number style = 0, teamcolor TeamColor=nil]",
+	"number bank7_x = 552, number bank7_y = 333, number|enumeration style = 0, teamcolor TeamColor=nil]",
 	"Draws the 3D overhead ship model with the lines pointing from bank weapon selections to bank firepoints. SelectedSlot refers to loadout "
 	"ship slots 1-12 where wing 1 is 1-4, wing 2 is 5-8, and wing 3 is 9-12. SelectedWeapon is the index into weapon classes. HoverSlot refers "
 	"to the bank slots 1-7 where 1-3 are primaries and 4-6 are secondaries. Lines will be drawn from any bank containing the SelectedWeapon to "
@@ -1367,7 +1368,8 @@ ADE_FUNC(renderOverheadModel,
 	"of that slot. Line drawing for HoverSlot takes precedence over line drawing for SelectedWeapon. Set either or both to -1 to stop line drawing. "
 	"The bank coordinates are the coordinates from which the lines for that bank will be drawn. It is expected that primary slots will be on the "
 	"left of the ship model and secondaries will be on the right. The lines have a hard-coded curve expecing to be drawn from those directions. "
-	"Style can be 0 or 1. 0 for the ship to be drawn stationary from top down, 1 for the ship to be rotating.",
+	"Style can be one of the OVERHEAD_STYLE_* enumerations (preferred) or a legacy number for backwards compatibility. Numeric values are: "
+	"0 top, 1 rotate, 2 left, 3 right, 4 bottom, 5 front, 6 back.",
 	"boolean",
 	"true if rendered, false if error")
 {
@@ -1397,6 +1399,8 @@ ADE_FUNC(renderOverheadModel,
 	int bank7_x = 552;
 	int bank7_y = 333;
 	int style = 0;
+	enum_h style_enum;
+	bool style_is_enum = false;
 
 	int weapon_list[MAX_SHIP_WEAPONS] = {-1, -1, -1, -1, -1, -1, -1};
 
@@ -1429,8 +1433,37 @@ ADE_FUNC(renderOverheadModel,
 				&bank7_x,
 				&bank7_y,
 				&style,
-				l_TeamColor.Get(&tc_idx)))
-			return ADE_RETURN_NIL;
+				l_TeamColor.Get(&tc_idx))) {
+			if (!ade_get_args(L,
+					"oii|iiiiiiiiiiiiiiiiiiioo",
+					l_Shipclass.Get(&idx),
+					&x1,
+					&y1,
+					&x2,
+					&y2,
+					&selectedSlot,
+					&selectedWeapon,
+					&hoverSlot,
+					&bank1_x,
+					&bank1_y,
+					&bank2_x,
+					&bank2_y,
+					&bank3_x,
+					&bank3_y,
+					&bank4_x,
+					&bank4_y,
+					&bank5_x,
+					&bank5_y,
+					&bank6_x,
+					&bank6_y,
+					&bank7_x,
+					&bank7_y,
+					l_Enum.Get(&style_enum),
+					l_TeamColor.Get(&tc_idx))) {
+				return ADE_RETURN_NIL;
+			}
+			style_is_enum = true;
+		}
 
 		// Convert this from the Lua index
 		selectedSlot--;
@@ -1467,8 +1500,37 @@ ADE_FUNC(renderOverheadModel,
 				&bank7_x,
 				&bank7_y,
 				&style,
-				l_TeamColor.Get(&tc_idx)))
-			return ADE_RETURN_NIL;
+				l_TeamColor.Get(&tc_idx))) {
+			if (!ade_get_args(L,
+					"oii|iitiiiiiiiiiiiiiiiiioo",
+					l_Shipclass.Get(&idx),
+					&x1,
+					&y1,
+					&x2,
+					&y2,
+					&weapon_table,
+					&selectedWeapon,
+					&hoverSlot,
+					&bank1_x,
+					&bank1_y,
+					&bank2_x,
+					&bank2_y,
+					&bank3_x,
+					&bank3_y,
+					&bank4_x,
+					&bank4_y,
+					&bank5_x,
+					&bank5_y,
+					&bank6_x,
+					&bank6_y,
+					&bank7_x,
+					&bank7_y,
+					l_Enum.Get(&style_enum),
+					l_TeamColor.Get(&tc_idx))) {
+				return ADE_RETURN_NIL;
+			}
+			style_is_enum = true;
+		}
 
 		int count = 0;
 		if (weapon_table.isValid()) {
@@ -1503,8 +1565,40 @@ ADE_FUNC(renderOverheadModel,
 	selectedWeapon--;
 	hoverSlot--;
 
-	if ((style < 0) || (style > 1))
-		LuaError(L, "Overhead style can only be 0 or 1!");
+	overhead_style parsed_style = OH_TOP_VIEW;
+	if (style_is_enum) {
+		switch (style_enum.index) {
+		case LE_OVERHEAD_STYLE_TOP:
+			parsed_style = OH_TOP_VIEW;
+			break;
+		case LE_OVERHEAD_STYLE_ROTATE:
+			parsed_style = OH_ROTATING;
+			break;
+		case LE_OVERHEAD_STYLE_LEFT:
+			parsed_style = OH_LEFT_VIEW;
+			break;
+		case LE_OVERHEAD_STYLE_RIGHT:
+			parsed_style = OH_RIGHT_VIEW;
+			break;
+		case LE_OVERHEAD_STYLE_BOTTOM:
+			parsed_style = OH_BOTTOM_VIEW;
+			break;
+		case LE_OVERHEAD_STYLE_FRONT:
+			parsed_style = OH_FRONT_VIEW;
+			break;
+		case LE_OVERHEAD_STYLE_BACK:
+			parsed_style = OH_BACK_VIEW;
+			break;
+		default:
+			LuaError(L, "Invalid overhead style enumeration! Use OVERHEAD_STYLE_* values.");
+			return ADE_RETURN_FALSE;
+		}
+	} else {
+		if ((style < 0) || (style > 6))
+			LuaError(L, "Overhead style can only be 0 (top), 1 (rotate), 2 (left), 3 (right), 4 (bottom), 5 (front), or 6 (back)!");
+
+		parsed_style = static_cast<overhead_style>(style);
+	}
 
 	if (selectedWeapon < 0 || selectedWeapon >= weapon_info_size())
 		selectedWeapon = -1;
@@ -1555,7 +1649,7 @@ ADE_FUNC(renderOverheadModel,
 		0,
 		0,
 		0,
-		(overhead_style)style,
+		parsed_style,
 		tcolor);
 
 	return ade_set_args(L, "b", true);

@@ -1281,6 +1281,16 @@ void parse_mod_table(const char *filename)
 					Default_overhead_ship_style = OH_ROTATING;
 				} else if (!stricmp(effect, "TOPVIEW")) {
 					Default_overhead_ship_style = OH_TOP_VIEW;
+				} else if (!stricmp(effect, "LEFTVIEW")) {
+					Default_overhead_ship_style = OH_LEFT_VIEW;
+				} else if (!stricmp(effect, "RIGHTVIEW")) {
+					Default_overhead_ship_style = OH_RIGHT_VIEW;
+				} else if (!stricmp(effect, "BOTTOMVIEW")) {
+					Default_overhead_ship_style = OH_BOTTOM_VIEW;
+				} else if (!stricmp(effect, "FRONTVIEW")) {
+					Default_overhead_ship_style = OH_FRONT_VIEW;
+				} else if (!stricmp(effect, "BACKVIEW")) {
+					Default_overhead_ship_style = OH_BACK_VIEW;
 				} else {
 					error_display(0, "Unknown Select Overhead Ship Style %s, using TOPVIEW instead.", effect);
 				}

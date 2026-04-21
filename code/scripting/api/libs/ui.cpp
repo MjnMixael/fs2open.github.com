@@ -1497,16 +1497,54 @@ ADE_FUNC(get3dWeaponChoices,
 
 ADE_FUNC(get3dOverheadChoices,
 	l_UserInterface_ShipWepSelect,
-	nullptr,
+	"[boolean LegacyStyleNumber = false]",
 	"Gets the 3d select choices from game_settings.tbl relating to weapon select overhead view.",
-	"boolean, number",
-	"3d overhead select choice(true for on, false for off), default overhead style(0 for top view, 1 for rotate)")
+	"boolean, enumeration|number",
+	"3d overhead select choice(true for on, false for off), default overhead style as OVERHEAD_STYLE_* enumeration by default; "
+	"or legacy style number if LegacyStyleNumber is true (0 top, 1 rotate, 2 left, 3 right, 4 bottom, 5 front, 6 back)")
 {
+	bool legacy_style_number = false;
+	ade_get_args(L, "|b", &legacy_style_number);
+
+	if (legacy_style_number) {
+		return ade_set_args(L,
+			"bi",
+			Use_3d_overhead_ship,
+			static_cast<int>(Default_overhead_ship_style));
+	}
+
+	lua_enum style_enum = LE_OVERHEAD_STYLE_TOP;
+	switch (Default_overhead_ship_style) {
+	case OH_TOP_VIEW:
+		style_enum = LE_OVERHEAD_STYLE_TOP;
+		break;
+	case OH_ROTATING:
+		style_enum = LE_OVERHEAD_STYLE_ROTATE;
+		break;
+	case OH_LEFT_VIEW:
+		style_enum = LE_OVERHEAD_STYLE_LEFT;
+		break;
+	case OH_RIGHT_VIEW:
+		style_enum = LE_OVERHEAD_STYLE_RIGHT;
+		break;
+	case OH_BOTTOM_VIEW:
+		style_enum = LE_OVERHEAD_STYLE_BOTTOM;
+		break;
+	case OH_FRONT_VIEW:
+		style_enum = LE_OVERHEAD_STYLE_FRONT;
+		break;
+	case OH_BACK_VIEW:
+		style_enum = LE_OVERHEAD_STYLE_BACK;
+		break;
+	default:
+		style_enum = LE_OVERHEAD_STYLE_TOP;
+		break;
+	}
 
 	return ade_set_args(L,
-		"bi",
+		"bo",
 		Use_3d_overhead_ship,
-		(int)Default_overhead_ship_style);
+		l_Enum.Set(enum_h(style_enum)));
 }
 
 ADE_LIB_DERIV(l_Ship_Pool, "Ship_Pool", nullptr, nullptr, l_UserInterface_ShipWepSelect);
