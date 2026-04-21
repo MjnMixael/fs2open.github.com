@@ -786,6 +786,16 @@ void draw_3d_overhead_view(int model_num,
 			rot_angles.b = 0.0f;
 			rot_angles.h = 0.0f;
 			vm_angles_2_matrix(&object_orient, &rot_angles);
+		} else if (style == OH_LEFT_VIEW) {
+			rot_angles.p = 0.0f;
+			rot_angles.b = 0.0f;
+			rot_angles.h = PI_2;
+			vm_angles_2_matrix(&object_orient, &rot_angles);
+		} else if (style == OH_RIGHT_VIEW) {
+			rot_angles.p = 0.0f;
+			rot_angles.b = 0.0f;
+			rot_angles.h = -(PI_2);
+			vm_angles_2_matrix(&object_orient, &rot_angles);
 		} else if (style == OH_ROTATING) {
 			float rev_rate;
 			rev_rate = REVOLUTION_RATE;

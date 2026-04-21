@@ -1281,6 +1281,10 @@ void parse_mod_table(const char *filename)
 					Default_overhead_ship_style = OH_ROTATING;
 				} else if (!stricmp(effect, "TOPVIEW")) {
 					Default_overhead_ship_style = OH_TOP_VIEW;
+				} else if (!stricmp(effect, "LEFTVIEW")) {
+					Default_overhead_ship_style = OH_LEFT_VIEW;
+				} else if (!stricmp(effect, "RIGHTVIEW")) {
+					Default_overhead_ship_style = OH_RIGHT_VIEW;
 				} else {
 					error_display(0, "Unknown Select Overhead Ship Style %s, using TOPVIEW instead.", effect);
 				}
