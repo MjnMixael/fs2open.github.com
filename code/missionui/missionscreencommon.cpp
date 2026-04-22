@@ -1612,7 +1612,7 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 			bs = &pm->submodel[0];
 		}
 
-		vec3d weap_closeup = *closeup_pos;
+		vec3d weap_closeup = vmd_zero_vector;
 		float y_closeup;
 		float tm_zoom = closeup_zoom;
 
@@ -1631,6 +1631,14 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 		{
 			weap_closeup.xyz.z = bs->min.xyz.x;
 		}
+
+		// Keep the auto-centered closeup as the baseline, then apply table-defined offsets.
+		// This preserves existing framing when no closeup_pos is defined (or when it's zeroed).
+		if (closeup_pos != nullptr && !IS_VEC_NULL(closeup_pos))
+		{
+			weap_closeup += *closeup_pos;
+		}
+
 		g3_set_view_matrix( &weap_closeup, &vmd_identity_matrix, tm_zoom);
 
 		gr_set_proj_matrix(Proj_fov * 0.5f, gr_screen.clip_aspect, 0.05f, 1000.0f);
