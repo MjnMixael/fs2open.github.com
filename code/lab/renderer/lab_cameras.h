@@ -111,6 +111,7 @@ public:
 
 	bool handleOrientationWidgetClick(int mouseX, int mouseY);
 	void snapToDirection(SnapDirection direction);
+	float getObjectFitDistance() const;
 
 	float distance = DEFAULT_DISTANCE;
 	float phi = DEFAULT_PHI;

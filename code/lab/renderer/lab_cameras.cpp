@@ -271,7 +271,7 @@ void OrbitCamera::snapToDirection(SnapDirection direction)
 	// Force deterministic snap results regardless of prior manipulations.
 	// Object orientation is intentionally left untouched.
 	pan_offset = vmd_zero_vector;
-	distance = DEFAULT_DISTANCE;
+	distance = getObjectFitDistance();
 
 	switch (direction) {
 	case SnapDirection::Front:
@@ -301,6 +301,33 @@ void OrbitCamera::snapToDirection(SnapDirection direction)
 	updateCamera();
 }
 
+float OrbitCamera::getObjectFitDistance() const
+{
+	static constexpr float distance_multiplier = 1.6f;
+	float fit_distance = DEFAULT_DISTANCE;
+
+	if (getLabManager()->CurrentObject != -1) {
+		object* obj = &Objects[getLabManager()->CurrentObject];
+		fit_distance = obj->radius * distance_multiplier;
+
+		// Beams use the muzzle radius
+		if (obj->type == OBJ_BEAM) {
+			weapon_info* wip = &Weapon_info[Beams[obj->instance].weapon_info_index];
+			if (wip != nullptr) {
+				fit_distance = wip->b_info.beam_muzzle_radius * distance_multiplier;
+			}
+		// Lasers use the laser length
+		} else if (obj->type == OBJ_WEAPON) {
+			weapon_info* wip = &Weapon_info[Weapons[obj->instance].weapon_info_index];
+			if (wip != nullptr && wip->render_type == WRT_LASER) {
+				fit_distance = wip->laser_length * distance_multiplier;
+			}
+		}
+	}
+
+	return fit_distance;
+}
+
 void OrbitCamera::resetView()
 {
 	phi = DEFAULT_PHI;
@@ -312,31 +339,9 @@ void OrbitCamera::resetView()
 }
 
 void OrbitCamera::displayedObjectChanged() {
-	float distance_multiplier = 1.6f;
-
-	if (getLabManager()->CurrentObject != -1) {
-		object* obj = &Objects[getLabManager()->CurrentObject];
-
-		// Reset camera panning
-		pan_offset = vmd_zero_vector;
-		
-		// Ships and Missiles use the object radius to get a camera distance
-		distance = obj->radius * distance_multiplier;
-
-		// Beams use the muzzle radius
-		if (obj->type == OBJ_BEAM) {
-			weapon_info* wip = &Weapon_info[Beams[obj->instance].weapon_info_index];
-			if (wip != nullptr) {
-				distance = wip->b_info.beam_muzzle_radius * distance_multiplier;
-			}
-		// Lasers use the laser length
-		} else if (obj->type == OBJ_WEAPON) {
-			weapon_info* wip = &Weapon_info[Weapons[obj->instance].weapon_info_index];
-			if (wip != nullptr && wip->render_type == WRT_LASER) {
-				distance = wip->laser_length * distance_multiplier;
-			}
-		}
-	}
+	// Reset camera panning
+	pan_offset = vmd_zero_vector;
+	distance = getObjectFitDistance();
 
 	updateCamera();
 }
