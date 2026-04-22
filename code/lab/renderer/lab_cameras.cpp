@@ -305,7 +305,7 @@ std::array<AdjacentLabel, 4> build_adjacent_labels(float phi, float theta, int c
 
 void OrbitCamera::handleInput(
 	int dx, int dy, int dz, bool, bool lmbPressed, bool rmbDown, int modifierKeys, int mouseX, int mouseY) {
-	if (lmbPressed && handleOrientationWidgetClick(mouseX, mouseY)) {
+	if (getLabManager()->Renderer->getShowOrientationWidget() && lmbPressed && handleOrientationWidgetClick(mouseX, mouseY)) {
 		return;
 	}
 
@@ -586,4 +586,11 @@ void OrbitCamera::renderOverlay() const
 		gr_set_color_fast(hovered ? &Color_white : &Color_silver);
 		gr_string(label.x + 5, label.y + 2, label.label, GR_RESIZE_NONE);
 	}
+
+	const char* subtitle = "Camera orientation (not object)";
+	int subtitle_w = 0;
+	int subtitle_h = 0;
+	gr_get_string_size(&subtitle_w, &subtitle_h, subtitle);
+	gr_set_color_fast(&Color_silver);
+	gr_string(center_x - (subtitle_w / 2), widget_top + widget_size + 8, subtitle, GR_RESIZE_NONE);
 }
