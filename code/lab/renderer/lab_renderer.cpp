@@ -368,6 +368,8 @@ void LabRenderer::renderHud(float) {
 			"Current Team Color: %s",
 			currentTeamColor.c_str());
 	}
+
+	labCamera->renderOverlay();
 }
 
 void LabRenderer::useBackground(const SCP_string& mission_name) {
