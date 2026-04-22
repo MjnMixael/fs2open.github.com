@@ -2909,7 +2909,16 @@ void weapon_select_do(float frametime)
 				if(icon->model_index != -1)
 				{
 					//Draw the model
-					draw_model_icon(icon->model_index, MR_NO_FOGGING | MR_NO_LIGHTING, wip->closeup_zoom / 2.5f, sx, sy, w, h, NULL, GR_RESIZE_MENU, &wip->closeup_pos);
+					draw_model_icon(icon->model_index,
+						MR_NO_FOGGING | MR_NO_LIGHTING,
+						wip->icon_closeup_zoom / 2.5f,
+						sx,
+						sy,
+						w,
+						h,
+						NULL,
+						GR_RESIZE_MENU,
+						&wip->icon_closeup_pos);
 				}
 				else if(icon->laser_bmap != -1)
 				{
@@ -3141,7 +3150,17 @@ void wl_render_icon(int index, int x, int y, int num, int draw_num_flag, int hot
 		if(icon->model_index != -1)
 		{
 			//Draw the model
-			draw_model_icon(icon->model_index, MR_NO_FOGGING | MR_NO_LIGHTING, Weapon_info[index].closeup_zoom * 0.4f, x, y, 56, 24, NULL, GR_RESIZE_MENU);
+			auto* wip = &Weapon_info[index];
+			draw_model_icon(icon->model_index,
+				MR_NO_FOGGING | MR_NO_LIGHTING,
+				wip->icon_closeup_zoom * 0.4f,
+				x,
+				y,
+				56,
+				24,
+				NULL,
+				GR_RESIZE_MENU,
+				&wip->icon_closeup_pos);
 		}
 		else if(icon->laser_bmap != -1)
 		{

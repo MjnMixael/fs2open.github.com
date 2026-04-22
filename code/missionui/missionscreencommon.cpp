@@ -1590,7 +1590,8 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 	g3_start_frame(1);
 	if(sip != NULL)
 	{
-		g3_set_view_matrix( &sip->closeup_pos, &vmd_identity_matrix, zoom);
+		const auto& ship_closeup = (closeup_pos != nullptr && !IS_VEC_NULL(closeup_pos)) ? *closeup_pos : sip->closeup_pos;
+		g3_set_view_matrix(&ship_closeup, &vmd_identity_matrix, zoom);
 
 		gr_set_proj_matrix(Proj_fov * 0.5f, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
 	}

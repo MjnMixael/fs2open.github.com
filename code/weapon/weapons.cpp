@@ -983,6 +983,18 @@ int parse_weapon(int subtype, bool replace, const char *filename)
 		if (optional_string("+Closeup_zoom:")) {
 			stuff_float(&wip->closeup_zoom);
 		}
+
+		// Icon closeup settings use regular closeup values as defaults unless explicitly overridden.
+		wip->icon_closeup_pos = wip->closeup_pos;
+		wip->icon_closeup_zoom = wip->closeup_zoom;
+
+		if (optional_string("+Icon_closeup_pos:")) {
+			stuff_vec3d(&wip->icon_closeup_pos);
+		}
+
+		if (optional_string("+Icon_closeup_zoom:")) {
+			stuff_float(&wip->icon_closeup_zoom);
+		}
 	}
 
 	// Weapon fadein effect, used when no ani is specified or weapon_select_3d is active
@@ -9396,6 +9408,8 @@ void weapon_info::reset()
 
 	vm_vec_zero(&this->closeup_pos);
 	this->closeup_zoom = 1.0f;
+	this->icon_closeup_pos = this->closeup_pos;
+	this->icon_closeup_zoom = this->closeup_zoom;
 
 	memset(this->hud_filename, 0, sizeof(this->hud_filename));
 	this->hud_image_index = -1;

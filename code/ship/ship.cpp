@@ -1243,6 +1243,8 @@ void ship_info::clone(const ship_info& other)
 
 	closeup_pos = other.closeup_pos;
 	closeup_zoom = other.closeup_zoom;
+	icon_closeup_pos = other.icon_closeup_pos;
+	icon_closeup_zoom = other.icon_closeup_zoom;
 
 	closeup_pos_targetbox = other.closeup_pos_targetbox;
 	closeup_zoom_targetbox = other.closeup_zoom_targetbox;
@@ -1595,6 +1597,8 @@ void ship_info::move(ship_info&& other)
 
 	std::swap(closeup_pos, other.closeup_pos);
 	closeup_zoom = other.closeup_zoom;
+	std::swap(icon_closeup_pos, other.icon_closeup_pos);
+	icon_closeup_zoom = other.icon_closeup_zoom;
 
 	std::swap(closeup_pos_targetbox, other.closeup_pos_targetbox);
 	closeup_zoom_targetbox = other.closeup_zoom_targetbox;
@@ -1984,6 +1988,8 @@ ship_info::ship_info()
 
 	vm_vec_zero(&closeup_pos);
 	closeup_zoom = 0.5f;
+	icon_closeup_pos = closeup_pos;
+	icon_closeup_zoom = closeup_zoom;
 
 	vm_vec_zero(&closeup_pos_targetbox);
 	closeup_zoom_targetbox = 0.5f;
@@ -4770,6 +4776,23 @@ static void parse_ship_values(ship_info* sip, const bool is_template, const bool
 		if (sip->closeup_zoom <= 0.0f) {
 			mprintf(("Warning!  Ship '%s' has a $Closeup_zoom value that is less than or equal to 0 (%f). Setting to default value.\n", sip->name, sip->closeup_zoom));
 			sip->closeup_zoom = 0.5f;
+		}
+	}
+
+	// Icon closeup settings use regular closeup values as defaults unless explicitly overridden.
+	sip->icon_closeup_pos = sip->closeup_pos;
+	sip->icon_closeup_zoom = sip->closeup_zoom;
+
+	if (optional_string("$Icon_closeup_pos:")) {
+		stuff_vec3d(&sip->icon_closeup_pos);
+	}
+
+	if (optional_string("$Icon_closeup_zoom:")) {
+		stuff_float(&sip->icon_closeup_zoom);
+
+		if (sip->icon_closeup_zoom <= 0.0f) {
+			mprintf(("Warning!  Ship '%s' has a $Icon_closeup_zoom value that is less than or equal to 0 (%f). Setting to default value.\n", sip->name, sip->icon_closeup_zoom));
+			sip->icon_closeup_zoom = sip->closeup_zoom;
 		}
 	}
 
