@@ -3,6 +3,15 @@ All notable changes to this project will be documented in this file.
 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
+## [Unreleased]
+### Changes
+
+<details><summary>Modding: </summary>
+
+- Add weapon table entries `+Icon_closeup_pos:` and `+Icon_closeup_zoom:` as icon-only overrides for loadout weapon icons; omitted values fall back to `+Closeup_pos:`/`+Closeup_zoom:`.
+- Add ship table entries `$Icon_closeup_pos:` and `$Icon_closeup_zoom:` as icon-only overrides for loadout ship icons; omitted values fall back to `$Closeup_pos:`/`$Closeup_zoom:`.
+</details>
+
 ## [23.2.0] - 2023-06-16
 ### Changes
 

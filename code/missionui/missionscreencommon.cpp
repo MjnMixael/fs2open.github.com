@@ -1590,7 +1590,8 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 	g3_start_frame(1);
 	if(sip != NULL)
 	{
-		g3_set_view_matrix( &sip->closeup_pos, &vmd_identity_matrix, zoom);
+		const auto& ship_closeup = (closeup_pos != nullptr && !IS_VEC_NULL(closeup_pos)) ? *closeup_pos : sip->closeup_pos;
+		g3_set_view_matrix(&ship_closeup, &vmd_identity_matrix, zoom);
 
 		gr_set_proj_matrix(Proj_fov * 0.5f, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
 	}
@@ -1664,6 +1665,39 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 
 	g3_end_frame();
 	gr_reset_clip();
+}
+
+void draw_model_loadout_icon(int model_id,
+	uint64_t flags,
+	float zoom_scale,
+	int x,
+	int y,
+	int w,
+	int h,
+	ship_info* sip,
+	const weapon_info* wip,
+	int resize_mode)
+{
+	if (sip != nullptr) {
+		const auto* closeup_pos = IS_VEC_NULL(&sip->icon_closeup_pos) ? &sip->closeup_pos : &sip->icon_closeup_pos;
+		const auto base_zoom = sip->icon_closeup_zoom <= 0.0f ? sip->closeup_zoom : sip->icon_closeup_zoom;
+		const auto closeup_zoom = base_zoom * zoom_scale;
+
+		draw_model_icon(model_id, flags, closeup_zoom, x, y, w, h, sip, resize_mode, closeup_pos);
+		return;
+	}
+
+	if (wip != nullptr) {
+		const auto* closeup_pos = IS_VEC_NULL(&wip->icon_closeup_pos) ? &wip->closeup_pos : &wip->icon_closeup_pos;
+		const auto base_zoom = wip->icon_closeup_zoom <= 0.0f ? wip->closeup_zoom : wip->icon_closeup_zoom;
+		const auto closeup_zoom = base_zoom * zoom_scale;
+
+		draw_model_icon(model_id, flags, closeup_zoom, x, y, w, h, nullptr, resize_mode, closeup_pos);
+		return;
+	}
+
+	// Fallback for callers that do not have table camera data.
+	draw_model_icon(model_id, flags, zoom_scale, x, y, w, h, nullptr, resize_mode);
 }
 
 void draw_model_rotating(model_render_params *render_info, int ship_class, int model_id, int x1, int y1, int x2, int y2, float *rotation_buffer, const vec3d *closeup_pos, float closeup_zoom, float rev_rate, uint64_t flags, int resize_mode, select_effect_params effect_params)

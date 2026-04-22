@@ -386,6 +386,8 @@ struct weapon_info
 
 	vec3d	closeup_pos;						// position for camera to set an offset for viewing the weapon model
 	float	closeup_zoom;						// zoom when using weapon model in closeup view in loadout selection
+	vec3d	icon_closeup_pos;					// icon-only camera position override for weapon list/carried icons; falls back to closeup_pos
+	float	icon_closeup_zoom;					// icon-only camera zoom override for weapon list/carried icons; falls back to closeup_zoom
 
 	char hud_filename[MAX_FILENAME_LEN];			//Name of image to display on HUD in place of text
 	int hud_image_index;					//teh index of the image
