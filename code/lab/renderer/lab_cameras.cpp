@@ -6,6 +6,8 @@
 #include "lab/labv2_internal.h"
 
 #include <algorithm>
+#include <array>
+#include <cfloat>
 
 
 LabCamera::~LabCamera() {
@@ -31,6 +33,46 @@ struct WidgetFaceProjection {
 	float center_depth = 0.0f;
 	bool visible = false;
 };
+
+const char* snap_direction_label(OrbitCamera::SnapDirection direction)
+{
+	switch (direction) {
+	case OrbitCamera::SnapDirection::Front:
+		return "Front";
+	case OrbitCamera::SnapDirection::Back:
+		return "Back";
+	case OrbitCamera::SnapDirection::Top:
+		return "Top";
+	case OrbitCamera::SnapDirection::Bottom:
+		return "Bottom";
+	case OrbitCamera::SnapDirection::Left:
+		return "Left";
+	case OrbitCamera::SnapDirection::Right:
+		return "Right";
+	default:
+		return "";
+	}
+}
+
+vec3d snap_direction_normal(OrbitCamera::SnapDirection direction)
+{
+	switch (direction) {
+	case OrbitCamera::SnapDirection::Front:
+		return vm_vec_new(0.0f, 0.0f, 1.0f);
+	case OrbitCamera::SnapDirection::Back:
+		return vm_vec_new(0.0f, 0.0f, -1.0f);
+	case OrbitCamera::SnapDirection::Top:
+		return vm_vec_new(0.0f, 1.0f, 0.0f);
+	case OrbitCamera::SnapDirection::Bottom:
+		return vm_vec_new(0.0f, -1.0f, 0.0f);
+	case OrbitCamera::SnapDirection::Left:
+		return vm_vec_new(-1.0f, 0.0f, 0.0f);
+	case OrbitCamera::SnapDirection::Right:
+		return vm_vec_new(1.0f, 0.0f, 0.0f);
+	default:
+		return vmd_zero_vector;
+	}
+}
 
 bool point_in_convex_quad(int x, int y, const int quad_x[4], const int quad_y[4])
 {
@@ -170,6 +212,95 @@ SCP_vector<WidgetFaceProjection> build_widget_faces(float phi, float theta, int 
 
 	return faces;
 }
+
+OrbitCamera::SnapDirection pick_direction_for_axis(const vec3d& axis, const SCP_vector<OrbitCamera::SnapDirection>& excluded)
+{
+	const std::array<OrbitCamera::SnapDirection, 6> all_dirs = {OrbitCamera::SnapDirection::Front,
+		OrbitCamera::SnapDirection::Back,
+		OrbitCamera::SnapDirection::Top,
+		OrbitCamera::SnapDirection::Bottom,
+		OrbitCamera::SnapDirection::Left,
+		OrbitCamera::SnapDirection::Right};
+
+	float best_dot = -FLT_MAX;
+	auto best_dir = OrbitCamera::SnapDirection::Front;
+
+	for (auto dir : all_dirs) {
+		if (std::find(excluded.begin(), excluded.end(), dir) != excluded.end()) {
+			continue;
+		}
+
+		const auto normal = snap_direction_normal(dir);
+		const float dir_dot = vm_vec_dot(&normal, &axis);
+		if (dir_dot > best_dot) {
+			best_dot = dir_dot;
+			best_dir = dir;
+		}
+	}
+
+	return best_dir;
+}
+
+struct AdjacentLabel {
+	OrbitCamera::SnapDirection direction;
+	const char* label;
+	int x = 0;
+	int y = 0;
+	int w = 0;
+	int h = 0;
+};
+
+std::array<AdjacentLabel, 4> build_adjacent_labels(float phi, float theta, int center_x, int center_y, int cube_half_px)
+{
+	vec3d forward;
+	vec3d right;
+	vec3d up;
+	get_orbit_view_basis(phi, theta, forward, right, up);
+	vec3d camera_dir;
+	vm_vec_copy_scale(&camera_dir, &forward, -1.0f);
+
+	const auto primary = pick_direction_for_axis(camera_dir, {});
+	const auto opposite = pick_direction_for_axis(vm_vec_new(-camera_dir.xyz.x, -camera_dir.xyz.y, -camera_dir.xyz.z), {primary});
+
+	const auto up_dir = pick_direction_for_axis(up, {primary, opposite});
+	const auto down_dir = pick_direction_for_axis(vm_vec_new(-up.xyz.x, -up.xyz.y, -up.xyz.z), {primary, opposite, up_dir});
+	const auto right_dir = pick_direction_for_axis(right, {primary, opposite, up_dir, down_dir});
+	const auto left_dir =
+		pick_direction_for_axis(vm_vec_new(-right.xyz.x, -right.xyz.y, -right.xyz.z), {primary, opposite, up_dir, down_dir, right_dir});
+
+	static constexpr int padding_x = 5;
+	static constexpr int padding_y = 2;
+	static constexpr int margin = 6;
+
+	std::array<AdjacentLabel, 4> labels = {{
+		{up_dir, snap_direction_label(up_dir)},
+		{down_dir, snap_direction_label(down_dir)},
+		{left_dir, snap_direction_label(left_dir)},
+		{right_dir, snap_direction_label(right_dir)},
+	}};
+
+	for (auto& label : labels) {
+		int text_w = 0;
+		int text_h = 0;
+		gr_get_string_size(&text_w, &text_h, label.label);
+		label.w = text_w + (padding_x * 2);
+		label.h = text_h + (padding_y * 2);
+	}
+
+	labels[0].x = center_x - (labels[0].w / 2);
+	labels[0].y = center_y - cube_half_px - margin - labels[0].h;
+
+	labels[1].x = center_x - (labels[1].w / 2);
+	labels[1].y = center_y + cube_half_px + margin;
+
+	labels[2].x = center_x - cube_half_px - margin - labels[2].w;
+	labels[2].y = center_y - (labels[2].h / 2);
+
+	labels[3].x = center_x + cube_half_px + margin;
+	labels[3].y = center_y - (labels[3].h / 2);
+
+	return labels;
+}
 }
 
 void OrbitCamera::handleInput(
@@ -253,6 +384,14 @@ bool OrbitCamera::handleOrientationWidgetClick(int mouseX, int mouseY)
 		}
 	}
 
+	const auto adjacent_labels = build_adjacent_labels(phi, theta, center_x, center_y, cube_half);
+	for (const auto& label : adjacent_labels) {
+		if (point_in_rect(mouseX, mouseY, label.x, label.y, label.w, label.h)) {
+			snapToDirection(label.direction);
+			return true;
+		}
+	}
+
 	return false;
 }
 
@@ -261,7 +400,21 @@ bool OrbitCamera::isOverlayHit(int mouseX, int mouseY) const
 	const int widget_size = WIDGET_CUBE_HALF_SIZE * 4;
 	const int widget_left = gr_screen.center_offset_x + gr_screen.center_w - widget_size - WIDGET_MARGIN;
 	const int widget_top = gr_screen.center_offset_y + WIDGET_MARGIN;
-	return point_in_rect(mouseX, mouseY, widget_left, widget_top, widget_size, widget_size);
+	if (point_in_rect(mouseX, mouseY, widget_left, widget_top, widget_size, widget_size)) {
+		return true;
+	}
+
+	const int center_x = widget_left + widget_size / 2;
+	const int center_y = widget_top + widget_size / 2;
+	const int cube_half = WIDGET_CUBE_HALF_SIZE;
+	const auto adjacent_labels = build_adjacent_labels(phi, theta, center_x, center_y, cube_half);
+	for (const auto& label : adjacent_labels) {
+		if (point_in_rect(mouseX, mouseY, label.x, label.y, label.w, label.h)) {
+			return true;
+		}
+	}
+
+	return false;
 }
 
 void OrbitCamera::snapToDirection(SnapDirection direction)
@@ -419,5 +572,18 @@ void OrbitCamera::renderOverlay() const
 		gr_get_string_size(&text_w, &text_h, face.label);
 		gr_set_color_fast(hovered ? &Color_white : &Color_grey);
 		gr_string(face.center_screen_x - (text_w / 2), face.center_screen_y - (text_h / 2), face.label, GR_RESIZE_NONE);
+	}
+
+	const auto adjacent_labels = build_adjacent_labels(phi, theta, center_x, center_y, cube_half);
+	for (const auto& label : adjacent_labels) {
+		const bool hovered = point_in_rect(mouse_x, mouse_y, label.x, label.y, label.w, label.h);
+
+		color label_bg;
+		gr_init_alphacolor(&label_bg, 24, 24, 24, hovered ? 180 : 120);
+		gr_set_color_fast(&label_bg);
+		gr_rect(label.x, label.y, label.w, label.h, GR_RESIZE_NONE);
+
+		gr_set_color_fast(hovered ? &Color_white : &Color_silver);
+		gr_string(label.x + 5, label.y + 2, label.label, GR_RESIZE_NONE);
 	}
 }
