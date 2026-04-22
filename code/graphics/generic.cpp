@@ -230,6 +230,29 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 		ga->current_frame = 0;
 		ga->png.previous_frame_time = 0.0f;
 		ga->num_frames = ga->png.anim->nframes;
+		ga->keyframe = ga->png.anim->keyframe;
+		if (ga->keyframe < 0 || ga->keyframe >= ga->num_frames) {
+			nprintf(("apng", "Ignoring invalid iTXt keyframe %d for '%s' (%d frames)\n", ga->keyframe, ga->filename, ga->num_frames));
+			ga->keyframe = 0;
+		}
+		else if (ga->keyframe > 0) {
+			ga->png.anim->frame_start_times.clear();
+
+			if (cache) {
+				ga->png.anim->frame_start_times.reserve(ga->num_frames);
+				float frame_start = 0.0f;
+				for (int frame = 0; frame < ga->num_frames; ++frame) {
+					ga->png.anim->frame_start_times.push_back(frame_start);
+					ga->png.anim->next_frame();
+					frame_start += ga->png.anim->frame.delay;
+				}
+				ga->png.anim->goto_start();
+			}
+			else {
+				nprintf(("apng", "APNG keyframe %d ignored for '%s' because stream cache is disabled\n", ga->keyframe, ga->filename));
+				ga->keyframe = 0;
+			}
+		}
 		ga->height = ga->png.anim->h;
 		ga->width = ga->png.anim->w;
 		ga->previous_frame = -1;
@@ -612,10 +635,6 @@ void generic_anim_render_fixed_frame_delay(generic_anim* ga, float frametime, fl
 void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime, float alpha)
 {
 	Assertion(ga->type == BM_TYPE_PNG, "only valid for apngs (currently); get a coder!");
-	if (ga->keyframe != 0) {
-		Warning(LOCATION, "apngs don't support keyframes");
-		return;
-	}
 
 	// don't change the frame time if we're paused
 	if((ga->direction & GENERIC_ANIM_DIRECTION_PAUSED) == 0) {
@@ -643,11 +662,20 @@ void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime,
 					ga->anim_time = ga->total_time;  // stop on last frame when playing
 				}
 				else {
-					// loop back to start
-					ga->anim_time = 0.0f;
-					ga->png.previous_frame_time = 0.0f;
-					ga->current_frame = 0;
-					ga->png.anim->goto_start();
+					if (ga->keyframe > 0 && !ga->png.anim->frame_start_times.empty()) {
+						// loop back to keyframe
+						ga->anim_time = ga->png.anim->frame_start_times.at(ga->keyframe);
+						ga->png.previous_frame_time = ga->anim_time;
+						ga->current_frame = ga->keyframe;
+						ga->png.anim->current_frame = static_cast<uint>(ga->keyframe);
+					}
+					else {
+						// loop back to start
+						ga->anim_time = 0.0f;
+						ga->png.previous_frame_time = 0.0f;
+						ga->current_frame = 0;
+						ga->png.anim->goto_start();
+					}
 				}
 				ga->done_playing = 1;
 			}
