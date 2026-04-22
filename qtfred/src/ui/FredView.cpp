@@ -270,10 +270,14 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	enforceSideDockAreas();
 
 	// Keep the context bar on its own row below the primary toolbar.
-	// restoreState() can otherwise place it inline with the main toolbar.
+	// restoreState() can otherwise place or hide toolbars based on saved layout.
+	removeToolBar(ui->toolBar);
 	removeToolBar(ui->contextToolBar);
+	addToolBar(Qt::TopToolBarArea, ui->toolBar);
+	addToolBarBreak(Qt::TopToolBarArea);
 	addToolBar(Qt::TopToolBarArea, ui->contextToolBar);
-	insertToolBarBreak(ui->contextToolBar);
+	ui->toolBar->setVisible(true);
+	ui->contextToolBar->setVisible(true);
 
 	// Lock the context toolbar to a fixed height so that adding/removing buttons
 	// doesn't resize the viewport. Use the primary toolbar's hint; fall back to 28px.
@@ -790,6 +794,7 @@ void FredView::initializeStatusBar() {
 void FredView::initializeContextToolbar() {
 	_contextToolBar = ui->contextToolBar;
 	_contextToolBar->setContextMenuPolicy(Qt::PreventContextMenu);
+	_contextToolBar->setVisible(true);
 
 	_contextLabel = new QLabel(tr("No Selection"), _contextToolBar);
 	_contextLabel->setContentsMargins(6, 0, 8, 0);
@@ -976,6 +981,7 @@ void FredView::quickRenameCurrentObject() {
 void FredView::initializeTransformBar() {
 	_transformToolBar = ui->transformToolBar;
 	_transformToolBar->setContextMenuPolicy(Qt::PreventContextMenu);
+	_transformToolBar->setVisible(true);
 
 	// Helper: add a fixed-width spacer widget to the toolbar.
 	auto addFixedSpacer = [this](int w) {
