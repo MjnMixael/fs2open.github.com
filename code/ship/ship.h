@@ -1346,6 +1346,10 @@ public:
 
 	vec3d	closeup_pos;					// position for camera when using ship in closeup view (eg briefing and techroom)
 	float	closeup_zoom;					// zoom when using ship in closeup view (eg briefing and techroom)
+	vec3d	icon_closeup_pos;				// optional icon-specific closeup camera position override
+	float	icon_closeup_zoom;				// optional icon-specific closeup zoom override
+	bool	icon_closeup_pos_set;			// true if icon_closeup_pos was explicitly set
+	bool	icon_closeup_zoom_set;			// true if icon_closeup_zoom was explicitly set
 
 	vec3d	closeup_pos_targetbox;			// position for camera when using ship in closeup view for hud target monitor
 	float	closeup_zoom_targetbox;			// zoom when using ship in closeup view for hud target monitor

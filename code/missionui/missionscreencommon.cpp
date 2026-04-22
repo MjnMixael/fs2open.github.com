@@ -1552,15 +1552,16 @@ int restore_wss_data(ubyte *data)
 	return offset;
 }
 
-void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, int y, int w, int h, ship_info *sip, int resize_mode, const vec3d *closeup_pos)
+void draw_model_icon(int model_id, uint64_t flags, int x, int y, int w, int h, ship_info* sip, weapon_info* wip, float closeup_zoom_scale, int resize_mode)
 {
 	lighting_profiles::set_non_mission_profile non_mission_lighting_profile;
 	
 	matrix	object_orient	= IDENTITY_MATRIX;
 	angles rot_angles = vmd_zero_angles;
-	float zoom = closeup_zoom * 2.5f;
+	const bool is_weapon = (wip != nullptr && sip == nullptr);
+	const bool is_ship = (sip != nullptr);
 
-	if(sip == NULL)
+	if(!is_ship)
 	{
 		//Assume it's a weapon
 		rot_angles.h = -(PI_2);
@@ -1588,9 +1589,11 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 
 	gr_set_clip(x, y, w, h, resize_mode);
 	g3_start_frame(1);
-	if(sip != NULL)
+	if(is_ship)
 	{
-		g3_set_view_matrix( &sip->closeup_pos, &vmd_identity_matrix, zoom);
+		const vec3d* closeup_pos = sip->icon_closeup_pos_set ? &sip->icon_closeup_pos : &sip->closeup_pos;
+		const auto closeup_zoom = (sip->icon_closeup_zoom_set ? sip->icon_closeup_zoom : sip->closeup_zoom) * closeup_zoom_scale * 2.5f;
+		g3_set_view_matrix(closeup_pos, &vmd_identity_matrix, closeup_zoom);
 
 		gr_set_proj_matrix(Proj_fov * 0.5f, gr_screen.clip_aspect, Min_draw_distance, Max_draw_distance);
 	}
@@ -1612,9 +1615,9 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 			bs = &pm->submodel[0];
 		}
 
-		vec3d weap_closeup = *closeup_pos;
+		vec3d weap_closeup = is_weapon ? (wip->icon_closeup_pos_set ? wip->icon_closeup_pos : wip->closeup_pos) : vmd_zero_vector;
 		float y_closeup;
-		float tm_zoom = closeup_zoom;
+		float tm_zoom = is_weapon ? (wip->icon_closeup_zoom_set ? wip->icon_closeup_zoom : wip->closeup_zoom) * closeup_zoom_scale : 1.0f;
 
 		//Find the center of teh submodel
 		weap_closeup.xyz.x = -(bs->min.xyz.z + (bs->max.xyz.z - bs->min.xyz.z)/2.0f);
