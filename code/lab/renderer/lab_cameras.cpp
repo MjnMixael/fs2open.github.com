@@ -5,6 +5,8 @@
 #include "lab/renderer/lab_cameras.h"
 #include "lab/labv2_internal.h"
 
+#include <algorithm>
+
 
 LabCamera::~LabCamera() {
 	cam_delete(FS_camera);
@@ -14,6 +16,159 @@ namespace {
 bool point_in_rect(int x, int y, int rect_x, int rect_y, int rect_w, int rect_h)
 {
 	return x >= rect_x && x < rect_x + rect_w && y >= rect_y && y < rect_y + rect_h;
+}
+
+struct WidgetFaceProjection {
+	OrbitCamera::SnapDirection direction;
+	const char* label;
+	vec3d center_world;
+	vec3d normal_world;
+	vec3d corners_world[4];
+	int corners_screen_x[4] = {0, 0, 0, 0};
+	int corners_screen_y[4] = {0, 0, 0, 0};
+	int center_screen_x = 0;
+	int center_screen_y = 0;
+	float center_depth = 0.0f;
+	bool visible = false;
+};
+
+bool point_in_convex_quad(int x, int y, const int quad_x[4], const int quad_y[4])
+{
+	int sign = 0;
+
+	for (int i = 0; i < 4; ++i) {
+		const int next = (i + 1) % 4;
+		const int edge_x = quad_x[next] - quad_x[i];
+		const int edge_y = quad_y[next] - quad_y[i];
+		const int to_point_x = x - quad_x[i];
+		const int to_point_y = y - quad_y[i];
+		const int cross = edge_x * to_point_y - edge_y * to_point_x;
+
+		if (cross == 0) {
+			continue;
+		}
+
+		const int current_sign = (cross > 0) ? 1 : -1;
+		if (sign == 0) {
+			sign = current_sign;
+		} else if (sign != current_sign) {
+			return false;
+		}
+	}
+
+	return true;
+}
+
+void get_orbit_view_basis(float phi, float theta, vec3d& forward, vec3d& right, vec3d& up)
+{
+	vec3d camera_offset;
+	camera_offset.xyz.x = sinf(phi) * cosf(theta);
+	camera_offset.xyz.y = cosf(phi);
+	camera_offset.xyz.z = sinf(phi) * sinf(theta);
+	vm_vec_normalize_safe(&camera_offset);
+
+	vm_vec_copy_scale(&forward, &camera_offset, -1.0f);
+
+	vec3d world_up = vmd_y_vector;
+	vm_vec_cross(&right, &world_up, &forward);
+	if (vm_vec_mag_squared(&right) <= 1e-6f) {
+		world_up = vmd_x_vector;
+		vm_vec_cross(&right, &world_up, &forward);
+	}
+	vm_vec_normalize_safe(&right);
+
+	vm_vec_cross(&up, &forward, &right);
+	vm_vec_normalize_safe(&up);
+}
+
+SCP_vector<WidgetFaceProjection> build_widget_faces(float phi, float theta, int center_x, int center_y, int half_size_px)
+{
+	const float cube_half = 1.0f;
+
+	SCP_vector<WidgetFaceProjection> faces;
+	faces.reserve(6);
+	faces.push_back({OrbitCamera::SnapDirection::Front,
+		"Front",
+		vm_vec_new(0.0f, 0.0f, cube_half),
+		vm_vec_new(0.0f, 0.0f, 1.0f),
+		{vm_vec_new(-cube_half, cube_half, cube_half),
+			vm_vec_new(cube_half, cube_half, cube_half),
+			vm_vec_new(cube_half, -cube_half, cube_half),
+			vm_vec_new(-cube_half, -cube_half, cube_half)}});
+	faces.push_back({OrbitCamera::SnapDirection::Back,
+		"Back",
+		vm_vec_new(0.0f, 0.0f, -cube_half),
+		vm_vec_new(0.0f, 0.0f, -1.0f),
+		{vm_vec_new(cube_half, cube_half, -cube_half),
+			vm_vec_new(-cube_half, cube_half, -cube_half),
+			vm_vec_new(-cube_half, -cube_half, -cube_half),
+			vm_vec_new(cube_half, -cube_half, -cube_half)}});
+	faces.push_back({OrbitCamera::SnapDirection::Top,
+		"Top",
+		vm_vec_new(0.0f, cube_half, 0.0f),
+		vm_vec_new(0.0f, 1.0f, 0.0f),
+		{vm_vec_new(-cube_half, cube_half, -cube_half),
+			vm_vec_new(cube_half, cube_half, -cube_half),
+			vm_vec_new(cube_half, cube_half, cube_half),
+			vm_vec_new(-cube_half, cube_half, cube_half)}});
+	faces.push_back({OrbitCamera::SnapDirection::Bottom,
+		"Bottom",
+		vm_vec_new(0.0f, -cube_half, 0.0f),
+		vm_vec_new(0.0f, -1.0f, 0.0f),
+		{vm_vec_new(-cube_half, -cube_half, cube_half),
+			vm_vec_new(cube_half, -cube_half, cube_half),
+			vm_vec_new(cube_half, -cube_half, -cube_half),
+			vm_vec_new(-cube_half, -cube_half, -cube_half)}});
+	faces.push_back({OrbitCamera::SnapDirection::Left,
+		"Left",
+		vm_vec_new(-cube_half, 0.0f, 0.0f),
+		vm_vec_new(-1.0f, 0.0f, 0.0f),
+		{vm_vec_new(-cube_half, cube_half, -cube_half),
+			vm_vec_new(-cube_half, cube_half, cube_half),
+			vm_vec_new(-cube_half, -cube_half, cube_half),
+			vm_vec_new(-cube_half, -cube_half, -cube_half)}});
+	faces.push_back({OrbitCamera::SnapDirection::Right,
+		"Right",
+		vm_vec_new(cube_half, 0.0f, 0.0f),
+		vm_vec_new(1.0f, 0.0f, 0.0f),
+		{vm_vec_new(cube_half, cube_half, cube_half),
+			vm_vec_new(cube_half, cube_half, -cube_half),
+			vm_vec_new(cube_half, -cube_half, -cube_half),
+			vm_vec_new(cube_half, -cube_half, cube_half)}});
+
+	vec3d forward;
+	vec3d right;
+	vec3d up;
+	get_orbit_view_basis(phi, theta, forward, right, up);
+	vec3d camera_dir;
+	vm_vec_copy_scale(&camera_dir, &forward, -1.0f);
+
+	for (auto& face : faces) {
+		face.visible = vm_vec_dot(&face.normal_world, &camera_dir) > 0.0f;
+
+		vec3d center_view;
+		center_view.xyz.x = vm_vec_dot(&face.center_world, &right);
+		center_view.xyz.y = vm_vec_dot(&face.center_world, &up);
+		center_view.xyz.z = vm_vec_dot(&face.center_world, &camera_dir);
+		face.center_screen_x = center_x + fl2i(center_view.xyz.x * half_size_px);
+		face.center_screen_y = center_y - fl2i(center_view.xyz.y * half_size_px);
+		face.center_depth = center_view.xyz.z;
+
+		for (int i = 0; i < 4; ++i) {
+			vec3d view;
+			view.xyz.x = vm_vec_dot(&face.corners_world[i], &right);
+			view.xyz.y = vm_vec_dot(&face.corners_world[i], &up);
+			view.xyz.z = vm_vec_dot(&face.corners_world[i], &camera_dir);
+			face.corners_screen_x[i] = center_x + fl2i(view.xyz.x * half_size_px);
+			face.corners_screen_y[i] = center_y - fl2i(view.xyz.y * half_size_px);
+		}
+	}
+
+	std::sort(faces.begin(), faces.end(), [](const WidgetFaceProjection& a, const WidgetFaceProjection& b) {
+		return a.center_depth < b.center_depth;
+	});
+
+	return faces;
 }
 }
 
@@ -79,41 +234,21 @@ void OrbitCamera::handleInput(
 
 bool OrbitCamera::handleOrientationWidgetClick(int mouseX, int mouseY)
 {
-	const int widget_size = (WIDGET_BUTTON_SIZE * 3) + (WIDGET_GAP * 2);
+	const int widget_size = WIDGET_CUBE_HALF_SIZE * 4;
 	const int widget_left = gr_screen.center_offset_x + gr_screen.center_w - widget_size - WIDGET_MARGIN;
 	const int widget_top = gr_screen.center_offset_y + WIDGET_MARGIN;
 	const int center_x = widget_left + widget_size / 2;
 	const int center_y = widget_top + widget_size / 2;
-	const int half_button = WIDGET_BUTTON_SIZE / 2;
-	const int button_offset = WIDGET_BUTTON_SIZE + WIDGET_GAP;
+	const int cube_half = WIDGET_CUBE_HALF_SIZE;
 
-	const auto button_rect = [&](SnapDirection direction, int& x, int& y) {
-		x = center_x - half_button;
-		y = center_y - half_button;
-
-		switch (direction) {
-		case SnapDirection::Top:
-			y -= button_offset;
-			break;
-		case SnapDirection::Bottom:
-			y += button_offset;
-			break;
-		case SnapDirection::Left:
-			x -= button_offset;
-			break;
-		case SnapDirection::Right:
-			x += button_offset;
-			break;
+	const auto faces = build_widget_faces(phi, theta, center_x, center_y, cube_half);
+	for (auto it = faces.rbegin(); it != faces.rend(); ++it) {
+		if (!it->visible) {
+			continue;
 		}
-	};
 
-	for (auto direction : {SnapDirection::Top, SnapDirection::Bottom, SnapDirection::Left, SnapDirection::Right}) {
-		int button_x = 0;
-		int button_y = 0;
-		button_rect(direction, button_x, button_y);
-
-		if (point_in_rect(mouseX, mouseY, button_x, button_y, WIDGET_BUTTON_SIZE, WIDGET_BUTTON_SIZE)) {
-			snapToDirection(direction);
+		if (point_in_convex_quad(mouseX, mouseY, it->corners_screen_x, it->corners_screen_y)) {
+			snapToDirection(it->direction);
 			return true;
 		}
 	}
@@ -123,39 +258,10 @@ bool OrbitCamera::handleOrientationWidgetClick(int mouseX, int mouseY)
 
 bool OrbitCamera::isOverlayHit(int mouseX, int mouseY) const
 {
-	const int widget_size = (WIDGET_BUTTON_SIZE * 3) + (WIDGET_GAP * 2);
+	const int widget_size = WIDGET_CUBE_HALF_SIZE * 4;
 	const int widget_left = gr_screen.center_offset_x + gr_screen.center_w - widget_size - WIDGET_MARGIN;
 	const int widget_top = gr_screen.center_offset_y + WIDGET_MARGIN;
-	const int center_x = widget_left + widget_size / 2;
-	const int center_y = widget_top + widget_size / 2;
-	const int half_button = WIDGET_BUTTON_SIZE / 2;
-	const int button_offset = WIDGET_BUTTON_SIZE + WIDGET_GAP;
-
-	for (auto direction : {SnapDirection::Top, SnapDirection::Bottom, SnapDirection::Left, SnapDirection::Right}) {
-		int button_x = center_x - half_button;
-		int button_y = center_y - half_button;
-
-		switch (direction) {
-		case SnapDirection::Top:
-			button_y -= button_offset;
-			break;
-		case SnapDirection::Bottom:
-			button_y += button_offset;
-			break;
-		case SnapDirection::Left:
-			button_x -= button_offset;
-			break;
-		case SnapDirection::Right:
-			button_x += button_offset;
-			break;
-		}
-
-		if (point_in_rect(mouseX, mouseY, button_x, button_y, WIDGET_BUTTON_SIZE, WIDGET_BUTTON_SIZE)) {
-			return true;
-		}
-	}
-
-	return false;
+	return point_in_rect(mouseX, mouseY, widget_left, widget_top, widget_size, widget_size);
 }
 
 void OrbitCamera::snapToDirection(SnapDirection direction)
@@ -163,12 +269,19 @@ void OrbitCamera::snapToDirection(SnapDirection direction)
 	static constexpr float POLE_EPSILON = 0.01f;
 
 	// Force deterministic snap results regardless of prior manipulations.
-	// Reset object orientation and camera pan/zoom before applying the snap direction.
-	getLabManager()->CurrentOrientation = vmd_identity_matrix;
+	// Object orientation is intentionally left untouched.
 	pan_offset = vmd_zero_vector;
 	distance = DEFAULT_DISTANCE;
 
 	switch (direction) {
+	case SnapDirection::Front:
+		phi = PI_2;
+		theta = PI_2;
+		break;
+	case SnapDirection::Back:
+		phi = PI_2;
+		theta = -PI_2;
+		break;
 	case SnapDirection::Top:
 		phi = POLE_EPSILON;
 		break;
@@ -263,13 +376,12 @@ void OrbitCamera::updateCamera() {
 
 void OrbitCamera::renderOverlay() const
 {
-	const int widget_size = (WIDGET_BUTTON_SIZE * 3) + (WIDGET_GAP * 2);
+	const int widget_size = WIDGET_CUBE_HALF_SIZE * 4;
 	const int widget_left = gr_screen.center_offset_x + gr_screen.center_w - widget_size - WIDGET_MARGIN;
 	const int widget_top = gr_screen.center_offset_y + WIDGET_MARGIN;
 	const int center_x = widget_left + widget_size / 2;
 	const int center_y = widget_top + widget_size / 2;
-	const int half_button = WIDGET_BUTTON_SIZE / 2;
-	const int button_offset = WIDGET_BUTTON_SIZE + WIDGET_GAP;
+	const int cube_half = WIDGET_CUBE_HALF_SIZE;
 
 	color background;
 	gr_init_alphacolor(&background, 24, 24, 24, 96);
@@ -280,41 +392,27 @@ void OrbitCamera::renderOverlay() const
 	int mouse_y = 0;
 	mouse_get_pos(&mouse_x, &mouse_y);
 
-	const auto draw_button = [&](SnapDirection direction, const char* label) {
-		int button_x = center_x - half_button;
-		int button_y = center_y - half_button;
-
-		switch (direction) {
-		case SnapDirection::Top:
-			button_y -= button_offset;
-			break;
-		case SnapDirection::Bottom:
-			button_y += button_offset;
-			break;
-		case SnapDirection::Left:
-			button_x -= button_offset;
-			break;
-		case SnapDirection::Right:
-			button_x += button_offset;
-			break;
+	const auto faces = build_widget_faces(phi, theta, center_x, center_y, cube_half);
+	for (const auto& face : faces) {
+		if (!face.visible) {
+			continue;
 		}
 
-		const bool hovered = point_in_rect(mouse_x, mouse_y, button_x, button_y, WIDGET_BUTTON_SIZE, WIDGET_BUTTON_SIZE);
+		const bool hovered = point_in_convex_quad(mouse_x, mouse_y, face.corners_screen_x, face.corners_screen_y);
 
-		color button_color;
-		gr_init_alphacolor(&button_color, 220, 220, 220, hovered ? 200 : 140);
-		gr_set_color_fast(&button_color);
-		gr_rect(button_x, button_y, WIDGET_BUTTON_SIZE, WIDGET_BUTTON_SIZE, GR_RESIZE_NONE);
+		color edge_color;
+		gr_init_alphacolor(&edge_color, hovered ? 255 : 210, hovered ? 255 : 210, hovered ? 255 : 210, hovered ? 255 : 170);
+		gr_set_color_fast(&edge_color);
+
+		for (int i = 0; i < 4; ++i) {
+			const int next = (i + 1) % 4;
+			gr_line(face.corners_screen_x[i], face.corners_screen_y[i], face.corners_screen_x[next], face.corners_screen_y[next], GR_RESIZE_NONE);
+		}
 
 		int text_w = 0;
 		int text_h = 0;
-		gr_get_string_size(&text_w, &text_h, label);
-		gr_set_color_fast(&Color_black);
-		gr_string(button_x + (WIDGET_BUTTON_SIZE - text_w) / 2, button_y + (WIDGET_BUTTON_SIZE - text_h) / 2, label, GR_RESIZE_NONE);
-	};
-
-	draw_button(SnapDirection::Top, "T");
-	draw_button(SnapDirection::Bottom, "B");
-	draw_button(SnapDirection::Left, "L");
-	draw_button(SnapDirection::Right, "R");
+		gr_get_string_size(&text_w, &text_h, face.label);
+		gr_set_color_fast(hovered ? &Color_white : &Color_grey);
+		gr_string(face.center_screen_x - (text_w / 2), face.center_screen_y - (text_h / 2), face.label, GR_RESIZE_NONE);
+	}
 }

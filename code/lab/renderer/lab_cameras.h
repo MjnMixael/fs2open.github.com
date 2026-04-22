@@ -68,6 +68,8 @@ public:
 
 class OrbitCamera : public LabCamera {
 public:
+	enum class SnapDirection { Front, Back, Top, Bottom, Left, Right };
+
 	OrbitCamera() : LabCamera(cam_create("Lab orbit camera")) {}
 
 	SCP_string getUsageInfo() override {
@@ -100,10 +102,7 @@ public:
 	bool isOverlayHit(int mouseX, int mouseY) const override;
 
   private:
-	enum class SnapDirection { Top, Bottom, Left, Right };
-
-	static constexpr int WIDGET_BUTTON_SIZE = 24;
-	static constexpr int WIDGET_GAP = 6;
+	static constexpr int WIDGET_CUBE_HALF_SIZE = 30;
 	static constexpr int WIDGET_MARGIN = 14;
 
 	static constexpr float DEFAULT_DISTANCE = 100.0f;
