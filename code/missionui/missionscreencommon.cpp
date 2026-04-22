@@ -1667,6 +1667,38 @@ void draw_model_icon(int model_id, uint64_t flags, float closeup_zoom, int x, in
 	gr_reset_clip();
 }
 
+void draw_model_loadout_icon(int model_id,
+	uint64_t flags,
+	float zoom_scale,
+	int x,
+	int y,
+	int w,
+	int h,
+	ship_info* sip,
+	const weapon_info* wip,
+	bool use_icon_closeup,
+	int resize_mode)
+{
+	if (sip != nullptr) {
+		const auto* closeup_pos = use_icon_closeup ? &sip->icon_closeup_pos : &sip->closeup_pos;
+		const auto closeup_zoom = (use_icon_closeup ? sip->icon_closeup_zoom : sip->closeup_zoom) * zoom_scale;
+
+		draw_model_icon(model_id, flags, closeup_zoom, x, y, w, h, sip, resize_mode, closeup_pos);
+		return;
+	}
+
+	if (wip != nullptr) {
+		const auto* closeup_pos = use_icon_closeup ? &wip->icon_closeup_pos : &wip->closeup_pos;
+		const auto closeup_zoom = (use_icon_closeup ? wip->icon_closeup_zoom : wip->closeup_zoom) * zoom_scale;
+
+		draw_model_icon(model_id, flags, closeup_zoom, x, y, w, h, nullptr, resize_mode, closeup_pos);
+		return;
+	}
+
+	// Fallback for callers that do not have table camera data.
+	draw_model_icon(model_id, flags, zoom_scale, x, y, w, h, nullptr, resize_mode);
+}
+
 void draw_model_rotating(model_render_params *render_info, int ship_class, int model_id, int x1, int y1, int x2, int y2, float *rotation_buffer, const vec3d *closeup_pos, float closeup_zoom, float rev_rate, uint64_t flags, int resize_mode, select_effect_params effect_params)
 {
 	//WMC - Can't draw a non-model

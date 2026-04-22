@@ -1515,16 +1515,17 @@ void ship_select_do(float frametime)
 
 			if(Ss_icons[Carried_ss_icon.ship_class].model_index != -1)
 			{
-				draw_model_icon(Ss_icons[Carried_ss_icon.ship_class].model_index,
+				draw_model_loadout_icon(Ss_icons[Carried_ss_icon.ship_class].model_index,
 					MR_AUTOCENTER | MR_NO_FOGGING | MR_NO_LIGHTING,
-					sip->icon_closeup_zoom / 1.25f,
+					1.0f / 1.25f,
 					sx,
 					sy,
 					w,
 					h,
 					sip,
-					GR_RESIZE_MENU,
-					&sip->icon_closeup_pos);
+					nullptr,
+					true,
+					GR_RESIZE_MENU);
 			}
 		}
 	}
@@ -1714,16 +1715,17 @@ void draw_ship_icon_with_number(int screen_offset, int ship_class)
 
 		if(ss_icon->model_index != -1)
 		{
-			draw_model_icon(ss_icon->model_index,
+			draw_model_loadout_icon(ss_icon->model_index,
 				MR_AUTOCENTER | MR_NO_FOGGING | MR_NO_LIGHTING,
-				sip->icon_closeup_zoom / 1.25f,
+				1.0f / 1.25f,
 				Ship_list_coords[gr_screen.res][screen_offset][0],
 				Ship_list_coords[gr_screen.res][screen_offset][1],
 				32,
 				28,
 				sip,
-				GR_RESIZE_MENU,
-				&sip->icon_closeup_pos);
+				nullptr,
+				true,
+				GR_RESIZE_MENU);
 		}
 	}
 
@@ -2325,16 +2327,17 @@ void draw_wing_block(int wb_num, int hot_slot, int selected_slot, int class_sele
 			draw_brackets_square(&line_draw_list, Wing_icon_coords[gr_screen.res][slot_index][0], Wing_icon_coords[gr_screen.res][slot_index][1], Wing_icon_coords[gr_screen.res][slot_index][0] + 32, Wing_icon_coords[gr_screen.res][slot_index][1] + 28, GR_RESIZE_MENU);
 			line_draw_list.flush();
 
-			draw_model_icon(icon->model_index,
+			draw_model_loadout_icon(icon->model_index,
 				MR_AUTOCENTER | MR_NO_FOGGING | MR_NO_LIGHTING,
-				sip->icon_closeup_zoom / 1.25f,
+				1.0f / 1.25f,
 				Wing_icon_coords[gr_screen.res][slot_index][0],
 				Wing_icon_coords[gr_screen.res][slot_index][1],
 				32,
 				28,
 				sip,
-				GR_RESIZE_MENU,
-				&sip->icon_closeup_pos);
+				nullptr,
+				true,
+				GR_RESIZE_MENU);
 		}
 	}
 }
@@ -2417,16 +2420,17 @@ void ss_blit_ship_icon(int x,int y,int ship_class,int bmap_num)
 				draw_brackets_square(&line_draw_list, x, y, x + 32, y + 28, GR_RESIZE_MENU);
 				line_draw_list.flush();
 
-				draw_model_icon(icon->model_index,
+				draw_model_loadout_icon(icon->model_index,
 					MR_AUTOCENTER | MR_NO_FOGGING | MR_NO_LIGHTING,
-					sip->icon_closeup_zoom / 1.25f,
+					1.0f / 1.25f,
 					x,
 					y,
 					32,
 					28,
 					sip,
-					GR_RESIZE_MENU,
-					&sip->icon_closeup_pos);
+					nullptr,
+					true,
+					GR_RESIZE_MENU);
 			}
 		}
 	}
