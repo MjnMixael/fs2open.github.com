@@ -162,6 +162,12 @@ void OrbitCamera::snapToDirection(SnapDirection direction)
 {
 	static constexpr float POLE_EPSILON = 0.01f;
 
+	// Force deterministic snap results regardless of prior manipulations.
+	// Reset object orientation and camera pan/zoom before applying the snap direction.
+	getLabManager()->CurrentOrientation = vmd_identity_matrix;
+	pan_offset = vmd_zero_vector;
+	distance = DEFAULT_DISTANCE;
+
 	switch (direction) {
 	case SnapDirection::Top:
 		phi = POLE_EPSILON;
