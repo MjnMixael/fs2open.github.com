@@ -301,11 +301,15 @@ void LabUi::build_options_menu()
 {
 	with_Menu("Options")
 	{
+		bool show_widget_menu = getLabManager()->Renderer->getShowOrientationWidget();
 		MenuItem("Render options", nullptr, &show_render_options_dialog);
 		MenuItem("Object selector", nullptr, &show_object_selection_dialog);
 		MenuItem("Background selector", nullptr, &show_background_selection_dialog);
 		MenuItem("Object options", nullptr, &show_object_options_dialog);
 		MenuItem("Controls reference", nullptr, &show_controls_reference_dialog);
+		if (MenuItem("Show orientation cube widget", nullptr, show_widget_menu)) {
+			getLabManager()->Renderer->setShowOrientationWidget(!show_widget_menu);
+		}
 		MenuItem("Reset View", nullptr, &reset_view);
 		MenuItem("Close lab", "ESC", &close_lab);
 	}
@@ -1640,4 +1644,3 @@ void LabUi::show_object_options() const
 		}
 	}
 }
-
