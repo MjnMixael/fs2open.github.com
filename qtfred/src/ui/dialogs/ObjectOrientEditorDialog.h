@@ -49,6 +49,7 @@ private slots:
 	void on_locationXSpinBox_valueChanged(double value);
 	void on_locationYSpinBox_valueChanged(double value);
 	void on_locationZSpinBox_valueChanged(double value);
+	void on_pointUsingUvecCheckBox_toggled(bool checked);
 
 
 private: // NOLINT(readability-redundant-access-specifiers)

@@ -98,7 +98,7 @@ void ObjectOrientEditorDialogModel::updateObject(object* ptr)
 			return; // can't point to itself.
 		}
 
-		vm_vector_2_matrix(&m, &v, nullptr, nullptr);
+		vm_vector_2_matrix(&m, &v, _pointUsingUvec ? &ptr->orient.vec.uvec : nullptr, nullptr);
 		ptr->orient = m;
 	}
 }
@@ -431,6 +431,16 @@ void ObjectOrientEditorDialogModel::setLocationZ(float z)
 ObjectPosition ObjectOrientEditorDialogModel::getLocation() const
 {
 	return {_location.xyz.x, _location.xyz.y, _location.xyz.z};
+}
+
+void ObjectOrientEditorDialogModel::setPointUsingUvec(bool value)
+{
+	modify(_pointUsingUvec, value);
+}
+
+bool ObjectOrientEditorDialogModel::getPointUsingUvec() const
+{
+	return _pointUsingUvec;
 }
 
 } // namespace fso::fred::dialogs

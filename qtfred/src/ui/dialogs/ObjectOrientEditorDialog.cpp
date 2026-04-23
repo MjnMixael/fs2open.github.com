@@ -88,6 +88,7 @@ void ObjectOrientEditorDialog::enableOrDisableControls()
 	ui->locationXSpinBox->setEnabled(enableLocation);
 	ui->locationYSpinBox->setEnabled(enableLocation);
 	ui->locationZSpinBox->setEnabled(enableLocation);
+	ui->pointUsingUvecCheckBox->setEnabled(_model->getPointTo() && _model->isOrientationEnabledForType());
 }
 
 void ObjectOrientEditorDialog::updatePosition()
@@ -115,6 +116,7 @@ void ObjectOrientEditorDialog::updatePointTo()
 	ui->pointToCheckBox->setChecked(_model->getPointTo());
 	ui->objectRadioButton->setChecked(_model->getPointMode() == ObjectOrientEditorDialogModel::PointToMode::Object);
 	ui->locationRadioButton->setChecked(_model->getPointMode() == ObjectOrientEditorDialogModel::PointToMode::Location);
+	ui->pointUsingUvecCheckBox->setChecked(_model->getPointUsingUvec());
 }
 
 void ObjectOrientEditorDialog::updateComboBox()
@@ -251,6 +253,11 @@ void ObjectOrientEditorDialog::on_locationYSpinBox_valueChanged(double value)
 void ObjectOrientEditorDialog::on_locationZSpinBox_valueChanged(double value)
 {
 	_model->setLocationZ(static_cast<float>(value));
+}
+
+void ObjectOrientEditorDialog::on_pointUsingUvecCheckBox_toggled(bool checked)
+{
+	_model->setPointUsingUvec(checked);
 }
 
 } // namespace fso::fred::dialogs

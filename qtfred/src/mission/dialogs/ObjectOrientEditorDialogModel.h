@@ -75,6 +75,8 @@ class ObjectOrientEditorDialogModel : public AbstractDialogModel {
 	void setLocationY(float y);
 	void setLocationZ(float z);
 	ObjectPosition getLocation() const;
+	void setPointUsingUvec(bool value);
+	bool getPointUsingUvec() const;
 
   private:
 	void initializeData();
@@ -82,6 +84,7 @@ class ObjectOrientEditorDialogModel : public AbstractDialogModel {
 
 	int _selectedPointToObjectIndex = -1;
 	bool _pointTo = false;
+	bool _pointUsingUvec = false;
 
 	vec3d _position;       // UI fields: X/Y/Z
 	vec3d _orientationDeg; // UI fields: Pitch/Bank/Heading in degrees
