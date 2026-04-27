@@ -53,19 +53,19 @@ namespace fso {
 				}
 
 				// Add LuaAI goals as individual entries so we preserve ai_submode identity in the combo box.
-				for (int op_index = 0; op_index < Num_operators; ++op_index) {
+				for (int op_index = 0; op_index < static_cast<int>(Operators.size()); ++op_index) {
 					const int op = Operators[op_index].value;
 					if (!ai_lua_has_mode(op)) {
 						continue;
 					}
 
-					const auto* op_text = Operators[op_index].text;
-					if (op_text == nullptr || *op_text == '\0') {
+					const auto& op_text = Operators[op_index].text;
+					if (op_text.empty()) {
 						continue;
 					}
 
 					SCP_set<ai_goal_mode> new_set{ AI_GOAL_LUA };
-					m_ai_goal_combo_data.emplace_back(op_text, std::move(new_set));
+					m_ai_goal_combo_data.emplace_back(op_text.c_str(), std::move(new_set));
 					m_lua_goal_submode_by_combo.push_back(op);
 				}
 			}
