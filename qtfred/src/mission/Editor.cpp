@@ -3005,7 +3005,7 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 				if (ship_entry == nullptr) {
 					return "*Invalid target ship name";
 				}
-				target_name = ship_entry->name.c_str();
+				target_name = ship_entry->name;
 				flag = 2;
 			} else if (target.has_wingp()) {
 				const auto* wingp = target.wingp_or_null();
