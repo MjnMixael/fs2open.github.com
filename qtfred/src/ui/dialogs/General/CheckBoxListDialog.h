@@ -17,7 +17,9 @@ class CheckBoxListDialog : public QDialog {
 
 	void setCaption(const QString& text);
 	void setOptions(const QVector<std::pair<QString, bool>>& options);
+	void setTriStateOptions(const QVector<std::pair<QString, Qt::CheckState>>& options);
 	QVector<bool> getCheckedStates() const;
+	QVector<Qt::CheckState> getCheckStates() const;
 
   private:
 	Ui::CheckBoxListDialog* ui;

@@ -59,11 +59,44 @@ void CheckBoxListDialog::setOptions(const QVector<std::pair<QString, bool>>& opt
 	layout->addStretch();
 }
 
+void CheckBoxListDialog::setTriStateOptions(const QVector<std::pair<QString, Qt::CheckState>>& options)
+{
+	// Clear previous checkboxes
+	for (auto* cb : _checkboxes) {
+		cb->deleteLater();
+	}
+	_checkboxes.clear();
+
+	auto* layout = qobject_cast<QVBoxLayout*>(ui->checkboxContainer->layout());
+	if (!layout) {
+		return;
+	}
+
+	for (const auto& [label, state] : options) {
+		auto* cb = new QCheckBox(label, this);
+		cb->setTristate(true);
+		cb->setCheckState(state);
+		layout->addWidget(cb);
+		_checkboxes.append(cb);
+	}
+	// Add spacer to push items to top
+	layout->addStretch();
+}
+
 QVector<bool> CheckBoxListDialog::getCheckedStates() const
 {
 	QVector<bool> states;
 	for (auto* cb : _checkboxes) {
 		states.append(cb->isChecked());
+	}
+	return states;
+}
+
+QVector<Qt::CheckState> CheckBoxListDialog::getCheckStates() const
+{
+	QVector<Qt::CheckState> states;
+	for (auto* cb : _checkboxes) {
+		states.append(cb->checkState());
 	}
 	return states;
 }

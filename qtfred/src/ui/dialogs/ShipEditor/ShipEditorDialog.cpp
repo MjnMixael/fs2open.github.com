@@ -660,16 +660,16 @@ void ShipEditorDialog::on_playerOrdersButton_clicked()
 	// Get our flag list and convert it to Qt's internal types
 	auto playerOrders = _model->getAcceptedOrders();
 
-	QVector<std::pair<QString, bool>> checkbox_list;
+	QVector<std::pair<QString, Qt::CheckState>> checkbox_list;
 
 	for (const auto& porder : playerOrders) {
 		checkbox_list.append({porder.first.c_str(), porder.second});
 	}
-	dlg.setOptions(checkbox_list); // TODO upgrade checkbox to accept and display item descriptions
+	dlg.setTriStateOptions(checkbox_list);
 	if (dlg.exec() == QDialog::Accepted) {
-		auto returned_values = dlg.getCheckedStates();
+		auto returned_values = dlg.getCheckStates();
 
-		std::vector<std::pair<SCP_string, bool>> updatedOrders;
+		std::vector<std::pair<SCP_string, Qt::CheckState>> updatedOrders;
 
 		for (int i = 0; i < checkbox_list.size(); ++i) {
 			// Convert back to std::string

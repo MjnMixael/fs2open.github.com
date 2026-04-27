@@ -1,7 +1,9 @@
 #include "ShipGoalsDialogModel.h"
+#include <ai/ailua.h>
 #include <globalincs/linklist.h>
 #include <mission/object.h>
 #include <model/model.h>
+#include <parse/sexp.h>
 namespace fso {
 	namespace fred {
 		namespace dialogs {
@@ -21,6 +23,8 @@ namespace fso {
 				SCP_set<ai_goal_mode> none_set{ AI_GOAL_NONE };
 				m_ai_goal_combo_data.clear();
 				m_ai_goal_combo_data.emplace_back(none_str, std::move(none_set));
+				m_lua_goal_submode_by_combo.clear();
+				m_lua_goal_submode_by_combo.push_back(-1);
 
 				// initialize the data used in the combo boxes in the Initial Orders dialog
 				for (int i = 0; i < Ai_goal_list_size; ++i)
@@ -44,7 +48,25 @@ namespace fso {
 						// add the entry's goal definition as the first (maybe only) member of the set
 						SCP_set<ai_goal_mode> new_set{ entry.def };
 						m_ai_goal_combo_data.emplace_back(entry.name, std::move(new_set));
+						m_lua_goal_submode_by_combo.push_back(-1);
 					}
+				}
+
+				// Add LuaAI goals as individual entries so we preserve ai_submode identity in the combo box.
+				for (int op_index = 0; op_index < Num_operators; ++op_index) {
+					const int op = Operators[op_index].value;
+					if (!ai_lua_has_mode(op)) {
+						continue;
+					}
+
+					const auto* op_text = Operators[op_index].text;
+					if (op_text == nullptr || *op_text == '\0') {
+						continue;
+					}
+
+					SCP_set<ai_goal_mode> new_set{ AI_GOAL_LUA };
+					m_ai_goal_combo_data.emplace_back(op_text, std::move(new_set));
+					m_lua_goal_submode_by_combo.push_back(op);
 				}
 			}
 			const SCP_vector<std::pair<const char*, SCP_set<ai_goal_mode>>> &ShipGoalsDialogModel::get_ai_goal_combo_data()
@@ -65,6 +87,15 @@ namespace fso {
 
 				// just get the first mode in the set, since chase/chase-wing and guard/guard-wing are handled respectively together
 				return *(set.begin());
+			}
+			int ShipGoalsDialogModel::get_lua_submode_from_combo_box(int which_item) const
+			{
+				int behavior_index = m_behavior[which_item];
+				if (behavior_index < 0 || behavior_index >= static_cast<int>(m_lua_goal_submode_by_combo.size())) {
+					return -1;
+				}
+
+				return m_lua_goal_submode_by_combo[behavior_index];
 			}
 			bool ShipGoalsDialogModel::apply()
 			{
@@ -147,6 +178,7 @@ namespace fso {
 					goalp[item].priority = m_priority[item];
 
 				mode = get_first_mode_from_combo_box(item);
+				auto lua_submode = get_lua_submode_from_combo_box(item);
 				switch (mode) {
 				case AI_GOAL_NONE:
 				case AI_GOAL_CHASE_ANY:
@@ -303,6 +335,44 @@ namespace fso {
 					}
 
 					break;
+
+				case AI_GOAL_LUA: {
+					if (lua_submode < 0) {
+						modify(goalp[item].ai_mode, AI_GOAL_NONE);
+						return;
+					}
+
+					const auto* lua_mode = ai_lua_find_mode(lua_submode);
+					if (lua_mode == nullptr) {
+						modify(goalp[item].ai_mode, AI_GOAL_NONE);
+						return;
+					}
+
+					goalp[item].ai_submode = lua_submode;
+					goalp[item].lua_ai_target.target.clear();
+					goalp[item].lua_ai_target.arguments.clear();
+
+					if (!lua_mode->needsTarget) {
+						modify(goalp[item].ai_mode, AI_GOAL_LUA);
+						return;
+					}
+
+					switch (m_object[item] & TYPE_MASK) {
+					case TYPE_SHIP:
+					case TYPE_PLAYER:
+						goalp[item].lua_ai_target.target = object_ship_wing_point_team(&Ships[m_object[item] & DATA_MASK]);
+						break;
+					case TYPE_WING:
+						goalp[item].lua_ai_target.target = object_ship_wing_point_team(&Wings[m_object[item] & DATA_MASK]);
+						break;
+					default:
+						modify(goalp[item].ai_mode, AI_GOAL_NONE);
+						return;
+					}
+
+					modify(goalp[item].ai_mode, AI_GOAL_LUA);
+					return;
+				}
 
 				default:
 					Warning(LOCATION, "Unknown AI_GOAL type 0x%x", mode);
@@ -504,12 +574,21 @@ namespace fso {
 
 					m_behavior[item] = 0;
 					if (mode != AI_GOAL_NONE) {
-						i = static_cast<int>(m_ai_goal_combo_data.size());
-						while (i-- > 0) {
-							const auto &set = m_ai_goal_combo_data[i].second;
-							if (set.find(mode) != set.end()) {
-								m_behavior[item] = i;
-								break;
+						if (mode == AI_GOAL_LUA) {
+							for (i = 0; i < static_cast<int>(m_lua_goal_submode_by_combo.size()); ++i) {
+								if (m_lua_goal_submode_by_combo[i] == goalp[item].ai_submode) {
+									m_behavior[item] = i;
+									break;
+								}
+							}
+						} else {
+							i = static_cast<int>(m_ai_goal_combo_data.size());
+							while (i-- > 0) {
+								const auto &set = m_ai_goal_combo_data[i].second;
+								if (set.find(mode) != set.end()) {
+									m_behavior[item] = i;
+									break;
+								}
 							}
 						}
 					}
@@ -566,6 +645,16 @@ namespace fso {
 					case AI_GOAL_CHASE_WING:
 					case AI_GOAL_GUARD_WING:
 						flag = 2; // target is a wing
+						break;
+
+					case AI_GOAL_LUA:
+						if (goalp[item].lua_ai_target.target.has_wingp()) {
+							flag = 2;
+						} else if (goalp[item].lua_ai_target.target.has_ship_entry()) {
+							flag = 1;
+						} else {
+							continue;
+						}
 						break;
 
 					default:
