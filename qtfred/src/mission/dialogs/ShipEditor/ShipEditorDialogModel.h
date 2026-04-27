@@ -65,6 +65,7 @@ class ShipEditorDialogModel : public AbstractDialogModel {
 	int player_ship;
 
 	std::set<size_t> ship_orders;
+	SCP_vector<size_t> accepted_order_ids;
 
 	bool texenable = true;
 
@@ -244,7 +245,7 @@ class ShipEditorDialogModel : public AbstractDialogModel {
 	 */
 	int getIfPlayerShip() const;
 
-	std::vector<std::pair<SCP_string, bool>> getAcceptedOrders() const;
+	std::vector<std::pair<SCP_string, bool>> getAcceptedOrders();
 	void setAcceptedOrders(const std::vector<std::pair<SCP_string, bool>>&);
 
 	std::vector<std::pair<SCP_string, bool>> getArrivalPaths() const;

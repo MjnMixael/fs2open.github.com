@@ -16,6 +16,7 @@
 #include "missioneditor/common.h"
 
 #include <globalincs/linklist.h>
+#include <ai/ailua.h>
 #include <hud/hudsquadmsg.h>
 #include <localization/localize.h>
 #include <mission/object.h>
@@ -23,6 +24,31 @@
 #include <QtWidgets>
 
 namespace fso::fred::dialogs {
+namespace {
+SCP_set<size_t> get_relevant_orders_for_ship(const int ship_index)
+{
+	SCP_set<size_t> orders = ship_get_default_orders_accepted(&Ship_info[Ships[ship_index].ship_info_index]);
+
+	for (size_t order_id = 0; order_id < Player_orders.size(); ++order_id) {
+		const auto& order = Player_orders[order_id];
+		if (order.lua_id <= 0) {
+			continue;
+		}
+
+		const auto* lua_order = ai_lua_find_player_order(order.lua_id);
+		if (lua_order == nullptr || lua_order->generalOrder) {
+			continue;
+		}
+
+		if (ai_lua_is_valid_ship(order.lua_id, false, &Ships[ship_index])) {
+			orders.insert(order_id);
+		}
+	}
+
+	return orders;
+}
+}
+
 ShipEditorDialogModel::ShipEditorDialogModel(QObject* parent, EditorViewport* viewport)
 	: AbstractDialogModel(parent, viewport)
 {
@@ -78,36 +104,48 @@ int ShipEditorDialogModel::getIfPlayerShip() const
 {
 	return player_ship;
 }
-std::vector<std::pair<SCP_string, bool>> ShipEditorDialogModel::getAcceptedOrders() const
+std::vector<std::pair<SCP_string, bool>> ShipEditorDialogModel::getAcceptedOrders()
 {
 	std::vector<std::pair<SCP_string, bool>> acceptedOrders;
-	object* objp;
 	SCP_set<size_t> default_orders;
+	SCP_vector<int> selected_ships;
 	if (!multi_edit) {
-		default_orders = ship_get_default_orders_accepted(&Ship_info[Ships[_editor->cur_ship].ship_info_index]);
+		default_orders = get_relevant_orders_for_ship(_editor->cur_ship);
+		selected_ships.push_back(_editor->cur_ship);
 	} else {
-		for (objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
+		for (auto* objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
 			if (((objp->type == OBJ_SHIP) || (objp->type == OBJ_START)) &&
 				(objp->flags[Object::Object_Flags::Marked])) {
-				const SCP_set<size_t>& these_orders =
-					ship_get_default_orders_accepted(&Ship_info[Ships[objp->instance].ship_info_index]);
+				const auto these_orders = get_relevant_orders_for_ship(objp->instance);
+				selected_ships.push_back(objp->instance);
 
 				if (default_orders.empty()) {
 					default_orders = these_orders;
 				} else {
-					Assert(default_orders == these_orders);
+					SCP_set<size_t> intersection;
+					for (const auto& order_id : default_orders) {
+						if (these_orders.contains(order_id)) {
+							intersection.insert(order_id);
+						}
+					}
+					default_orders = std::move(intersection);
 				}
 			}
 		}
 	}
 
+	accepted_order_ids.clear();
 	for (size_t order_id : default_orders) {
 		SCP_string name = Player_orders[order_id].localized_name;
-		bool state = false;
-		const SCP_set<size_t>& orders_accepted = Ships[_editor->cur_ship].orders_accepted;
-		if (orders_accepted.contains(order_id))
-			state = true;
+		bool state = !selected_ships.empty();
+		for (auto ship_index : selected_ships) {
+			if (!Ships[ship_index].orders_accepted.contains(order_id)) {
+				state = false;
+				break;
+			}
+		}
 		acceptedOrders.emplace_back(name, state);
+		accepted_order_ids.push_back(order_id);
 	}
 	return acceptedOrders;
 }
@@ -118,15 +156,12 @@ void ShipEditorDialogModel::setAcceptedOrders(const std::vector<std::pair<SCP_st
 	for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
 		if (((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) && (ptr->flags[Object::Object_Flags::Marked])) {
 			auto i = ptr->instance;
-			SCP_set<size_t> default_orders = ship_get_default_orders_accepted(&Ship_info[Ships[i].ship_info_index]);
+			SCP_set<size_t> default_orders = get_relevant_orders_for_ship(i);
 			SCP_set<size_t> new_orders_set;
-			for (size_t order_id : default_orders) {
-				for (const auto& order : orders) {
-					if (order.first == Player_orders[order_id].localized_name) {
-						if (order.second) {
-							new_orders_set.insert(order_id);
-						}
-					}
+			for (size_t list_index = 0; list_index < orders.size() && list_index < accepted_order_ids.size(); ++list_index) {
+				const auto order_id = accepted_order_ids[list_index];
+				if (orders[list_index].second && default_orders.contains(order_id)) {
+					new_orders_set.insert(order_id);
 				}
 			}
 			Ships[i].orders_accepted = new_orders_set;
