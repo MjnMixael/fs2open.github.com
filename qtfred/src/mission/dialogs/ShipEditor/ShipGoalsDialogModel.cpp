@@ -656,15 +656,41 @@ namespace fso {
 						flag = 2; // target is a wing
 						break;
 
-					case AI_GOAL_LUA:
-						if (goalp[item].lua_ai_target.target.has_wingp()) {
-							flag = 2;
-						} else if (goalp[item].lua_ai_target.target.has_ship_entry()) {
-							flag = 1;
-						} else {
-							continue;
+					case AI_GOAL_LUA: {
+						const auto& lua_target = goalp[item].lua_ai_target.target;
+						if (lua_target.has_wingp()) {
+							const auto* wingp = lua_target.wingp_or_null();
+							if (wingp != nullptr) {
+								m_object[item] = static_cast<int>(wingp - &Wings[0]) | TYPE_WING;
+							}
+						} else if (lua_target.has_ship_entry()) {
+							if (auto* shipp = lua_target.shipp_or_null(); shipp != nullptr) {
+								auto ship_idx = static_cast<int>(shipp - &Ships[0]);
+								m_object[item] = ship_idx | TYPE_SHIP;
+							} else if (auto* ship_entry = lua_target.ship_entry_or_null(); ship_entry != nullptr) {
+								ptr = GET_FIRST(&obj_used_list);
+								while (ptr != END_OF_LIST(&obj_used_list)) {
+									if ((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) {
+										inst = ptr->instance;
+										if (!stricmp(ship_entry->name, Ships[inst].ship_name)) {
+											m_object[item] = inst | ((ptr->type == OBJ_SHIP) ? TYPE_SHIP : TYPE_PLAYER);
+											break;
+										}
+									}
+
+									ptr = GET_NEXT(ptr);
+								}
+							}
+						} else if (lua_target.has_waypointp()) {
+							if (auto* waypointp = lua_target.waypointp_or_null(); waypointp != nullptr) {
+								m_object[item] = waypointp->get_objnum() | TYPE_WAYPOINT;
+							}
 						}
+
+						// Lua targets are represented by lua_ai_target, not target_name.
+						flag = 0;
 						break;
+					}
 
 					default:
 						Error(LOCATION, "Unhandled AI_GOAL_X #define %d in ship goals dialog box", mode);
