@@ -4,6 +4,7 @@
 
 #include "mission/util.h"
 
+#include <ai/ailua.h>
 #include <globalincs/linklist.h>
 #include <mission/object.h>
 #include <ui/util/SignalBlockers.h>
@@ -131,7 +132,11 @@ void ShipGoalsDialog::updateUI()
 			}
 			_model->setDock(i, -1);
 		} else if ((mode == AI_GOAL_CHASE_ANY) || (mode == AI_GOAL_UNDOCK) || (mode == AI_GOAL_KEEP_SAFE_DISTANCE) ||
-				   (mode == AI_GOAL_PLAY_DEAD) || (mode == AI_GOAL_PLAY_DEAD_PERSISTENT) || (mode == AI_GOAL_WARP)) {
+				   (mode == AI_GOAL_PLAY_DEAD) || (mode == AI_GOAL_PLAY_DEAD_PERSISTENT) || (mode == AI_GOAL_WARP) ||
+				   (mode == AI_GOAL_LUA && [&]() {
+					   const auto* lua_mode = ai_lua_find_mode(_model->get_lua_submode_from_combo_box(i));
+					   return lua_mode != nullptr && !lua_mode->needsTarget;
+				   }())) {
 			priority[i]->setEnabled(true);
 			objects[i]->setEnabled(false);
 			subsys[i]->setEnabled(false);
@@ -212,6 +217,7 @@ void ShipGoalsDialog::updateUI()
 			case AI_GOAL_STAY_NEAR_SHIP:
 			case AI_GOAL_FORM_ON_WING:
 			case AI_GOAL_STAY_STILL:
+			case AI_GOAL_LUA:
 				object* ptr;
 				int inst, t;
 				ptr = GET_FIRST(&obj_used_list);
@@ -259,6 +265,7 @@ void ShipGoalsDialog::updateUI()
 			case AI_GOAL_CHASE_WING:
 			case AI_GOAL_GUARD:
 			case AI_GOAL_GUARD_WING:
+			case AI_GOAL_LUA:
 				int j;
 				for (j = 0; j < MAX_WINGS; j++) {
 					if (Wings[j].wave_count && j != _model->getWing()) {

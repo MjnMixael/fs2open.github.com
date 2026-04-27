@@ -392,6 +392,16 @@
            </property>
           </widget>
          </item>
+         <item row="3" column="0">
+          <widget class="QPushButton" name="playerOrdersButton">
+           <property name="toolTip">
+            <string>Configure which player orders ships in this wing will accept.</string>
+           </property>
+           <property name="text">
+            <string>Player Orders</string>
+           </property>
+          </widget>
+         </item>
          <item row="1" column="0">
           <spacer name="verticalSpacer_6">
            <property name="orientation">

@@ -8,12 +8,39 @@
 
 #include "ui_WingEditorDialog.h"
 
+#include <ai/ailua.h>
 #include <globalincs/globals.h>
+#include <hud/hudsquadmsg.h>
+#include <ship/ship.h>
 #include <ui/util/SignalBlockers.h>
 #include <ui/util/ImageRenderer.h>
 #include <QMessageBox>
 
 namespace fso::fred::dialogs {
+namespace {
+SCP_set<size_t> get_relevant_orders_for_ship(const int ship_index)
+{
+	SCP_set<size_t> orders = ship_get_default_orders_accepted(&Ship_info[Ships[ship_index].ship_info_index]);
+
+	for (size_t order_id = 0; order_id < Player_orders.size(); ++order_id) {
+		const auto& order = Player_orders[order_id];
+		if (order.lua_id <= 0) {
+			continue;
+		}
+
+		const auto* lua_order = ai_lua_find_player_order(order.lua_id);
+		if (lua_order == nullptr || lua_order->generalOrder) {
+			continue;
+		}
+
+		if (ai_lua_is_valid_ship(order.lua_id, true, &Ships[ship_index])) {
+			orders.insert(order_id);
+		}
+	}
+
+	return orders;
+}
+}
 
 WingEditorDialog::WingEditorDialog(FredView* parent, EditorViewport* viewport)
 	: QDialog(parent), ui(new Ui::WingEditorDialog()), _model(new WingEditorDialogModel(this, viewport)),
@@ -135,6 +162,7 @@ void WingEditorDialog::enableOrDisableControls()
 		// Top section, third column
 		ui->deleteWingButton->setEnabled(on);
 		ui->disbandWingButton->setEnabled(on);
+		ui->playerOrdersButton->setEnabled(on);
 		ui->initialOrdersButton->setEnabled(on);
 		// Middle section
 		ui->setSquadLogoButton->setEnabled(on);
@@ -473,6 +501,85 @@ void WingEditorDialog::on_initialOrdersButton_clicked()
 	fso::fred::dialogs::ShipGoalsDialog dlg(this, _viewport, false, -1, wingIndex);
 
 	dlg.exec();
+}
+
+void WingEditorDialog::on_playerOrdersButton_clicked()
+{
+	const int wingIndex = _model->getCurrentWingIndex();
+	if (wingIndex < 0 || wingIndex >= MAX_WINGS) {
+		QMessageBox::warning(this, "Player Orders", "No valid wing selected.");
+		return;
+	}
+
+	auto& wing = Wings[wingIndex];
+	if (wing.wave_count <= 0 || wing.ship_index[0] < 0) {
+		QMessageBox::information(this, "Player Orders", "This wing has no ships (wave_count == 0).");
+		return;
+	}
+
+	SCP_set<size_t> available_orders;
+	for (int i = 0; i < wing.wave_count; ++i) {
+		const auto ship_idx = wing.ship_index[i];
+		if (ship_idx < 0) {
+			continue;
+		}
+
+		const auto ship_orders = get_relevant_orders_for_ship(ship_idx);
+		if (available_orders.empty()) {
+			available_orders = ship_orders;
+		} else {
+			SCP_set<size_t> intersection;
+			for (const auto& order_id : available_orders) {
+				if (ship_orders.contains(order_id)) {
+					intersection.insert(order_id);
+				}
+			}
+			available_orders = std::move(intersection);
+		}
+	}
+
+	QVector<std::pair<QString, bool>> checkbox_list;
+	SCP_vector<size_t> order_ids;
+	for (const auto& order_id : available_orders) {
+		bool enabled_for_all = true;
+		for (int i = 0; i < wing.wave_count; ++i) {
+			const auto ship_idx = wing.ship_index[i];
+			if (ship_idx >= 0 && !Ships[ship_idx].orders_accepted.contains(order_id)) {
+				enabled_for_all = false;
+				break;
+			}
+		}
+
+		checkbox_list.append({Player_orders[order_id].localized_name.c_str(), enabled_for_all});
+		order_ids.push_back(order_id);
+	}
+
+	CheckBoxListDialog dlg(this);
+	dlg.setCaption("Player Orders Accepted");
+	dlg.setOptions(checkbox_list);
+	if (dlg.exec() != QDialog::Accepted) {
+		return;
+	}
+
+	auto checked = dlg.getCheckedStates();
+	for (int i = 0; i < wing.wave_count; ++i) {
+		const auto ship_idx = wing.ship_index[i];
+		if (ship_idx < 0) {
+			continue;
+		}
+
+		auto ship_available = get_relevant_orders_for_ship(ship_idx);
+		SCP_set<size_t> new_set;
+		for (int row = 0; row < checked.size() && row < static_cast<int>(order_ids.size()); ++row) {
+			const auto order_id = order_ids[row];
+			if (checked[row] && ship_available.contains(order_id)) {
+				new_set.insert(order_id);
+			}
+		}
+		Ships[ship_idx].orders_accepted = std::move(new_set);
+	}
+
+	_viewport->editor->missionChanged();
 }
 
 void WingEditorDialog::on_wingFlagsButton_clicked()

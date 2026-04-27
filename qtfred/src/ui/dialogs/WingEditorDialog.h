@@ -39,6 +39,7 @@ class WingEditorDialog : public QDialog, public SexpTreeEditorInterface {
 		void on_nextWingButton_clicked();
 		void on_deleteWingButton_clicked();
 		void on_disbandWingButton_clicked();
+		void on_playerOrdersButton_clicked();
 		void on_initialOrdersButton_clicked();
 		void on_wingFlagsButton_clicked();
 

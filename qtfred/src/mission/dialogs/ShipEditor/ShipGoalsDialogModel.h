@@ -37,6 +37,7 @@ class ShipGoalsDialogModel : public AbstractDialogModel {
 	long long m_dock2[ED_MAX_GOALS];
 	//int m_data[ED_MAX_GOALS];
 	SCP_vector<std::pair<const char*, SCP_set<ai_goal_mode>>> m_ai_goal_combo_data;
+	SCP_vector<int> m_lua_goal_submode_by_combo;
 	int valid[MAX_VALID];
 
 	bool m_multi_edit;
@@ -51,6 +52,7 @@ class ShipGoalsDialogModel : public AbstractDialogModel {
 
 	const SCP_vector<std::pair<const char*, SCP_set<ai_goal_mode>>> &get_ai_goal_combo_data();
 	ai_goal_mode get_first_mode_from_combo_box(int which_item);
+	int get_lua_submode_from_combo_box(int which_item) const;
 
 	void initializeData(bool multi, int self_ship, int self_wing);
 	bool apply() override;
