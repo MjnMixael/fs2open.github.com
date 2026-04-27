@@ -2433,6 +2433,25 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 			default_orders = ship_get_default_orders_accepted(&Ship_info[shipp->ship_info_index]);
 			std::set_difference(p_objp->orders_accepted.begin(), p_objp->orders_accepted.end(), default_orders.begin(), default_orders.end(),
 								  std::inserter(remaining_orders, remaining_orders.begin()));
+
+			// Lua player orders can be mission-unique and won't necessarily be in a ship class default list.
+			// Filter out Lua orders that are actually valid for this ship before warning.
+			for (auto it = remaining_orders.begin(); it != remaining_orders.end();) {
+				auto order_id = *it;
+				if (order_id < Player_orders.size()) {
+					const auto lua_id = Player_orders[order_id].lua_id;
+					if (lua_id > 0) {
+						const auto* lua_order = ai_lua_find_player_order(lua_id);
+						if (lua_order != nullptr && !lua_order->generalOrder && ai_lua_is_valid_ship(lua_id, false, shipp)) {
+							it = remaining_orders.erase(it);
+							continue;
+						}
+					}
+				}
+
+				++it;
+			}
+
 			if (!remaining_orders.empty())
 			{
 				Warning(LOCATION, "Ship %s has orders which it will accept that are\nnot part of default orders accepted.\n\nPlease reedit this ship and change the orders again\n", shipp->ship_name);
