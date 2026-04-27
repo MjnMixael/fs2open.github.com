@@ -7,6 +7,7 @@
 
 #include <SDL.h>
 #include <ai/ai.h>
+#include <ai/ailua.h>
 #include <sound/audiostr.h>
 #include <parse/parselo.h>
 #include <missionui/fictionviewer.h>
@@ -2940,6 +2941,7 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 	}
 
 	for (i=0; i<MAX_AI_GOALS; i++) {
+		const char* target_name = goals[i].target_name;
 		switch (goals[i].ai_mode) {
 		case AI_GOAL_NONE:
 		case AI_GOAL_CHASE_ANY:
@@ -2986,16 +2988,56 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 			flag = 4;
 			break;
 
+		case AI_GOAL_LUA: {
+			const auto* lua_mode = ai_lua_find_mode(goals[i].ai_submode);
+			if (lua_mode == nullptr) {
+				return "*Invalid goal type";
+			}
+
+			if (!lua_mode->needsTarget) {
+				flag = 0;
+				break;
+			}
+
+			const auto& target = goals[i].lua_ai_target.target;
+			if (target.has_ship_entry()) {
+				const auto* ship_entry = target.ship_entry_or_null();
+				if (ship_entry == nullptr) {
+					return "*Invalid target ship name";
+				}
+				target_name = ship_entry->name.c_str();
+				flag = 2;
+			} else if (target.has_wingp()) {
+				const auto* wingp = target.wingp_or_null();
+				if (wingp == nullptr) {
+					return "*Invalid target wing name";
+				}
+				target_name = wingp->name;
+				flag = 3;
+			} else if (target.has_waypointp()) {
+				const auto* waypointp = target.waypointp_or_null();
+				if (waypointp == nullptr) {
+					return "*Invalid target ship or waypoint name";
+				}
+				target_name = object_name(waypointp->get_objnum());
+				flag = 4;
+			} else {
+				return "Invalid target";
+			}
+
+			break;
+		}
+
 		default:
 			return "*Invalid goal type";
 		}
 
 		found = 0;
 		if (flag > 0) {
-			if (*goals[i].target_name == '<')
+			if (target_name == nullptr || *target_name == '<')
 				return "Invalid target";
 
-			if (!stricmp(goals[i].target_name, source)) {
+			if (!stricmp(target_name, source)) {
 				if (ship >= 0)
 					return "Target of ship's goal is itself";
 				else
@@ -3005,7 +3047,7 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 
 		inst = team2 = -1;
 		if (flag == 1) {  // target waypoint required
-			if (find_matching_waypoint_list(goals[i].target_name) == NULL)
+			if (find_matching_waypoint_list(target_name) == NULL)
 				return "*Invalid target waypoint path name";
 
 		} else if (flag == 2) {  // target ship required
@@ -3013,7 +3055,7 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 			while (ptr != END_OF_LIST(&obj_used_list)) {
 				if (ptr->type == OBJ_SHIP || ptr->type == OBJ_START) {
 					inst = ptr->instance;
-					if (!stricmp(goals[i].target_name, Ships[inst].ship_name)) {
+					if (!stricmp(target_name, Ships[inst].ship_name)) {
 						found = 1;
 						break;
 					}
@@ -3034,7 +3076,7 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 
 		} else if (flag == 3) {  // target wing required
 			for (j=0; j<MAX_WINGS; j++)
-				if (Wings[j].wave_count && !stricmp(Wings[j].name, goals[i].target_name))
+				if (Wings[j].wave_count && !stricmp(Wings[j].name, target_name))
 					break;
 
 			if (j >= MAX_WINGS)
@@ -3052,13 +3094,13 @@ const char* Editor::error_check_initial_orders(ai_goal* goals, int ship, int win
 			while (ptr != END_OF_LIST(&obj_used_list)) {
 				if (ptr->type == OBJ_SHIP || ptr->type == OBJ_START) {
 					inst = ptr->instance;
-					if (!stricmp(goals[i].target_name, Ships[inst].ship_name)) {
+					if (!stricmp(target_name, Ships[inst].ship_name)) {
 						found = 2;
 						break;
 					}
 
 				} else if (ptr->type == OBJ_WAYPOINT) {
-					if (!stricmp(goals[i].target_name, object_name(OBJ_INDEX(ptr)))) {
+					if (!stricmp(target_name, object_name(OBJ_INDEX(ptr)))) {
 						found = 1;
 						break;
 					}

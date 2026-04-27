@@ -1,6 +1,7 @@
 #include "ShipGoalsDialogModel.h"
 #include <ai/ailua.h>
 #include <globalincs/linklist.h>
+#include <hud/hudsquadmsg.h>
 #include <mission/object.h>
 #include <model/model.h>
 #include <parse/sexp.h>
@@ -64,8 +65,16 @@ namespace fso {
 						continue;
 					}
 
+					const char* display_name_cstr = op_text.c_str();
+					for (const auto& order : Player_orders) {
+						if (order.lua_id == op) {
+							display_name_cstr = order.localized_name.c_str();
+							break;
+						}
+					}
+
 					SCP_set<ai_goal_mode> new_set{ AI_GOAL_LUA };
-					m_ai_goal_combo_data.emplace_back(op_text.c_str(), std::move(new_set));
+					m_ai_goal_combo_data.emplace_back(display_name_cstr, std::move(new_set));
 					m_lua_goal_submode_by_combo.push_back(op);
 				}
 			}
