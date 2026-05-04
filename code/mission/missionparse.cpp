@@ -6882,6 +6882,54 @@ void apply_default_custom_data(mission* pm)
 	}
 }
 
+void parse_editor_custom_data_table()
+{
+	auto parse_editor_tbl = [](const char* filename) {
+		read_file_text(filename, CF_TYPE_TABLES);
+		reset_parse();
+
+		while (!check_for_eof()) {
+			if (optional_string("#MissionCustomData")) {
+				while (required_string_either("#End", "+Key:")) {
+					required_string("+Key:");
+					mission_default_custom_data def;
+					stuff_string(def.key, F_NAME);
+
+					required_string("+Type:");
+					stuff_string(def.type, F_NAME);
+
+					if (optional_string("+Default:")) {
+						stuff_string(def.value, F_RAW);
+					} else {
+						def.value.clear();
+					}
+
+					if (optional_string("+Description:")) {
+						stuff_string(def.description, F_MULTITEXT);
+					}
+
+					Default_custom_data.emplace_back(std::move(def));
+				}
+			}
+
+			ignore_white_space();
+			if (!check_for_eof()) {
+				skip_to_start_of_string_either("#MissionCustomData", "#End");
+				if (check_for_string("#End")) {
+					advance_to_eoln(nullptr);
+				}
+			}
+		}
+	};
+
+	Default_custom_data.clear();
+
+	if (cf_exists_full("editor.tbl", CF_TYPE_TABLES)) {
+		parse_editor_tbl("editor.tbl");
+	}
+	parse_modular_table("*-edt.tbm", parse_editor_tbl, CF_TYPE_TABLES);
+}
+
 bool parse_mission(mission *pm, int flags)
 {
 	int saved_warning_count = Global_warning_count;
@@ -7441,6 +7489,12 @@ void support_ship_info::reset()
  */
 void mission_init(mission *pm, bool quick_init)
 {
+	static bool editor_custom_data_loaded = false;
+	if (!editor_custom_data_loaded) {
+		parse_editor_custom_data_table();
+		editor_custom_data_loaded = true;
+	}
+
 	pm->Reset();
 
 	Player_starts = 0;

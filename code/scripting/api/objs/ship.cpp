@@ -3147,5 +3147,111 @@ ADE_FUNC(ModifyElectricArcPoints, l_Ship, "number index, table points, [number w
 	return ADE_RETURN_NIL;
 }
 
+ADE_FUNC(getCustomData,
+	l_Ship,
+	"string key, [string defaultValue = \"\"]",
+	"Gets ship instance custom data for a specific key.",
+	"string",
+	"Stored value if present; otherwise the provided default value (or empty string) if not present or invalid ship handle")
+{
+	object_h* objh = nullptr;
+	const char* key = nullptr;
+	const char* default_value = "";
+
+	if (!ade_get_args(L, "os|s", l_Ship.GetPtr(&objh), &key, &default_value))
+		return ADE_RETURN_NIL;
+
+	if (!objh->isValid())
+		return ade_set_error(L, "s", default_value);
+
+	auto shipp = &Ships[objh->objp()->instance];
+	auto it = shipp->custom_data.find(key);
+	if (it == shipp->custom_data.end()) {
+		return ade_set_args(L, "s", default_value);
+	}
+
+	return ade_set_args(L, "s", it->second.c_str());
+}
+
+ADE_FUNC(setCustomData,
+	l_Ship,
+	"string key, [string value]",
+	"Sets ship instance custom data. If no value is specified, the key is removed.",
+	"boolean",
+	"true if operation succeeded, false on invalid ship handle")
+{
+	object_h* objh = nullptr;
+	const char* key = nullptr;
+	const char* value = nullptr;
+
+	auto args = ade_get_args(L, "os|s", l_Ship.GetPtr(&objh), &key, &value);
+	if (!args)
+		return ADE_RETURN_NIL;
+
+	if (!objh->isValid())
+		return ADE_RETURN_FALSE;
+
+	auto shipp = &Ships[objh->objp()->instance];
+	if (args >= 3 && value != nullptr) {
+		shipp->custom_data[key] = value;
+	} else {
+		shipp->custom_data.erase(key);
+	}
+
+	return ADE_RETURN_TRUE;
+}
+
+ADE_FUNC(hasCustomData,
+	l_Ship,
+	"[string key]",
+	"Checks whether ship instance custom data exists. Without key, checks whether any keys exist.",
+	"boolean",
+	"true if data exists, false otherwise or on invalid ship handle")
+{
+	object_h* objh = nullptr;
+	const char* key = nullptr;
+
+	auto args = ade_get_args(L, "o|s", l_Ship.GetPtr(&objh), &key);
+	if (!args)
+		return ADE_RETURN_NIL;
+
+	if (!objh->isValid())
+		return ADE_RETURN_FALSE;
+
+	auto shipp = &Ships[objh->objp()->instance];
+	if (args >= 2 && key != nullptr) {
+		return ade_set_args(L, "b", shipp->custom_data.find(key) != shipp->custom_data.end());
+	}
+
+	return ade_set_args(L, "b", !shipp->custom_data.empty());
+}
+
+ADE_FUNC(clearCustomData,
+	l_Ship,
+	"[string key]",
+	"Clears ship instance custom data for a key or all keys if omitted.",
+	"boolean",
+	"true if operation succeeded, false on invalid ship handle")
+{
+	object_h* objh = nullptr;
+	const char* key = nullptr;
+
+	auto args = ade_get_args(L, "o|s", l_Ship.GetPtr(&objh), &key);
+	if (!args)
+		return ADE_RETURN_NIL;
+
+	if (!objh->isValid())
+		return ADE_RETURN_FALSE;
+
+	auto shipp = &Ships[objh->objp()->instance];
+	if (args >= 2 && key != nullptr) {
+		shipp->custom_data.erase(key);
+	} else {
+		shipp->custom_data.clear();
+	}
+
+	return ADE_RETURN_TRUE;
+}
+
 }
 }
