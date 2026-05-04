@@ -164,6 +164,7 @@ typedef struct mission_default_custom_data {
 	SCP_string key;
 	SCP_string value;
 	SCP_string description;
+	SCP_string type;
 } mission_default_custom_data;
 
 typedef struct custom_string {
@@ -615,6 +616,7 @@ void mission_parse_close();
 
 // used in fred management.cpp when creating a new mission
 void apply_default_custom_data(mission* pm);
+void parse_editor_custom_data_table();
 
 bool mission_maybe_make_ship_arrive(p_object *p_objp, bool force_arrival = false);
 bool mission_maybe_make_wing_arrive(int wingnum, bool force_arrival = false);
@@ -681,4 +683,3 @@ subsys_status *parse_get_subsys_status(p_object *pobjp, const char *subsys_name)
 custom_string* get_custom_string_by_name(SCP_string name);
 
 #endif
-

@@ -2216,7 +2216,7 @@ ADE_FUNC(addDefaultCustomData,
 		}
 	}
 
-	mission_default_custom_data data = {key, value, desc};
+	mission_default_custom_data data = {key, value, desc, "string"};
 
 	Default_custom_data.push_back(data);
 
