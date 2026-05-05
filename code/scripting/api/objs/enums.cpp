@@ -71,6 +71,7 @@ const lua_enum_def_list Enumerations[] = {
 	{"TARGET_UNLOCK", LE_UNLOCK, true},
 	{"UNLOCK", LE_UNLOCK, true},
 	{"TARGET_NONE", LE_NONE, true},
+	{"SHIELD_NONE", LE_NONE, true},
 	{"NONE", LE_NONE, true},
 	{"SHIELD_FRONT", LE_SHIELD_FRONT, true},
 	{"SHIELD_LEFT", LE_SHIELD_LEFT, true},
@@ -297,7 +298,7 @@ struct deprecated_enum_name_info {
 static const SCP_unordered_map<SCP_string, deprecated_enum_name_info> Deprecated_enumeration_names = {
 	{"LOCK", {LE_LOCK, "TARGET_LOCK", gameversion::version(26, 0)}},
 	{"UNLOCK", {LE_UNLOCK, "TARGET_UNLOCK", gameversion::version(26, 0)}},
-	{"NONE", {LE_NONE, "TARGET_NONE", gameversion::version(26, 0)}},
+	{"NONE", {LE_NONE, "SHIELD_NONE", gameversion::version(26, 0)}},
 	{"NORMAL_CONTROLS", {LE_NORMAL_CONTROLS, "FLIGHT_CONTROL_NORMAL", gameversion::version(26, 0)}},
 	{"LUA_STEERING_CONTROLS", {LE_LUA_STEERING_CONTROLS, "FLIGHT_CONTROL_LUA_STEERING", gameversion::version(26, 0)}},
 	{"LUA_FULL_CONTROLS", {LE_LUA_FULL_CONTROLS, "FLIGHT_CONTROL_LUA_FULL", gameversion::version(26, 0)}},
