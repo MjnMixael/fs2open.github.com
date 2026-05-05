@@ -5,6 +5,7 @@
 #define FS2_OPEN_ENUMS_H
 
 #include "globalincs/pstypes.h"
+#include "globalincs/version.h"
 #include "scripting/ade_api.h"
 
 #include <optional>
@@ -271,6 +272,12 @@ enum lua_enum : int32_t {
 	ENUM_NEXT_INDEX,
 	ENUM_COMBINATION,
 	ENUM_INVALID
+};
+
+
+struct deprecated_enum_info {
+	const char* replacement;
+	gameversion::version deprecated_since;
 };
 
 struct lua_enum_def_list : public flag_def_list_new<lua_enum> {

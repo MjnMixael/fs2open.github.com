@@ -66,19 +66,28 @@ const lua_enum_def_list Enumerations[] = {
 	{"SEXPVAR_TYPE_STRING", LE_SEXPVAR_TYPE_STRING, true},
 	{"TEXTURE_STATIC", LE_TEXTURE_STATIC, true},
 	{"TEXTURE_DYNAMIC", LE_TEXTURE_DYNAMIC, true},
+	{"TARGET_LOCK", LE_LOCK, true},
 	{"LOCK", LE_LOCK, true},
+	{"TARGET_UNLOCK", LE_UNLOCK, true},
 	{"UNLOCK", LE_UNLOCK, true},
+	{"TARGET_NONE", LE_NONE, true},
 	{"NONE", LE_NONE, true},
 	{"SHIELD_FRONT", LE_SHIELD_FRONT, true},
 	{"SHIELD_LEFT", LE_SHIELD_LEFT, true},
 	{"SHIELD_RIGHT", LE_SHIELD_RIGHT, true},
 	{"SHIELD_BACK", LE_SHIELD_BACK, true},
 	{"MISSION_REPEAT", LE_MISSION_REPEAT, true},
+	{"FLIGHT_CONTROL_NORMAL", LE_NORMAL_CONTROLS, true},
 	{"NORMAL_CONTROLS", LE_NORMAL_CONTROLS, true},
+	{"FLIGHT_CONTROL_LUA_STEERING", LE_LUA_STEERING_CONTROLS, true},
 	{"LUA_STEERING_CONTROLS", LE_LUA_STEERING_CONTROLS, true},
+	{"FLIGHT_CONTROL_LUA_FULL", LE_LUA_FULL_CONTROLS, true},
 	{"LUA_FULL_CONTROLS", LE_LUA_FULL_CONTROLS, true},
+	{"BUTTON_CONTROL_NORMAL", LE_NORMAL_BUTTON_CONTROLS, true},
 	{"NORMAL_BUTTON_CONTROLS", LE_NORMAL_BUTTON_CONTROLS, true},
+	{"BUTTON_CONTROL_LUA_ADDITIVE", LE_LUA_ADDITIVE_BUTTON_CONTROL, true},
 	{"LUA_ADDITIVE_BUTTON_CONTROL", LE_LUA_ADDITIVE_BUTTON_CONTROL, true},
+	{"BUTTON_CONTROL_LUA_OVERRIDE", LE_LUA_OVERRIDE_BUTTON_CONTROL, true},
 	{"LUA_OVERRIDE_BUTTON_CONTROL", LE_LUA_OVERRIDE_BUTTON_CONTROL, true},
 	{"VM_INTERNAL", LE_VM_INTERNAL, true},
 	{"VM_EXTERNAL", LE_VM_EXTERNAL, true},
@@ -148,10 +157,15 @@ const lua_enum_def_list Enumerations[] = {
 	{"SCORE_DEBRIEFING_AVERAGE", LE_SCORE_DEBRIEFING_AVERAGE, true},
 	{"SCORE_DEBRIEFING_FAILURE", LE_SCORE_DEBRIEFING_FAILURE, true},
 	{"SCORE_FICTION_VIEWER", LE_SCORE_FICTION_VIEWER, true},
+	{"SHIP_STATUS_INVALID", LE_INVALID, true},
 	{"INVALID", LE_INVALID, true},
+	{"SHIP_STATUS_NOT_YET_PRESENT", LE_NOT_YET_PRESENT, true},
 	{"NOT_YET_PRESENT", LE_NOT_YET_PRESENT, true},
+	{"SHIP_STATUS_PRESENT", LE_PRESENT, true},
 	{"PRESENT", LE_PRESENT, true},
+	{"SHIP_STATUS_DEATH_ROLL", LE_DEATH_ROLL, true},
 	{"DEATH_ROLL", LE_DEATH_ROLL, true},
+	{"SHIP_STATUS_EXITED", LE_EXITED, true},
 	{"EXITED", LE_EXITED, true},
 	{"DC_IS_HULL", LE_DC_IS_HULL, (1 << 0), true},
 	{"DC_VAPORIZE", LE_DC_VAPORIZE, (1 << 1), true},
@@ -273,6 +287,40 @@ const lua_enum_def_list Enumerations[] = {
 };
 
 const size_t Num_enumerations = sizeof(Enumerations) / sizeof(lua_enum_def_list);
+
+static const SCP_unordered_map<lua_enum, deprecated_enum_info> Deprecated_enumeration_info = {
+	{LE_LOCK, {"TARGET_LOCK", gameversion::version(26, 0)}},
+	{LE_UNLOCK, {"TARGET_UNLOCK", gameversion::version(26, 0)}},
+	{LE_NONE, {"TARGET_NONE", gameversion::version(26, 0)}},
+	{LE_NORMAL_CONTROLS, {"FLIGHT_CONTROL_NORMAL", gameversion::version(26, 0)}},
+	{LE_LUA_STEERING_CONTROLS, {"FLIGHT_CONTROL_LUA_STEERING", gameversion::version(26, 0)}},
+	{LE_LUA_FULL_CONTROLS, {"FLIGHT_CONTROL_LUA_FULL", gameversion::version(26, 0)}},
+	{LE_NORMAL_BUTTON_CONTROLS, {"BUTTON_CONTROL_NORMAL", gameversion::version(26, 0)}},
+	{LE_LUA_ADDITIVE_BUTTON_CONTROL, {"BUTTON_CONTROL_LUA_ADDITIVE", gameversion::version(26, 0)}},
+	{LE_LUA_OVERRIDE_BUTTON_CONTROL, {"BUTTON_CONTROL_LUA_OVERRIDE", gameversion::version(26, 0)}},
+	{LE_INVALID, {"SHIP_STATUS_INVALID", gameversion::version(26, 0)}},
+	{LE_NOT_YET_PRESENT, {"SHIP_STATUS_NOT_YET_PRESENT", gameversion::version(26, 0)}},
+	{LE_PRESENT, {"SHIP_STATUS_PRESENT", gameversion::version(26, 0)}},
+	{LE_DEATH_ROLL, {"SHIP_STATUS_DEATH_ROLL", gameversion::version(26, 0)}},
+	{LE_EXITED, {"SHIP_STATUS_EXITED", gameversion::version(26, 0)}}
+};
+
+static void maybe_warn_deprecated_enum(lua_State* L, const enum_h* e) {
+	if (e == nullptr || !e->isValid()) {
+		return;
+	}
+	auto deprecated_info = Deprecated_enumeration_info.find(e->index);
+	if (deprecated_info != Deprecated_enumeration_info.end() && e->getName() != deprecated_info->second.replacement) {
+		const auto& deprecation_version = deprecated_info->second.deprecated_since;
+		if (mod_supports_version(deprecation_version.major, deprecation_version.minor, deprecation_version.build)) {
+			LuaError(L, "Enumeration '%s' is deprecated since version %s and cannot be used if the mod targets that version or higher. Use '%s' instead.",
+				e->getName().c_str(), gameversion::format_version(deprecation_version).c_str(), deprecated_info->second.replacement);
+		} else {
+			Warning(LOCATION, "Enumeration '%s' is deprecated from version %s and should be replaced with '%s'.",
+				e->getName().c_str(), gameversion::format_version(deprecation_version).c_str(), deprecated_info->second.replacement);
+		}
+	}
+}
 
 
 enum_h::enum_h() {
@@ -406,6 +454,8 @@ ADE_FUNC(__tostring,
 		return ade_set_args(L, "s", "<INVALID>");
 	}
 
+	maybe_warn_deprecated_enum(L, e);
+
 	if (!e->isValid()) {
 		return ade_set_args(L, "s", "<INVALID>");
 	}
@@ -430,6 +480,9 @@ ADE_FUNC(__eq,
 		return ade_set_error(L, "o", l_Enum.Set(enum_h()));
 	}
 
+	maybe_warn_deprecated_enum(L, e1);
+	maybe_warn_deprecated_enum(L, e2);
+
 	if (e1 == nullptr || e2 == nullptr) {
 		return ADE_RETURN_FALSE;
 	}
@@ -449,6 +502,9 @@ ADE_FUNC(__add,
 	if (!ade_get_args(L, "oo", l_Enum.GetPtr(&e1), l_Enum.GetPtr(&e2))) {
 		return ade_set_error(L, "o", l_Enum.Set(enum_h()));
 	}
+
+	maybe_warn_deprecated_enum(L, e1);
+	maybe_warn_deprecated_enum(L, e2);
 
 	if (e1 == nullptr || e2 == nullptr || !e1->isValid() || !e2->isValid() || !e1->value ||!e2->value) {
 		return ade_set_error(L, "o", l_Enum.Set(enum_h()));
@@ -470,6 +526,9 @@ ADE_FUNC(__mul,
 		return ade_set_error(L, "o", l_Enum.Set(enum_h()));
 	}
 
+	maybe_warn_deprecated_enum(L, e1);
+	maybe_warn_deprecated_enum(L, e2);
+
 	if (e1 == nullptr || e2 == nullptr || !e1->isValid() || !e2->isValid() || !e1->value || !e2->value) {
 		return ade_set_error(L, "o", l_Enum.Set(enum_h()));
 	}
@@ -483,6 +542,8 @@ ADE_VIRTVAR_DEPRECATED(IntValue, l_Enum, "enumeration", "Internal value of the e
 	if (!ade_get_args(L, "o", l_Enum.GetPtr(&e))) {
 		return ade_set_args(L, "i", -1);
 	}
+
+	maybe_warn_deprecated_enum(L, e);
 
 	if (ADE_SETTING_VAR) {
 		LuaError(L, "IntValue is read only!");
@@ -498,6 +559,8 @@ ADE_VIRTVAR(Value, l_Enum, "enumeration", "Internal bitfield value of the enum. 
 	if (!ade_get_args(L, "o", l_Enum.GetPtr(&e))) {
 		return ade_set_args(L, "i", -1);
 	}
+
+	maybe_warn_deprecated_enum(L, e);
 
 	if (ADE_SETTING_VAR) {
 		LuaError(L, "Value is read only!");
