@@ -1,7 +1,41 @@
 #include "doc_html.h"
+#include "scripting/api/objs/enums.h"
+#include <cctype>
 
 namespace scripting {
 namespace {
+SCP_string link_enum_group_references(const SCP_string& text) {
+	SCP_string out;
+	SCP_string token;
+	for (size_t i = 0; i <= text.size(); ++i) {
+		const auto ch = (i < text.size()) ? text[i] : ' ';
+		if (std::isalnum(static_cast<unsigned char>(ch)) || ch == '_' || ch == '*') {
+			token.push_back(ch);
+			continue;
+		}
+		if (!token.empty()) {
+			SCP_string lookup = token;
+			while (!lookup.empty() && (lookup.back() == '*' || lookup.back() == ',' || lookup.back() == '.' || lookup.back() == ')' || lookup.back() == ']')) {
+				lookup.pop_back();
+			}
+			auto group = get_enum_group_info(lookup.c_str());
+			if (group) {
+				out += "<a href=\"#enum-group-";
+				out += group->id;
+				out += "\">";
+				out += token;
+				out += "</a>";
+			} else {
+				out += token;
+			}
+			token.clear();
+		}
+		if (i < text.size()) {
+			out.push_back(ch);
+		}
+	}
+	return out;
+}
 
 void ade_output_toc(FILE* fp, const std::unique_ptr<DocumentationElement>& el)
 {
@@ -25,8 +59,10 @@ void ade_output_toc(FILE* fp, const std::unique_ptr<DocumentationElement>& el)
 	}
 	fputs("</a>", fp);
 
-	if (!el->description.empty())
-		fprintf(fp, " - %s\n", el->description.c_str());
+	if (!el->description.empty()) {
+		auto description = link_enum_group_references(el->description);
+		fprintf(fp, " - %s\n", description.c_str());
+	}
 
 	fputs("</dd>\n", fp);
 }
@@ -285,7 +321,8 @@ void OutputElement(FILE* fp,
 
 			//***Description
 			if (!el->description.empty()) {
-				fprintf(fp, "<dd>%s</dd>\n", el->description.c_str());
+				auto description = link_enum_group_references(el->description);
+				fprintf(fp, "<dd>%s</dd>\n", description.c_str());
 			}
 			break;
 		}
@@ -343,7 +380,8 @@ void OutputElement(FILE* fp,
 
 			//***Description
 			if (!el->description.empty()) {
-				fprintf(fp, "<dd>%s</dd>\n", el->description.c_str());
+				auto description = link_enum_group_references(el->description);
+				fprintf(fp, "<dd>%s</dd>\n", description.c_str());
 			}
 
 			if (el->deprecationVersion.isValid()) {
@@ -365,7 +403,8 @@ void OutputElement(FILE* fp,
 
 			//***Result: ReturnDescription
 			if (!funcEl->returnDocumentation.empty()) {
-				fprintf(fp, "<dd><b>Returns:</b> %s</dd>\n", funcEl->returnDocumentation.c_str());
+				auto returns = link_enum_group_references(funcEl->returnDocumentation);
+				fprintf(fp, "<dd><b>Returns:</b> %s</dd>\n", returns.c_str());
 			} else {
 				fputs("<dd><b>Returns:</b> Nothing</dd>\n", fp);
 			}
@@ -396,10 +435,14 @@ void OutputElement(FILE* fp,
 
 			//***Description
 			if (!propEl->description.empty())
-				fprintf(fp, "<dd>%s</dd>\n", propEl->description.c_str());
+				auto description = link_enum_group_references(propEl->description);
+				fprintf(fp, "<dd>%s</dd>\n", description.c_str());
 
 			if (!propEl->returnDocumentation.empty())
-				fprintf(fp, "<dd><b>Value:</b> %s</b></dd>\n", propEl->returnDocumentation.c_str());
+			{
+				auto value = link_enum_group_references(propEl->returnDocumentation);
+				fprintf(fp, "<dd><b>Value:</b> %s</b></dd>\n", value.c_str());
+			}
 			break;
 		}
 		default:
