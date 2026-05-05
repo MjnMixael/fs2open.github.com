@@ -83,6 +83,7 @@ class FFmpegWaveFile : public IAudioFile {
 	 * @return @c true if succesfull, @c false otherwise
 	 */
 	bool Cue() override;
+	bool Seek(double time_seconds) override;
 
 	/**
 	 * @brief Read audio data into a buffer

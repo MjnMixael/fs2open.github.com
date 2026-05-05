@@ -118,6 +118,8 @@ public:
 	void	Set_Default_Volume(float vol) { m_lDefaultVolume = vol; }
 	float	Get_Default_Volume() { return m_lDefaultVolume; }
 	uint	Get_Samples_Committed();
+	bool	Seek_To(double time_seconds);
+	double	Get_Elapsed_Time();
 	int	Is_looping() { return m_bLooping; }
 	int	status;
 	int	type;
@@ -746,6 +748,50 @@ uint AudioStream::Get_Samples_Committed(void)
 	return (uint) (m_total_uncompressed_bytes_read / m_fileProps.bytes_per_sample);
 }
 
+bool AudioStream::Seek_To(double time_seconds)
+{
+	if (m_pwavefile == nullptr) {
+		return false;
+	}
+
+	auto was_playing = m_fPlaying || m_bIsPaused;
+	auto was_paused = m_bIsPaused;
+	auto prev_volume = m_lVolume;
+	auto was_looping = m_bLooping;
+
+	Stop_and_Rewind();
+
+	if (!m_pwavefile->Seek(time_seconds)) {
+		return false;
+	}
+
+	m_fCued = false;
+	Cue();
+
+	const auto frame_size = m_fileProps.bytes_per_sample * m_fileProps.num_channels;
+	m_total_uncompressed_bytes_read = static_cast<size_t>(time_seconds * m_fileProps.sample_rate) * frame_size;
+
+	if (was_playing) {
+		Play(prev_volume, was_looping ? 1 : 0);
+		if (was_paused) {
+			Stop(1);
+		}
+	}
+
+	return true;
+}
+
+double AudioStream::Get_Elapsed_Time()
+{
+	if (m_fileProps.sample_rate <= 0 || m_fileProps.bytes_per_sample <= 0 || m_fileProps.num_channels <= 0) {
+		return 0.0;
+	}
+
+	const auto frame_size = m_fileProps.bytes_per_sample * m_fileProps.num_channels;
+	const auto total_frames = static_cast<double>(m_total_uncompressed_bytes_read) / static_cast<double>(frame_size);
+	return total_frames / static_cast<double>(m_fileProps.sample_rate);
+}
+
 
 /** Have stream fade out and be destroyed when inaudabile.
 If stream is already done or never started just destroy it now.
@@ -1292,6 +1338,28 @@ void audiostream_pause_all(bool via_sexp_or_script)
 
 		audiostream_pause(i, via_sexp_or_script);
 	}
+}
+
+bool audiostream_seek(int i, double time_seconds)
+{
+	if (!Audiostream_inited || !snd_is_inited())
+		return false;
+
+	if (i < 0 || i >= MAX_AUDIO_STREAMS)
+		return false;
+
+	return Audio_streams[i].Seek_To(time_seconds);
+}
+
+double audiostream_get_time(int i)
+{
+	if (!Audiostream_inited || !snd_is_inited())
+		return 0.0;
+
+	if (i < 0 || i >= MAX_AUDIO_STREAMS)
+		return 0.0;
+
+	return Audio_streams[i].Get_Elapsed_Time();
 }
 
 void audiostream_unpause_all(bool via_sexp_or_script)

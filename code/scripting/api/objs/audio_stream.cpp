@@ -161,6 +161,35 @@ ADE_FUNC(getDuration, l_AudioStream, nullptr, "Gets the duration of the stream",
 	return ade_set_args(L, "f", (float)audiostream_get_duration(streamHandle));
 }
 
+ADE_FUNC(getPlaybackTime, l_AudioStream, nullptr, "Gets the current playback position in seconds", "number", "the playback time in seconds or nil if invalid")
+{
+	int streamHandle = -1;
+	if (!ade_get_args(L, "o", l_AudioStream.Get(&streamHandle))) {
+		return ADE_RETURN_NIL;
+	}
+
+	if (streamHandle < 0) {
+		return ADE_RETURN_NIL;
+	}
+
+	return ade_set_args(L, "f", (float)audiostream_get_time(streamHandle));
+}
+
+ADE_FUNC(seek, l_AudioStream, "number timeSeconds", "Seeks playback to the specified timestamp in seconds", "boolean", "true on success, false otherwise")
+{
+	int streamHandle = -1;
+	float timeSeconds = 0.0f;
+	if (!ade_get_args(L, "of", l_AudioStream.Get(&streamHandle), &timeSeconds)) {
+		return ADE_RETURN_FALSE;
+	}
+
+	if (streamHandle < 0) {
+		return ADE_RETURN_FALSE;
+	}
+
+	return ade_set_args(L, "b", audiostream_seek(streamHandle, timeSeconds));
+}
+
 ADE_FUNC(isValid,
 	l_AudioStream,
 	nullptr,

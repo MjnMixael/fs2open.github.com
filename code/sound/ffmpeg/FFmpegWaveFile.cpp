@@ -337,6 +337,24 @@ bool FFmpegWaveFile::Cue()
 	return err >= 0;
 }
 
+bool FFmpegWaveFile::Seek(double time_seconds)
+{
+	if (time_seconds < 0.0) {
+		time_seconds = 0.0;
+	}
+
+	auto stream = m_ctx->ctx()->streams[m_audioStreamIndex];
+	auto target_ts = static_cast<int64_t>(time_seconds / av_q2d(stream->time_base));
+	auto err = av_seek_frame(m_ctx->ctx(), m_audioStreamIndex, target_ts, AVSEEK_FLAG_BACKWARD);
+
+	if (err >= 0) {
+		avcodec_flush_buffers(m_audioCodecCtx);
+		avformat_flush(m_ctx->ctx());
+	}
+
+	return err >= 0;
+}
+
 void FFmpegWaveFile::setAdjustedAudioProperties(const AudioProperties& props)
 {
 	if (m_resampleCtx) {

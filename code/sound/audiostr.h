@@ -68,6 +68,8 @@ int audiostream_is_paused(int i);
 
 // get duration of a stream in seconds
 double audiostream_get_duration(int i);
+bool audiostream_seek(int i, double time_seconds);
+double audiostream_get_time(int i);
 
 // set the number of samples that the sound should cutoff after
 void audiostream_set_sample_cutoff(int i, unsigned int cutoff);

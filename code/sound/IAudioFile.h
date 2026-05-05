@@ -62,6 +62,15 @@ class IAudioFile {
 	virtual bool Cue() = 0;
 
 	/**
+	 * @brief Seek playback position to the specified timestamp
+	 *
+	 * @param time_seconds The target timestamp in seconds from the start of the stream
+	 * @return @c true on success, @c false otherwise
+	 */
+	virtual bool Seek(double time_seconds) = 0;
+
+
+	/**
 	 * @brief Read audio data into a buffer
 	 *
 	 * Reads up to cbSize bytes of audio data into the buffer. cbSize must be a multiple of the size of one sample
