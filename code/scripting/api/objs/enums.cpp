@@ -305,6 +305,44 @@ static const SCP_unordered_map<lua_enum, deprecated_enum_info> Deprecated_enumer
 	{LE_EXITED, {"SHIP_STATUS_EXITED", gameversion::version(26, 0)}}
 };
 
+static const SCP_unordered_set<SCP_string> Deprecated_enumeration_names = {
+	"LOCK",
+	"UNLOCK",
+	"NONE",
+	"NORMAL_CONTROLS",
+	"LUA_STEERING_CONTROLS",
+	"LUA_FULL_CONTROLS",
+	"NORMAL_BUTTON_CONTROLS",
+	"LUA_ADDITIVE_BUTTON_CONTROL",
+	"LUA_OVERRIDE_BUTTON_CONTROL",
+	"INVALID",
+	"NOT_YET_PRESENT",
+	"PRESENT",
+	"DEATH_ROLL",
+	"EXITED",
+	"VM_EXTERNAL_CAMERA_LOCKED"
+};
+
+bool is_deprecated_enum_name(const char* enum_name) {
+	return enum_name != nullptr && Deprecated_enumeration_names.find(enum_name) != Deprecated_enumeration_names.end();
+}
+
+std::optional<enum_group_info> get_enum_group_info(const char* enum_name) {
+	if (enum_name == nullptr) {
+		return std::nullopt;
+	}
+
+	auto starts = [enum_name](const char* prefix) { return strncmp(enum_name, prefix, strlen(prefix)) == 0; };
+
+	if (starts("TARGET_")) return enum_group_info{"target-lock", "Target Lock Control", "Controls how targeting lock behavior is set or queried."};
+	if (starts("FLIGHT_CONTROL_")) return enum_group_info{"flight-controls", "Flight Control Mode", "Specifies whether steering is handled by normal controls or Lua control modes."};
+	if (starts("BUTTON_CONTROL_")) return enum_group_info{"button-controls", "Button Control Mode", "Defines how Lua interacts with normal button input handling."};
+	if (starts("SHIP_STATUS_")) return enum_group_info{"ship-status", "Ship Presence/State", "Describes high-level ship registry presence and lifecycle state."};
+	if (starts("VM_")) return enum_group_info{"view-modes", "View Modes", "View and camera modes for rendering/player perspective."};
+
+	return std::nullopt;
+}
+
 static void maybe_warn_deprecated_enum(lua_State* L, const enum_h* e) {
 	if (e == nullptr || !e->isValid()) {
 		return;

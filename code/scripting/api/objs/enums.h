@@ -289,6 +289,16 @@ struct lua_enum_def_list : public flag_def_list_new<lua_enum> {
 extern const lua_enum_def_list Enumerations[];
 extern const size_t Num_enumerations;
 
+struct enum_group_info {
+	const char* id;
+	const char* title;
+	const char* description;
+};
+
+bool is_deprecated_enum_name(const char* enum_name);
+std::optional<enum_group_info> get_enum_group_info(const char* enum_name);
+
+
 struct enum_h {
 private:
 	enum class last_combine_op { NATIVE, AND, OR };

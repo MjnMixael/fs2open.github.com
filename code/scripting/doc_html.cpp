@@ -561,13 +561,24 @@ void output_html_doc(const ScriptingDocumentation& doc, const SCP_string& filena
 
 	//***Enumerations
 	fprintf(fp, "<dt id=\"Enumerations\"><h2>Enumerations</h2></dt>");
+	SCP_unordered_map<SCP_string, SCP_vector<const DocumentationEnum*>> enum_groups;
+	SCP_vector<SCP_string> enum_group_order;
 	for (const auto& enumeration : doc.enumerations) {
-		// Cyborg17 -- Omit the deprecated flag
-		if (enumeration.name == "VM_EXTERNAL_CAMERA_LOCKED") {
-			continue;
+		auto key = enumeration.group_id.empty() ? SCP_string("ungrouped") : enumeration.group_id;
+		if (enum_groups.find(key) == enum_groups.end()) {
+			enum_group_order.push_back(key);
 		}
-		// WMC - For now, print to the file without the description.
-		fprintf(fp, "<dd><b>%s</b></dd>", enumeration.name.c_str());
+		enum_groups[key].push_back(&enumeration);
+	}
+	for (const auto& group_id : enum_group_order) {
+		const auto* first_enum = enum_groups[group_id].front();
+		const auto& group_title = first_enum->group_title.empty() ? SCP_string("Ungrouped Enumerations") : first_enum->group_title;
+		const auto& group_description = first_enum->group_description.empty() ? SCP_string("General-purpose enumeration constants.") : first_enum->group_description;
+		fprintf(fp, "<dd><h3 id=\"enum-group-%s\">%s</h3></dd>", group_id.c_str(), group_title.c_str());
+		fprintf(fp, "<dd>%s</dd>", group_description.c_str());
+		for (const auto* enumeration : enum_groups[group_id]) {
+			fprintf(fp, "<dd><b>%s</b></dd>", enumeration->name.c_str());
+		}
 	}
 	fputs("</dl></body></html>", fp);
 
