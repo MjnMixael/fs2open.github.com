@@ -342,6 +342,7 @@ std::optional<enum_group_info> get_enum_group_info(const char* enum_name) {
 		{"SEXPVAR_", "sexpvar", "SEXP Variable", "SEXP variable persistence and type constants."},
 		{"TEXTURE_", "textures", "Texture Sources", "Texture handle source types."},
 		{"TARGET_", "target-lock", "Target Lock Control", "Controls how targeting lock behavior is set or queried."},
+		{"MISSION_", "mission-flow", "Mission Flow", "Mission-level control and mission selection constants."},
 		{"SHIELD_", "shield-quadrants", "Shield Quadrants", "Shield quadrant constants."},
 		{"FLIGHT_CONTROL_", "flight-controls", "Flight Control Mode", "Specifies whether steering is handled by normal controls or Lua control modes."},
 		{"BUTTON_CONTROL_", "button-controls", "Button Control Mode", "Defines how Lua interacts with normal button input handling."},
