@@ -313,12 +313,12 @@ static const SCP_unordered_map<SCP_string, deprecated_enum_name_info> Deprecated
 	{"VM_EXTERNAL_CAMERA_LOCKED", {LE_VM_EXTERNAL_CAMERA_LOCKED, "VM_CAMERA_LOCKED", gameversion::version(24, 0)}}
 };
 
-static std::optional<deprecated_enum_name_info> get_deprecated_enum_info(lua_enum value) {
-	for (const auto& deprecated_enum : Deprecated_enumeration_names) {
-		if (deprecated_enum.second.value == value) {
-			return deprecated_enum.second;
-		}
+static std::optional<deprecated_enum_name_info> get_deprecated_enum_info(const SCP_string& enum_name) {
+	auto deprecated_enum = Deprecated_enumeration_names.find(enum_name);
+	if (deprecated_enum != Deprecated_enumeration_names.end()) {
+		return deprecated_enum->second;
 	}
+
 	return std::nullopt;
 }
 
@@ -385,7 +385,7 @@ static void maybe_warn_deprecated_enum(lua_State* L, const enum_h* e) {
 	if (e == nullptr || !e->isValid()) {
 		return;
 	}
-	auto deprecated_info = get_deprecated_enum_info(e->index);
+	auto deprecated_info = get_deprecated_enum_info(e->getName());
 	if (deprecated_info && e->getName() != deprecated_info->replacement) {
 		const auto& deprecation_version = deprecated_info->deprecated_since;
 		if (mod_supports_version(deprecation_version.major, deprecation_version.minor, deprecation_version.build)) {
