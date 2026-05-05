@@ -299,6 +299,7 @@ static const SCP_unordered_map<SCP_string, deprecated_enum_name_info> Deprecated
 	{"LOCK", {LE_LOCK, "TARGET_LOCK", gameversion::version(26, 0)}},
 	{"UNLOCK", {LE_UNLOCK, "TARGET_UNLOCK", gameversion::version(26, 0)}},
 	{"NONE", {LE_NONE, "SHIELD_NONE", gameversion::version(26, 0)}},
+	{"TARGET_NONE", {LE_NONE, "TARGET_NONE", gameversion::version(26, 0)}},
 	{"NORMAL_CONTROLS", {LE_NORMAL_CONTROLS, "FLIGHT_CONTROL_NORMAL", gameversion::version(26, 0)}},
 	{"LUA_STEERING_CONTROLS", {LE_LUA_STEERING_CONTROLS, "FLIGHT_CONTROL_LUA_STEERING", gameversion::version(26, 0)}},
 	{"LUA_FULL_CONTROLS", {LE_LUA_FULL_CONTROLS, "FLIGHT_CONTROL_LUA_FULL", gameversion::version(26, 0)}},
