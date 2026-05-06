@@ -8,6 +8,7 @@
 
 #include "cmdline/cmdline.h"
 #include "def_files/def_files.h"
+#include "graphics/post_processing.h"
 #include "io/timer.h"
 #include "lighting/lighting.h"
 #include "osapi/dialogs.h"
@@ -58,6 +59,7 @@ void switch_to(const SCP_string& name)
 		return;
 	}
 	_current = Profiles[name];
+	gr_set_bloom_intensity_default(_current.bloom_intensity);
 }
 
 void switch_to_non_mission()
@@ -86,11 +88,6 @@ const piecewise_power_curve_values& current_piecewise_values()
 float current_exposure()
 {
 	return _current.exposure;
-}
-
-int current_bloom_intensity()
-{
-	return _current.bloom_intensity;
 }
 
 piecewise_power_curve_intermediates current_piecewise_intermediates()

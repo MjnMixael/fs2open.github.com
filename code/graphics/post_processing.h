@@ -75,5 +75,7 @@ class PostProcessingManager {
 bool gr_lightshafts_enabled();
 bool gr_sunglare_enabled();
 int gr_bloom_intensity();
+// used by lighting profiles to update the option fallback without changing the user setting
+void gr_set_bloom_intensity_default(int intensity);
 // used by lab
 void gr_set_bloom_intensity(int intensity);

@@ -95,7 +95,6 @@ const piecewise_power_curve_values& current_piecewise_values();
 piecewise_power_curve_intermediates current_piecewise_intermediates();
 piecewise_power_curve_intermediates calc_intermediates(piecewise_power_curve_values input);
 float current_exposure();
-int current_bloom_intensity();
 void lab_set_exposure(float exIn);
 void lab_set_tonemapper(TonemapperAlgorithm tnin);
 void lab_set_ppc(const piecewise_power_curve_values &ppcin);

@@ -107,8 +107,7 @@ static auto BloomIntensityOption __UNUSED = options::OptionBuilder<int>("Graphic
                      .category(std::make_pair("Graphics", 1825))
                      .range(0, 200)
                      .level(options::ExpertLevel::Advanced)
-                     // Use the active lighting profile as the default while preserving any saved player value.
-                     .default_func([]() { return lighting_profiles::current_bloom_intensity(); })
+                     .default_func([]() { return Post_processing_bloom_intensity; })
                      .bind_to(&Post_processing_bloom_intensity)
                      .importance(55)
                      .flags({options::OptionFlags::RangeTypeInteger})
@@ -303,6 +302,12 @@ int gr_bloom_intensity()
 	}
 
 	return graphics::BloomIntensityOption->getValue();
+}
+
+void gr_set_bloom_intensity_default(int intensity)
+{
+	CLAMP(intensity, 0, 200);
+	graphics::Post_processing_bloom_intensity = intensity;
 }
 
 void gr_set_bloom_intensity(int intensity)
