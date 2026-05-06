@@ -2287,6 +2287,64 @@ int parse_get_line(char *lineout, int max_line_len, const char *textin, int inpu
 	return input_len;
 }
 
+
+// Reads one line of text from the input, returning the number of input chars read. Also sets the line ending type if found;
+// and if there is a mismatch, displays a warning.
+int parse_get_line(SCP_string& lineout, const char* textin, int input_len, int line_num, LineEndingType& file_line_ending_type, bool& warned_for_this_file)
+{
+	auto found_line_ending = LineEndingType::UNKNOWN;
+	char prev_c = '\0';
+
+	lineout.clear();
+
+	for (int num_chars_read = 1; num_chars_read <= input_len; ++num_chars_read)
+	{
+		char c = *textin++;
+
+		if (c == '\0' || c == EOF)	// hard stop
+		{
+			input_len = num_chars_read;
+			break;
+		}
+		else if (c == EOLN)
+		{
+			if (prev_c == CARRIAGE_RETURN)
+				found_line_ending = LineEndingType::CRLF;
+			else
+				found_line_ending = LineEndingType::LF;
+		}
+		else if (c == CARRIAGE_RETURN)
+		{
+			if (*textin != EOLN)
+				found_line_ending = LineEndingType::CR;
+		}
+		else
+		{
+			lineout.push_back(c);
+		}
+
+		if (found_line_ending != LineEndingType::UNKNOWN)
+		{
+			if (file_line_ending_type == LineEndingType::UNKNOWN)
+				file_line_ending_type = found_line_ending;
+			else if (found_line_ending != file_line_ending_type && !warned_for_this_file)
+			{
+				// we can't use error_display() here because we're in the middle of reading the file
+				Warning(LOCATION, "In %s, an inconsistent line ending was detected on line %d.  Please check the file for line ending errors.", Current_filename_sub, line_num);
+				warned_for_this_file = true;
+			}
+
+			lineout.push_back(EOLN);	// normalize line endings to single-character EOLN
+			return num_chars_read;
+		}
+
+		prev_c = c;
+	}
+
+	// we read the entire input without reaching a newline
+	return input_len;
+}
+
 //	Read mission text, stripping comments.
 //	When a comment is found, it is removed.  If an entire line
 //	consisted of a comment, a blank line is left in the input file.
@@ -2590,7 +2648,7 @@ void process_raw_file_text(char* processed_text, char* raw_text)
 
 	char* mp;
 	char* mp_raw;
-	char outbuf[PARSE_BUF_SIZE];
+	SCP_string outbuf;
 	bool in_quote = false;
 	bool in_multiline_comment_a = false;
 	bool in_multiline_comment_b = false;
@@ -2614,44 +2672,44 @@ void process_raw_file_text(char* processed_text, char* raw_text)
 	int parsed_line_num = 1;
 	auto file_line_ending_type = LineEndingType::UNKNOWN;
 	bool warned_for_this_file = false;
-	while ((num_chars_read = parse_get_line(outbuf, PARSE_BUF_SIZE-1, mp_raw, remaining_raw_len, parsed_line_num, file_line_ending_type, warned_for_this_file)) != 0) {
+	while ((num_chars_read = parse_get_line(outbuf, mp_raw, remaining_raw_len, parsed_line_num, file_line_ending_type, warned_for_this_file)) != 0) {
 		mp_raw += num_chars_read;
 		remaining_raw_len -= num_chars_read;
 		parsed_line_num++;
 
 		// stupid hacks to make retail data work with fixed parser, per Mantis #3072
-		if (!strcmp(outbuf, parse_exception_1402.c_str())) {
+		if (outbuf == parse_exception_1402) {
 
 			int offset = Unicode_text_mode ? 1 : 0;
 			outbuf[121 + offset] = ' ';
 			outbuf[122 + offset] = ' ';
 		}
-		else if (!strcmp(outbuf, parse_exception_1117.c_str())) {
+		else if (outbuf == parse_exception_1117) {
 			char* ch = &outbuf[11];
 			do {
 				*ch = *(ch + 1);
 				++ch;
 			} while (*ch);
 		}
-		else if (!strcmp(outbuf, parse_exception_1337.c_str())) {
+		else if (outbuf == parse_exception_1337) {
 			outbuf[3] = '6';
 		}
-		else if (!strcmp(outbuf, parse_exception_3966.c_str())) {
+		else if (outbuf == parse_exception_3966) {
 			int offset = Unicode_text_mode ? 1 : 0;
 			outbuf[171 + offset] = '\'';
 			outbuf[181 + offset * 2] = '\'';
 		}
 
-		strip_comments(outbuf, in_quote, in_multiline_comment_a, in_multiline_comment_b);
+		strip_comments(outbuf.data(), in_quote, in_multiline_comment_a, in_multiline_comment_b);
 
 		if (Unicode_text_mode) {
 			// In unicode mode we simply assume that the text is already properly encoded in UTF-8
 			// Also, since we don't know how big mp actually is since we get the pointer from the outside we can't use one of
 			// the "safe" strcpy variants here...
-			strcpy(mp, outbuf);
-			mp += strlen(outbuf);
+			strcpy(mp, outbuf.c_str());
+			mp += strlen(outbuf.c_str());
 		} else {
-			mp += maybe_convert_foreign_characters(outbuf, mp, false);
+			mp += maybe_convert_foreign_characters(outbuf.c_str(), mp, false);
 		}
 	}
 

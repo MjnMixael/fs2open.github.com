@@ -368,10 +368,10 @@ void parse_stringstbl_quick(const char *filename)
 // The "external" parameter controls which format to load: true for tstrings.tbl, false for strings.tbl
 void parse_stringstbl_common(const char *filename, const bool external)
 {
-	char chr, buf[4096];
+	SCP_string buf;
+	SCP_string offset_text;
 	char language_tag[512];
-	int z, index;
-	char *p_offset = nullptr;
+	int index;
 	int offset_lo = 0, offset_hi = 0;
 	int lcl_index = lcl_get_current_lang_index();
 
@@ -400,9 +400,9 @@ void parse_stringstbl_common(const char *filename, const bool external)
 			stuff_int(&index);
 			if (external) {
 				ignore_white_space();
-				get_string(buf, sizeof(buf));
+				get_string(buf);
 			} else {
-				stuff_string(buf, F_RAW, sizeof(buf));
+				stuff_string(buf, F_RAW);
 			}
 
 			if (external && index < 0) {
@@ -413,28 +413,27 @@ void parse_stringstbl_common(const char *filename, const bool external)
 			}
 
 			if (!external) {
+				if (buf.empty()) {
+					error_display(1, "%s is corrupt", filename);
+				}
 
-				size_t i = strlen(buf);
-
-				while (i--) {
-					if ( !isspace(buf[i]) )
-						break;
+				auto i = buf.find_last_not_of(" \t\r\n\f\v");
+				if (i == SCP_string::npos) {
+					error_display(1, "%s is corrupt", filename);
 				}
 
 				// trim unnecessary end of string
 				// Assert(buf[i] == '"');
 				if (buf[i] != '"') {
 					// probably an offset on this entry
-
-					// drop down a null terminator (prolly unnecessary)
-					buf[i+1] = 0;
+					buf.erase(i + 1);
 
 					// back up over the potential offset
-					while ( !is_white_space(buf[i]) )
+					while (i > 0 && !is_white_space(buf[i]))
 						i--;
 
 					// now back up over intervening spaces
-					while ( is_white_space(buf[i]) )
+					while (i > 0 && is_white_space(buf[i]))
 						i--;
 
 					num_offsets_on_this_line = 1;
@@ -442,31 +441,32 @@ void parse_stringstbl_common(const char *filename, const bool external)
 					if (buf[i] != '"') {
 						// could have a 2nd offset value (one for 640, one for 1024)
 						// so back up again
-						while ( !is_white_space(buf[i]) )
+						while (i > 0 && !is_white_space(buf[i]))
 							i--;
 
 						// now back up over intervening spaces
-						while ( is_white_space(buf[i]) )
+						while (i > 0 && is_white_space(buf[i]))
 							i--;
 
 						num_offsets_on_this_line = 2;
 					}
 
-					p_offset = &buf[i+1];			// get ptr to string section with offset in it
-
 					if (buf[i] != '"')
 						error_display(1, "%s is corrupt", filename);		// now its an error
+
+					offset_text = buf.substr(i + 1);
 				}
 
-				buf[i] = 0;
+				buf.erase(i);
 
 				// copy string into buf
-				z = 0;
-				for (i = 1; buf[i]; i++) {
-					chr = buf[i];
+				SCP_string parsed_string;
+				parsed_string.reserve(buf.size());
+				for (size_t j = 1; j < buf.size(); j++) {
+					char chr = buf[j];
 
-					if (chr == '\\') {
-						chr = buf[++i];
+					if (chr == '\\' && j + 1 < buf.size()) {
+						chr = buf[++j];
 
 						if (chr == 'n')
 							chr = '\n';
@@ -474,11 +474,10 @@ void parse_stringstbl_common(const char *filename, const bool external)
 							chr = '\r';
 					}
 
-					buf[z++] = chr;
+					parsed_string.push_back(chr);
 				}
 
-				// null terminator on buf
-				buf[z] = 0;
+				buf = std::move(parsed_string);
 			}
 
 			// write into Xstr_table (for strings.tbl) or Lcl_ext_str (for tstrings.tbl)
@@ -505,9 +504,9 @@ void parse_stringstbl_common(const char *filename, const bool external)
 			}
 
 			if (external) {
-				Lcl_ext_str.insert(std::make_pair(index, vm_strdup(buf)));
+				Lcl_ext_str.insert(std::make_pair(index, vm_strdup(buf.c_str())));
 			} else {
-				Xstr_table_map.insert(std::make_pair(index, lcl_xstr{ vm_strdup(buf), 0, 0 }));
+				Xstr_table_map.insert(std::make_pair(index, lcl_xstr{ vm_strdup(buf.c_str()), 0, 0 }));
 			}
 
 			// the rest of this loop applies only to strings.tbl,
@@ -517,8 +516,8 @@ void parse_stringstbl_common(const char *filename, const bool external)
 			}
 
 			// read offset information, assume 0 if nonexistant
-			if (p_offset != nullptr) {
-				if (sscanf(p_offset, "%d%d", &offset_lo, &offset_hi) < num_offsets_on_this_line) {
+			if (!offset_text.empty()) {
+				if (sscanf(offset_text.c_str(), "%d%d", &offset_lo, &offset_hi) < num_offsets_on_this_line) {
 					// whatever is in the file ain't a proper offset
 					Error(LOCATION, "%s is corrupt", filename);
 				}
@@ -533,7 +532,7 @@ void parse_stringstbl_common(const char *filename, const bool external)
 			}
 
 			// clear out our vars
-			p_offset = nullptr;
+			offset_text.clear();
 			offset_lo = 0;
 			offset_hi = 0;
 		}
