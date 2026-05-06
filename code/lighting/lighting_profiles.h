@@ -14,6 +14,8 @@ namespace lighting_profiles {
 // https://64.github.io/tonemapping/ Delta - Blog by 64: Tone Mapping
 // http://filmicworlds.com/blog/filmic-tonemapping-operators/ Filmic Worlds: Filmic Tonemapping Operators by John Hable
 
+constexpr int DEFAULT_BLOOM_INTENSITY = 25;
+
 enum class TonemapperAlgorithm : int
 {
 	Invalid = -1,
@@ -54,6 +56,7 @@ class profile {
 	TonemapperAlgorithm tonemapper;
 	piecewise_power_curve_values ppc_values;
 	float exposure;
+	int bloom_intensity = DEFAULT_BLOOM_INTENSITY;
 	adjustment missile_light_brightness;
 	adjustment missile_light_radius;
 	adjustment laser_light_brightness;
@@ -92,6 +95,7 @@ const piecewise_power_curve_values& current_piecewise_values();
 piecewise_power_curve_intermediates current_piecewise_intermediates();
 piecewise_power_curve_intermediates calc_intermediates(piecewise_power_curve_values input);
 float current_exposure();
+int current_bloom_intensity();
 void lab_set_exposure(float exIn);
 void lab_set_tonemapper(TonemapperAlgorithm tnin);
 void lab_set_ppc(const piecewise_power_curve_values &ppcin);

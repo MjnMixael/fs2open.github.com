@@ -88,6 +88,11 @@ float current_exposure()
 	return _current.exposure;
 }
 
+int current_bloom_intensity()
+{
+	return _current.bloom_intensity;
+}
+
 piecewise_power_curve_intermediates current_piecewise_intermediates()
 {
 	return calc_intermediates(_current.ppc_values);
@@ -370,6 +375,12 @@ void profile::parse(const char* filename, const SCP_string& profile_name, const 
 		parsed |= parse_optional_float_into("$PPC Shoulder Angle:", &ppc_values.shoulder_angle);
 		parsed |= parse_optional_float_into("$Exposure:", &exposure);
 
+		if (optional_string("$Bloom intensity:")) {
+			stuff_int(&bloom_intensity);
+			CLAMP(bloom_intensity, 0, 200);
+			parsed = true;
+		}
+
 		parsed |= adjustment::parse(filename, "$Missile light brightness:", profile_name, &missile_light_brightness);
 		parsed |= adjustment::parse(filename, "$Missile light radius:", profile_name, &missile_light_radius);
 
@@ -432,6 +443,7 @@ void profile::reset()
 	ppc_values.shoulder_angle = 0.1f;
 
 	exposure = 4.0f;
+	bloom_intensity = DEFAULT_BLOOM_INTENSITY;
 
 	missile_light_brightness.reset();
 	missile_light_radius.reset();

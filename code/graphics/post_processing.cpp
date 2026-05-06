@@ -2,6 +2,7 @@
 #include "post_processing.h"
 
 #include "graphics/grinternal.h"
+#include "lighting/lighting_profiles.h"
 #include "options/Option.h"
 #include "parse/parselo.h"
 #include "ship/ship.h"
@@ -89,7 +90,7 @@ auto SunglareOption = options::OptionBuilder<bool>("Graphics.Sunglare",
 			.parser(parse_sunglare_func)
 			.finish();
 
-int Post_processing_bloom_intensity = 25; // using default value of Cmdline_bloom_intensity
+int Post_processing_bloom_intensity = lighting_profiles::DEFAULT_BLOOM_INTENSITY;
 
 void parse_bloom_intensity_func()
 {
@@ -106,7 +107,8 @@ static auto BloomIntensityOption __UNUSED = options::OptionBuilder<int>("Graphic
                      .category(std::make_pair("Graphics", 1825))
                      .range(0, 200)
                      .level(options::ExpertLevel::Advanced)
-                     .default_func([](){return Post_processing_bloom_intensity;})
+                     // Use the active lighting profile as the default while preserving any saved player value.
+                     .default_func([]() { return lighting_profiles::current_bloom_intensity(); })
                      .bind_to(&Post_processing_bloom_intensity)
                      .importance(55)
                      .flags({options::OptionFlags::RangeTypeInteger})
