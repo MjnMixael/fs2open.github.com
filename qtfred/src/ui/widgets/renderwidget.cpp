@@ -152,6 +152,13 @@ void RenderWidget::contextMenuEvent(QContextMenuEvent* event) {
 	parentView->showContextMenu(event->globalPos());
 }
 
+void RenderWidget::focusInEvent(QFocusEvent* e) {
+	if (_fredView) {
+		_fredView->undoGroup()->setActiveStack(_fredView->mainUndoStack());
+	}
+	QWidget::focusInEvent(e);
+}
+
 void RenderWidget::keyPressEvent(QKeyEvent* key) {
 	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _viewport->button_down) {
 		_viewport->cancel_drag();
@@ -518,6 +525,7 @@ void RenderWidget::setEditor(Editor* editor, EditorViewport* viewport) {
 
 	fred = editor;
 	_viewport = viewport;
+	_fredView = static_cast<FredView*>(parentWidget());
 
 	_window->setEditor(editor, _viewport->renderer);
 }
