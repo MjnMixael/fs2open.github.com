@@ -36,6 +36,7 @@
 #include <ui/dialogs/AsteroidEditorDialog.h>
 #include <ui/dialogs/VolumetricNebulaDialog.h>
 #include <ui/dialogs/BriefingEditorDialog.h>
+#include <ui/dialogs/CoordinatePointEditorDialog.h>
 #include <ui/dialogs/WaypointEditorDialog.h>
 #include <object/object.h>
 #include <object/waypoint.h>
@@ -1325,6 +1326,8 @@ void FredView::onUpdateContextToolbar() {
 		if (numMarked <= 1)
 			addBtn(tr("Rename"),           &FredView::quickRenameCurrentObject);
 		addBtn(tr("Edit Prop"),            &FredView::on_actionProps_triggered);
+	} else if (effectiveType == OBJ_COORDINATE_POINT) {
+		addBtn(tr("Edit Coordinate Point"),&FredView::on_actionCoordinate_Points_triggered);
 	}
 
 	if (anythingSelected) {
@@ -1986,7 +1989,8 @@ void FredView::connectActionToViewSetting(QAction* option, std::vector<bool>* ve
 
 static bool canObjectBeAssignedLayer(int objType) {
 	return (objType == OBJ_SHIP) || (objType == OBJ_START) || (objType == OBJ_PROP) ||
-	       (objType == OBJ_JUMP_NODE) || (objType == OBJ_WAYPOINT);
+	       (objType == OBJ_JUMP_NODE) || (objType == OBJ_WAYPOINT) ||
+	       (objType == OBJ_COORDINATE_POINT);
 }
 
 void FredView::showContextMenu(int objNum, const QPoint& globalPos) {
@@ -2829,6 +2833,11 @@ void FredView::on_actionWaypoint_Paths_triggered(bool) {
 	editorDialog->setAttribute(Qt::WA_DeleteOnClose);
 	editorDialog->show();
 }
+void FredView::on_actionCoordinate_Points_triggered(bool) {
+	auto editorDialog = new dialogs::CoordinatePointEditorDialog(this, _viewport);
+	editorDialog->setAttribute(Qt::WA_DeleteOnClose);
+	editorDialog->show();
+}
 void FredView::on_actionJump_Nodes_triggered(bool)
 {
 	if (raiseExistingEditor<dialogs::JumpNodeEditorDialog>(this)) return;
@@ -3009,6 +3018,11 @@ void FredView::handleObjectEditor(int objNum) {
 				// If this is a waypoint, we need to show the waypoint editor
 				on_actionWaypoint_Paths_triggered(false);
 			}
+		} else if (Objects[objNum].type == OBJ_COORDINATE_POINT) {
+			fred->selectObject(objNum);
+			on_actionCoordinate_Points_triggered(false);
+		} else if (Objects[objNum].type == OBJ_POINT) {
+			return;
 		} else {
 			Assertion(false, "Unhandled object type %d!", Objects[objNum].type);
 		}
