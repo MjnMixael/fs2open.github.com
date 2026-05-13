@@ -1227,6 +1227,9 @@ int EditorViewport::create_object(vec3d* pos, int waypoint_instance, CreateKind 
 			Jump_nodes.push_back(std::move(jnp));
 			break;
 		}
+		case OtherKind::CoordinatePoint:
+			obj = editor->create_coordinate_point(pos);
+			break;
 		default:
 			obj = -1;
 			break;
