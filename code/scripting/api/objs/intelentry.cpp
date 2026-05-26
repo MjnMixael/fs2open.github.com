@@ -202,8 +202,8 @@ ADE_FUNC(getIntelEntryIndex, l_Intelentry, nullptr, "Gets the index value of the
 
 ADE_FUNC(renderTechModel,
 	l_Intelentry,
-	"number X1, number Y1, number X2, number Y2, [number RotationPercent =0, number PitchPercent =0, number "
-	"BankPercent=40, number Zoom=1.3, boolean Lighting=true]",
+	"number X1, number Y1, number X2, number Y2, [number RotationPercent =40, number PitchPercent =0, number "
+	"BankPercent=0, number Zoom=1.3, boolean Lighting=true]",
 	"Draws the intel entry's tech model. True for regular lighting, false for flat lighting. Returns false if the intel entry has no tech model defined.",
 	"boolean",
 	"Whether the intel entry was rendered")
@@ -256,7 +256,7 @@ ADE_FUNC(renderTechModel2,
 	int idx;
 	float zoom = 1.3f;
 	matrix_h* mh = nullptr;
-	if (!ade_get_args(L, "oiiiio|f", l_Intelentry.Get(&idx), &x1, &y1, &x2, &y2, l_Matrix.GetPtr(&mh), &zoom))
+	if (!ade_get_args(L, "oiiii|of", l_Intelentry.Get(&idx), &x1, &y1, &x2, &y2, l_Matrix.GetPtr(&mh), &zoom))
 		return ade_set_error(L, "b", false);
 
 	if (idx < 0 || idx >= intel_info_size())
@@ -270,7 +270,8 @@ ADE_FUNC(renderTechModel2,
 	if (!VALID_FNAME(iip->tech_model))
 		return ade_set_args(L, "b", false);
 
-	matrix* orient = mh->GetMatrix();
+	matrix identity_orient = vmd_identity_matrix;
+	matrix* orient = mh != nullptr ? mh->GetMatrix() : &identity_orient;
 
 	return ade_set_args(L, "b", render_tech_model(TECH_POF, x1, y1, x2, y2, zoom, true, -1, orient, iip->tech_model, iip->closeup_zoom, &iip->closeup_pos));
 }

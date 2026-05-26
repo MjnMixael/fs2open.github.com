@@ -322,7 +322,7 @@ void techroom_select_new_entry()
 				if ((i < Cur_entry + 5) && (i > Cur_entry - 5) )
 					continue;
 
-				mprintf(("TECH ROOM: Dumping excess ship textures...\n"));
+				mprintf(("TECH ROOM: Dumping excess textures...\n"));
 
 				model_page_out_textures(list_entry.model_num);
 
@@ -358,7 +358,7 @@ void techroom_select_new_entry()
 						if ((i < Cur_entry + 5) && (i > Cur_entry - 5))
 							continue;
 
-						mprintf(("TECH ROOM: Dumping excess ship textures...\n"));
+						mprintf(("TECH ROOM: Dumping excess textures...\n"));
 
 						model_page_out_textures(list_entry.model_num);
 
@@ -372,7 +372,8 @@ void techroom_select_new_entry()
 				if (Techroom_modelnum >= 0) {
 					Current_list->at(Cur_entry).model_num = Techroom_modelnum;
 
-					model_page_in_textures(Techroom_modelnum, Cur_entry_index);
+					// intel index isn't a ship_info index; pass -1 so we skip ship-specific paging
+					model_page_in_textures(Techroom_modelnum);
 
 					Current_list->at(Cur_entry).textures_loaded = 1;
 
