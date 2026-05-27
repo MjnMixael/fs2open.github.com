@@ -78,6 +78,12 @@ struct PlaybackProperties {
 	bool with_audio = true;
 	bool looping = false;
 	bool force_rgba = false;
+	// Ordered list of CFile directory types (CF_TYPE_*) to search for the movie file.
+	// First match wins. If empty, the decoder uses its default search list
+	// (CF_TYPE_ROOT then CF_TYPE_MOVIES) — appropriate for fullscreen cutscenes.
+	// Generic_anim populates this with the in-UI anim directories so movie-format
+	// anims don't collide with cutscenes that happen to share a base name.
+	SCP_vector<int> search_dirs;
 };
 
 /**

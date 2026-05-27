@@ -190,14 +190,28 @@ FFMPEGDecoder::~FFMPEGDecoder() {
 }
 
 namespace {
-std::unique_ptr<InputStream> openStream(const SCP_string& name) {
-	// Only check the root and movies folders
-	int dirType;
-	if (cf_exists_full(name.c_str(), CF_TYPE_ROOT)) {
-		dirType = CF_TYPE_ROOT;
-	} else if (cf_exists_full(name.c_str(), CF_TYPE_MOVIES)) {
-		dirType = CF_TYPE_MOVIES;
+// Default directories searched when PlaybackProperties::search_dirs is empty —
+// the original behavior for fullscreen cutscenes.
+const int DEFAULT_SEARCH_DIRS[] = { CF_TYPE_ROOT, CF_TYPE_MOVIES };
+
+std::unique_ptr<InputStream> openStream(const SCP_string& name, const SCP_vector<int>& search_dirs) {
+	int dirType = -1;
+	if (search_dirs.empty()) {
+		for (int d : DEFAULT_SEARCH_DIRS) {
+			if (cf_exists_full(name.c_str(), d)) {
+				dirType = d;
+				break;
+			}
+		}
 	} else {
+		for (int d : search_dirs) {
+			if (cf_exists_full(name.c_str(), d)) {
+				dirType = d;
+				break;
+			}
+		}
+	}
+	if (dirType < 0) {
 		return nullptr;
 	}
 
@@ -424,13 +438,13 @@ std::unique_ptr<DecoderStatus> initializeStatus(std::unique_ptr<InputStream>& st
 	return status;
 }
 
-std::unique_ptr<InputStream> openInputStream(const SCP_string& name) {
+std::unique_ptr<InputStream> openInputStream(const SCP_string& name, const SCP_vector<int>& search_dirs) {
 	// Check a list of extensions we might use
 	// The actual format of the file may be whatever FFmpeg supports
 	for (auto ext : CHECKED_EXTENSIONS) {
 		auto fileName = name + "." + ext;
 
-		auto input = openStream(fileName);
+		auto input = openStream(fileName, search_dirs);
 
 		if (input) {
 			return input;
@@ -440,7 +454,7 @@ std::unique_ptr<InputStream> openInputStream(const SCP_string& name) {
 	return nullptr;
 }
 
-std::unique_ptr<InputStream> openSubtitleStream(const SCP_string& name)
+std::unique_ptr<InputStream> openSubtitleStream(const SCP_string& name, const SCP_vector<int>& search_dirs)
 {
 	auto& current_language = Lcl_languages[lcl_get_current_lang_index()];
 
@@ -452,7 +466,7 @@ std::unique_ptr<InputStream> openSubtitleStream(const SCP_string& name)
 			fileName = name + "-" + current_language.lang_ext + "." + ext;
 		}
 
-		auto input = openStream(fileName);
+		auto input = openStream(fileName, search_dirs);
 
 		if (input) {
 			return input;
@@ -476,12 +490,12 @@ bool FFMPEGDecoder::initialize(const SCP_string& fileName, const PlaybackPropert
 	}
 
 	// Try to open the input stream
-	auto input = openInputStream(movieName);
+	auto input = openInputStream(movieName, properties.search_dirs);
 	if (!input) {
 		return false;
 	}
 
-	auto subt = openSubtitleStream(movieName);
+	auto subt = openSubtitleStream(movieName, properties.search_dirs);
 
 	// We now have a valid input stream, try to find the correct streams
 	auto status = initializeStatus(input, subt, properties);
