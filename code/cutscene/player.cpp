@@ -22,11 +22,7 @@
 
 using namespace cutscene::player;
 
-namespace {
-using namespace cutscene;
-
-const int MAX_AUDIO_BUFFERS = 15;
-
+namespace cutscene {
 std::unique_ptr<Decoder> findDecoder(__UNUSED const SCP_string& name, __UNUSED const PlaybackProperties& properties) {
 #ifdef WITH_FFMPEG
 	{
@@ -39,6 +35,12 @@ std::unique_ptr<Decoder> findDecoder(__UNUSED const SCP_string& name, __UNUSED c
 
 	return nullptr;
 }
+}
+
+namespace {
+using namespace cutscene;
+
+const int MAX_AUDIO_BUFFERS = 15;
 
 // get relative time since beginning playback, compensating for A/V drift
 double playbackGetTime(PlayerState* state) {
@@ -373,7 +375,7 @@ std::unique_ptr<Player> Player::newPlayer(const SCP_string& name, const Playback
 {
 	mprintf(("Creating player for movie '%s'.\n", name.c_str()));
 
-	auto decoder = findDecoder(name, properties);
+	auto decoder = cutscene::findDecoder(name, properties);
 
 	if (decoder == nullptr) {
 		return nullptr;

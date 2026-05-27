@@ -77,6 +77,7 @@ typedef std::unique_ptr<SubtitleFrame> SubtitleFramePtr;
 struct PlaybackProperties {
 	bool with_audio = true;
 	bool looping = false;
+	bool force_rgba = false;
 };
 
 /**

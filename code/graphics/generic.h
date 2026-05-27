@@ -14,6 +14,9 @@
 #define GENERIC_ANIM_DIRECTION_NOLOOP		2
 #define GENERIC_ANIM_DIRECTION_PAUSED		4
 
+// Forward declaration — defined in generic.cpp to keep cutscene headers out of this header.
+struct movie_anim_state;
+
 // Goober5000
 typedef struct generic_anim {
 	char filename[MAX_FILENAME_LEN];
@@ -42,6 +45,9 @@ typedef struct generic_anim {
 			apng::apng_ani* anim;
 			float previous_frame_time;
 		} png;
+		struct {
+			movie_anim_state* state;
+		} movie;
 	};
 	BM_TYPE type;
 	unsigned char streaming;

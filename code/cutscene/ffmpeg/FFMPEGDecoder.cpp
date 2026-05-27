@@ -509,13 +509,13 @@ MovieProperties FFMPEGDecoder::getProperties() const
 	props.fps = static_cast<float>(getFrameRate(m_status->videoStream, m_status->videoCodecCtx));
 	props.duration = static_cast<float>(m_status->videoStream->duration * av_q2d(m_status->videoStream->time_base));
 
-	props.pixelFormat = getPixelFormat(getConversionFormat(m_status->videoCodecPars.pixel_format));
+	props.pixelFormat = getPixelFormat(m_properties.force_rgba ? AV_PIX_FMT_BGRA : getConversionFormat(m_status->videoCodecPars.pixel_format));
 
 	return props;
 }
 
 void FFMPEGDecoder::startDecoding() {
-	std::unique_ptr<VideoDecoder> videoDecoder(new VideoDecoder(m_status.get(), getConversionFormat(m_status->videoCodecPars.pixel_format)));
+	std::unique_ptr<VideoDecoder> videoDecoder(new VideoDecoder(m_status.get(), m_properties.force_rgba ? AV_PIX_FMT_BGRA : getConversionFormat(m_status->videoCodecPars.pixel_format)));
 
 	std::unique_ptr<AudioDecoder> audioDecoder;
 	std::unique_ptr<SubtitleDecoder> subtitleDecoder;

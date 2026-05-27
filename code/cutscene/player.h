@@ -13,6 +13,15 @@
 namespace cutscene {
 class Decoder;
 
+/**
+ * @brief Constructs a Decoder configured to play the given movie.
+ *
+ * Returns @c nullptr if no available backend can open the file. The returned
+ * decoder has been @c initialize'd but @c startDecoding has not been called;
+ * the caller is responsible for spawning a thread to drive decoding.
+ */
+std::unique_ptr<Decoder> findDecoder(const SCP_string& name, const PlaybackProperties& properties);
+
 struct PlayerState {
 	MovieProperties props;
 	Decoder* decoder = nullptr;
