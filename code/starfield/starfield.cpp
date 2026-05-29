@@ -1966,6 +1966,11 @@ void stars_draw(int show_stars, int show_suns, int  /*show_nebulas*/, int show_s
 		stars_draw_background();
 	}
 
+	// old (FS1-style) procedural background nebula -- sits behind the stars, never under neb2
+	if ( show_stars && !(The_mission.flags[Mission::Mission_Flags::Fullneb]) ) {
+		nebula_render();
+	}
+
 	if ( !env && show_stars && (Nmodel_num < 0) && (Game_detail_flags & DETAIL_FLAG_STARS) && !(The_mission.flags[Mission::Mission_Flags::Fullneb]) && (supernova_stage() < SUPERNOVA_STAGE::TOOLTIME) ) {
 		stars_draw_stars();
 	}

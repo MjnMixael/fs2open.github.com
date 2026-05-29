@@ -311,6 +311,7 @@ add_file_folder("Default files\\\\data\\\\tables"
 	def_files/data/tables/post_processing.tbl
 	def_files/data/tables/species_defs.tbl
 	def_files/data/tables/cheats.tbl
+	def_files/data/tables/old_nebula.tbm
 )
 
 # These files will be included in the executable but not in CFile

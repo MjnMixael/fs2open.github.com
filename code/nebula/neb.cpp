@@ -25,6 +25,7 @@
 #include "render/3d.h"
 #include "render/batching.h"
 #include "ship/ship.h"
+#include "starfield/nebula.h"
 #include "starfield/starfield.h"
 #include "tgautils/tgautils.h"
 #include "tracing/tracing.h"
@@ -353,6 +354,9 @@ void neb2_init()
 
 	// parse any modular tables
 	parse_modular_table("*-neb.tbm", parse_nebula_table);
+
+	// parse the old (FS1-style) nebula patterns/colors registries
+	old_nebula_init();
 
 	// align Poof_accum with Poof_info
 	Poof_accum.resize(Poof_info.size());

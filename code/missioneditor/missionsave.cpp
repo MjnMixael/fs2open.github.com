@@ -960,11 +960,11 @@ int Fred_mission_save::save_bitmaps()
 			} else {
 				fout("\n+Nebula:");
 			}
-			fout(" %s", Nebula_filenames[Nebula_index]);
+			fout(" %s", old_nebula_pattern_name(Nebula_index));
 
 			required_string_fred("+Color:");
 			parse_comments();
-			fout(" %s", Nebula_colors[Mission_palette]);
+			fout(" %s", old_nebula_color_name(Mission_palette));
 
 			required_string_fred("+Pitch:");
 			parse_comments();

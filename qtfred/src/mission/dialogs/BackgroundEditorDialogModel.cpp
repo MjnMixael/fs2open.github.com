@@ -987,8 +987,8 @@ SCP_vector<SCP_string> BackgroundEditorDialogModel::getOldNebulaPatternOptions()
 {
 	SCP_vector<SCP_string> out;
 	out.emplace_back("<None>");
-	for (auto& neb : Nebula_filenames) {
-		out.emplace_back(neb);
+	for (auto& neb : Old_nebula_patterns) {
+		out.emplace_back(neb.name);
 	}
 	return out;
 }
@@ -996,9 +996,9 @@ SCP_vector<SCP_string> BackgroundEditorDialogModel::getOldNebulaPatternOptions()
 SCP_vector<SCP_string> BackgroundEditorDialogModel::getOldNebulaColorOptions()
 {
 	SCP_vector<SCP_string> out;
-	out.reserve(NUM_NEBULA_COLORS);
-	for (auto& color : Nebula_colors) {
-		out.emplace_back(color);
+	out.reserve(Old_nebula_colors.size());
+	for (auto& color : Old_nebula_colors) {
+		out.emplace_back(color.name);
 	}
 	return out;
 }
@@ -1008,8 +1008,8 @@ SCP_string BackgroundEditorDialogModel::getOldNebulaPattern()
 	if (Nebula_index < 0)
 		return "<None>";
 
-	if (Nebula_index >= 0 && Nebula_index < NUM_NEBULAS) {
-		return Nebula_filenames[Nebula_index];
+	if (Nebula_index < static_cast<int>(Old_nebula_patterns.size())) {
+		return Old_nebula_patterns[Nebula_index].name;
 	}
 
 	return SCP_string{};
@@ -1019,21 +1019,17 @@ void BackgroundEditorDialogModel::setOldNebulaPattern(const SCP_string& name)
 {
 	int newIndex = -1;
 	if (!name.empty() && stricmp(name.c_str(), "<None>") != 0) {
-		for (int i = 0; i < NUM_NEBULAS; ++i) {
-			if (!stricmp(Nebula_filenames[i], name.c_str())) {
-				newIndex = i;
-				break;
-			}
-		}
+		newIndex = old_nebula_pattern_lookup(name.c_str());
 	}
 
 	modify(Nebula_index, newIndex);
+	nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
 }
 
 SCP_string BackgroundEditorDialogModel::getOldNebulaColorName()
 {
-	if (Mission_palette >= 0 && Mission_palette < NUM_NEBULA_COLORS) {
-		return Nebula_colors[Mission_palette];
+	if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size())) {
+		return Old_nebula_colors[Mission_palette].name;
 	}
 	return SCP_string{};
 }
@@ -1042,11 +1038,10 @@ void BackgroundEditorDialogModel::setOldNebulaColorName(const SCP_string& name)
 {
 	if (name.empty())
 		return;
-	for (int i = 0; i < NUM_NEBULA_COLORS; ++i) {
-		if (!stricmp(Nebula_colors[i], name.c_str())) {
-			modify(Mission_palette, i);
-			return;
-		}
+	int idx = old_nebula_color_lookup(name.c_str());
+	if (idx >= 0) {
+		modify(Mission_palette, idx);
+		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
 	}
 	// name not found: ignore
 }
@@ -1062,6 +1057,7 @@ void BackgroundEditorDialogModel::setOldNebulaPitch(int deg)
 	if (Nebula_pitch != deg) {
 		Nebula_pitch = deg;
 		modify(Nebula_pitch, deg);
+		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
 	}
 }
 
@@ -1076,6 +1072,7 @@ void BackgroundEditorDialogModel::setOldNebulaBank(int deg)
 	if (Nebula_bank != deg) {
 		Nebula_bank = deg;
 		modify(Nebula_bank, deg);
+		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
 	}
 }
 
@@ -1090,6 +1087,7 @@ void BackgroundEditorDialogModel::setOldNebulaHeading(int deg)
 	if (Nebula_heading != deg) {
 		Nebula_heading = deg;
 		modify(Nebula_heading, deg);
+		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
 	}
 }
 

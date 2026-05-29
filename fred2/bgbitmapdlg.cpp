@@ -262,9 +262,9 @@ void bg_bitmap_dlg::create()
 	GetDlgItem(IDC_SUN1_B_SPIN)->EnableWindow(FALSE);
 	
 	box = (CComboBox *) GetDlgItem(IDC_NEBCOLOR);
-	for (int i=0; i<NUM_NEBULA_COLORS; i++){
-		box->AddString(Nebula_colors[i]);
-	}	
+	for (int i=0; i<(int)Old_nebula_colors.size(); i++){
+		box->AddString(Old_nebula_colors[i].name.c_str());
+	}
 
 	m_slider.SetRange(0, MAX_STARS);
 	m_slider.SetPos(Num_stars);
@@ -756,11 +756,11 @@ void bg_bitmap_dlg::build_nebfile_list()
 	// clear the box
 	box->ResetContent();
 
-	// add all necessary strings		
+	// add all necessary strings
 	box->AddString("None");
-	for (i=0; i<NUM_NEBULAS; i++){
-		box->AddString(Nebula_filenames[i]);
-	}	
+	for (i=0; i<(int)Old_nebula_patterns.size(); i++){
+		box->AddString(Old_nebula_patterns[i].name.c_str());
+	}
 
 	// select the first elementccombobox
 	box->SetCurSel(0);

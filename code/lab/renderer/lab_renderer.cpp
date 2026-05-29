@@ -380,7 +380,6 @@ void LabRenderer::useBackground(const SCP_string& mission_name) {
 	int skybox_flags;
 
 	int ambient_light_level;
-	extern const char* Neb2_filenames[];
 
 	char envmap_name[MAX_FILENAME_LEN] = {0};
 	SCP_string ltp_name;
@@ -509,40 +508,21 @@ void LabRenderer::useBackground(const SCP_string& mission_name) {
 				Nebula_index = -1;
 				if (optional_string("+Nebula:")) {
 					char str[MAX_FILENAME_LEN];
-					int z;
 					stuff_string(str, F_NAME, MAX_FILENAME_LEN);
 
-					// parse the proper nebula type (full or not)
-					for (z = 0; z < NUM_NEBULAS; z++) {
-						if (flags[Mission::Mission_Flags::Fullneb]) {
-							if (!stricmp(str, Neb2_filenames[z])) {
-								Nebula_index = z;
-								break;
-							}
-						}
-						else {
-							if (!stricmp(str, Nebula_filenames[z])) {
-								Nebula_index = z;
-								break;
-							}
-						}
-					}
-
-					if (z == NUM_NEBULAS)
+					// look up the old nebula pattern in the registry
+					Nebula_index = old_nebula_pattern_lookup(str);
+					if (Nebula_index < 0)
 						WarningEx(LOCATION, "Unknown nebula %s!", str);
 
 					if (optional_string("+Color:")) {
 						stuff_string(str, F_NAME, MAX_FILENAME_LEN);
-						for (z = 0; z < NUM_NEBULA_COLORS; z++) {
-							if (!stricmp(str, Nebula_colors[z])) {
-								Mission_palette = z;
-								break;
-							}
-						}
+						int color_idx = old_nebula_color_lookup(str);
+						if (color_idx < 0)
+							WarningEx(LOCATION, "Unknown nebula color %s!", str);
+						else
+							Mission_palette = color_idx;
 					}
-
-					if (z == NUM_NEBULA_COLORS)
-						WarningEx(LOCATION, "Unknown nebula color %s!", str);
 
 					if (optional_string("+Pitch:")) {
 						stuff_int(&Nebula_pitch);
