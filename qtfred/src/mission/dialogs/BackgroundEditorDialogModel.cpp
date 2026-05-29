@@ -1015,6 +1015,14 @@ SCP_string BackgroundEditorDialogModel::getOldNebulaPattern()
 	return SCP_string{};
 }
 
+void BackgroundEditorDialogModel::regenerateOldNebula()
+{
+	// rebuild the procedural mesh from the current settings and repaint the viewport
+	nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
+	if (_viewport)
+		_viewport->needsUpdate();
+}
+
 void BackgroundEditorDialogModel::setOldNebulaPattern(const SCP_string& name)
 {
 	int newIndex = -1;
@@ -1023,7 +1031,7 @@ void BackgroundEditorDialogModel::setOldNebulaPattern(const SCP_string& name)
 	}
 
 	modify(Nebula_index, newIndex);
-	nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
+	regenerateOldNebula();
 }
 
 SCP_string BackgroundEditorDialogModel::getOldNebulaColorName()
@@ -1041,7 +1049,7 @@ void BackgroundEditorDialogModel::setOldNebulaColorName(const SCP_string& name)
 	int idx = old_nebula_color_lookup(name.c_str());
 	if (idx >= 0) {
 		modify(Mission_palette, idx);
-		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
+		regenerateOldNebula();
 	}
 	// name not found: ignore
 }
@@ -1054,11 +1062,8 @@ int BackgroundEditorDialogModel::getOldNebulaPitch()
 void BackgroundEditorDialogModel::setOldNebulaPitch(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
-	if (Nebula_pitch != deg) {
-		Nebula_pitch = deg;
-		modify(Nebula_pitch, deg);
-		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
-	}
+	modify(Nebula_pitch, deg);
+	regenerateOldNebula();
 }
 
 int BackgroundEditorDialogModel::getOldNebulaBank()
@@ -1069,11 +1074,8 @@ int BackgroundEditorDialogModel::getOldNebulaBank()
 void BackgroundEditorDialogModel::setOldNebulaBank(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
-	if (Nebula_bank != deg) {
-		Nebula_bank = deg;
-		modify(Nebula_bank, deg);
-		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
-	}
+	modify(Nebula_bank, deg);
+	regenerateOldNebula();
 }
 
 int BackgroundEditorDialogModel::getOldNebulaHeading()
@@ -1084,11 +1086,8 @@ int BackgroundEditorDialogModel::getOldNebulaHeading()
 void BackgroundEditorDialogModel::setOldNebulaHeading(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
-	if (Nebula_heading != deg) {
-		Nebula_heading = deg;
-		modify(Nebula_heading, deg);
-		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
-	}
+	modify(Nebula_heading, deg);
+	regenerateOldNebula();
 }
 
 int BackgroundEditorDialogModel::getAmbientR()
