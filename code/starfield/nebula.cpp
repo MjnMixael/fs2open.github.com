@@ -99,6 +99,8 @@ static void old_nebula_parse_buffer()
 				stuff_float(&p->warp);
 			if (optional_string("+Contrast:"))
 				stuff_float(&p->contrast);
+			if (optional_string("+Intensity:"))
+				stuff_float(&p->intensity);
 			if (optional_string("+Seed:"))
 				stuff_int(&p->seed);
 			if (optional_string("+Resolution:")) {
@@ -353,12 +355,20 @@ static void nebula_generate_mesh(const old_nebula_pattern &p, const old_nebula_c
 	Nebula_n_verts = rlon * rlat * 6;
 	Nebula_verts = new vertex[Nebula_n_verts];
 
+	float intensity = (p.intensity > 0.0f) ? p.intensity : 1.0f;
+
+	auto chan = [](float c, float b) {
+		int v = static_cast<int>(c * b);
+		CLAMP(v, 0, 255);
+		return static_cast<ubyte>(v);
+	};
+
 	auto set_vert = [&](vertex *vt, int gi) {
 		g3_transfer_vertex(vt, &gpt[gi]);
-		float b = gbright[gi];
-		vt->r = static_cast<ubyte>(col.r * b);
-		vt->g = static_cast<ubyte>(col.g * b);
-		vt->b = static_cast<ubyte>(col.b * b);
+		float b = gbright[gi] * intensity;
+		vt->r = chan(col.r, b);
+		vt->g = chan(col.g, b);
+		vt->b = chan(col.b, b);
 		vt->a = 255;
 	};
 
