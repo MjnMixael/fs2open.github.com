@@ -90,8 +90,10 @@ static void old_nebula_parse_buffer()
 			if (optional_string("+Density:"))
 				stuff_float(&p->density);
 			if (optional_string("+Frequency:")) {
-				stuff_float(&p->freq_u);
-				stuff_float(&p->freq_v);
+				float f[2];
+				parse_float_list(f, 2);
+				p->freq_u = f[0];
+				p->freq_v = f[1];
 			}
 			if (optional_string("+Warp:"))
 				stuff_float(&p->warp);
@@ -100,12 +102,16 @@ static void old_nebula_parse_buffer()
 			if (optional_string("+Seed:"))
 				stuff_int(&p->seed);
 			if (optional_string("+Resolution:")) {
-				stuff_int(&p->res_lon);
-				stuff_int(&p->res_lat);
+				int r[2];
+				parse_int_list(r, 2);
+				p->res_lon = r[0];
+				p->res_lat = r[1];
 			}
 			if (optional_string("+Band:")) {
-				stuff_float(&p->band_min);
-				stuff_float(&p->band_max);
+				float b[2];
+				parse_float_list(b, 2);
+				p->band_min = b[0];
+				p->band_max = b[1];
 			}
 		}
 	}
@@ -129,9 +135,7 @@ static void old_nebula_parse_buffer()
 
 			if (optional_string("+RGB:")) {
 				int rgb[3];
-				stuff_int(&rgb[0]);
-				stuff_int(&rgb[1]);
-				stuff_int(&rgb[2]);
+				parse_int_list(rgb, 3);
 				CLAMP(rgb[0], 0, 255);
 				CLAMP(rgb[1], 0, 255);
 				CLAMP(rgb[2], 0, 255);
