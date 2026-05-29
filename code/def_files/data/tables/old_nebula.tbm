@@ -17,33 +17,33 @@
 #Old Nebula Patterns
 
 $Name: Nebula01
-	+Density:    0.35
-	+Frequency:  2.0 5.0
-	+Warp:       0.40
-	+Contrast:   1.5
-	+Intensity:  3.5
+	+Density:    0.45
+	+Frequency:  1.5 2.5
+	+Warp:       0.50
+	+Contrast:   1.1
+	+Intensity:  3.0
 	+Seed:       1
-	+Resolution: 28 14
+	+Resolution: 32 16
 	+Band:       0.07 0.93
 
 $Name: Nebula02
-	+Density:    0.38
-	+Frequency:  3.0 4.0
-	+Warp:       0.50
-	+Contrast:   1.4
-	+Intensity:  3.5
+	+Density:    0.48
+	+Frequency:  2.0 2.0
+	+Warp:       0.60
+	+Contrast:   1.0
+	+Intensity:  3.0
 	+Seed:       2
-	+Resolution: 28 14
+	+Resolution: 32 16
 	+Band:       0.09 0.93
 
 $Name: Nebula03
-	+Density:    0.30
-	+Frequency:  2.0 6.0
-	+Warp:       0.60
-	+Contrast:   1.6
-	+Intensity:  3.5
+	+Density:    0.42
+	+Frequency:  1.5 3.0
+	+Warp:       0.70
+	+Contrast:   1.2
+	+Intensity:  3.0
 	+Seed:       3
-	+Resolution: 28 14
+	+Resolution: 32 16
 	+Band:       0.05 0.91
 
 #End

@@ -284,8 +284,9 @@ static float neb_fbm(float lon, float lat, const old_nebula_pattern &p)
 	// low-frequency directional warp to stretch the wisps
 	float w = (neb_vnoise(lon * base, lat * p.freq_v, p.seed + 777, base) - 0.5f) * p.warp;
 
+	// 3 octaves: enough for soft cloud structure without the high-frequency dottiness a 4th adds
 	float sum = 0.0f, amp = 0.5f, norm = 0.0f;
-	for (int o = 0; o < 4; o++) {
+	for (int o = 0; o < 3; o++) {
 		int per = base << o;
 		float n = neb_vnoise((lon + w) * per, lat * p.freq_v * static_cast<float>(1 << o), p.seed + o, per);
 		sum += amp * n;
