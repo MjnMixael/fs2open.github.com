@@ -30,6 +30,7 @@ struct old_nebula_pattern {
 	float freq_v   = 5.0f;     // noise frequency along latitude
 	float warp     = 0.4f;     // directional warp strength (stretches the wisps)
 	float contrast = 1.5f;     // falloff curve applied to bright knots
+	float intensity = 1.0f;    // overall brightness multiplier (channels are clamped to max)
 	int   seed     = 0;        // noise seed (gives each pattern a distinct look)
 	int   res_lon  = 24;       // longitude grid resolution (coarse = retro chunky gouraud)
 	int   res_lat  = 12;       // latitude grid resolution

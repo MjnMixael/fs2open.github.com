@@ -9,6 +9,7 @@
 ;   +Frequency:  <u> <v>   noise frequency along longitude/latitude (unequal => streaky)
 ;   +Warp:       directional warp strength (stretches the wisps)
 ;   +Contrast:   falloff curve applied to bright knots (higher => tighter knots)
+;   +Intensity:  overall brightness multiplier (channels are clamped; higher => more visible)
 ;   +Seed:       noise seed (gives each pattern a distinct look)
 ;   +Resolution: <lon> <lat>  grid resolution (coarse values give the retro chunky gouraud look)
 ;   +Band:       <min> <max>  latitude extent in 0..1 (skip the poles, like the originals)
@@ -20,6 +21,7 @@ $Name: Nebula01
 	+Frequency:  2.0 5.0
 	+Warp:       0.40
 	+Contrast:   1.5
+	+Intensity:  3.5
 	+Seed:       1
 	+Resolution: 28 14
 	+Band:       0.07 0.93
@@ -29,6 +31,7 @@ $Name: Nebula02
 	+Frequency:  3.0 4.0
 	+Warp:       0.50
 	+Contrast:   1.4
+	+Intensity:  3.5
 	+Seed:       2
 	+Resolution: 28 14
 	+Band:       0.09 0.93
@@ -38,6 +41,7 @@ $Name: Nebula03
 	+Frequency:  2.0 6.0
 	+Warp:       0.60
 	+Contrast:   1.6
+	+Intensity:  3.5
 	+Seed:       3
 	+Resolution: 28 14
 	+Band:       0.05 0.91
