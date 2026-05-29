@@ -222,6 +222,8 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	void initializeData();
 	void refreshBackgroundPreview();
 	static void refreshPreview(Editor* editor);
+	// regenerate the old nebula mesh and request a viewport redraw
+	void regenerateOldNebula();
 	static background_t& getActiveBackground();
 	starfield_list_entry* getActiveBitmap() const;
 	starfield_list_entry* getActiveSun() const;
