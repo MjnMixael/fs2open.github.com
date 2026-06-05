@@ -27,7 +27,19 @@ bool VolumetricNebulaDialogModel::apply()
 
 void VolumetricNebulaDialogModel::reject()
 {
-	//do nothing - only here because parent class reject() function is virtual
+	// Roll back any live-previewed changes (currently: nebula position).
+	// If a volumetrics existed before, restore its full state; otherwise
+	// remove the one we created for the preview (none currently created here,
+	// but keep this symmetric for future additions).
+	if (_had_original_volumetrics) {
+		if (!The_mission.volumetrics) {
+			The_mission.volumetrics.emplace();
+		}
+		makeVolumetricsCopy(*The_mission.volumetrics, _original_volumetrics);
+	} else {
+		// No volumetrics before the dialog opened, so nothing to live-preview
+		// against in the first place — leave as-is.
+	}
 }
 
 void VolumetricNebulaDialogModel::initializeData()
@@ -35,10 +47,14 @@ void VolumetricNebulaDialogModel::initializeData()
 	if (The_mission.volumetrics) {
 		// Copy authoring fields into our working copy
 		makeVolumetricsCopy(_volumetrics, *The_mission.volumetrics);
+		// Snapshot for reject() to restore live-previewed fields (e.g. pos).
+		_had_original_volumetrics = true;
+		makeVolumetricsCopy(_original_volumetrics, *The_mission.volumetrics);
 	} else {
 		// Start from engine defaults
 		makeVolumetricsCopy(_volumetrics, volumetric_nebula{});
 		_volumetrics.enabled = false;
+		_had_original_volumetrics = false;
 	}
 	_modified = false;
 }
@@ -145,6 +161,7 @@ float VolumetricNebulaDialogModel::getPosX() const
 void VolumetricNebulaDialogModel::setPosX(float x)
 {
 	modify(_volumetrics.pos.xyz.x, x);
+	pushLivePos();
 }
 
 float VolumetricNebulaDialogModel::getPosY() const
@@ -155,6 +172,7 @@ float VolumetricNebulaDialogModel::getPosY() const
 void VolumetricNebulaDialogModel::setPosY(float y)
 {
 	modify(_volumetrics.pos.xyz.y, y);
+	pushLivePos();
 }
 
 float VolumetricNebulaDialogModel::getPosZ() const
@@ -165,6 +183,29 @@ float VolumetricNebulaDialogModel::getPosZ() const
 void VolumetricNebulaDialogModel::setPosZ(float z)
 {
 	modify(_volumetrics.pos.xyz.z, z);
+	pushLivePos();
+}
+
+void VolumetricNebulaDialogModel::nudgePos(const vec3d& delta_world)
+{
+	if (delta_world.xyz.x == 0.0f && delta_world.xyz.y == 0.0f && delta_world.xyz.z == 0.0f) {
+		return;
+	}
+	vec3d new_pos = _volumetrics.pos;
+	vm_vec_add2(&new_pos, &delta_world);
+	modify(_volumetrics.pos, new_pos);
+	pushLivePos();
+}
+
+void VolumetricNebulaDialogModel::pushLivePos()
+{
+	// Only push when the dialog itself is showing the hull (enabled + a real
+	// volumetrics object exists). With no volumetrics, the visualizer has
+	// nothing to draw anyway.
+	if (!The_mission.volumetrics) {
+		return;
+	}
+	The_mission.volumetrics->pos = _volumetrics.pos;
 }
 
 int VolumetricNebulaDialogModel::getColorR() const

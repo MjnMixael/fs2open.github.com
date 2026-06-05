@@ -164,6 +164,18 @@ void RenderWidget::focusInEvent(QFocusEvent* e) {
 }
 
 void RenderWidget::keyPressEvent(QKeyEvent* key) {
+	// Escape during a viewport-handle drag: drop the grab. The struct retains
+	// whatever the last drag tick wrote (apply/reject on the owning dialog
+	// handles full revert). Env handles take precedence over the background
+	// drag below, matching the press-time pre-pass order.
+	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _handleGrabbed) {
+		_viewport->end_handle_drag();
+		_handleGrabbed = false;
+		_viewport->needsUpdate();
+		key->accept();
+		return;
+	}
+
 	// Escape during a background-element drag reverts to the pre-drag state.
 	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _bgDragging) {
 		_bgDragging = false;
@@ -236,6 +248,14 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 
 	// Orbit camera: right button
 	if (event->button() == Qt::RightButton) {
+		if (_viewport != nullptr && _handleGrabbed) {
+			_viewport->end_handle_drag();
+			_handleGrabbed = false;
+			_viewport->needsUpdate();
+			event->accept();
+			return;
+		}
+
 		if (_viewport != nullptr && _viewport->button_down) {
 			_viewport->cancel_drag();
 			_usingMarkingBox = false;
@@ -259,6 +279,29 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	if (event->button() != Qt::LeftButton) {
 		// Ignore everything that has nothing to do with the left button
 		return QWidget::mousePressEvent(event);
+	}
+
+	// Viewport handle pre-pass. If the click landed on a handle owned by an
+	// open dialog (asteroid bounds, volumetric center, etc.), consume the click
+	// and route subsequent moves/release to the handle drag path. Normal
+	// object selection is bypassed entirely for this click, which keeps the
+	// marquee-select and selection-lock behaviors fully untouched.
+	//
+	// Only active in Moving mode — handles are about positioning, so the
+	// pointer/rotate modes leave them inert (matching the mode's affordance
+	// of "not for translation"). The handles still render so the user can
+	// see them; they just won't grab.
+	if (_viewport != nullptr && _viewport->Editing_mode == CursorMode::Moving) {
+		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
+			event->position().y() * _window->devicePixelRatio());
+		if (pick.group_index >= 0 && _viewport->begin_handle_drag(pick,
+				event->position().x() * _window->devicePixelRatio(),
+				event->position().y() * _window->devicePixelRatio())) {
+			_handleGrabbed = true;
+			_usingMarkingBox = false;
+			event->accept();
+			return;
+		}
 	}
 
 	int waypoint_instance = -1;
@@ -474,6 +517,18 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 		}
 	}
 
+	// If a viewport handle is currently being dragged, route every move to
+	// drag_handle and skip the rest of the mission-object-drag path. Checked
+	// before the background drag below so the precedence matches the press,
+	// release and Escape paths.
+	if (_handleGrabbed) {
+		if (event->buttons().testFlag(Qt::LeftButton)) {
+			_viewport->drag_handle(event->position().x() * _window->devicePixelRatio(),
+				event->position().y() * _window->devicePixelRatio());
+		}
+		return;
+	}
+
 	// Background-element drag: re-point (Move) or bank (Rotate) the grabbed handle.
 	if (_bgDragging) {
 		if (!event->buttons().testFlag(Qt::LeftButton)) {
@@ -503,6 +558,17 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 // Update marking box
 	_markingBox.x2 = event->position().x() * _window->devicePixelRatio();
 	_markingBox.y2 = event->position().y() * _window->devicePixelRatio();
+
+	// Track whether the cursor is hovering a pickable handle so updateCursor
+	// can show the move cursor for it. Only relevant in Moving mode, since
+	// that's the only mode that can actually grab a handle (see press-time
+	// pre-pass above).
+	_hoveringHandle = false;
+	if (_viewport->Editing_mode == CursorMode::Moving) {
+		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
+			event->position().y() * _window->devicePixelRatio());
+		_hoveringHandle = (pick.group_index >= 0);
+	}
 
 	// RT point
 
@@ -561,6 +627,19 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 	if (event->button() != Qt::LeftButton) {
 		// Ignore everything that has nothing to do with the left button
 		return QWidget::mouseReleaseEvent(event);
+	}
+
+	// End any active viewport-handle drag. We deliberately do NOT call
+	// missionChanged() here — the dialog model that owns the handle is
+	// responsible for marking its own dirty state (and the spinboxes have
+	// already been refreshed live via modelChanged → updateUi).
+	// Checked before the background drag: env handles win the click.
+	if (_handleGrabbed) {
+		_viewport->end_handle_drag();
+		_handleGrabbed = false;
+		_viewport->needsUpdate();
+		event->accept();
+		return;
 	}
 
 	// Finalize a background-element drag: a genuine move produces one undo step;
@@ -723,6 +802,14 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 	}
 }
 void RenderWidget::updateCursor() const {
+	// Hovering a viewport handle: always show the move cursor (handles only
+	// translate, and the press-time pre-pass already gated this on Moving
+	// mode, so we know clicking would actually grab).
+	if (_hoveringHandle) {
+		_window->setCursor(*_moveCursor);
+		return;
+	}
+
 	if (_viewport->Cursor_over >= 0) {
 		switch (_cursorMode) {
 		case CursorMode::Selecting:
