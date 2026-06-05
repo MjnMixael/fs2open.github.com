@@ -79,6 +79,65 @@ int grid_colors_inited = 0;
 color Fred_grid_bright;
 color Fred_grid_dark;
 
+// Draws every registered viewport-handle group as small filled screen-space
+// squares overlaid on the visualizer. Disabled handles (those whose
+// is_enabled callback returns false) render as a dim gray "ghost" so the user
+// can see the constraint state without losing track of where the handle is.
+static void draw_viewport_handles(fso::fred::EditorViewport* viewport) {
+	if (!viewport) {
+		return;
+	}
+	const auto& groups = viewport->getHandleGroups();
+	if (groups.empty()) {
+		return;
+	}
+
+	for (const auto& group : groups) {
+		for (const auto& handle : group) {
+			vertex vt;
+			vec3d pos_copy = handle.world_pos;
+			g3_rotate_vertex(&vt, &pos_copy);
+			if (vt.codes & CC_BEHIND) {
+				continue;
+			}
+			if (g3_project_vertex(&vt) & PF_OVERFLOW) {
+				continue;
+			}
+
+			const bool enabled = !handle.is_enabled || handle.is_enabled();
+			int r = handle.color_r;
+			int g = handle.color_g;
+			int b = handle.color_b;
+			if (!enabled) {
+				// Desaturate + dim. Keeps the handle visible-but-clearly-off.
+				r = (r + 128) / 4;
+				g = (g + 128) / 4;
+				b = (b + 128) / 4;
+			}
+
+			// Pick a screen-space size by handle kind. Center handles are
+			// larger so they read as "drag the whole thing" at a glance.
+			int half;
+			switch (handle.kind) {
+			case fso::fred::ViewportHandle::Kind::Center: half = 6; break;
+			case fso::fred::ViewportHandle::Kind::Corner: half = 5; break;
+			case fso::fred::ViewportHandle::Kind::Face:   half = 4; break;
+			default:                                      half = 4; break;
+			}
+
+			int x = static_cast<int>(vt.screen.xyw.x);
+			int y = static_cast<int>(vt.screen.xyw.y);
+
+			// White border for visibility against any background.
+			gr_set_color(255, 255, 255);
+			gr_rect(x - half - 1, y - half - 1, half * 2 + 3, half * 2 + 3);
+
+			gr_set_color(r, g, b);
+			gr_rect(x - half, y - half, half * 2 + 1, half * 2 + 1);
+		}
+	}
+}
+
 void draw_asteroid_field() {
 	int i, j;
 	vec3d p[8], ip[8];
@@ -1018,6 +1077,11 @@ void FredRenderer::render_frame(int cur_object_index,
 	gr_set_color(0, 0, 64);
 	render_models(cur_object_index);
 	render_volumetric_overlay();
+
+	// Viewport handles overlay every visualizer (asteroid box, volumetric
+	// hull) and need to draw after them so the markers sit on top of the
+	// wireframe and the translucent hull.
+	draw_viewport_handles(_viewport);
 
 	if (view().Show_distances) {
 		display_distances();

@@ -58,6 +58,16 @@ class RenderWidget: public QWidget {
 	bool _usingMarkingBox = false;
 	Marking_box _markingBox;
 
+	// Set when a viewport handle was grabbed on the most recent left-press
+	// pre-pass; consumed in mouseMoveEvent / mouseReleaseEvent. While true,
+	// normal object selection and dragging are bypassed entirely.
+	bool _handleGrabbed = false;
+
+	// True iff the cursor is hovering a pickable viewport handle (and the
+	// editor is in Moving mode). updateCursor() consults this to show the
+	// move cursor, matching the affordance for hovering a real object.
+	bool _hoveringHandle = false;
+
 	QPoint _lastMouse;
 
 	// Orbit camera drag state

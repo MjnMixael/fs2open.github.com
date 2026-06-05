@@ -6,6 +6,8 @@
 #include <globalincs/globals.h>
 #include <mission/util.h>
 
+#include <algorithm>
+
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QMessageBox>
@@ -24,9 +26,21 @@ VolumetricNebulaDialog::VolumetricNebulaDialog(FredView* parent, EditorViewport*
 	// set our internal values, update the UI
 	initializeUi();
 	updateUi();
+
+	// Refresh the position spinboxes (and the handle) whenever the model
+	// changes. Handle drags route into the model via nudgePos(), which calls
+	// modify() and fires modelChanged; the resulting updateUi() pushes the
+	// new position back into the spinboxes (and re-runs rebuildHandles, which
+	// updateUi() above has already done once to register the initial group).
+	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &VolumetricNebulaDialog::updateUi);
 }
 
-VolumetricNebulaDialog::~VolumetricNebulaDialog() = default;
+VolumetricNebulaDialog::~VolumetricNebulaDialog()
+{
+	if (_viewport != nullptr && _handle_group.valid()) {
+		_viewport->unregisterHandleGroup(_handle_group);
+	}
+}
 
 void VolumetricNebulaDialog::accept()
 {
@@ -118,6 +132,8 @@ void VolumetricNebulaDialog::updateUi()
 
 	updateColorSwatch();
 	updateNoiseColorSwatch();
+
+	rebuildHandles();
 }
 
 void VolumetricNebulaDialog::enableDisableControls()
@@ -367,6 +383,40 @@ void VolumetricNebulaDialog::on_setBaseNoiseFunctionButton_clicked()
 void VolumetricNebulaDialog::on_setSubNoiseFunctionButton_clicked()
 {
 	QMessageBox::information(this, "Not Implemented", "Setting the sub noise function is not implemented yet.");
+}
+
+void VolumetricNebulaDialog::rebuildHandles()
+{
+	if (_viewport == nullptr) {
+		return;
+	}
+
+	std::vector<ViewportHandle> handles;
+
+	// Only show the handle while the nebula is enabled AND a hull is set (the
+	// visualizer renders nothing otherwise, so a handle would float in empty
+	// space). We render the hull from The_mission.volumetrics, so checking
+	// model state here matches what the user actually sees.
+	if (_model->getEnabled() && !_model->getHullPof().empty()) {
+		ViewportHandle h;
+		h.kind = ViewportHandle::Kind::Center;
+		h.world_pos = _model->getPos();
+		// Match the nebula color so the handle blends visually with its hull.
+		h.color_r = std::clamp(_model->getColorR(), 64, 255);
+		h.color_g = std::clamp(_model->getColorG(), 64, 255);
+		h.color_b = std::clamp(_model->getColorB(), 64, 255);
+		VolumetricNebulaDialogModel* model = _model.get();
+		h.on_drag = [model](const vec3d& delta) {
+			model->nudgePos(delta);
+		};
+		handles.push_back(std::move(h));
+	}
+
+	if (_handle_group.valid()) {
+		_viewport->updateHandleGroup(_handle_group, std::move(handles));
+	} else {
+		_handle_group = _viewport->registerHandleGroup(std::move(handles));
+	}
 }
 
 } // namespace fso::fred::dialogs

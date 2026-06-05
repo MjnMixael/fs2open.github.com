@@ -1773,4 +1773,232 @@ void EditorViewport::view_object(int obj_num) {
 	needsUpdate();
 }
 
+// ---------------------------------------------------------------------------
+// Viewport handle subsystem
+// ---------------------------------------------------------------------------
+
+// Pick radius for handles, in squared screen pixels. The existing object
+// fallback in select_object() uses 8 (~2.8px); handles get a more generous
+// radius so they feel grabbable even at distance.
+static constexpr double kHandlePickRadiusSquared = 144.0; // 12px
+
+HandleGroupId EditorViewport::registerHandleGroup(std::vector<ViewportHandle> handles) {
+	// Reuse a free slot if one exists, otherwise grow.
+	for (size_t i = 0; i < _handle_groups.size(); ++i) {
+		if (_handle_groups[i].empty() && _handle_group_generations[i] != 0) {
+			// Slot was used before and freed; reuse with bumped generation.
+			_handle_groups[i] = std::move(handles);
+			HandleGroupId id;
+			id.index = static_cast<int>(i);
+			id.generation = _handle_group_generations[i];
+			needsUpdate();
+			return id;
+		}
+	}
+	_handle_groups.push_back(std::move(handles));
+	_handle_group_generations.push_back(1);
+	HandleGroupId id;
+	id.index = static_cast<int>(_handle_groups.size() - 1);
+	id.generation = 1;
+	needsUpdate();
+	return id;
+}
+
+void EditorViewport::updateHandleGroup(HandleGroupId id, std::vector<ViewportHandle> handles) {
+	if (id.index < 0 || id.index >= static_cast<int>(_handle_groups.size())) {
+		return;
+	}
+	if (_handle_group_generations[id.index] != id.generation) {
+		return; // stale id
+	}
+	_handle_groups[id.index] = std::move(handles);
+	needsUpdate();
+}
+
+void EditorViewport::unregisterHandleGroup(HandleGroupId id) {
+	if (id.index < 0 || id.index >= static_cast<int>(_handle_groups.size())) {
+		return;
+	}
+	if (_handle_group_generations[id.index] != id.generation) {
+		return; // stale id; already replaced
+	}
+	// If a drag is in progress on this group, cancel it.
+	if (_active_handle.group_index == id.index && _active_handle_generation == id.generation) {
+		end_handle_drag();
+	}
+	_handle_groups[id.index].clear();
+	// Bump generation so any leftover id pointing at this slot is now stale.
+	_handle_group_generations[id.index]++;
+	needsUpdate();
+}
+
+EditorViewport::HandlePick EditorViewport::pick_handle(int cx, int cy) const {
+	HandlePick best{};
+	double best_dist = kHandlePickRadiusSquared;
+
+	if (g3_in_frame() != 1) {
+		return best;
+	}
+
+	for (size_t gi = 0; gi < _handle_groups.size(); ++gi) {
+		const auto& group = _handle_groups[gi];
+		for (size_t hi = 0; hi < group.size(); ++hi) {
+			const auto& handle = group[hi];
+			if (handle.is_enabled && !handle.is_enabled()) {
+				continue;
+			}
+			vertex vt;
+			vec3d pos_copy = handle.world_pos;
+			g3_rotate_vertex(&vt, &pos_copy);
+			if (vt.codes & CC_BEHIND) {
+				continue;
+			}
+			if (g3_project_vertex(&vt) & PF_OVERFLOW) {
+				continue;
+			}
+			double dx = static_cast<double>(vt.screen.xyw.x) - cx;
+			double dy = static_cast<double>(vt.screen.xyw.y) - cy;
+			double dist = dx * dx + dy * dy;
+			if (dist < best_dist) {
+				best_dist = dist;
+				best.group_index = static_cast<int>(gi);
+				best.handle_index = static_cast<int>(hi);
+			}
+		}
+	}
+	return best;
+}
+
+bool EditorViewport::screen_to_constraint_plane(int cx, int cy, const vec3d& anchor, vec3d* out_world) const {
+	vec3d cursor_dir, int_pnt, vec1, vec2;
+	g3_point_to_vec_delayed(&cursor_dir, cx, cy);
+
+	float r;
+	if (Single_axis_constraint) {
+		// Same trick drag_objects() uses: zero the X-component of Anticonstraint
+		// so the plane stays roughly perpendicular to the view's right.
+		vec3d tmpAnticonstraint = Anticonstraint;
+		tmpAnticonstraint.xyz.x = 0.0f;
+		vec3d tmpAnchor = anchor;
+		r = fvi_ray_plane(&int_pnt, &tmpAnchor, &tmpAnticonstraint, &camera.view_pos, &cursor_dir, 0.0f);
+	} else {
+		r = fvi_ray_plane(&int_pnt, &anchor, &Anticonstraint, &camera.view_pos, &cursor_dir, 0.0f);
+	}
+
+	if (r < 0.0f) {
+		return false;
+	}
+	vm_vec_sub(&vec1, &int_pnt, &camera.view_pos);
+	vm_vec_sub(&vec2, &anchor, &camera.view_pos);
+	if (vm_vec_dot(&vec1, &vec2) < 0.0f) {
+		// Intersection landed behind the viewer; ignore.
+		return false;
+	}
+
+	if (Single_axis_constraint) {
+		// Re-apply the single-axis component mask drag_objects() applies.
+		vec3d tmp;
+		vm_vec_sub(&tmp, &int_pnt, &anchor);
+		tmp.xyz.x *= Constraint.xyz.x;
+		tmp.xyz.y *= Constraint.xyz.y;
+		tmp.xyz.z *= Constraint.xyz.z;
+		vm_vec_add(&int_pnt, &anchor, &tmp);
+	}
+
+	*out_world = int_pnt;
+	return true;
+}
+
+bool EditorViewport::begin_handle_drag(HandlePick pick, int cx, int cy) {
+	if (pick.group_index < 0 || pick.group_index >= static_cast<int>(_handle_groups.size())) {
+		return false;
+	}
+	const auto& group = _handle_groups[pick.group_index];
+	if (pick.handle_index < 0 || pick.handle_index >= static_cast<int>(group.size())) {
+		return false;
+	}
+	const auto& handle = group[pick.handle_index];
+	if (!handle.on_drag) {
+		return false;
+	}
+
+	vec3d anchor;
+	if (!screen_to_constraint_plane(cx, cy, handle.world_pos, &anchor)) {
+		return false;
+	}
+	_active_handle = pick;
+	_active_handle_generation = _handle_group_generations[pick.group_index];
+	_active_handle_last_world = anchor;
+	return true;
+}
+
+bool EditorViewport::drag_handle(int cx, int cy) {
+	if (_active_handle.group_index < 0) {
+		return false;
+	}
+	if (_active_handle.group_index >= static_cast<int>(_handle_groups.size())) {
+		end_handle_drag();
+		return false;
+	}
+	if (_handle_group_generations[_active_handle.group_index] != _active_handle_generation) {
+		end_handle_drag();
+		return false;
+	}
+	auto& group = _handle_groups[_active_handle.group_index];
+	if (_active_handle.handle_index < 0 || _active_handle.handle_index >= static_cast<int>(group.size())) {
+		end_handle_drag();
+		return false;
+	}
+	const auto& handle = group[_active_handle.handle_index];
+	if (!handle.on_drag) {
+		end_handle_drag();
+		return false;
+	}
+
+	// IMPORTANT: the on_drag callback typically writes back into the owning
+	// dialog model, which emits modelChanged and triggers rebuildHandles,
+	// which replaces the contents of _handle_groups[group_index] via
+	// updateHandleGroup. That destroys the ViewportHandle (and its
+	// std::function!) we're holding a reference to. So copy everything we
+	// need into locals up front before invoking the callback — otherwise
+	// we'd be executing a destructed function object.
+	auto on_drag_copy = handle.on_drag;
+	const auto handle_kind = handle.kind;
+	const vec3d handle_axis = handle.axis;
+
+	vec3d new_world;
+	if (!screen_to_constraint_plane(cx, cy, _active_handle_last_world, &new_world)) {
+		return true; // keep the drag alive; the user will move back into a valid region
+	}
+
+	vec3d delta;
+	vm_vec_sub(&delta, &new_world, &_active_handle_last_world);
+
+	// Face handles snap motion to their single axis so dragging the +X face
+	// only changes max_bound.x even with no toolbar lock. The on_drag callback
+	// may further reject the move (e.g. clamping min < max).
+	if (handle_kind == ViewportHandle::Kind::Face) {
+		float along = vm_vec_dot(&delta, &handle_axis);
+		vm_vec_copy_scale(&delta, &handle_axis, along);
+	}
+
+	if (delta.xyz.x == 0.0f && delta.xyz.y == 0.0f && delta.xyz.z == 0.0f) {
+		return true;
+	}
+
+	on_drag_copy(delta);
+	// Do NOT touch `handle` past here — the rebuild from on_drag may have
+	// invalidated it. The active-handle indices themselves are still valid
+	// (rebuildHandles produces a same-shape vector) so the next tick re-looks
+	// it up by index from the top.
+	_active_handle_last_world = new_world;
+	needsUpdate();
+	return true;
+}
+
+void EditorViewport::end_handle_drag() {
+	_active_handle = {};
+	_active_handle_generation = 0;
+}
+
 } // namespace fso::fred

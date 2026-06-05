@@ -63,6 +63,22 @@ public:
 	void setBoxText(const QString& text, _box_line_edits type);
 	QString& getBoxText(_box_line_edits type);
 
+	// Convenience for the viewport handle drag callbacks. Adds a delta in
+	// world space to one component of one bound and clamps so the box stays
+	// non-degenerate (and, if applicable, so outer keeps containing inner with
+	// the minimum thickness). Updates the working strings AND pushes the new
+	// bounds to Asteroid_field so the visualizer reflects the drag live.
+	enum class BoundCorner { Min, Max };
+	enum class BoundBox { Outer, Inner };
+	void nudgeBoundComponent(BoundBox box, BoundCorner corner, int axis_index, float delta_world);
+
+	// Translate the whole working AABB (outer or inner) by a world delta.
+	// Same live-push to Asteroid_field as nudgeBoundComponent.
+	void translateBound(BoundBox box, const vec3d& delta_world);
+
+	// Read-back helpers for handle position computation.
+	void getBound(BoundBox box, vec3d* out_min, vec3d* out_max) const;
+
 	// object selections
 	QVector<std::pair<QString, bool>> getAsteroidSelections() const;
 	void setAsteroidSelections(const QVector<bool>& selected);
@@ -80,12 +96,24 @@ private:
 	bool validate_data();
 	void showErrorDialogNoCancel(const SCP_string& message);
 
+	// Push the working-copy bounds for the given box back into the global
+	// Asteroid_field and refresh the corresponding _min/_max string members.
+	// Called from nudgeBoundComponent/translateBound so handle drags update
+	// both the visualizer (which reads Asteroid_field) and the dialog
+	// spinboxes (which read the string members via getBoxText/updateUi).
+	void pushLiveBound(BoundBox box);
+
 	// boilerplate
 	bool _bypass_errors;
 	const int _MIN_BOX_THICKNESS = 400;
 
 	// working copy of the asteroid field
 	asteroid_field _a_field;
+
+	// Snapshot taken in initializeData(), restored by reject() so cancelling
+	// the dialog undoes any live preview the user produced by dragging
+	// handles or typing into the spinboxes.
+	asteroid_field _original_a_field;
 
 	// toggles
 	bool  _enable_asteroids;

@@ -6,6 +6,7 @@
 #include "Editor.h"
 #include "IDialogProvider.h"
 #include "ui/ThemeMode.h"
+#include "ViewportHandle.h"
 
 #include <object/object.h>
 
@@ -123,6 +124,29 @@ class EditorViewport {
 	int object_check_collision(object* objp, vec3d* p0, vec3d* p1, vec3d* hitpos);
 
 	int select_object(int cx, int cy);
+
+	// Viewport handle (non-object selectable marker) API. Dialogs register a
+	// group of handles while open; the picking pre-pass below runs before
+	// select_object() so a handle click never falls through into normal mission
+	// object selection.
+	HandleGroupId registerHandleGroup(std::vector<ViewportHandle> handles);
+	void updateHandleGroup(HandleGroupId id, std::vector<ViewportHandle> handles);
+	void unregisterHandleGroup(HandleGroupId id);
+	const std::vector<std::vector<ViewportHandle>>& getHandleGroups() const { return _handle_groups; }
+
+	// Returns {group_index, handle_index} or {-1, -1} if nothing within pick
+	// radius. group_index is the slot in _handle_groups, NOT the generation id.
+	struct HandlePick { int group_index = -1; int handle_index = -1; };
+	HandlePick pick_handle(int cx, int cy) const;
+
+	// Begin/continue/end a handle drag. begin_handle_drag records the anchor
+	// point on the constraint plane; drag_handle delivers per-tick deltas via
+	// the handle's on_drag callback. Returns false if the active handle was
+	// invalidated (e.g. its group was unregistered mid-drag).
+	bool begin_handle_drag(HandlePick pick, int cx, int cy);
+	bool drag_handle(int cx, int cy);
+	void end_handle_drag();
+	bool has_active_handle_drag() const { return _active_handle.group_index >= 0; }
 
 	SCP_vector<SCP_string> getLayerNames() const;
 	bool addLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
@@ -249,6 +273,22 @@ private:
 
 	void lockControls();
 	void unlockControls();
+
+	// Handle registry. _handle_group_generations[i] increments every time slot
+	// i is freed so a stale HandleGroupId pointing at the recycled slot fails
+	// the generation check in unregisterHandleGroup / updateHandleGroup.
+	std::vector<std::vector<ViewportHandle>> _handle_groups;
+	std::vector<int> _handle_group_generations;
+
+	// Active handle drag state. group_index = -1 means no drag in progress.
+	HandlePick _active_handle{};
+	int _active_handle_generation = 0;
+	vec3d _active_handle_last_world = vmd_zero_vector;
+
+	// Compute the world-space point under the mouse cursor on the same
+	// constraint plane that drag_objects() uses (centered on `anchor`).
+	// Returns false if the intersection is behind the camera or invalid.
+	bool screen_to_constraint_plane(int cx, int cy, const vec3d& anchor, vec3d* out_world) const;
 };
 
 } // namespace fso::fred

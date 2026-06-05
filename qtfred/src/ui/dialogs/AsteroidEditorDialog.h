@@ -70,11 +70,22 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeUi();
 	void updateUi();
 
+	// Build the current set of ViewportHandles (faces, corners, center for
+	// the outer box; same for the inner box if enabled) and push them to the
+	// viewport. Called when the dialog is shown, and again from updateUi() so
+	// handles track the latest bound values after a spinbox edit, a checkbox
+	// toggle, or a handle drag.
+	void rebuildHandles();
+
 	// Boilerplate
 	EditorViewport* _viewport = nullptr;
 	Editor* _editor = nullptr;
 	std::unique_ptr<Ui::AsteroidEditorDialog> ui;
 	std::unique_ptr<AsteroidEditorDialogModel> _model;
+
+	// Identifier for the handle group registered with EditorViewport while
+	// this dialog is open. Set on construction, cleared in the destructor.
+	HandleGroupId _handle_group;
 
 	// Validators
 	QDoubleValidator _box_validator;

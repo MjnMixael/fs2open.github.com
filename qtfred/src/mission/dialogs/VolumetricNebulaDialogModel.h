@@ -53,6 +53,12 @@ public:
 	float getPosZ() const;
     void setPosZ(float z);
 
+	// Used by the viewport center-handle drag. Adds a world-space delta to
+	// the working position and live-pushes to The_mission.volumetrics so the
+	// hull moves under the cursor in real time.
+	vec3d getPos() const { return _volumetrics.pos; }
+	void nudgePos(const vec3d& delta_world);
+
     // Color
 	int getColorR() const;
 	void setColorR(int r);
@@ -128,12 +134,23 @@ private:
 	bool validate_data();
 	void showErrorDialogNoCancel(const SCP_string& message);
 
+	// Push the working position into The_mission.volumetrics so the
+	// translucent hull renders at the new location while the user is still
+	// dragging / editing. Reject() restores the original (or removes the
+	// volumetrics entirely if there wasn't one before).
+	void pushLivePos();
+
 	static void makeVolumetricsCopy(volumetric_nebula& dest, const volumetric_nebula& src);
 
 	// boilerplate
 	bool _bypass_errors;
 
 	volumetric_nebula _volumetrics;
+
+	// Snapshot of the original mission volumetrics state at dialog-open time
+	// so reject() can roll back live-preview changes (currently: position).
+	bool _had_original_volumetrics = false;
+	volumetric_nebula _original_volumetrics;
 };
 
 } // namespace fso::fred::dialogs
