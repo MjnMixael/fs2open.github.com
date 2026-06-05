@@ -2,9 +2,6 @@
 <ui version="4.0">
  <class>fso::fred::dialogs::VolumetricNebulaDialog</class>
  <widget class="QDialog" name="fso::fred::dialogs::VolumetricNebulaDialog">
-  <property name="windowModality">
-   <enum>Qt::WindowModal</enum>
-  </property>
   <property name="geometry">
    <rect>
     <x>0</x>

@@ -77,6 +77,13 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void changeBoxText(QLineEdit* edit, AsteroidEditorDialogModel::_box_line_edits type, const QString& text);
 	void changeFieldType(field_type_t type, debris_genre_t genre);
 
+	// Build the current set of ViewportHandles (faces, corners, center for
+	// the outer box; same for the inner box if enabled) and push them to the
+	// viewport. Called when the dialog is shown, and again from updateUi() so
+	// handles track the latest bound values after a spinbox edit, a checkbox
+	// toggle, or a handle drag.
+	void rebuildHandles();
+
 	// Boilerplate
 	EditorViewport* _viewport    = nullptr;
 	Editor*         _editor      = nullptr;
@@ -84,6 +91,10 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	QUndoStack*     _dialogStack = nullptr;
 	std::unique_ptr<Ui::AsteroidEditorDialog> ui;
 	std::unique_ptr<AsteroidEditorDialogModel> _model;
+
+	// Identifier for the handle group registered with EditorViewport while
+	// this dialog is open. Set on construction, cleared in the destructor.
+	HandleGroupId _handle_group;
 
 	// Validators
 	QDoubleValidator _box_validator;
