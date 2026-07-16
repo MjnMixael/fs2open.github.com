@@ -22007,6 +22007,16 @@ void sexp_activate_deactivate_glow_maps(int n, bool activate)
 {
 	for ( ; n != -1; n = CDR(n))
 	{
+		// props aren't ships, so check for one first
+		int prop_id = prop_name_lookup(CTEXT(n));
+		if (prop_id >= 0)
+		{
+			prop* propp = prop_id_lookup(prop_id);
+			if (propp != nullptr)
+				propp->flags.set(Prop::Prop_Flags::Glowmaps_disabled, !activate);
+			continue;
+		}
+
 		auto ship_entry = eval_ship(n);
 		if (!ship_entry || !ship_entry->has_shipp())
 			continue;
@@ -34382,9 +34392,11 @@ int query_operator_argument_type(int op_index, int argnum)
 
 		case OP_DEACTIVATE_GLOW_POINTS:	//-Bobboau
 		case OP_ACTIVATE_GLOW_POINTS:	//-Bobboau
+			return OPF_SHIP;	//a list of ships that are to be activated/deactivated
+
 		case OP_DEACTIVATE_GLOW_MAPS:	//-Bobboau
 		case OP_ACTIVATE_GLOW_MAPS:		//-Bobboau
-			return OPF_SHIP;	//a list of ships that are to be activated/deactivated
+			return OPF_SHIP_PROP;	//a list of ships or props that are to be activated/deactivated
 
 		case OP_DEACTIVATE_GLOW_POINT_BANK:
 		case OP_ACTIVATE_GLOW_POINT_BANK:
@@ -41652,14 +41664,14 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 
 	// Bobboau
 	{ OP_DEACTIVATE_GLOW_MAPS, "deactivate-glow-maps\r\n"
-		"\tDeactivates the glow maps for a ship.  Takes 1 or more arguments...\r\n"
-		"\tAll: Name of ship on which to deactivate glow maps (ship must be in-mission)\r\n"
+		"\tDeactivates the glow maps for a ship or prop.  Takes 1 or more arguments...\r\n"
+		"\tAll: Name of ship or prop on which to deactivate glow maps (must be in-mission)\r\n"
 	},
 
 	// Bobboau
 	{ OP_ACTIVATE_GLOW_MAPS, "activate-glow-maps\r\n"
-		"\tActivates the glow maps for a ship.  Takes 1 or more arguments...\r\n"
-		"\tAll: Name of ship on which to activate glow maps (ship must be in-mission)\r\n"
+		"\tActivates the glow maps for a ship or prop.  Takes 1 or more arguments...\r\n"
+		"\tAll: Name of ship or prop on which to activate glow maps (must be in-mission)\r\n"
 	},
 
 	// Bobboau
