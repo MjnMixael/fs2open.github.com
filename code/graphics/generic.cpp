@@ -45,7 +45,6 @@ static const int generic_anim_movie_dirs[] = {
 	CF_TYPE_MAPS,
 	CF_TYPE_EFFECTS,
 };
-static const int GENERIC_ANIM_MOVIE_DIRS_NUM = sizeof(generic_anim_movie_dirs) / sizeof(generic_anim_movie_dirs[0]);
 
 // Look up a movie file (mp4/ogg) for a generic_anim base name across the
 // anim directories in priority order. Returns the first hit. On success, *out_dir
@@ -54,11 +53,11 @@ static const int GENERIC_ANIM_MOVIE_DIRS_NUM = sizeof(generic_anim_movie_dirs) /
 // the matched movie_ext_list index.
 static CFileLocationExt find_movie_for_generic_anim(const char* filename, int* out_dir = nullptr)
 {
-	for (int i = 0; i < GENERIC_ANIM_MOVIE_DIRS_NUM; ++i) {
-		auto res = cf_find_file_location_ext(filename, MOVIE_NUM_TYPES, movie_ext_list, generic_anim_movie_dirs[i]);
+	for (int dir : generic_anim_movie_dirs) {
+		auto res = cf_find_file_location_ext(filename, MOVIE_NUM_TYPES, movie_ext_list, dir);
 		if (res.found) {
 			if (out_dir != nullptr)
-				*out_dir = generic_anim_movie_dirs[i];
+				*out_dir = dir;
 			return res;
 		}
 	}
@@ -892,7 +891,7 @@ void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime,
 static void generic_render_movie_upload(generic_anim* ga, cutscene::VideoFrame* frame)
 {
 	const auto plane_size = frame->getPlaneSize(0);
-	const ubyte* src = reinterpret_cast<const ubyte*>(frame->getPlaneData(0));
+	const auto* src = reinterpret_cast<const ubyte*>(frame->getPlaneData(0));
 	const size_t row_bytes = static_cast<size_t>(ga->width) * 4;
 	const size_t src_stride = plane_size.stride;
 	if (src_stride == row_bytes) {
