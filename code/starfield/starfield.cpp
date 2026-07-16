@@ -22,6 +22,7 @@
 #include "hud/hudtarget.h"
 #include "io/timer.h"
 #include "lighting/lighting.h"
+#include "math/curve.h"
 #include "math/vecmat.h"
 #include "mission/missionparse.h"
 #include "model/modelrender.h"
@@ -29,6 +30,7 @@
 #include "options/Option.h"
 #include "osapi/dialogs.h"
 #include "parse/parselo.h"
+#include "physics/physics.h"
 #include "render/3d.h"
 #include "render/batching.h"
 #include "starfield/nebula.h"
@@ -64,18 +66,48 @@ int Num_stars = 500;
 // A timestamp for animated skyboxes -MageKing17
 TIMESTAMP Skybox_timestamp;
 
-#define MAX_FLARE_COUNT 10
-#define MAX_FLARE_BMP 6
-
 typedef struct flare_info {
-	float pos;
-	float scale;
-	int tex_num;
+	float pos;				// position along flare ray (0.0 = sun, 1.0 = opposite side)
+	float scale;			// base uniform scale multiplier
+	int tex_num;			// index into flare_bitmaps vector
+
+	// core properties
+	int dist_curve_idx;		// curve index for position interpolation (-1 = linear)
+	int scale_curve_idx;	// curve index for scale interpolation (-1 = linear)
+	float scale_x;			// non-uniform X scale multiplier
+	float scale_y;			// non-uniform Y scale multiplier
+	bool dynamic_rotation;	// rotate with camera bank angle
+	bool dynamic_flare_line;// rotate to align with flare line direction
+	float offset_x;		// perpendicular offset from flare line (normalized to screen width)
+	float offset_y;		// parallel offset along flare line direction
+
+	// stretch properties
+	float luminance;		// brightness multiplier (maps to alpha)
+	float gamma;			// gamma correction on luminance
+	float color_r;			// color tint R (1.0 = no tint)
+	float color_g;			// color tint G
+	float color_b;			// color tint B
+	float rotation;			// fixed rotation angle in degrees
+
+	flare_info() : pos(0.0f), scale(1.0f), tex_num(0),
+		dist_curve_idx(-1), scale_curve_idx(-1),
+		scale_x(1.0f), scale_y(1.0f),
+		dynamic_rotation(false), dynamic_flare_line(false),
+		offset_x(0.0f), offset_y(0.0f),
+		luminance(1.0f), gamma(1.0f),
+		color_r(1.0f), color_g(1.0f), color_b(1.0f),
+		rotation(0.0f) {}
 } flare_info;
 
 typedef struct flare_bitmap {
 	char filename[MAX_FILENAME_LEN];
 	int bitmap_id;
+	int n_frames;			// animation frame count (1 for static)
+	int fps;				// animation playback speed
+
+	flare_bitmap() : bitmap_id(-1), n_frames(1), fps(0) {
+		filename[0] = '\0';
+	}
 } flare_bitmap;
 
 
@@ -93,10 +125,11 @@ typedef struct starfield_bitmap {
 	float r, g, b, i;		// only for suns
 	int glare;										// only for suns
 	int flare;										// Is there a lens-flare for this sun?
-	flare_info flare_infos[MAX_FLARE_COUNT];		// each flare can use a texture in flare_bmp, with different scale
-	flare_bitmap flare_bitmaps[MAX_FLARE_BMP];		// bitmaps for different lens flares (can be re-used)
-	int n_flares;									// number of flares actually used
-	int n_flare_bitmaps;							// number of flare bitmaps available
+	SCP_vector<flare_info> flare_infos;				// each flare can use a texture in flare_bmp, with different scale
+	SCP_vector<flare_bitmap> flare_bitmaps;			// bitmaps for different lens flares (can be re-used)
+	bool flare_smooth_falloff;						// opt-in: smoothly fade/keep moving as the sun leaves frame (retail = hard cutoff)
+	float flare_fade_margin;						// global source-exit fade distance, as a fraction of screen width
+	float flare_element_fade_margin;				// per-element edge-softening distance, as a fraction of screen width
 	int used_this_level;
 	int preload;
 } starfield_bitmap;
@@ -390,23 +423,30 @@ static void starfield_generate_bitmap_buffers()
 
 static void starfield_bitmap_entry_init(starfield_bitmap *sbm)
 {
-	int i;
-
 	Assert( sbm != NULL );
 
-	memset( sbm, 0, sizeof(starfield_bitmap) );
-
+	sbm->filename[0] = '\0';
+	sbm->glow_filename[0] = '\0';
 	sbm->bitmap_id = -1;
+	sbm->n_frames = 0;
+	sbm->fps = 0;
 	sbm->glow_bitmap = -1;
 	sbm->glow_n_frames = 1;
-
-	for (i = 0; i < MAX_FLARE_BMP; i++) {
-		sbm->flare_bitmaps[i].bitmap_id = -1;
-	}
-
-	for (i = 0; i < MAX_FLARE_COUNT; i++) {
-		sbm->flare_infos[i].tex_num = -1;
-	}
+	sbm->glow_fps = 0;
+	sbm->xparent = 0;
+	sbm->r = 0.0f;
+	sbm->g = 0.0f;
+	sbm->b = 0.0f;
+	sbm->i = 0.0f;
+	sbm->glare = 0;
+	sbm->flare = 0;
+	sbm->flare_infos.clear();
+	sbm->flare_bitmaps.clear();
+	sbm->flare_smooth_falloff = false;
+	sbm->flare_fade_margin = 0.25f;
+	sbm->flare_element_fade_margin = 0.1f;
+	sbm->used_this_level = 0;
+	sbm->preload = 0;
 }
 
 #define CHECK_END() {	\
@@ -419,7 +459,7 @@ static void starfield_bitmap_entry_init(starfield_bitmap *sbm)
 
 void parse_startbl(const char *filename)
 {
-	char name[MAX_FILENAME_LEN], tempf[16];
+	char name[MAX_FILENAME_LEN], tempf[32];
 	starfield_bitmap sbm;
 	int idx;
 	bool in_check = false;
@@ -500,56 +540,135 @@ void parse_startbl(const char *filename)
 				if (optional_string("$Flare:")) {
 					sbm.flare = 1;
 
-					required_string("+FlareCount:");
-					stuff_int(&sbm.n_flares);
+					// sun-wide flare falloff options (opt-in; retail flares omit these and keep the hard cutoff)
+					if (optional_string("+FlareSmoothFalloff:"))
+						stuff_boolean(&sbm.flare_smooth_falloff);
+					if (optional_string("+FlareFadeMargin:"))
+						stuff_float(&sbm.flare_fade_margin);
+					if (optional_string("+FlareElementFadeMargin:"))
+						stuff_float(&sbm.flare_element_fade_margin);
 
-					// if there's a flare, it has to have at least one texture
+					// +FlareCount: is parsed for backward compat but ignored (count derived from parsed elements)
+					if (optional_string("+FlareCount:")) {
+						int dummy;
+						stuff_int(&dummy);
+					}
+
+					// parse flare textures - at least one required
 					required_string("$FlareTexture1:");
-					stuff_string(sbm.flare_bitmaps[0].filename, F_NAME, MAX_FILENAME_LEN);
+					{
+						flare_bitmap fbm;
+						stuff_string(fbm.filename, F_NAME, MAX_FILENAME_LEN);
+						sbm.flare_bitmaps.push_back(fbm);
+					}
 
-					sbm.n_flare_bitmaps = 1;
-
-					for (idx = 1; idx < MAX_FLARE_BMP; idx++) {
-						// allow 9999 textures (theoretically speaking, that is)
+					for (idx = 1; /* no upper limit */; idx++) {
 						sprintf(tempf, "$FlareTexture%d:", idx + 1);
 
 						if (optional_string(tempf)) {
-							sbm.n_flare_bitmaps++;
-							stuff_string(sbm.flare_bitmaps[idx].filename, F_NAME, MAX_FILENAME_LEN);
+							flare_bitmap fbm;
+							stuff_string(fbm.filename, F_NAME, MAX_FILENAME_LEN);
+							sbm.flare_bitmaps.push_back(fbm);
+						} else {
+							break;
 						}
-						//	else break; //don't allow flaretexture1 and then 3, etc.
 					}
 
+					// parse flare elements - at least one required
 					required_string("$FlareGlow1:");
 
-					required_string("+FlareTexture:");
-					stuff_int(&sbm.flare_infos[0].tex_num);
+					{
+						flare_info fi;
 
-					required_string("+FlarePos:");
-					stuff_float(&sbm.flare_infos[0].pos);
+						required_string("+FlareTexture:");
+						stuff_int(&fi.tex_num);
 
-					required_string("+FlareScale:");
-					stuff_float(&sbm.flare_infos[0].scale);
+						required_string("+FlarePos:");
+						stuff_float(&fi.pos);
 
-					sbm.n_flares = 1;
+						required_string("+FlareScale:");
+						stuff_float(&fi.scale);
 
-					for (idx = 1; idx < MAX_FLARE_COUNT; idx++) {
-						// allow a lot of glows
+						// new optional properties
+						if (optional_string("+FlareScaleX:"))
+							stuff_float(&fi.scale_x);
+						if (optional_string("+FlareScaleY:"))
+							stuff_float(&fi.scale_y);
+						if (optional_string("+FlareDistanceCurve:"))
+							fi.dist_curve_idx = curve_parse("Lens flare distance curve not found");
+						if (optional_string("+FlareScaleCurve:"))
+							fi.scale_curve_idx = curve_parse("Lens flare scale curve not found");
+						if (optional_string("+FlareDynamic:"))
+							stuff_boolean(&fi.dynamic_rotation);
+						if (optional_string("+FlareDynamicLine:"))
+							stuff_boolean(&fi.dynamic_flare_line);
+						if (optional_string("+FlareOffsetX:"))
+							stuff_float(&fi.offset_x);
+						if (optional_string("+FlareOffsetY:"))
+							stuff_float(&fi.offset_y);
+						if (optional_string("+FlareLuminance:"))
+							stuff_float(&fi.luminance);
+						if (optional_string("+FlareGamma:"))
+							stuff_float(&fi.gamma);
+						if (optional_string("+FlareColor:")) {
+							stuff_float(&fi.color_r);
+							stuff_float(&fi.color_g);
+							stuff_float(&fi.color_b);
+						}
+						if (optional_string("+FlareRotation:"))
+							stuff_float(&fi.rotation);
+
+						sbm.flare_infos.push_back(fi);
+					}
+
+					for (idx = 1; /* no upper limit */; idx++) {
 						sprintf(tempf, "$FlareGlow%d:", idx + 1);
 
 						if (optional_string(tempf)) {
-							sbm.n_flares++;
+							flare_info fi;
 
 							required_string("+FlareTexture:");
-							stuff_int(&sbm.flare_infos[idx].tex_num);
+							stuff_int(&fi.tex_num);
 
 							required_string("+FlarePos:");
-							stuff_float(&sbm.flare_infos[idx].pos);
+							stuff_float(&fi.pos);
 
 							required_string("+FlareScale:");
-							stuff_float(&sbm.flare_infos[idx].scale);
+							stuff_float(&fi.scale);
+
+							// new optional properties
+							if (optional_string("+FlareScaleX:"))
+								stuff_float(&fi.scale_x);
+							if (optional_string("+FlareScaleY:"))
+								stuff_float(&fi.scale_y);
+							if (optional_string("+FlareDistanceCurve:"))
+								fi.dist_curve_idx = curve_parse("Lens flare distance curve not found");
+							if (optional_string("+FlareScaleCurve:"))
+								fi.scale_curve_idx = curve_parse("Lens flare scale curve not found");
+							if (optional_string("+FlareDynamic:"))
+								stuff_boolean(&fi.dynamic_rotation);
+							if (optional_string("+FlareDynamicLine:"))
+								stuff_boolean(&fi.dynamic_flare_line);
+							if (optional_string("+FlareOffsetX:"))
+								stuff_float(&fi.offset_x);
+							if (optional_string("+FlareOffsetY:"))
+								stuff_float(&fi.offset_y);
+							if (optional_string("+FlareLuminance:"))
+								stuff_float(&fi.luminance);
+							if (optional_string("+FlareGamma:"))
+								stuff_float(&fi.gamma);
+							if (optional_string("+FlareColor:")) {
+								stuff_float(&fi.color_r);
+								stuff_float(&fi.color_g);
+								stuff_float(&fi.color_b);
+							}
+							if (optional_string("+FlareRotation:"))
+								stuff_float(&fi.rotation);
+
+							sbm.flare_infos.push_back(fi);
+						} else {
+							break;
 						}
-						//	else break; //don't allow "flare 1" and then "flare 3"
 					}
 				}
 
@@ -760,15 +879,15 @@ void stars_load_all_bitmaps()
 		}
 
 		if (sb.flare) {
-			for (int i = 0; i < MAX_FLARE_BMP; i++) {
-				if ( !strlen(sb.flare_bitmaps[i].filename) )
+			for (auto& fbm : sb.flare_bitmaps) {
+				if ( !strlen(fbm.filename) )
 					continue;
 
-				if (sb.flare_bitmaps[i].bitmap_id < 0) {
-					sb.flare_bitmaps[i].bitmap_id = bm_load(sb.flare_bitmaps[i].filename);
+				if (fbm.bitmap_id < 0) {
+					fbm.bitmap_id = bm_load_either(fbm.filename, &fbm.n_frames, &fbm.fps);
 
-					if (sb.flare_bitmaps[i].bitmap_id < 0) {
-						Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", sb.flare_bitmaps[i].filename);
+					if (fbm.bitmap_id < 0) {
+						Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", fbm.filename);
 						continue;
 					}
 				}
@@ -859,10 +978,10 @@ void stars_pre_level_init(bool clear_backgrounds)
 				sb.glow_bitmap = -1;
 			}
 
-			for (int i = 0; i < MAX_FLARE_BMP; i++) {
-				if (sb.flare_bitmaps[i].bitmap_id > 0) {
-					bm_release(sb.flare_bitmaps[i].bitmap_id);
-					sb.flare_bitmaps[i].bitmap_id = -1;
+			for (auto& fbm : sb.flare_bitmaps) {
+				if (fbm.bitmap_id > 0) {
+					bm_release(fbm.bitmap_id);
+					fbm.bitmap_id = -1;
 				}
 			}
 
@@ -1351,13 +1470,55 @@ void stars_draw_sun(int show_sun)
 	}
 }
 
+// render a single lens flare element as a screen-space textured quad with rotation, non-uniform scale, and color
+static void stars_render_flare_element(int bitmap_id, float screen_x, float screen_y,
+	float width, float height, float angle, float alpha,
+	float color_r, float color_g, float color_b)
+{
+	if (bitmap_id < 0)
+		return;
+
+	// compute half-dimensions
+	float hw = width * 0.5f;
+	float hh = height * 0.5f;
+
+	float cos_a = cosf(angle);
+	float sin_a = sinf(angle);
+
+	// four corners relative to center, then rotated
+	float corners_x[4] = { -hw, hw, hw, -hw };
+	float corners_y[4] = { -hh, -hh, hh, hh };
+
+	vertex P[4];
+	float uv_u[4] = { 0.0f, 1.0f, 1.0f, 0.0f };
+	float uv_v[4] = { 0.0f, 0.0f, 1.0f, 1.0f };
+
+	for (int k = 0; k < 4; k++) {
+		float rx = corners_x[k] * cos_a - corners_y[k] * sin_a;
+		float ry = corners_x[k] * sin_a + corners_y[k] * cos_a;
+
+		memset(&P[k], 0, sizeof(vertex));
+		P[k].screen.xyw.x = screen_x + rx;
+		P[k].screen.xyw.y = screen_y + ry;
+		P[k].screen.xyw.w = 1.0f;
+		P[k].world.xyz.z = 100000.0f;
+		P[k].texture_position.u = uv_u[k];
+		P[k].texture_position.v = uv_v[k];
+		P[k].flags = PF_PROJECTED;
+	}
+
+	material mat_params;
+	material_set_unlit(&mat_params, bitmap_id, 1.0f, true, false);
+	mat_params.set_color(color_r * alpha, color_g * alpha, color_b * alpha, 1.0f);
+
+	g3_render_primitives_textured(&mat_params, P, 4, PRIM_TYPE_TRIFAN, true);
+}
+
 // draw a star's lens-flare
 void stars_draw_lens_flare(vertex *sun_vex, int sun_n)
 {
 	starfield_bitmap *bm;
-	int i,j;
-	float dx,dy;
-	vertex flare_vex = *sun_vex; //copy over to flare_vex to get all sorts of properties
+	float dx, dy;
 
 	if (gr_screen.mode == GR_STUB) {
 		return;
@@ -1377,31 +1538,147 @@ void stars_draw_lens_flare(vertex *sun_vex, int sun_n)
 
 	if (!bm->flare)
 		return;
-	
-	/* (dx,dy) is a 2d vector equal to two times the vector from the sun's
-	position to the center fo the screen meaning it is the vector to the 
-	opposite position on the screen. */
-	dx = 2.0f*(i2fl(gr_screen.clip_right-gr_screen.clip_left)*0.5f - sun_vex->screen.xyw.x);
-	dy = 2.0f*(i2fl(gr_screen.clip_bottom-gr_screen.clip_top)*0.5f - sun_vex->screen.xyw.y);
 
-	for (j = 0; j < bm->n_flare_bitmaps; j++)
-	{
-		// if no bitmap then bail...
-		if (bm->flare_bitmaps[j].bitmap_id < 0)
+	// ensure the sun's projected screen position is valid even when it is off-screen. it is
+	// normally projected as a side effect of drawing the sun, but with smooth falloff we draw the
+	// flare while the sun is outside the frame, where that side effect may not have happened.
+	// g3_project_vertex is a no-op if the vertex is already projected.
+	g3_project_vertex(sun_vex);
+
+	// screen center
+	float screen_cx = i2fl(gr_screen.clip_right - gr_screen.clip_left) * 0.5f;
+	float screen_cy = i2fl(gr_screen.clip_bottom - gr_screen.clip_top) * 0.5f;
+
+	/* (dx,dy) is a 2d vector equal to two times the vector from the sun's
+	position to the center of the screen meaning it is the vector to the
+	opposite position on the screen. */
+	dx = 2.0f * (screen_cx - sun_vex->screen.xyw.x);
+	dy = 2.0f * (screen_cy - sun_vex->screen.xyw.y);
+
+	// compute sun offset factor (0 = sun at center, 1 = sun at screen edge)
+	float max_dist = sqrtf(screen_cx * screen_cx + screen_cy * screen_cy);
+	float sun_dx = sun_vex->screen.xyw.x - screen_cx;
+	float sun_dy = sun_vex->screen.xyw.y - screen_cy;
+	float sun_dist = sqrtf(sun_dx * sun_dx + sun_dy * sun_dy);
+	float sun_offset_factor = std::clamp(sun_dist / max_dist, 0.0f, 1.0f);
+
+	// screen width for offset/margin scaling
+	float screen_w = i2fl(gr_screen.clip_right - gr_screen.clip_left);
+
+	// global source-exit fade: 1.0 while the sun is within the frame, ramping to 0 as it travels
+	// flare_fade_margin * screen_w pixels beyond the nearest edge. retail flares skip this and
+	// rely on the hard cutoff in the caller.
+	float global_fade = 1.0f;
+	if (bm->flare_smooth_falloff) {
+		float out_x = std::max(0.0f, fabsf(sun_dx) - screen_cx);
+		float out_y = std::max(0.0f, fabsf(sun_dy) - screen_cy);
+		float out_dist = sqrtf(out_x * out_x + out_y * out_y);
+		float margin = bm->flare_fade_margin * screen_w;
+		global_fade = (margin > 0.001f) ? (1.0f - std::clamp(out_dist / margin, 0.0f, 1.0f))
+										 : ((out_dist > 0.0f) ? 0.0f : 1.0f);
+		if (global_fade <= 0.0f)
+			return;
+	}
+
+	// flare line direction (normalized) and perpendicular
+	float line_len = sqrtf(dx * dx + dy * dy);
+	float norm_dx = (line_len > 0.001f) ? dx / line_len : 0.0f;
+	float norm_dy = (line_len > 0.001f) ? dy / line_len : 0.0f;
+	float perp_dx = -norm_dy;
+	float perp_dy = norm_dx;
+
+	// flare line angle (for dynamic_flare_line)
+	float flare_line_angle = atan2f(dy, dx);
+
+	// iterate sorted by texture to minimize state changes
+	for (size_t j = 0; j < bm->flare_bitmaps.size(); j++) {
+		const flare_bitmap& fb = bm->flare_bitmaps[j];
+		if (fb.bitmap_id < 0)
 			continue;
 
-		//gr_set_bitmap(bm->flare_bitmaps[j].bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, 0.999f);
+		// compute animation frame
+		int bitmap_id = fb.bitmap_id;
+		if (fb.n_frames > 1 && fb.fps > 0) {
+			bitmap_id = fb.bitmap_id + ((timestamp() * fb.fps / MILLISECONDS_PER_SECOND) % fb.n_frames);
+		}
 
-		for (i = 0; i < bm->n_flares; i++) {
-			// draw sorted by texture, to minimize texture changes. not the most efficient way, but better than non-sorted
-			if (bm->flare_infos[i].tex_num == j) {
-				flare_vex.screen.xyw.x = sun_vex->screen.xyw.x + dx * bm->flare_infos[i].pos;
-				flare_vex.screen.xyw.y = sun_vex->screen.xyw.y + dy * bm->flare_infos[i].pos;
-				//g3_draw_bitmap(&flare_vex, 0, 0.05f * bm->flare_infos[i].scale, TMAP_FLAG_TEXTURED);
-				material mat_params;
-				material_set_unlit(&mat_params, bm->flare_bitmaps[j].bitmap_id, 0.999f, true, false);
-				g3_render_rect_screen_aligned_2d(&mat_params, &flare_vex, 0, 0.05f * bm->flare_infos[i].scale);
+		for (size_t i = 0; i < bm->flare_infos.size(); i++) {
+			const flare_info& fi = bm->flare_infos[i];
+			if (fi.tex_num != static_cast<int>(j))
+				continue;
+
+			// distance interpolation - when a curve is specified, position is further
+			// scaled by the curve evaluated at sun_offset_factor (0 at center, 1 at edge).
+			// without a curve, position uses the raw pos value (backward compatible).
+			float effective_pos = fi.pos;
+			if (fi.dist_curve_idx >= 0 && SCP_vector_inbounds(Curves, fi.dist_curve_idx)) {
+				effective_pos *= Curves[fi.dist_curve_idx].GetValue(sun_offset_factor);
 			}
+
+			// scale interpolation - when a curve is specified, scale is further
+			// scaled by the curve evaluated at sun_offset_factor.
+			// without a curve, scale uses the raw scale value (backward compatible).
+			float effective_scale = fi.scale;
+			if (fi.scale_curve_idx >= 0 && SCP_vector_inbounds(Curves, fi.scale_curve_idx)) {
+				effective_scale *= Curves[fi.scale_curve_idx].GetValue(sun_offset_factor);
+			}
+
+			// position along flare line with offsets
+			float flare_x = sun_vex->screen.xyw.x + dx * effective_pos
+				+ perp_dx * fi.offset_x * screen_w
+				+ norm_dx * fi.offset_y * screen_w;
+			float flare_y = sun_vex->screen.xyw.y + dy * effective_pos
+				+ perp_dy * fi.offset_x * screen_w
+				+ norm_dy * fi.offset_y * screen_w;
+
+			// rotation
+			float angle = fl_radians(fi.rotation);
+			if (fi.dynamic_rotation) {
+				angle += Physics_viewer_bank;
+			}
+			if (fi.dynamic_flare_line) {
+				angle += flare_line_angle;
+			}
+
+			// per-element edge softening: fade this element as its own screen position leaves the
+			// frame, so ghosts slide off smoothly instead of hard-clipping at the viewport edge.
+			// this is what makes the streak (pinned to the sun) and the far-side ghosts fade on
+			// their own schedules. retail flares skip it.
+			float elem_fade = 1.0f;
+			if (bm->flare_smooth_falloff) {
+				float ex = std::max(0.0f, fabsf(flare_x - screen_cx) - screen_cx);
+				float ey = std::max(0.0f, fabsf(flare_y - screen_cy) - screen_cy);
+				float elem_out = sqrtf(ex * ex + ey * ey);
+				float emargin = bm->flare_element_fade_margin * screen_w;
+				elem_fade = (emargin > 0.001f) ? (1.0f - std::clamp(elem_out / emargin, 0.0f, 1.0f))
+											   : ((elem_out > 0.0f) ? 0.0f : 1.0f);
+			}
+
+			// luminance and gamma
+			float alpha = fi.luminance;
+			if (fi.gamma != 1.0f && alpha > 0.0f) {
+				alpha = powf(alpha, 1.0f / fi.gamma);
+			}
+			CLAMP(alpha, 0.0f, 1.0f);
+
+			// apply the fade envelopes (both are 1.0 for retail flares)
+			alpha *= global_fade * elem_fade;
+			if (alpha <= 0.0f)
+				continue;
+
+			// compute pixel size from base scale (matching original 0.05f factor)
+			// get bitmap dimensions for aspect ratio
+			int bw, bh;
+			bm_get_info(bitmap_id, &bw, &bh, nullptr);
+			float aspect = (bh > 0 && bw > 0) ? (i2fl(bw) / i2fl(bh)) : 1.0f;
+
+			float base_size = 0.05f * effective_scale * screen_w;
+			float width = base_size * fi.scale_x * aspect;
+			float height = base_size * fi.scale_y;
+
+			stars_render_flare_element(bitmap_id, flare_x, flare_y,
+				width, height, angle, alpha,
+				fi.color_r, fi.color_g, fi.color_b);
 		}
 	}
 }
@@ -1472,7 +1749,10 @@ void stars_draw_sun_glow(int sun_n)
 		light_get_global_dir(&light_dir, sun_n);
 		vm_vec_rotate(&local_light_dir, &light_dir, &Eye_matrix);
 		float dot=vm_vec_dot( &light_dir, &Eye_matrix.vec.fvec );
-		if (dot > 0.7f) // Only render the flares if the sun is reasonably near the center of the screen
+		// retail: hard cutoff near screen center. smooth falloff: draw whenever the sun is in front of
+		// the camera and let stars_draw_lens_flare fade it out as it leaves the frame.
+		float min_dot = bm->flare_smooth_falloff ? 0.05f : 0.7f;
+		if (dot > min_dot)
 			stars_draw_lens_flare(&sun_vex, sun_n);
 	}
 
@@ -2056,7 +2336,7 @@ void stars_preload_background_bitmap(const char *fname)
 
 void stars_page_in()
 {
-	int idx, i;
+	int idx;
 
 	if (gr_screen.mode == GR_STUB) {
 		return;
@@ -2168,20 +2448,20 @@ void stars_page_in()
 			}
 
 			if (sb.flare) {
-				for (i = 0; i < MAX_FLARE_BMP; i++) {
-					if ( !strlen(sb.flare_bitmaps[i].filename) )
+				for (auto& fbm : sb.flare_bitmaps) {
+					if ( !strlen(fbm.filename) )
 						continue;
 
-					if (sb.flare_bitmaps[i].bitmap_id < 0) {
-						sb.flare_bitmaps[i].bitmap_id = bm_load(sb.flare_bitmaps[i].filename);
+					if (fbm.bitmap_id < 0) {
+						fbm.bitmap_id = bm_load_either(fbm.filename, &fbm.n_frames, &fbm.fps);
 
-						if (sb.flare_bitmaps[i].bitmap_id < 0) {
-							Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", sb.flare_bitmaps[i].filename);
+						if (fbm.bitmap_id < 0) {
+							Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", fbm.filename);
 							continue;
 						}
 					}
 
-					bm_page_in_texture(sb.flare_bitmaps[i].bitmap_id);
+					bm_page_in_texture(fbm.bitmap_id);
 				}
 			}
 
@@ -2264,20 +2544,20 @@ void stars_page_in()
 		}
 
 		if (sb.flare) {
-			for (i = 0; i < MAX_FLARE_BMP; i++) {
-				if ( !strlen(sb.flare_bitmaps[i].filename) )
+			for (auto& fbm : sb.flare_bitmaps) {
+				if ( !strlen(fbm.filename) )
 					continue;
 
-				if (sb.flare_bitmaps[i].bitmap_id < 0) {
-					sb.flare_bitmaps[i].bitmap_id = bm_load(sb.flare_bitmaps[i].filename);
+				if (fbm.bitmap_id < 0) {
+					fbm.bitmap_id = bm_load_either(fbm.filename, &fbm.n_frames, &fbm.fps);
 
-					if (sb.flare_bitmaps[i].bitmap_id < 0) {
-						Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", sb.flare_bitmaps[i].filename);
+					if (fbm.bitmap_id < 0) {
+						Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", fbm.filename);
 						continue;
 					}
 				}
 
-				bm_page_in_texture(sb.flare_bitmaps[i].bitmap_id);
+				bm_page_in_texture(fbm.bitmap_id);
 			}
 		}
 
@@ -2552,16 +2832,15 @@ int stars_add_sun_entry(starfield_list_entry *sun_ptr)
 		}
 
 		if (Sun_bitmaps[idx].flare) {
-			for (int i = 0; i < MAX_FLARE_BMP; i++) {
-				flare_bitmap* fbp = &Sun_bitmaps[idx].flare_bitmaps[i];
-				if ( !strlen(fbp->filename) )
+			for (auto& fbm : Sun_bitmaps[idx].flare_bitmaps) {
+				if ( !strlen(fbm.filename) )
 					continue;
 
-				if (fbp->bitmap_id < 0) {
-					fbp->bitmap_id = bm_load(fbp->filename);
+				if (fbm.bitmap_id < 0) {
+					fbm.bitmap_id = bm_load_either(fbm.filename, &fbm.n_frames, &fbm.fps);
 
-					if (fbp->bitmap_id < 0) {
-						Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", Sun_bitmaps[idx].flare_bitmaps[i].filename);
+					if (fbm.bitmap_id < 0) {
+						Warning(LOCATION, "Unable to load sun flare bitmap: '%s'!\n", fbm.filename);
 						continue;
 					}
 				}
