@@ -3,6 +3,7 @@
 #include "globalincs/pstypes.h"
 
 #include "mission/mission_flags.h"
+#include "mission/missionparse.h"
 #include "object/object.h"
 #include "object/objcollide.h"
 #include "prop/prop_flags.h"
@@ -23,6 +24,7 @@ typedef struct prop_info {
 	flagset<Prop::Info_Flags> flags;                            // Info flags
 	SCP_map<SCP_string, SCP_string> custom_data;                // Custom data for this prop
 	SCP_vector<custom_string> custom_strings;                   // Custom strings for this prop
+	SCP_vector<texture_replace> replacement_textures;           // Class-level texture replacements (from_table == true)
 } prop_info;
 
 typedef struct prop {
@@ -37,6 +39,7 @@ typedef struct prop {
 	// glow points
 	SCP_deque<bool> glow_point_bank_active;
 	flagset<Prop::Prop_Flags> flags;
+	SCP_vector<texture_replace> replacement_textures;  // Class + instance texture replacements; only from_table == false entries are saved
 } prop;
 
 typedef struct prop_category {
@@ -51,6 +54,7 @@ typedef struct parsed_prop {
 	vec3d position;
 	flagset<Mission::Parse_Object_Flags> flags;
 	SCP_string fred_layer = "Default";
+	SCP_vector<texture_replace> replacement_textures;
 } parsed_prop;
 
 extern bool Props_inited;
@@ -88,6 +92,9 @@ int prop_name_lookup(const char* name);
 prop* prop_id_lookup(int id);
 
 void change_prop_type(int n, int prop_type);
+
+// (Re)build the prop's model instance texture-replace slots from its replacement_textures vector
+void prop_apply_replacement_textures(prop* propp);
 
 prop_category* prop_get_category(int index);
 

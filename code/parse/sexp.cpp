@@ -2600,8 +2600,26 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 				if (!Fred_running && mission_check_ship_yet_to_arrive(CTEXT(node))) {
 					break;
 				}
-				
+
 				return SEXP_CHECK_INVALID_SHIP_PROP;
+
+			case OPF_SHIP_WING_PROP:
+				if (node_subtype != SEXP_ATOM_STRING) {
+					return SEXP_CHECK_TYPE_MISMATCH;
+				}
+				if (ship_name_lookup(CTEXT(node), 1) >= 0 || wing_name_lookup(CTEXT(node), 1) >= 0) {
+					break;
+				}
+				if (prop_name_lookup(CTEXT(node)) >= 0) {
+					break;
+				}
+
+				// also check arrival list if we're running the game
+				if (!Fred_running && mission_check_ship_yet_to_arrive(CTEXT(node))) {
+					break;
+				}
+
+				return SEXP_CHECK_INVALID_SHIP_WING_PROP;
 
 			case OPF_AWACS_SUBSYSTEM:
 			case OPF_ROTATING_SUBSYSTEM:
@@ -21693,6 +21711,20 @@ void sexp_replace_texture(int n, bool skybox)
 
 	for (; n != -1; n = CDR(n))
 	{
+		// props aren't part of the ship/wing/point/team system, so check for one first.
+		// As with already-present ships (ship_replace_active_texture), this is a runtime-only
+		// change applied straight to the model instance; the SEXP re-runs to reapply it.
+		int prop_id = prop_name_lookup(CTEXT(n));
+		if (prop_id >= 0)
+		{
+			prop* propp = prop_id_lookup(prop_id);
+			if (propp != nullptr)
+			{
+				polymodel_instance* pmi = model_get_instance(propp->model_instance_num);
+				modelinstance_replace_active_texture(pmi, old_name, new_name);
+			}
+			continue;
+		}
 
 		object_ship_wing_point_team oswpt;
 		eval_object_ship_wing_point_team(&oswpt, n);
@@ -34928,7 +34960,7 @@ int query_operator_argument_type(int op_index, int argnum)
 			if (argnum == 0 || argnum == 1)
 				return OPF_STRING;
 			else
-				return OPF_SHIP_WING;
+				return OPF_SHIP_WING_PROP;
 
 		case OP_REPLACE_TEXTURE_SKYBOX:
 			return OPF_STRING;
@@ -35438,6 +35470,9 @@ const char *sexp_error_message(int num)
 
 		case SEXP_CHECK_INVALID_SHIP_PROP:
 			return "Invalid ship or prop name";
+
+		case SEXP_CHECK_INVALID_SHIP_WING_PROP:
+			return "Invalid ship, wing, or prop name";
 
 		case SEXP_CHECK_INVALID_SHIP_TYPE:
 			return "Invalid ship type";
@@ -42842,11 +42877,11 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 	},
 
 	{ OP_REPLACE_TEXTURE, "replace-texture\r\n"
-		"\tChanges a texture of a ship to a different texture, similar to the FRED texture replace.\r\n"
+		"\tChanges a texture of a ship or prop to a different texture, similar to the FRED texture replace.\r\n"
 		"Takes 3 or more arguments...\r\n"
 		"\t1: Name of the texture to be replaced.\r\n"
 		"\t2: Name of the texture to be changed to.\r\n"
-		"\tRest: Name of the ship or wing (ship/wing does not need to be in-mission).\r\n"
+		"\tRest: Name of the ship, wing, or prop (a ship/wing does not need to be in-mission; a prop must already exist).\r\n"
 	},
 
 	{ OP_REPLACE_TEXTURE_SKYBOX, "replace-skybox-texture\r\n"

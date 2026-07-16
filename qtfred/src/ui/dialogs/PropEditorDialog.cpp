@@ -1,4 +1,6 @@
 #include "ui/dialogs/PropEditorDialog.h"
+#include "ui/dialogs/PropTextureReplacementDialog.h"
+
 #include <ui/util/DialogUndo.h>
 
 #include "ui_PropEditorDialog.h"
@@ -131,6 +133,8 @@ void PropEditorDialog::initializeUi() {
 	ui->nextButton->setEnabled(has_props);
 	ui->prevButton->setEnabled(has_props);
 	ui->layerCombo->setEnabled(enable);
+	// texture replacement operates on a single prop
+	ui->textureReplacementButton->setEnabled(_model->getSelectedPropObject() >= 0);
 }
 
 void PropEditorDialog::updateUi() {
@@ -181,6 +185,16 @@ void PropEditorDialog::on_layerCombo_currentIndexChanged(int index) {
 	// MoveLayerCommand::redo() applies the change, so do not also call _model->setLayer().
 	_fredView->mainUndoStack()->push(
 		new MoveLayerCommand(std::move(changes), _viewport, _viewport->editor));
+}
+
+void PropEditorDialog::on_textureReplacementButton_clicked() {
+	const int propObjNum = _model->getSelectedPropObject();
+	if (propObjNum < 0)
+		return;
+
+	auto dialog = new dialogs::PropTextureReplacementDialog(this, _viewport, propObjNum);
+	dialog->setAttribute(Qt::WA_DeleteOnClose);
+	dialog->show();
 }
 
 } // namespace fso::fred::dialogs

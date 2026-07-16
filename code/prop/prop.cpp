@@ -1,6 +1,7 @@
 #include "prop.h"
 
 #include "asteroid/asteroid.h"
+#include "bmpman/bmpman.h"
 #include "debris/debris.h"
 #include "freespace.h"
 #include "model/model.h"
@@ -351,6 +352,41 @@ void parse_prop_table(const char* filename)
 
 			required_string("$end_custom_strings");
 		}
+
+		// class-level texture replacement - mirrors ships.tbl $Texture Replace:
+		if (optional_string("$Texture Replace:")) {
+			texture_replace tr;
+			char* p;
+
+			tr.from_table = true;
+
+			while (optional_string("+old:")) {
+				strcpy_s(tr.ship_name, pip->name.c_str());
+				tr.new_texture_id = -1;
+
+				stuff_string(tr.old_texture, F_NAME, MAX_FILENAME_LEN);
+				required_string("+new:");
+				stuff_string(tr.new_texture, F_NAME, MAX_FILENAME_LEN);
+
+				// get rid of extensions
+				p = strchr(tr.old_texture, '.');
+				if (p) {
+					mprintf(("Extraneous extension found on replacement texture %s!\n", tr.old_texture));
+					*p = 0;
+				}
+				p = strchr(tr.new_texture, '.');
+				if (p) {
+					mprintf(("Extraneous extension found on replacement texture %s!\n", tr.new_texture));
+					*p = 0;
+				}
+
+				// add it if we aren't over the limit
+				if (pip->replacement_textures.size() < MAX_MODEL_TEXTURES)
+					pip->replacement_textures.push_back(tr);
+				else
+					mprintf(("Too many replacement textures specified for prop '%s'!\n", pip->name.c_str()));
+			}
+		}
 	}
 
 	required_string("#END");
@@ -414,6 +450,41 @@ void prop_init()
 	post_process_props();
 
 	Props_inited = true;
+}
+
+void prop_apply_replacement_textures(prop* propp)
+{
+	if (propp == nullptr)
+		return;
+
+	polymodel_instance* pmi = model_get_instance(propp->model_instance_num);
+	if (pmi == nullptr)
+		return;
+
+	// start fresh so removed entries don't linger
+	pmi->texture_replace = std::make_shared<model_texture_replace>();
+
+	if (propp->replacement_textures.empty())
+		return;
+
+	polymodel* pm = model_get(pmi->model_num);
+
+	for (auto& tr : propp->replacement_textures) {
+		// resolve the new texture id if we haven't done so yet (-1 == unresolved)
+		if (tr.new_texture_id == -1) {
+			if (!stricmp(tr.new_texture, "invisible"))
+				tr.new_texture_id = REPLACE_WITH_INVISIBLE;
+			else
+				tr.new_texture_id = bm_load_either(tr.new_texture);
+		}
+
+		// look for matching textures on the model
+		for (int j = 0; j < pm->n_textures; j++) {
+			int tnum = pm->maps[j].FindTexture(tr.old_texture);
+			if (tnum > -1)
+				(*pmi->texture_replace)[j * TM_NUM_TYPES + tnum] = tr.new_texture_id;
+		}
+	}
 }
 
 /**
@@ -515,6 +586,11 @@ int prop_create(const matrix* orient, const vec3d* pos, int prop_type, const cha
 	propp->objnum = objnum;
 
 	propp->model_instance_num = model_create_instance(objnum, pip->model_num);
+
+	// seed and apply any class-level texture replacements (mission/SEXP replacements are layered on later)
+	propp->replacement_textures = pip->replacement_textures;
+	if (!propp->replacement_textures.empty())
+		prop_apply_replacement_textures(propp);
 
 	object* objp = &Objects[objnum];
 	objp->hull_strength = 0.0f;
@@ -699,6 +775,12 @@ void change_prop_type(int n, int prop_type)
 	// point to new prop data
 	prop_model_change(n, prop_type);
 	sp->prop_info_index = prop_type;
+
+	// the old texture replacements referenced the old class's textures; reseed from the new class.
+	// prop_model_change already gave us a fresh model instance, so only rebuild if there's anything to apply.
+	sp->replacement_textures = pip->replacement_textures;
+	if (!sp->replacement_textures.empty())
+		prop_apply_replacement_textures(sp);
 
 	// check class-specific flags
 

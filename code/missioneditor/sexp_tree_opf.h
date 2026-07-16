@@ -81,6 +81,7 @@ public:
 	sexp_list_item* get_listing_opf_goal_name(int parent_node) const;
 	sexp_list_item* get_listing_opf_ship_wing() const;
 	sexp_list_item* get_listing_opf_ship_prop() const;
+	sexp_list_item* get_listing_opf_ship_wing_prop() const;
 	sexp_list_item* get_listing_opf_order_recipient() const;
 	static sexp_list_item* get_listing_opf_ship_type();
 	static sexp_list_item* get_listing_opf_keypress();

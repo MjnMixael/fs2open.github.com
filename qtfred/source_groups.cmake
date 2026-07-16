@@ -114,6 +114,8 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/ObjectOrientEditorDialogModel.h
 	src/mission/dialogs/PropEditorDialogModel.cpp
 	src/mission/dialogs/PropEditorDialogModel.h
+	src/mission/dialogs/PropTextureReplacementDialogModel.cpp
+	src/mission/dialogs/PropTextureReplacementDialogModel.h
 	src/mission/dialogs/ReinforcementsEditorDialogModel.cpp	
 	src/mission/dialogs/ReinforcementsEditorDialogModel.h
 	src/mission/dialogs/RelativeCoordinatesDialogModel.cpp
@@ -231,6 +233,8 @@ add_file_folder("Source/UI/Dialogs"
 	src/ui/dialogs/PreferencesDialog.h
 	src/ui/dialogs/PropEditorDialog.cpp
 	src/ui/dialogs/PropEditorDialog.h
+	src/ui/dialogs/PropTextureReplacementDialog.cpp
+	src/ui/dialogs/PropTextureReplacementDialog.h
 	src/ui/dialogs/ReinforcementsEditorDialog.cpp
 	src/ui/dialogs/ReinforcementsEditorDialog.h
 	src/ui/dialogs/RelativeCoordinatesDialog.cpp
@@ -396,6 +400,7 @@ add_file_folder("UI"
 	ui/ObjectOrientationDialog.ui
 	ui/PreferencesDialog.ui
 	ui/PropEditorDialog.ui
+	ui/PropTextureReplacementDialog.ui
 	ui/ReinforcementsDialog.ui
 	ui/RelativeCoordinatesDialog.ui
 	ui/ShieldSystemDialog.ui

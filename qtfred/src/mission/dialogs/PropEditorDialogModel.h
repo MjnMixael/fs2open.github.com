@@ -16,6 +16,8 @@ class PropEditorDialogModel : public AbstractDialogModel {
 
 	bool hasValidSelection() const;
 	bool hasMultipleSelection() const;
+	// object number of the single selected prop, or -1 if there isn't exactly one
+	int getSelectedPropObject() const;
 	static bool hasAnyPropsInMission();
 	const SCP_vector<int>& getSelectedPropObjects() const;
 	const SCP_string& getPropName() const;

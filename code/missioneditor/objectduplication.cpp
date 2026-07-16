@@ -260,6 +260,11 @@ void clone_prop_instance_data(int src_prop_id, int dest_prop_id)
 	} else {
 		Objects[dest->objnum].flags.remove(Object::Object_Flags::Collides);
 	}
+
+	// texture replacements (both class and instance entries) and their applied slots
+	dest->replacement_textures = src->replacement_textures;
+	if (!dest->replacement_textures.empty())
+		prop_apply_replacement_textures(dest);
 }
 
 // Per-jump-node field handling here MUST stay in sync with:

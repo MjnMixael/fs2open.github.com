@@ -5459,6 +5459,37 @@ int Fred_mission_save::save_props()
 					fout(" %s", p->fred_layer.c_str());
 				}
 
+				// texture replacement - only the instance-level entries; class replacements
+				// live in props.tbl and are re-applied on load
+				bool needs_tex_header = true;
+				for (const auto& tr : p->replacement_textures) {
+					if (tr.from_table)
+						continue;
+
+					if (needs_tex_header) {
+						if (optional_string_fred("$Texture Replace:", "$Name:"))
+							parse_comments(1);
+						else
+							fout("\n$Texture Replace:");
+
+						needs_tex_header = false;
+					}
+
+					if (optional_string_fred("+old:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", tr.old_texture);
+					} else {
+						fout("\n+old: %s", tr.old_texture);
+					}
+
+					if (optional_string_fred("+new:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", tr.new_texture);
+					} else {
+						fout("\n+new: %s", tr.new_texture);
+					}
+				}
+
 				fso_comment_pop();
 			}
 		}

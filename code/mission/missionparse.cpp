@@ -5424,6 +5424,43 @@ void parse_prop(mission* /*pm*/)
 		}
 	}
 
+	// texture replacement - mirrors the ship $Texture Replace: handling.  These are the
+	// instance-level (from_table == false) replacements; class replacements are layered on
+	// automatically at prop_create time.
+	if (optional_string("$Texture Replace:")) {
+		texture_replace tr;
+		char* tp;
+
+		tr.from_table = false;
+
+		while (optional_string("+old:")) {
+			strcpy_s(tr.ship_name, p.name);
+			tr.new_texture_id = -1;
+
+			stuff_string(tr.old_texture, F_NAME, MAX_FILENAME_LEN);
+			required_string("+new:");
+			stuff_string(tr.new_texture, F_NAME, MAX_FILENAME_LEN);
+
+			// get rid of extensions
+			tp = strchr(tr.old_texture, '.');
+			if (tp) {
+				mprintf(("Extraneous extension found on replacement texture %s!\n", tr.old_texture));
+				*tp = 0;
+			}
+			tp = strchr(tr.new_texture, '.');
+			if (tp) {
+				mprintf(("Extraneous extension found on replacement texture %s!\n", tr.new_texture));
+				*tp = 0;
+			}
+
+			// add it if we aren't over the limit
+			if (p.replacement_textures.size() < MAX_MODEL_TEXTURES)
+				p.replacement_textures.push_back(tr);
+			else
+				mprintf(("Too many replacement textures specified for prop '%s'!\n", p.name));
+		}
+	}
+
 	// if idx is still -1 then we have an empty props.tbl so we parse
 	// everything here and just discard it. A warning has already been generated above.
 	if (idx < 0) {
@@ -5609,6 +5646,15 @@ void post_process_mission_props()
 			auto createdProp = prop_id_lookup(obj.instance);
 			if (createdProp != nullptr) {
 				createdProp->fred_layer = propp.fred_layer;
+
+				// layer the mission's instance-level texture replacements on top of the class
+				// replacements already seeded by prop_create, then (re)apply them all
+				if (!propp.replacement_textures.empty()) {
+					createdProp->replacement_textures.insert(createdProp->replacement_textures.end(),
+						propp.replacement_textures.begin(),
+						propp.replacement_textures.end());
+					prop_apply_replacement_textures(createdProp);
+				}
 			}
 		}
 	}

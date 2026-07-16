@@ -58,6 +58,7 @@ enum sexp_opf_t : int {
 	OPF_GOAL_NAME,					// name of goal (or maybe event?) from a mission
 	OPF_SHIP_WING,					// either a ship or wing name (they don't conflict)
 	OPF_SHIP_PROP,                  // either a ship or a prop
+	OPF_SHIP_WING_PROP,             // a ship, a wing, or a prop
 	OPF_SHIP_WING_WHOLETEAM,		// Karajorma - Ship, wing or an entire team's worth of ships
 	OPF_SHIP_WING_SHIPONTEAM_POINT,	// name of a ship, wing, any ship on a team, or a point
 	OPF_SHIP_WING_POINT,
@@ -1305,6 +1306,7 @@ enum sexp_error_check
 	SEXP_CHECK_INVALID_CUSTOM_STRING,
 	SEXP_CHECK_INVALID_MESSAGE_TYPE,
 	SEXP_CHECK_POTENTIAL_ISSUE,
+	SEXP_CHECK_INVALID_SHIP_WING_PROP,  // invalid ship/wing/prop
 };
 
 
