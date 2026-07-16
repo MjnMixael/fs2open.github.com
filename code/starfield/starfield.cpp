@@ -82,12 +82,14 @@ typedef struct flare_info {
 	float offset_y;		// parallel offset along flare line direction
 
 	// stretch properties
-	float luminance;		// brightness multiplier (maps to alpha)
+	float luminance;		// brightness multiplier folded into the additive color (>1.0 brightens)
 	float gamma;			// gamma correction on luminance
 	float color_r;			// color tint R (1.0 = no tint)
 	float color_g;			// color tint G
 	float color_b;			// color tint B
 	float rotation;			// fixed rotation angle in degrees
+
+	bool enhanced;			// true if any new property was specified; retail-only elements use the exact legacy render path
 
 	flare_info() : pos(0.0f), scale(1.0f), tex_num(0),
 		dist_curve_idx(-1), scale_curve_idx(-1),
@@ -96,7 +98,7 @@ typedef struct flare_info {
 		offset_x(0.0f), offset_y(0.0f),
 		luminance(1.0f), gamma(1.0f),
 		color_r(1.0f), color_g(1.0f), color_b(1.0f),
-		rotation(0.0f) {}
+		rotation(0.0f), enhanced(false) {}
 } flare_info;
 
 typedef struct flare_bitmap {
@@ -574,12 +576,10 @@ void parse_startbl(const char *filename)
 						}
 					}
 
-					// parse flare elements - at least one required
-					required_string("$FlareGlow1:");
-
-					{
-						flare_info fi;
-
+					// parse one flare element: required texture/pos/scale plus any optional enhanced
+					// properties. any optional property flags the element for the enhanced render
+					// path; elements with none use the exact legacy path.
+					auto parse_flare_element = [](flare_info& fi) {
 						required_string("+FlareTexture:");
 						stuff_int(&fi.tex_num);
 
@@ -589,35 +589,64 @@ void parse_startbl(const char *filename)
 						required_string("+FlareScale:");
 						stuff_float(&fi.scale);
 
-						// new optional properties
-						if (optional_string("+FlareScaleX:"))
+						if (optional_string("+FlareScaleX:")) {
 							stuff_float(&fi.scale_x);
-						if (optional_string("+FlareScaleY:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareScaleY:")) {
 							stuff_float(&fi.scale_y);
-						if (optional_string("+FlareDistanceCurve:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareDistanceCurve:")) {
 							fi.dist_curve_idx = curve_parse("Lens flare distance curve not found");
-						if (optional_string("+FlareScaleCurve:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareScaleCurve:")) {
 							fi.scale_curve_idx = curve_parse("Lens flare scale curve not found");
-						if (optional_string("+FlareDynamic:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareDynamic:")) {
 							stuff_boolean(&fi.dynamic_rotation);
-						if (optional_string("+FlareDynamicLine:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareDynamicLine:")) {
 							stuff_boolean(&fi.dynamic_flare_line);
-						if (optional_string("+FlareOffsetX:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareOffsetX:")) {
 							stuff_float(&fi.offset_x);
-						if (optional_string("+FlareOffsetY:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareOffsetY:")) {
 							stuff_float(&fi.offset_y);
-						if (optional_string("+FlareLuminance:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareLuminance:")) {
 							stuff_float(&fi.luminance);
-						if (optional_string("+FlareGamma:"))
+							fi.enhanced = true;
+						}
+						if (optional_string("+FlareGamma:")) {
 							stuff_float(&fi.gamma);
+							fi.enhanced = true;
+						}
 						if (optional_string("+FlareColor:")) {
 							stuff_float(&fi.color_r);
 							stuff_float(&fi.color_g);
 							stuff_float(&fi.color_b);
+							fi.enhanced = true;
 						}
-						if (optional_string("+FlareRotation:"))
+						if (optional_string("+FlareRotation:")) {
 							stuff_float(&fi.rotation);
+							fi.enhanced = true;
+						}
+					};
 
+					// parse flare elements - at least one required
+					required_string("$FlareGlow1:");
+
+					{
+						flare_info fi;
+						parse_flare_element(fi);
 						sbm.flare_infos.push_back(fi);
 					}
 
@@ -626,45 +655,7 @@ void parse_startbl(const char *filename)
 
 						if (optional_string(tempf)) {
 							flare_info fi;
-
-							required_string("+FlareTexture:");
-							stuff_int(&fi.tex_num);
-
-							required_string("+FlarePos:");
-							stuff_float(&fi.pos);
-
-							required_string("+FlareScale:");
-							stuff_float(&fi.scale);
-
-							// new optional properties
-							if (optional_string("+FlareScaleX:"))
-								stuff_float(&fi.scale_x);
-							if (optional_string("+FlareScaleY:"))
-								stuff_float(&fi.scale_y);
-							if (optional_string("+FlareDistanceCurve:"))
-								fi.dist_curve_idx = curve_parse("Lens flare distance curve not found");
-							if (optional_string("+FlareScaleCurve:"))
-								fi.scale_curve_idx = curve_parse("Lens flare scale curve not found");
-							if (optional_string("+FlareDynamic:"))
-								stuff_boolean(&fi.dynamic_rotation);
-							if (optional_string("+FlareDynamicLine:"))
-								stuff_boolean(&fi.dynamic_flare_line);
-							if (optional_string("+FlareOffsetX:"))
-								stuff_float(&fi.offset_x);
-							if (optional_string("+FlareOffsetY:"))
-								stuff_float(&fi.offset_y);
-							if (optional_string("+FlareLuminance:"))
-								stuff_float(&fi.luminance);
-							if (optional_string("+FlareGamma:"))
-								stuff_float(&fi.gamma);
-							if (optional_string("+FlareColor:")) {
-								stuff_float(&fi.color_r);
-								stuff_float(&fi.color_g);
-								stuff_float(&fi.color_b);
-							}
-							if (optional_string("+FlareRotation:"))
-								stuff_float(&fi.rotation);
-
+							parse_flare_element(fi);
 							sbm.flare_infos.push_back(fi);
 						} else {
 							break;
@@ -1470,9 +1461,10 @@ void stars_draw_sun(int show_sun)
 	}
 }
 
-// render a single lens flare element as a screen-space textured quad with rotation, non-uniform scale, and color
+// render a single lens flare element as a screen-space textured quad with rotation, non-uniform scale, and color.
+// brightness is folded into the additive color and may exceed 1.0 to brighten (HDR).
 static void stars_render_flare_element(int bitmap_id, float screen_x, float screen_y,
-	float width, float height, float angle, float alpha,
+	float width, float height, float angle, float brightness,
 	float color_r, float color_g, float color_b)
 {
 	if (bitmap_id < 0)
@@ -1509,7 +1501,7 @@ static void stars_render_flare_element(int bitmap_id, float screen_x, float scre
 
 	material mat_params;
 	material_set_unlit(&mat_params, bitmap_id, 1.0f, true, false);
-	mat_params.set_color(color_r * alpha, color_g * alpha, color_b * alpha, 1.0f);
+	mat_params.set_color(color_r * brightness, color_g * brightness, color_b * brightness, 1.0f);
 
 	g3_render_primitives_textured(&mat_params, P, 4, PRIM_TYPE_TRIFAN, true);
 }
@@ -1607,6 +1599,19 @@ void stars_draw_lens_flare(vertex *sun_vex, int sun_n)
 			if (fi.tex_num != static_cast<int>(j))
 				continue;
 
+			// legacy path: an element that specifies none of the new properties, on a sun without
+			// smooth falloff, renders exactly as retail did (distance/FOV-scaled bitmap, native
+			// aspect handling). only opted-in flares take the enhanced screen-space quad path.
+			if (!bm->flare_smooth_falloff && !fi.enhanced) {
+				vertex flare_vex = *sun_vex;
+				flare_vex.screen.xyw.x = sun_vex->screen.xyw.x + dx * fi.pos;
+				flare_vex.screen.xyw.y = sun_vex->screen.xyw.y + dy * fi.pos;
+				material mat_params;
+				material_set_unlit(&mat_params, bitmap_id, 0.999f, true, false);
+				g3_render_rect_screen_aligned_2d(&mat_params, &flare_vex, 0, 0.05f * fi.scale);
+				continue;
+			}
+
 			// distance interpolation - when a curve is specified, position is further
 			// scaled by the curve evaluated at sun_offset_factor (0 at center, 1 at edge).
 			// without a curve, position uses the raw pos value (backward compatible).
@@ -1654,16 +1659,17 @@ void stars_draw_lens_flare(vertex *sun_vex, int sun_n)
 											   : ((elem_out > 0.0f) ? 0.0f : 1.0f);
 			}
 
-			// luminance and gamma
-			float alpha = fi.luminance;
-			if (fi.gamma != 1.0f && alpha > 0.0f) {
-				alpha = powf(alpha, 1.0f / fi.gamma);
+			// luminance and gamma - brightness multiplier folded into the additive color. it is
+			// intentionally not clamped to 1.0 so values above 1.0 actually brighten (HDR); only
+			// the fade envelopes below are constrained to [0,1].
+			float brightness = fi.luminance;
+			if (fi.gamma != 1.0f && brightness > 0.0f) {
+				brightness = powf(brightness, 1.0f / fi.gamma);
 			}
-			CLAMP(alpha, 0.0f, 1.0f);
 
 			// apply the fade envelopes (both are 1.0 for retail flares)
-			alpha *= global_fade * elem_fade;
-			if (alpha <= 0.0f)
+			brightness *= global_fade * elem_fade;
+			if (brightness <= 0.0f)
 				continue;
 
 			// compute pixel size from base scale (matching original 0.05f factor)
@@ -1677,7 +1683,7 @@ void stars_draw_lens_flare(vertex *sun_vex, int sun_n)
 			float height = base_size * fi.scale_y;
 
 			stars_render_flare_element(bitmap_id, flare_x, flare_y,
-				width, height, angle, alpha,
+				width, height, angle, brightness,
 				fi.color_r, fi.color_g, fi.color_b);
 		}
 	}
