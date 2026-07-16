@@ -132,44 +132,11 @@ bool WaypointEditorDialogModel::validateName(const SCP_string& name) {
 		return false;
 	}
 
-	// wing name collision
-	for (auto& wing : Wings) {
-		if (!stricmp(wing.name, name.c_str())) {
-			showErrorDialogNoCancel("This waypoint path name is already being used by a wing");
-			return false;
-		}
-	}
-
-	// ship name collision
-	for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
-		if ((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) {
-			if (!stricmp(name.c_str(), Ships[ptr->instance].ship_name)) {
-				showErrorDialogNoCancel("This waypoint path name is already being used by a ship");
-				return false;
-			}
-		}
-	}
-
-	// target priority group name collision
-	for (auto& ai : Ai_tp_list) {
-		if (!stricmp(name.c_str(), ai.name)) {
-			showErrorDialogNoCancel("This waypoint path name is already being used by a target priority group");
-			return false;
-		}
-	}
-
-	// waypoint path name collision
+	// waypoint path names share a single namespace with ships, props, wings, jump nodes, etc.
 	const waypoint_list* current_path = &Waypoint_lists[_selectedWaypointPaths.front()];
-	for (const auto& ii : Waypoint_lists) {
-		if (!stricmp(ii.get_name(), name.c_str()) && (&ii != current_path)) {
-			showErrorDialogNoCancel("This waypoint path name is already being used by another waypoint path");
-			return false;
-		}
-	}
-
-	// jump node name collision
-	if (jumpnode_get_by_name(name.c_str()) != nullptr) {
-		showErrorDialogNoCancel("This waypoint path name is already being used by a jump node");
+	SCP_string collision = fred_object_name_collision(name.c_str(), -1, current_path);
+	if (!collision.empty()) {
+		showErrorDialogNoCancel("This waypoint path name is already being used by " + collision);
 		return false;
 	}
 

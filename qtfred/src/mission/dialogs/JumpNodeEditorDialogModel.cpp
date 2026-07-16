@@ -147,38 +147,11 @@ bool JumpNodeEditorDialogModel::validateName(const SCP_string& name) {
 		return false;
 	}
 
-	for (auto& wing : Wings) {
-		if (!stricmp(wing.name, name.c_str())) {
-			showErrorDialogNoCancel("This jump node name is already being used by a wing.");
-			return false;
-		}
-	}
-
-	for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
-		if (ptr->type == OBJ_SHIP || ptr->type == OBJ_START) {
-			if (!stricmp(name.c_str(), Ships[ptr->instance].ship_name)) {
-				showErrorDialogNoCancel("This jump node name is already being used by a ship.");
-				return false;
-			}
-		}
-	}
-
-	for (auto& ai : Ai_tp_list) {
-		if (!stricmp(name.c_str(), ai.name)) {
-			showErrorDialogNoCancel("This jump node name is already being used by a target priority group.");
-			return false;
-		}
-	}
-
-	if (find_matching_waypoint_list(name.c_str()) != nullptr) {
-		showErrorDialogNoCancel("This jump node name is already being used by a waypoint path.");
-		return false;
-	}
-
-	auto* current_jnp = _selectedJumpNodes.empty() ? nullptr : jumpnode_get_by_objnum(_selectedJumpNodes.front());
-	auto* found = jumpnode_get_by_name(name.c_str());
-	if (found != nullptr && found != current_jnp) {
-		showErrorDialogNoCancel("This jump node name is already being used by another jump node.");
+	// jump node names share a single namespace with ships, props, wings, waypoints, etc.
+	int except_objnum = _selectedJumpNodes.empty() ? -1 : _selectedJumpNodes.front();
+	SCP_string collision = fred_object_name_collision(name.c_str(), except_objnum);
+	if (!collision.empty()) {
+		showErrorDialogNoCancel("This jump node name is already being used by " + collision + ".");
 		return false;
 	}
 

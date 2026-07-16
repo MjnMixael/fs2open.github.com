@@ -4,8 +4,6 @@
 #include <mission/object.h>
 #include <prop/prop.h>
 
-#include <unordered_set>
-
 namespace fso::fred::dialogs {
 
 PropEditorDialogModel::PropEditorDialogModel(QObject* parent, EditorViewport* viewport) : AbstractDialogModel(parent, viewport) {
@@ -203,24 +201,15 @@ bool PropEditorDialogModel::setPropName(const SCP_string& name) {
 		return false;
 	}
 
-	std::unordered_set<int> selected_instances;
-	for (auto obj_idx : _selectedPropObjects) {
-		if (query_valid_object(obj_idx) && Objects[obj_idx].type == OBJ_PROP) {
-			selected_instances.insert(Objects[obj_idx].instance);
-		}
-	}
-
-	for (size_t i = 0; i < Props.size(); ++i) {
-		if (selected_instances.find(static_cast<int>(i)) != selected_instances.end() || !Props[i].has_value()) {
-			continue;
-		}
-		if (!stricmp(trimmed.c_str(), Props[i].value().prop_name)) {
-			showErrorDialogNoCancel("This prop name is already being used by another prop.");
-			return false;
-		}
-	}
-
 	auto obj_idx = _selectedPropObjects.front();
+
+	// prop names share a single namespace with ships, wings, waypoints, jump nodes, etc.
+	SCP_string collision = fred_object_name_collision(trimmed.c_str(), obj_idx);
+	if (!collision.empty()) {
+		showErrorDialogNoCancel("This prop name is already being used by " + collision + ".");
+		return false;
+	}
+
 	auto prp = prop_id_lookup(Objects[obj_idx].instance);
 	if (prp == nullptr) {
 		return false;

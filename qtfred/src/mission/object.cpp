@@ -94,3 +94,50 @@ int get_ship_from_obj(object* objp) {
 	Int3();
 	return 0;
 }
+
+SCP_string fred_object_name_collision(const char* name, int except_objnum, const waypoint_list* except_wp_list)
+{
+	if (name == nullptr || *name == '\0')
+		return "";
+
+	// ships, starts, and props all share the object list
+	for (object* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
+		if (OBJ_INDEX(ptr) == except_objnum)
+			continue;
+
+		if ((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) {
+			if (!stricmp(name, Ships[ptr->instance].ship_name))
+				return "a ship";
+		} else if (ptr->type == OBJ_PROP) {
+			int idx = ptr->instance;
+			if (idx >= 0 && idx < static_cast<int>(Props.size()) && Props[idx].has_value() &&
+				!stricmp(name, Props[idx]->prop_name))
+				return "a prop";
+		}
+	}
+
+	// wings
+	for (auto& w : Wings) {
+		if (w.wave_count && !stricmp(name, w.name))
+			return "a wing";
+	}
+
+	// AI target-priority groups
+	for (auto& tp : Ai_tp_list) {
+		if (!stricmp(name, tp.name))
+			return "a target priority group";
+	}
+
+	// waypoint paths
+	for (auto& wp_list : Waypoint_lists) {
+		if (&wp_list != except_wp_list && !stricmp(name, wp_list.get_name()))
+			return "a waypoint path";
+	}
+
+	// jump nodes
+	auto* jnp = jumpnode_get_by_name(name);
+	if (jnp != nullptr && jnp->GetSCPObjectNumber() != except_objnum)
+		return "a jump node";
+
+	return "";
+}

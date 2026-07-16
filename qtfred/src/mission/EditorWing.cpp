@@ -6,6 +6,7 @@
 #include <globalincs/linklist.h>
 #include <globalincs/utility.h>
 #include <missioneditor/common.h>
+#include <prop/prop.h>
 #include <ship/ship.h>
 
 namespace {
@@ -510,6 +511,13 @@ WingNameCheck Editor::validate_wing_name(const SCP_string& new_name, int ignore_
 				return r;
 			}
 		}
+	}
+
+	// Props
+	if (prop_name_lookup(new_name.c_str()) >= 0) {
+		r.error = WingNameError::DuplicateProp;
+		r.message = "This wing name is already used by a prop.";
+		return r;
 	}
 
 	// Target priority groups
