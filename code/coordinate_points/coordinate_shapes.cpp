@@ -4,6 +4,8 @@
 #include "def_files/def_files.h"
 #include "parse/parselo.h"
 
+#include <algorithm>
+
 SCP_vector<coordinate_shape_def> Coordinate_shapes;
 
 namespace {
@@ -19,12 +21,8 @@ bool is_reserved_shape_name(const char* name)
 
 bool shape_name_exists(const char* name)
 {
-	for (const auto& s : Coordinate_shapes) {
-		if (!stricmp(s.name.c_str(), name)) {
-			return true;
-		}
-	}
-	return false;
+	return std::any_of(Coordinate_shapes.begin(), Coordinate_shapes.end(),
+		[name](const coordinate_shape_def& s) { return !stricmp(s.name.c_str(), name); });
 }
 
 void parse_coordinate_points_table(const char* filename)

@@ -38,7 +38,7 @@ private slots:
 	void on_colorBSpinBox_valueChanged(int value);
 	void on_colorASpinBox_valueChanged(int value);
 
-private:
+private: // NOLINT(readability-redundant-access-specifiers)
 	EditorViewport* _viewport;
 	std::unique_ptr<Ui::CoordinatePointEditorDialog> ui;
 	std::unique_ptr<CoordinatePointEditorDialogModel> _model;

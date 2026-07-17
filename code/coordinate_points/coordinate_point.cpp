@@ -5,6 +5,8 @@
 #include "math/vecmat.h"
 #include "parse/parselo.h"
 
+#include <algorithm>
+
 SCP_list<mission_coordinate_point> Coordinate_points;
 SCP_vector<parsed_coordinate_point> Parse_coordinate_points;
 
@@ -43,12 +45,8 @@ void coordinate_points_level_close()
 
 static bool coordinate_point_name_in_use(const char* name)
 {
-	for (const auto& cp : Coordinate_points) {
-		if (!stricmp(cp.name.c_str(), name)) {
-			return true;
-		}
-	}
-	return false;
+	return std::any_of(Coordinate_points.begin(), Coordinate_points.end(),
+		[name](const mission_coordinate_point& cp) { return !stricmp(cp.name.c_str(), name); });
 }
 
 static SCP_string make_unique_default_name()

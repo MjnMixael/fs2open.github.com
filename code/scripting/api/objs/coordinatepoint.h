@@ -4,10 +4,8 @@
 
 #include "object/object.h"
 
-namespace scripting {
-namespace api {
+namespace scripting::api {
 
 DECLARE_ADE_OBJ(l_CoordinatePoint, object_h);
 
-}
 }

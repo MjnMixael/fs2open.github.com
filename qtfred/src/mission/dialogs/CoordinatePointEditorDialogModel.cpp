@@ -27,7 +27,7 @@ CoordinatePointEditorDialogModel::CoordinatePointEditorDialogModel(QObject* pare
 bool CoordinatePointEditorDialogModel::apply() { return true; }
 void CoordinatePointEditorDialogModel::reject() {}
 
-mission_coordinate_point* CoordinatePointEditorDialogModel::getSelected(int objnum) const
+mission_coordinate_point* CoordinatePointEditorDialogModel::getSelected(int objnum)
 {
 	return find_coordinate_point_by_objnum(objnum);
 }
