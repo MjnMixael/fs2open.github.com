@@ -607,6 +607,8 @@ bool parse_main(const char *mission_name, int flags = 0);
 p_object *mission_parse_get_arrival_ship(ushort net_signature);
 p_object *mission_parse_get_arrival_ship(const char *name);
 bool mission_check_ship_yet_to_arrive(const char *name);
+bool mission_check_prop_yet_to_spawn(const char *name);
+bool mission_replace_pending_prop_texture(const char *name, const char *old_texture, const char *new_texture);
 p_object *mission_parse_find_parse_object(const char *name);
 int parse_create_object(p_object *objp, bool standalone_ship = false);
 void resolve_parse_flags(object *objp, flagset<Mission::Parse_Object_Flags> &parse_flags);

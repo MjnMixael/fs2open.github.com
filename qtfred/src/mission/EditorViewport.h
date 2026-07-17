@@ -228,6 +228,7 @@ class EditorViewport {
 	bool Show_sexp_help_mission_cutscenes = true;
 	bool Show_sexp_help_ship_editor = false;
 	bool Show_sexp_help_wing_editor = false;
+	bool Show_sexp_help_prop_editor = false;
 
 	ThemeMode Theme_mode = ThemeMode::System;
 

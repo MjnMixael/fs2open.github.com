@@ -144,6 +144,7 @@ void EditorViewport::loadSettings() {
 	Show_sexp_help_mission_cutscenes   = settings.value("show_sexp_help_mission_cutscenes",   Show_sexp_help_mission_cutscenes).toBool();
 	Show_sexp_help_ship_editor         = settings.value("show_sexp_help_ship_editor",         Show_sexp_help_ship_editor).toBool();
 	Show_sexp_help_wing_editor         = settings.value("show_sexp_help_wing_editor",         Show_sexp_help_wing_editor).toBool();
+	Show_sexp_help_prop_editor         = settings.value("show_sexp_help_prop_editor",         Show_sexp_help_prop_editor).toBool();
 	// Handles its own group, since main.cpp reads it before the viewport exists.
 	Theme_mode                         = readThemeModeSetting();
 
@@ -193,6 +194,7 @@ void EditorViewport::saveSettings() const {
 	settings.setValue("show_sexp_help_mission_cutscenes",    Show_sexp_help_mission_cutscenes);
 	settings.setValue("show_sexp_help_ship_editor",          Show_sexp_help_ship_editor);
 	settings.setValue("show_sexp_help_wing_editor",          Show_sexp_help_wing_editor);
+	settings.setValue("show_sexp_help_prop_editor",          Show_sexp_help_prop_editor);
 	writeThemeModeSetting(Theme_mode);
 
 	settings.setValue("view_universal_heading",                 view.Universal_heading);

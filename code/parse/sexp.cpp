@@ -2513,10 +2513,14 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 				if (node_subtype != SEXP_ATOM_STRING) {
 					return SEXP_CHECK_TYPE_MISMATCH;
 				}
-				if (prop_name_lookup(CTEXT(node)) < 0) {
-					return SEXP_CHECK_INVALID_PROP;
+				if (prop_name_lookup(CTEXT(node)) >= 0) {
+					break;
 				}
-				break;
+				// in-game a prop may be parsed but not yet spawned (its spawn cue hasn't fired)
+				if (!Fred_running && mission_check_prop_yet_to_spawn(CTEXT(node))) {
+					break;
+				}
+				return SEXP_CHECK_INVALID_PROP;
 
 			case OPF_WING:
 				if (node_subtype != SEXP_ATOM_STRING){
@@ -2596,8 +2600,8 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 					break;
 				}
 
-				// also check arrival list if we're running the game
-				if (!Fred_running && mission_check_ship_yet_to_arrive(CTEXT(node))) {
+				// also check the arrival/spawn lists if we're running the game
+				if (!Fred_running && (mission_check_ship_yet_to_arrive(CTEXT(node)) || mission_check_prop_yet_to_spawn(CTEXT(node)))) {
 					break;
 				}
 
@@ -2614,8 +2618,8 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 					break;
 				}
 
-				// also check arrival list if we're running the game
-				if (!Fred_running && mission_check_ship_yet_to_arrive(CTEXT(node))) {
+				// also check the arrival/spawn lists if we're running the game
+				if (!Fred_running && (mission_check_ship_yet_to_arrive(CTEXT(node)) || mission_check_prop_yet_to_spawn(CTEXT(node)))) {
 					break;
 				}
 
@@ -21725,6 +21729,11 @@ void sexp_replace_texture(int n, bool skybox)
 			}
 			continue;
 		}
+
+		// the prop may have been parsed but not yet spawned; queue the replacement so it applies
+		// when its spawn cue fires
+		if (mission_replace_pending_prop_texture(CTEXT(n), old_name, new_name))
+			continue;
 
 		object_ship_wing_point_team oswpt;
 		eval_object_ship_wing_point_team(&oswpt, n);

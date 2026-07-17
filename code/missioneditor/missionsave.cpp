@@ -5490,6 +5490,48 @@ int Fred_mission_save::save_props()
 					}
 				}
 
+				// spawn/despawn cues - only written when non-default so existing prop blocks stay
+				// unchanged (default spawn is always-true, default despawn is never)
+				SCP_string sexp_out;
+
+				if (p->spawn_cue != Locked_sexp_true) {
+					if (optional_string_fred("+Spawn Cue:", "$Name:"))
+						parse_comments();
+					else
+						fout("\n+Spawn Cue:");
+
+					convert_sexp_to_string(sexp_out, p->spawn_cue, SEXP_SAVE_MODE);
+					fout(" %s", sexp_out.c_str());
+				}
+
+				if (p->spawn_delay != 0) {
+					if (optional_string_fred("+Spawn Delay:", "$Name:"))
+						parse_comments();
+					else
+						fout("\n+Spawn Delay:");
+
+					fout(" %d", p->spawn_delay);
+				}
+
+				if (p->despawn_cue != Locked_sexp_false) {
+					if (optional_string_fred("+Despawn Cue:", "$Name:"))
+						parse_comments();
+					else
+						fout("\n+Despawn Cue:");
+
+					convert_sexp_to_string(sexp_out, p->despawn_cue, SEXP_SAVE_MODE);
+					fout(" %s", sexp_out.c_str());
+				}
+
+				if (p->despawn_delay != 0) {
+					if (optional_string_fred("+Despawn Delay:", "$Name:"))
+						parse_comments();
+					else
+						fout("\n+Despawn Delay:");
+
+					fout(" %d", p->despawn_delay);
+				}
+
 				fso_comment_pop();
 			}
 		}

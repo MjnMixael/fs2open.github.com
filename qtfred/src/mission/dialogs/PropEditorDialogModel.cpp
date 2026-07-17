@@ -31,11 +31,41 @@ void PropEditorDialogModel::initializeData() {
 		_flagState.push_back(Qt::Unchecked);
 	}
 
+	// cues are only meaningful for a single selected prop
+	_spawnFormula = -1;
+	_despawnFormula = -1;
+	_spawnDelay = 0;
+	_despawnDelay = 0;
+
+	// prop class: shared class across the selection, or -1 if mixed/none
+	_propClass = -1;
+	{
+		bool first = true;
+		for (auto obj_idx : _selectedPropObjects) {
+			if (!query_valid_object(obj_idx) || Objects[obj_idx].type != OBJ_PROP)
+				continue;
+			auto prp = prop_id_lookup(Objects[obj_idx].instance);
+			if (prp == nullptr)
+				continue;
+			if (first) {
+				_propClass = prp->prop_info_index;
+				first = false;
+			} else if (_propClass != prp->prop_info_index) {
+				_propClass = -1;
+				break;
+			}
+		}
+	}
+
 	if (hasValidSelection()) {
 		if (!hasMultipleSelection()) {
 			auto prp = prop_id_lookup(Objects[_selectedPropObjects.front()].instance);
 			Assertion(prp != nullptr, "Selected prop could not be found.");
 			_propName = prp->prop_name;
+			_spawnFormula = prp->spawn_cue;
+			_despawnFormula = prp->despawn_cue;
+			_spawnDelay = prp->spawn_delay;
+			_despawnDelay = prp->despawn_delay;
 		} else {
 			_propName.clear();
 		}
@@ -288,6 +318,124 @@ void PropEditorDialogModel::setLayer(const SCP_string& layer)
 			continue;
 		_viewport->moveObjectToLayer(obj_idx, layer);
 	}
+	set_modified();
+	_editor->missionChanged();
+}
+
+int PropEditorDialogModel::getPropClass() const
+{
+	return _propClass;
+}
+
+void PropEditorDialogModel::setPropClass(int prop_class)
+{
+	if (prop_class < 0 || prop_class >= prop_info_size())
+		return;
+	if (_propClass == prop_class)
+		return;
+
+	_propClass = prop_class;
+	for (auto obj_idx : _selectedPropObjects) {
+		if (!query_valid_object(obj_idx) || Objects[obj_idx].type != OBJ_PROP)
+			continue;
+		auto prp = prop_id_lookup(Objects[obj_idx].instance);
+		if (prp == nullptr)
+			continue;
+		if (prp->prop_info_index != prop_class)
+			change_prop_type(Objects[obj_idx].instance, prop_class);
+	}
+
+	set_modified();
+	_editor->missionChanged();
+	Q_EMIT modelDataChanged();
+}
+
+int PropEditorDialogModel::getSpawnFormula() const
+{
+	return _spawnFormula;
+}
+
+int PropEditorDialogModel::getDespawnFormula() const
+{
+	return _despawnFormula;
+}
+
+void PropEditorDialogModel::setSpawnTreeDirty(int formula)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+
+	_spawnFormula = formula;
+	if (prp->spawn_cue >= 0 && prp->spawn_cue != formula)
+		free_sexp2(prp->spawn_cue);
+	prp->spawn_cue = formula;
+
+	set_modified();
+	_editor->missionChanged();
+}
+
+void PropEditorDialogModel::setDespawnTreeDirty(int formula)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+
+	_despawnFormula = formula;
+	if (prp->despawn_cue >= 0 && prp->despawn_cue != formula)
+		free_sexp2(prp->despawn_cue);
+	prp->despawn_cue = formula;
+
+	set_modified();
+	_editor->missionChanged();
+}
+
+int PropEditorDialogModel::getSpawnDelay() const
+{
+	return _spawnDelay;
+}
+
+void PropEditorDialogModel::setSpawnDelay(int delay)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+	if (delay < 0)
+		delay = 0;
+
+	_spawnDelay = delay;
+	prp->spawn_delay = delay; // FRED stores the positive value; the game negates it on load
+	set_modified();
+	_editor->missionChanged();
+}
+
+int PropEditorDialogModel::getDespawnDelay() const
+{
+	return _despawnDelay;
+}
+
+void PropEditorDialogModel::setDespawnDelay(int delay)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+	if (delay < 0)
+		delay = 0;
+
+	_despawnDelay = delay;
+	prp->despawn_delay = delay;
 	set_modified();
 	_editor->missionChanged();
 }

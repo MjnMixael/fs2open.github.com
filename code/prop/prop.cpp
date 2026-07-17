@@ -646,6 +646,12 @@ int prop_create(const matrix* orient, const vec3d* pos, int prop_type, const cha
 
 	propp->time_created = Missiontime;
 
+	// default cues: already spawned, never despawn (mission-created props override despawn afterward)
+	propp->spawn_cue = Locked_sexp_true;
+	propp->spawn_delay = 0;
+	propp->despawn_cue = Locked_sexp_false;
+	propp->despawn_delay = 0;
+
 	return objnum;
 }
 

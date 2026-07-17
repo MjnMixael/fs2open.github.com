@@ -3,6 +3,7 @@
 #include <QDialog>
 
 #include <mission/dialogs/PropEditorDialogModel.h>
+#include <missioneditor/sexp_tree_model.h>
 #include <ui/FredView.h>
 
 namespace Ui {
@@ -11,7 +12,7 @@ class PropEditorDialog;
 
 namespace fso::fred::dialogs {
 
-class PropEditorDialog : public QDialog {
+class PropEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	Q_OBJECT
 
  public:
@@ -26,7 +27,17 @@ class PropEditorDialog : public QDialog {
 	void on_nextButton_clicked();
 	void on_prevButton_clicked();
 	void on_layerCombo_currentIndexChanged(int index);
+	void on_propClassCombo_currentIndexChanged(int index);
 	void on_textureReplacementButton_clicked();
+
+	void on_spawnCueTree_modified();
+	void on_spawnCueTree_helpChanged(const QString&);
+	void on_spawnCueTree_miniHelpChanged(const QString&);
+	void on_spawnDelaySpinBox_valueChanged(int);
+	void on_despawnCueTree_modified();
+	void on_despawnCueTree_helpChanged(const QString&);
+	void on_despawnCueTree_miniHelpChanged(const QString&);
+	void on_despawnDelaySpinBox_valueChanged(int);
 
  private: // NOLINT(readability-redundant-access-specifiers)
 	FredView*       _fredView;
@@ -36,6 +47,7 @@ class PropEditorDialog : public QDialog {
 
 	void initializeUi();
 	void updateUi();
+	void updateCues();
 };
 
 }

@@ -5461,6 +5461,39 @@ void parse_prop(mission* /*pm*/)
 		}
 	}
 
+	// spawn/despawn cues, analogous to ship arrival/departure.  Both are optional; if absent the prop
+	// spawns immediately and never despawns, which preserves the behavior of pre-existing missions.
+	p.spawn_cue = Locked_sexp_true;
+	if (optional_string("+Spawn Cue:")) {
+		p.spawn_cue = get_sexp_main();
+	}
+
+	if (optional_string("+Spawn Delay:")) {
+		int delay;
+		stuff_int(&delay);
+		if (delay < 0) {
+			parse_warning_or_record("Spawn delay on prop %s cannot be negative — corrected to 0.", p.name);
+			delay = 0;
+		}
+		// negative in-game means "timer not yet set"; FRED keeps the positive value for editing/saving
+		p.spawn_delay = Fred_running ? delay : -delay;
+	}
+
+	p.despawn_cue = Locked_sexp_false;
+	if (optional_string("+Despawn Cue:")) {
+		p.despawn_cue = get_sexp_main();
+	}
+
+	if (optional_string("+Despawn Delay:")) {
+		int delay;
+		stuff_int(&delay);
+		if (delay < 0) {
+			parse_warning_or_record("Despawn delay on prop %s cannot be negative — corrected to 0.", p.name);
+			delay = 0;
+		}
+		p.despawn_delay = Fred_running ? delay : -delay;
+	}
+
 	// if idx is still -1 then we have an empty props.tbl so we parse
 	// everything here and just discard it. A warning has already been generated above.
 	if (idx < 0) {
@@ -5630,33 +5663,115 @@ void post_process_path_stuff()
 	}
 }
 
+// Create the live prop object described by a parsed_prop, carrying over its instance data.
+// Marks the parsed_prop as spawned.  Returns the object number, or -1 on failure.
+static int create_prop_from_parsed(parsed_prop& propp)
+{
+	int objnum = prop_create(&propp.orientation, &propp.position, propp.prop_info_index, propp.name);
+	if (objnum < 0)
+		return -1;
+
+	auto& obj = Objects[objnum];
+
+	if (propp.flags[Mission::Parse_Object_Flags::OF_No_collide]) {
+		obj.flags.remove(Object::Object_Flags::Collides);
+	}
+
+	auto createdProp = prop_id_lookup(obj.instance);
+	if (createdProp != nullptr) {
+		createdProp->fred_layer = propp.fred_layer;
+
+		// layer the mission's instance-level texture replacements on top of the class
+		// replacements already seeded by prop_create, then (re)apply them all
+		if (!propp.replacement_textures.empty()) {
+			createdProp->replacement_textures.insert(createdProp->replacement_textures.end(),
+				propp.replacement_textures.begin(),
+				propp.replacement_textures.end());
+			prop_apply_replacement_textures(createdProp);
+		}
+
+		// carry the cues onto the live prop; spawn is kept for FRED editing/saving, despawn is
+		// evaluated each frame at runtime
+		createdProp->spawn_cue = propp.spawn_cue;
+		createdProp->spawn_delay = propp.spawn_delay;
+		createdProp->despawn_cue = propp.despawn_cue;
+		createdProp->despawn_delay = propp.despawn_delay;
+	}
+
+	propp.spawned = true;
+	return objnum;
+}
+
+// Create any pending props whose spawn cue (and delay) have come due.  Not run in FRED, where all
+// props exist from the start so they can be seen and edited.
+static void mission_eval_prop_spawns()
+{
+	if (Fred_running)
+		return;
+
+	for (auto& propp : Parse_props) {
+		if (propp.spawned)
+			continue;
+
+		if (eval_sexp(propp.spawn_cue)) {
+			// same delay-timer convention as ship arrivals: <= 0 means the timer hasn't been set
+			if (propp.spawn_delay <= 0)
+				propp.spawn_delay = timestamp(-propp.spawn_delay * 1000);
+			if (!timestamp_elapsed(propp.spawn_delay))
+				continue;
+
+			create_prop_from_parsed(propp);
+		}
+	}
+}
+
+// Mark for deletion any live props whose despawn cue (and delay) have come due.  No warp effect --
+// the prop simply vanishes, exactly like the prop-vanish SEXP.
+static void mission_eval_prop_despawns()
+{
+	if (Fred_running)
+		return;
+
+	for (auto& opt_prop : Props) {
+		if (!opt_prop.has_value())
+			continue;
+
+		prop& propp = opt_prop.value();
+		if (propp.objnum < 0)
+			continue;
+
+		object* objp = &Objects[propp.objnum];
+		if (objp->flags[Object::Object_Flags::Should_be_dead])
+			continue;
+
+		if (eval_sexp(propp.despawn_cue)) {
+			if (propp.despawn_delay <= 0)
+				propp.despawn_delay = timestamp(-propp.despawn_delay * 1000);
+			if (!timestamp_elapsed(propp.despawn_delay))
+				continue;
+
+			objp->flags.set(Object::Object_Flags::Should_be_dead);
+		}
+	}
+}
+
 // MjnMixael
 void post_process_mission_props()
 {
-	for (const auto& propp : Parse_props) {
-		int objnum = prop_create(&propp.orientation, &propp.position, propp.prop_info_index, propp.name);
+	// In FRED every prop is created so it can be seen and edited; its cues are just stored on the prop.
+	if (Fred_running) {
+		for (auto& propp : Parse_props)
+			create_prop_from_parsed(propp);
+		return;
+	}
 
-		if (objnum >= 0) {
-			auto& obj = Objects[objnum];
-
-			if (propp.flags[Mission::Parse_Object_Flags::OF_No_collide]) {
-				obj.flags.remove(Object::Object_Flags::Collides);
-			}
-
-			auto createdProp = prop_id_lookup(obj.instance);
-			if (createdProp != nullptr) {
-				createdProp->fred_layer = propp.fred_layer;
-
-				// layer the mission's instance-level texture replacements on top of the class
-				// replacements already seeded by prop_create, then (re)apply them all
-				if (!propp.replacement_textures.empty()) {
-					createdProp->replacement_textures.insert(createdProp->replacement_textures.end(),
-						propp.replacement_textures.begin(),
-						propp.replacement_textures.end());
-					prop_apply_replacement_textures(createdProp);
-				}
-			}
-		}
+	// In-game, create the unconditionally-present props now (the default for pre-existing missions:
+	// always-true spawn cue, no delay) so they exist on frame 0.  Props with a real spawn cue or a
+	// delay stay pending in Parse_props and are handled by mission_eval_prop_spawns once the mission
+	// is running -- avoiding any evaluation of non-trivial cues before the mission is fully set up.
+	for (auto& propp : Parse_props) {
+		if (propp.spawn_cue == Locked_sexp_true && propp.spawn_delay == 0)
+			create_prop_from_parsed(propp);
 	}
 }
 
@@ -8169,6 +8284,44 @@ bool mission_check_ship_yet_to_arrive(const char *name)
 	return true;
 }
 
+// A prop is "yet to spawn" if it was parsed into the mission but its object hasn't been created yet
+// (its spawn cue hasn't fired).  Lets SEXPs reference props that spawn later, analogous to
+// mission_check_ship_yet_to_arrive for ships.
+bool mission_check_prop_yet_to_spawn(const char *name)
+{
+	for (const auto &pp : Parse_props) {
+		if (!pp.spawned && !stricmp(name, pp.name))
+			return true;
+	}
+
+	return false;
+}
+
+// Queue a texture replacement onto a not-yet-spawned prop so it takes effect when the prop spawns
+// (mirrors how replace-texture stores onto a not-yet-arrived ship's parse object).  Returns true if
+// a pending prop with this name was found.
+bool mission_replace_pending_prop_texture(const char *name, const char *old_texture, const char *new_texture)
+{
+	for (auto &pp : Parse_props) {
+		if (pp.spawned || stricmp(name, pp.name))
+			continue;
+
+		if (pp.replacement_textures.size() < MAX_MODEL_TEXTURES) {
+			texture_replace tr;
+			strcpy_s(tr.ship_name, pp.name);
+			strcpy_s(tr.old_texture, old_texture);
+			strcpy_s(tr.new_texture, new_texture);
+			tr.new_texture_id = -1;
+			tr.from_table = false;
+			pp.replacement_textures.push_back(tr);
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
 /**
  * Sets the arrival location of a parse object according to the arrival location of the object.
  * @return objnum of anchor ship if there is one, -1 otherwise.
@@ -8970,6 +9123,8 @@ void mission_parse_eval_stuff()
 {
 	mission_eval_arrivals();
 	mission_eval_departures();
+	mission_eval_prop_spawns();
+	mission_eval_prop_despawns();
 }
 
 int allocate_subsys_status()

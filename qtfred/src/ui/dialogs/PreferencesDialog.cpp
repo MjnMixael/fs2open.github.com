@@ -130,6 +130,7 @@ void PreferencesDialog::updateUi() {
 	ui->showSexpHelpMissionCutscenes->setChecked(_model->getShowSexpHelpMissionCutscenes());
 	ui->showSexpHelpShipEditor->setChecked(_model->getShowSexpHelpShipEditor());
 	ui->showSexpHelpWingEditor->setChecked(_model->getShowSexpHelpWingEditor());
+	ui->showSexpHelpPropEditor->setChecked(_model->getShowSexpHelpPropEditor());
 
 	// Grid plane selection and enabled state
 	const auto plane = _model->getGridPlane();
@@ -220,6 +221,9 @@ void PreferencesDialog::on_showSexpHelpShipEditor_toggled(bool checked) {
 }
 void PreferencesDialog::on_showSexpHelpWingEditor_toggled(bool checked) {
 	_model->setShowSexpHelpWingEditor(checked);
+}
+void PreferencesDialog::on_showSexpHelpPropEditor_toggled(bool checked) {
+	_model->setShowSexpHelpPropEditor(checked);
 }
 
 void PreferencesDialog::on_xyPlaneRadio_toggled(bool checked) {

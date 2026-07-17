@@ -40,6 +40,13 @@ typedef struct prop {
 	SCP_deque<bool> glow_point_bank_active;
 	flagset<Prop::Prop_Flags> flags;
 	SCP_vector<texture_replace> replacement_textures;  // Class + instance texture replacements; only from_table == false entries are saved
+	// spawn/despawn cues, analogous to ship arrival/departure (spawn is only meaningful in FRED
+	// once the prop exists; despawn is evaluated at runtime).  Delays follow the ship convention:
+	// stored as -seconds in-game (timer not yet set), positive seconds in FRED.
+	int spawn_cue = -1;
+	int spawn_delay = 0;
+	int despawn_cue = -1;
+	int despawn_delay = 0;
 } prop;
 
 typedef struct prop_category {
@@ -55,6 +62,13 @@ typedef struct parsed_prop {
 	flagset<Mission::Parse_Object_Flags> flags;
 	SCP_string fred_layer = "Default";
 	SCP_vector<texture_replace> replacement_textures;
+	// spawn/despawn cues (default to Locked_sexp_true/false in parse_prop).  In-game these props
+	// stay pending until the spawn cue fires; 'spawned' tracks whether the object has been created.
+	int spawn_cue = -1;
+	int spawn_delay = 0;
+	int despawn_cue = -1;
+	int despawn_delay = 0;
+	bool spawned = false;
 } parsed_prop;
 
 extern bool Props_inited;

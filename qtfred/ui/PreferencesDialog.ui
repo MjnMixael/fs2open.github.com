@@ -336,6 +336,16 @@
             </property>
            </widget>
           </item>
+          <item>
+           <widget class="QCheckBox" name="showSexpHelpPropEditor">
+            <property name="toolTip">
+             <string>Show the SEXP operator help panel in the Prop editor.</string>
+            </property>
+            <property name="text">
+             <string>Prop Editor</string>
+            </property>
+           </widget>
+          </item>
          </layout>
         </widget>
        </item>

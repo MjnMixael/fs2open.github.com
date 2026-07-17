@@ -23,6 +23,7 @@ PreferencesDialogModel::PreferencesDialogModel(QObject* parent, EditorViewport* 
 	, _showSexpHelpMissionCutscenes(viewport->Show_sexp_help_mission_cutscenes)
 	, _showSexpHelpShipEditor(viewport->Show_sexp_help_ship_editor)
 	, _showSexpHelpWingEditor(viewport->Show_sexp_help_wing_editor)
+	, _showSexpHelpPropEditor(viewport->Show_sexp_help_prop_editor)
 	, _themeMode(viewport->Theme_mode)
 	, _toolbarIconSize(viewport->toolbar_icon_size)
 	, _outlineLod(viewport->view.Outline_lod)
@@ -65,6 +66,7 @@ bool PreferencesDialogModel::apply() {
 	_viewport->Show_sexp_help_mission_cutscenes = _showSexpHelpMissionCutscenes;
 	_viewport->Show_sexp_help_ship_editor       = _showSexpHelpShipEditor;
 	_viewport->Show_sexp_help_wing_editor       = _showSexpHelpWingEditor;
+	_viewport->Show_sexp_help_prop_editor       = _showSexpHelpPropEditor;
 	_viewport->Theme_mode                       = _themeMode;
 	_viewport->toolbar_icon_size                = _toolbarIconSize;
 	_viewport->view.Outline_lod                 = _outlineLod;
@@ -170,6 +172,8 @@ bool PreferencesDialogModel::getShowSexpHelpShipEditor() const { return _showSex
 void PreferencesDialogModel::setShowSexpHelpShipEditor(bool value) { modify(_showSexpHelpShipEditor, value); }
 bool PreferencesDialogModel::getShowSexpHelpWingEditor() const { return _showSexpHelpWingEditor; }
 void PreferencesDialogModel::setShowSexpHelpWingEditor(bool value) { modify(_showSexpHelpWingEditor, value); }
+bool PreferencesDialogModel::getShowSexpHelpPropEditor() const { return _showSexpHelpPropEditor; }
+void PreferencesDialogModel::setShowSexpHelpPropEditor(bool value) { modify(_showSexpHelpPropEditor, value); }
 
 ThemeMode PreferencesDialogModel::getThemeMode() const { return _themeMode; }
 void PreferencesDialogModel::setThemeMode(ThemeMode value) { modify(_themeMode, value); }

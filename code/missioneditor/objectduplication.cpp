@@ -265,6 +265,18 @@ void clone_prop_instance_data(int src_prop_id, int dest_prop_id)
 	dest->replacement_textures = src->replacement_textures;
 	if (!dest->replacement_textures.empty())
 		prop_apply_replacement_textures(dest);
+
+	// spawn/despawn cues - duplicate the sexp tree so the two props don't share nodes, but keep the
+	// shared locked sentinels as-is (duplicating them would defeat the skip-default save logic)
+	auto dup_cue = [](int cue) {
+		if (cue == Locked_sexp_true || cue == Locked_sexp_false)
+			return cue;
+		return dup_sexp_chain(cue);
+	};
+	dest->spawn_cue = dup_cue(src->spawn_cue);
+	dest->spawn_delay = src->spawn_delay;
+	dest->despawn_cue = dup_cue(src->despawn_cue);
+	dest->despawn_delay = src->despawn_delay;
 }
 
 // Per-jump-node field handling here MUST stay in sync with:
