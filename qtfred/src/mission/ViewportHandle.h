@@ -66,6 +66,20 @@ struct ViewportHandle {
 	// When true, the handle's owning environment entity is selected: the label
 	// renders green (matching a selected object) instead of white.
 	bool is_selected = false;
+
+	// When true, this handle's coordinates are drawn (under Show Coordinates)
+	// and shown in its hover balloon, independent of info_label. Lets handles
+	// without a name (asteroid faces/corners) still surface their position.
+	bool show_coords = false;
+
+	// When true, a grid-drop indicator line is drawn from this handle to the
+	// grid plane (under Show Grid Positions), like an object's.
+	bool show_grid_position = false;
+
+	// Bitmask of axes (bit0=X, bit1=Y, bit2=Z) the transform-toolbar spinboxes
+	// may edit when this handle is the selected one. Face handles restrict to
+	// their single axis; corners/centers allow all three.
+	int movable_axes = 0x7;
 };
 
 } // namespace fso::fred

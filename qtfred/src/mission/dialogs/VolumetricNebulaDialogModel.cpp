@@ -29,6 +29,12 @@ bool VolumetricNebulaDialogModel::apply()
 		_editor->clearEnvironment();
 	}
 
+	// Enabling an environment entity forces the environment "layer" visible, so
+	// it can't be enabled yet invisibly hidden (which would be confusing).
+	if (_volumetrics.enabled && _editor != nullptr) {
+		_editor->setShowEnvironment(true);
+	}
+
 	// Notify: marks the mission modified and lets dependents refresh — notably
 	// the Scene Browser rebuilds so its "Environment" node appears/disappears as
 	// the volumetric is enabled/disabled.
