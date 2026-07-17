@@ -49,9 +49,14 @@ struct old_nebula_color {
 extern SCP_vector<old_nebula_pattern> Old_nebula_patterns;
 extern SCP_vector<old_nebula_color>   Old_nebula_colors;
 
-// Parse the old-nebula sections (built-in defaults + data tables) into the registries above.
-// Called once from neb2_init().
+// Clear the registries above and load the built-in default patterns/colors.  Called once from
+// neb2_init(), before the neb2 tables are parsed (game data overrides/extends the defaults).
 void old_nebula_init();
+
+// Parse any #Old Nebula Patterns / #Old Nebula Colors sections out of the table text already
+// loaded in the parse buffer.  Called by parse_nebula_table() so the old-nebula data is read as
+// part of the neb2 nebula.tbl / *-neb.tbm pass rather than re-reading those files.
+void old_nebula_parse_buffer();
 
 // Look up a pattern/color by name; returns the registry index or -1 if not found.
 int old_nebula_pattern_lookup(const char *name);

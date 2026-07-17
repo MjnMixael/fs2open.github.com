@@ -67,8 +67,9 @@ const char *old_nebula_color_name(int index)
 
 // parse the #Old Nebula Patterns / #Old Nebula Colors sections out of whatever table text is
 // currently loaded into the parse buffer.  Entries are matched by name, so a later table can
-// either override an existing entry in place or append a brand-new one.
-static void old_nebula_parse_buffer()
+// either override an existing entry in place or append a brand-new one.  Called by
+// parse_nebula_table() so the old-nebula data rides along on the neb2 table read pass.
+void old_nebula_parse_buffer()
 {
 	// patterns
 	reset_parse();
@@ -149,35 +150,21 @@ static void old_nebula_parse_buffer()
 	}
 }
 
-// callback for parse_modular_table() / the base nebula.tbl
-static void old_nebula_parse_table(const char *filename)
-{
-	try {
-		read_file_text(filename, CF_TYPE_TABLES);
-		old_nebula_parse_buffer();
-	} catch (const parse::ParseException &e) {
-		mprintf(("TABLES: Unable to parse old nebula data in '%s'!  Error message = %s.\n", filename, e.what()));
-	}
-}
-
 void old_nebula_init()
 {
 	Old_nebula_patterns.clear();
 	Old_nebula_colors.clear();
 
-	// built-in defaults, embedded in the executable
+	// built-in defaults, embedded in the executable.  The game data in nebula.tbl / *-neb.tbm is
+	// then parsed by parse_nebula_table() (see neb2_init), which reads each file once and lets
+	// both the neb2 poof parser and old_nebula_parse_buffer() pick over the same buffer.  Doing
+	// the defaults here means neb2_init must call this before it parses those tables.
 	try {
 		read_file_text_from_default(defaults_get_file("old_nebula.tbm"));
 		old_nebula_parse_buffer();
 	} catch (const parse::ParseException &e) {
 		mprintf(("TABLES: Unable to parse default old_nebula.tbm!  Error message = %s.\n", e.what()));
 	}
-
-	// allow the game data to override or extend the defaults
-	if (cf_exists_full("nebula.tbl", CF_TYPE_TABLES))
-		old_nebula_parse_table("nebula.tbl");
-
-	parse_modular_table("*-neb.tbm", old_nebula_parse_table);
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -484,6 +471,9 @@ static int load_nebula_sub(const char *filename)
 		cfread(&l, sizeof(int), 1, fp);
 		project_2d_onto_sphere(&nebula_vecs[i], 1.0f - xf, yf);
 		vm_vec_scale(&nebula_vecs[i], NEBULA_RADIUS);
+		// orient to match the procedural mesh (built with the current mission's PBH) so the two
+		// line up when comparing them
+		vm_vec_unrotate(&nebula_vecs[i], &nebula_vecs[i], &Nebula_orient);
 		neb_light[i] = l;
 	}
 
