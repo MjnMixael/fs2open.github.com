@@ -98,6 +98,7 @@ class volumetric_nebula {
 	volumetric_nebula& parse_volumetric_nebula();
 
 	const vec3d& getPos() const;
+	void setPos(const vec3d& new_pos);
 	const vec3d& getSize() const;
 	const SCP_string& getHullPof() const;
 	const std::tuple<float, float, float>& getNebulaColor() const;

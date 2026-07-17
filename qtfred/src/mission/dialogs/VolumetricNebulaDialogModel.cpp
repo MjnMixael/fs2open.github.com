@@ -22,6 +22,19 @@ bool VolumetricNebulaDialogModel::apply()
 		}
 		makeVolumetricsCopy(*The_mission.volumetrics, _volumetrics);
 	}
+	// If the volumetric was just disabled while it was the selected environment
+	// entity, drop that now-dangling selection.
+	if (!_volumetrics.enabled && _editor != nullptr &&
+		_editor->currentEnvironment == EnvironmentObject::VolumetricNebula) {
+		_editor->clearEnvironment();
+	}
+
+	// Notify: marks the mission modified and lets dependents refresh — notably
+	// the Scene Browser rebuilds so its "Environment" node appears/disappears as
+	// the volumetric is enabled/disabled.
+	if (_editor != nullptr) {
+		_editor->missionChanged();
+	}
 	return true;
 }
 
@@ -183,17 +196,6 @@ float VolumetricNebulaDialogModel::getPosZ() const
 void VolumetricNebulaDialogModel::setPosZ(float z)
 {
 	modify(_volumetrics.pos.xyz.z, z);
-	pushLivePos();
-}
-
-void VolumetricNebulaDialogModel::nudgePos(const vec3d& delta_world)
-{
-	if (delta_world.xyz.x == 0.0f && delta_world.xyz.y == 0.0f && delta_world.xyz.z == 0.0f) {
-		return;
-	}
-	vec3d new_pos = _volumetrics.pos;
-	vm_vec_add2(&new_pos, &delta_world);
-	modify(_volumetrics.pos, new_pos);
 	pushLivePos();
 }
 

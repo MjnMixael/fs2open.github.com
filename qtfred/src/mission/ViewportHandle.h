@@ -48,10 +48,24 @@ struct ViewportHandle {
 	// model so live UI refresh and apply/reject continue to work.
 	std::function<void(const vec3d& delta_world)> on_drag;
 
+	// Optional. Called once when a genuine mouse-release ends the drag (NOT on
+	// Escape/right-click cancel). Direct-edit handles use this to mark the
+	// mission modified exactly once per drag, matching object-drag behavior.
+	std::function<void()> on_release;
+
 	// Optional. Return false to render this handle as inert (grayed out, not
 	// pickable). Used to honor the toolbar axis-lock for Face handles whose
 	// axis is currently constrained out.
 	std::function<bool()> is_enabled;
+
+	// Optional. When non-empty and Show Info is on, this label is drawn next to
+	// the handle (like a ship's name); coordinates are appended when Show
+	// Coordinates is on. Also used as the hover-balloon text.
+	SCP_string info_label;
+
+	// When true, the handle's owning environment entity is selected: the label
+	// renders green (matching a selected object) instead of white.
+	bool is_selected = false;
 };
 
 } // namespace fso::fred
