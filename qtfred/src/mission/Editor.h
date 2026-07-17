@@ -100,6 +100,13 @@ class Editor : public QObject {
 	void selectEnvironment(EnvironmentObject env);
 	void clearEnvironment() { selectEnvironment(EnvironmentObject::None); }
 
+	// Viewport visibility of all environment entities (volumetric nebula,
+	// asteroid field) — their visualizers AND gizmos. Behaves like a layer
+	// toggle in the Scene Browser. Not saved to the mission. Hiding also clears
+	// any environment selection (you can't act on what you can't see).
+	void setShowEnvironment(bool show);
+	bool showEnvironment() const { return show_environment; }
+
 	EditorViewport* createEditorViewport(os::Viewport* renderView);
 
 	/* Schedules updates for all renderes */
@@ -177,6 +184,11 @@ class Editor : public QObject {
 	void currentEnvironmentChanged();
 
 	/**
+	 * @brief Emitted when environment viewport visibility is toggled
+	 */
+	void environmentVisibilityChanged();
+
+	/**
 	 * @brief A signal which is emitted if the marking status of an object changed
 	 * @param obj The object which changed
 	 * @param marked @c true if the object is now marked, @c false otherwise
@@ -205,6 +217,8 @@ class Editor : public QObject {
 	int currentObject = -1;
 	// The selected environment entity, mutually exclusive with object selection.
 	EnvironmentObject currentEnvironment = EnvironmentObject::None;
+	// Viewport visibility of environment entities (see setShowEnvironment).
+	bool show_environment = true;
 	int cur_wing = -1;
 	int cur_ship = -1;
 

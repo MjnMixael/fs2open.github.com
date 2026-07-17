@@ -63,8 +63,13 @@ public:
 	// live outside the object tree; the panel renders a top-level "Environment"
 	// node for them.
 	bool hasVolumetricNebula() const;
+	bool hasAsteroidField() const;
 	EnvironmentObject currentEnvironment() const;
 	void selectEnvironmentFromBrowser(EnvironmentObject env);
+
+	// Viewport visibility of the "Environment" node (like a layer checkbox).
+	bool environmentVisible() const;
+	void setEnvironmentVisible(bool visible);
 
 	void setNameFilter(const QString& filter);
 	const QString& getNameFilter() const { return _nameFilter; }

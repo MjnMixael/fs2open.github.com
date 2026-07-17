@@ -117,19 +117,32 @@ void SceneBrowserPanel::rebuildTree()
 	const auto marked = dialogs::SceneBrowserModel::getMarkedSet();
 
 	// "Environment" node: a top-level sibling of the layers, always first, no
-	// checkbox. Its children are non-object entities (volumetric nebula now,
-	// asteroid field later). Only shown when at least one such entity exists.
-	if (_model->hasVolumetricNebula()) {
+	// checkbox. Its children are non-object entities (volumetric nebula,
+	// asteroid field). Only shown when at least one such entity exists.
+	const bool hasVol = _model->hasVolumetricNebula();
+	const bool hasAst = _model->hasAsteroidField();
+	if (hasVol || hasAst) {
 		auto* envItem = new QTreeWidgetItem(_tree);
 		envItem->setText(0, tr("Environment"));
 		envItem->setData(0, IsEnvironmentRootRole, true);
-		envItem->setFlags(Qt::ItemIsEnabled);  // header row: visible, not selectable, no checkbox
+		// Header row: not selectable, but a layer-style visibility checkbox that
+		// hides/shows every environment entity (nebula, field) in the viewport.
+		envItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
+		envItem->setCheckState(0, _model->environmentVisible() ? Qt::Checked : Qt::Unchecked);
 		envItem->setExpanded(true);
 
-		auto* volItem = new QTreeWidgetItem(envItem);
-		volItem->setText(0, tr("Volumetric Nebula"));
-		volItem->setData(0, EnvKindRole, static_cast<int>(EnvironmentObject::VolumetricNebula));
-		volItem->setSelected(_model->currentEnvironment() == EnvironmentObject::VolumetricNebula);
+		if (hasVol) {
+			auto* volItem = new QTreeWidgetItem(envItem);
+			volItem->setText(0, tr("Volumetric Nebula"));
+			volItem->setData(0, EnvKindRole, static_cast<int>(EnvironmentObject::VolumetricNebula));
+			volItem->setSelected(_model->currentEnvironment() == EnvironmentObject::VolumetricNebula);
+		}
+		if (hasAst) {
+			auto* astItem = new QTreeWidgetItem(envItem);
+			astItem->setText(0, tr("Asteroid Field"));
+			astItem->setData(0, EnvKindRole, static_cast<int>(EnvironmentObject::AsteroidField));
+			astItem->setSelected(_model->currentEnvironment() == EnvironmentObject::AsteroidField);
+		}
 	}
 
 	for (const auto& layer : layers) {
@@ -269,6 +282,10 @@ void SceneBrowserPanel::syncLayerVisibility()
 
 	for (int i = 0; i < _tree->topLevelItemCount(); i++) {
 		auto* item = _tree->topLevelItem(i);
+		if (!item->data(0, IsEnvironmentRootRole).isNull()) {
+			item->setCheckState(0, _model->environmentVisible() ? Qt::Checked : Qt::Unchecked);
+			continue;
+		}
 		auto layerName = item->data(0, LayerNameRole).toString();
 		for (const auto& layer : layers) {
 			if (layer.name == layerName) {
@@ -382,6 +399,14 @@ void SceneBrowserPanel::onTreeStructureChanged()
 void SceneBrowserPanel::onItemChanged(QTreeWidgetItem* item, int column)
 {
 	if (column != 0) return;
+
+	// Environment visibility checkbox (top-level node).
+	auto varEnvRoot = item->data(0, IsEnvironmentRootRole);
+	if (!varEnvRoot.isNull() && varEnvRoot.toBool()) {
+		_model->setEnvironmentVisible(item->checkState(0) == Qt::Checked);
+		return;
+	}
+
 	auto varLayer = item->data(0, IsLayerItemRole);
 	if (varLayer.isNull() || !varLayer.toBool()) return;
 
@@ -465,11 +490,18 @@ void SceneBrowserPanel::onCustomContextMenuRequested(const QPoint& pos)
 		const auto kind = static_cast<EnvironmentObject>(varEnv.toInt());
 		_model->selectEnvironmentFromBrowser(kind);
 		syncSelection();
+		QMenu menu(this);
+		QAction* editAction = nullptr;
 		if (kind == EnvironmentObject::VolumetricNebula) {
-			QMenu menu(this);
-			auto* editAction = menu.addAction(tr("Edit Volumetric Nebula"));
-			if (menu.exec(globalPos) == editAction) {
+			editAction = menu.addAction(tr("Edit Volumetric Nebula"));
+		} else if (kind == EnvironmentObject::AsteroidField) {
+			editAction = menu.addAction(tr("Edit Asteroid Field"));
+		}
+		if (editAction != nullptr && menu.exec(globalPos) == editAction) {
+			if (kind == EnvironmentObject::VolumetricNebula) {
 				_fredView->editVolumetricNebula();
+			} else if (kind == EnvironmentObject::AsteroidField) {
+				_fredView->editAsteroidField();
 			}
 		}
 		return;

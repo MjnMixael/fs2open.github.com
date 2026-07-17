@@ -63,6 +63,10 @@ class FredView: public QMainWindow, public IDialogProvider {
 	// the handle double-click, and the environment context menu.
 	void editVolumetricNebula();
 
+	// Opens the (modal) Asteroid Field editor. Shared by the menu action, the
+	// handle double-click, and the environment context menu.
+	void editAsteroidField();
+
 	void restartAutosaveTimer();
 
  public slots:

@@ -37,6 +37,26 @@ bool AsteroidEditorDialogModel::apply()
 		return false;
 	}
 	Asteroid_field = _a_field;
+
+	// If the field was just disabled while it was the selected environment
+	// entity, drop that now-dangling selection.
+	if (Asteroid_field.num_initial_asteroids <= 0 && _editor != nullptr &&
+		_editor->currentEnvironment == EnvironmentObject::AsteroidField) {
+		_editor->clearEnvironment();
+	}
+
+	// Enabling an environment entity forces the environment "layer" visible, so
+	// it can't be enabled yet invisibly hidden (which would be confusing).
+	if (Asteroid_field.num_initial_asteroids > 0 && _editor != nullptr) {
+		_editor->setShowEnvironment(true);
+	}
+
+	// Notify: marks the mission modified and lets dependents refresh — notably
+	// the Scene Browser rebuilds so its "Environment" node's asteroid child
+	// appears/disappears as the field is enabled/disabled.
+	if (_editor != nullptr) {
+		_editor->missionChanged();
+	}
 	return true;
 }
 

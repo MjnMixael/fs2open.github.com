@@ -145,43 +145,47 @@ static void draw_viewport_handles(fso::fred::EditorViewport* viewport,
 			gr_set_color(r, g, b);
 			gr_rect(x - half, y - half, half * 2 + 1, half * 2 + 1);
 
-			if (handle.info_label.empty()) {
-				continue;
-			}
+			// A handle surfaces text if it has a name (label) and/or opts into
+			// coordinate display. Label follows Show Info; coords follow Show
+			// Coordinates. (Asteroid faces/corners are nameless but show_coords.)
+			const bool wantsLabel  = view.Show_ship_info && !handle.info_label.empty();
+			const bool wantsCoords = view.Show_coordinates && handle.show_coords;
 
-			// Persistent name / coordinate overlay, matching the object-info
-			// text loop (green/yellow-green/white by outline mode).
-			char buf[256];
-			buf[0] = 0;
-			if (view.Show_ship_info) {
-				strcpy_s(buf, handle.info_label.c_str());
-			}
-			if (view.Show_coordinates) {
-				char pos_str[64];
-				sprintf(pos_str, "(%.0f,%.0f,%.0f)", handle.world_pos.xyz.x, handle.world_pos.xyz.y, handle.world_pos.xyz.z);
-				if (*buf) {
-					strcat_s(buf, "\n");
+			// Persistent name / coordinate overlay. Green when the owning entity
+			// is selected (matching a selected object), white otherwise —
+			// deliberately NOT tracking Fred_outline (the selected object's scheme).
+			if (wantsLabel || wantsCoords) {
+				char buf[256];
+				buf[0] = 0;
+				if (wantsLabel) {
+					strcpy_s(buf, handle.info_label.c_str());
 				}
-				strcat_s(buf, pos_str);
-			}
-			if (*buf) {
-				// Green when this environment entity is selected (matching a
-				// selected object), white otherwise. Deliberately does NOT track
-				// Fred_outline (that reflects the selected *object's* scheme).
+				if (wantsCoords) {
+					char pos_str[64];
+					sprintf(pos_str, "(%.0f,%.0f,%.0f)", handle.world_pos.xyz.x, handle.world_pos.xyz.y, handle.world_pos.xyz.z);
+					if (*buf) {
+						strcat_s(buf, "\n");
+					}
+					strcat_s(buf, pos_str);
+				}
 				gr_set_color_fast(handle.is_selected ? &colour_green : &colour_white);
 				gr_string(x + half + 3, y - half, buf);
 			}
 
 			// Hover balloon on the handle under the cursor — same infobox ships
-			// draw, shown regardless of the Show toggles.
-			if (hovered.group_index == static_cast<int>(gi) && hovered.handle_index == static_cast<int>(hi)) {
+			// draw, shown regardless of the Show toggles. Only for handles that
+			// carry a name or surface coordinates.
+			const bool hovering = hovered.group_index == static_cast<int>(gi) &&
+				hovered.handle_index == static_cast<int>(hi);
+			if (hovering && (!handle.info_label.empty() || handle.show_coords)) {
 				char info[256];
-				sprintf(info,
-					"%s\n( %.1f , %.1f , %.1f ) ",
-					handle.info_label.c_str(),
-					handle.world_pos.xyz.x,
-					handle.world_pos.xyz.y,
-					handle.world_pos.xyz.z);
+				if (!handle.info_label.empty()) {
+					sprintf(info, "%s\n( %.1f , %.1f , %.1f ) ", handle.info_label.c_str(),
+						handle.world_pos.xyz.x, handle.world_pos.xyz.y, handle.world_pos.xyz.z);
+				} else {
+					sprintf(info, "( %.1f , %.1f , %.1f ) ",
+						handle.world_pos.xyz.x, handle.world_pos.xyz.y, handle.world_pos.xyz.z);
+				}
 				int w, h;
 				gr_get_string_size(&w, &h, info);
 				int bx = x;
@@ -1126,8 +1130,14 @@ void FredRenderer::render_frame(int cur_object_index,
 		g3_draw_horizon_line();
 	}
 
-	gr_set_color(192, 96, 16);
-	draw_asteroid_field();
+	// Environment visibility (Scene Browser "Environment" toggle) hides the
+	// asteroid-field wireframe and the volumetric hull, alongside their gizmos.
+	const bool showEnv = _viewport->editor == nullptr || _viewport->editor->showEnvironment();
+
+	if (showEnv) {
+		gr_set_color(192, 96, 16);
+		draw_asteroid_field();
+	}
 
 	if (view().Show_grid) {
 		render_grid(_viewport->The_grid);
@@ -1135,23 +1145,32 @@ void FredRenderer::render_frame(int cur_object_index,
 
 	gr_set_color(0, 0, 64);
 	render_models(cur_object_index);
-	render_volumetric_overlay();
-
-	// Grid-position indicator for the volumetric nebula, drawn like an object's
-	// so its height above/below the grid plane is readable. render_model_x_htl
-	// self-gates on Show_grid_positions; the enable_htl bracket is needed
-	// because render_models() left HTL disabled.
-	if (view().Show_grid_positions && The_mission.volumetrics && The_mission.volumetrics->get_enabled() &&
-		!The_mission.volumetrics->getHullPof().empty()) {
-		enable_htl();
-		vec3d vol_pos = The_mission.volumetrics->getPos();
-		render_model_x_htl(&vol_pos, _viewport->The_grid);
-		disable_htl();
+	if (showEnv) {
+		render_volumetric_overlay();
 	}
 
-	// Keep the always-on volumetric gizmo in sync with the mission before it is
-	// drawn/picked (cheap no-op unless the nebula's state actually changed).
+	// Keep the always-on gizmos in sync with the mission before they are
+	// drawn/picked (cheap no-ops unless the underlying state changed).
 	_viewport->refreshVolumetricHandle();
+	_viewport->refreshAsteroidHandles();
+
+	// Grid-position indicators for any handle that opts in (volumetric center,
+	// asteroid box centers), drawn like an object's so height above/below the
+	// grid plane is readable. render_model_x_htl self-gates on
+	// Show_grid_positions; the enable_htl bracket is needed because
+	// render_models() left HTL disabled.
+	if (view().Show_grid_positions) {
+		enable_htl();
+		for (const auto& group : _viewport->getHandleGroups()) {
+			for (const auto& handle : group) {
+				if (handle.show_grid_position) {
+					vec3d hp = handle.world_pos;
+					render_model_x_htl(&hp, _viewport->The_grid);
+				}
+			}
+		}
+		disable_htl();
+	}
 
 	// Viewport handles overlay every visualizer (asteroid box, volumetric
 	// hull) and need to draw after them so the markers sit on top of the

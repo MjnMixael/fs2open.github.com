@@ -212,10 +212,15 @@ void RenderWidget::mouseDoubleClickEvent(QMouseEvent* event) {
 	if (_viewport != nullptr && event->button() == Qt::LeftButton) {
 		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
 			event->position().y() * _window->devicePixelRatio());
-		if (_viewport->handleEnvironment(pick) == EnvironmentObject::VolumetricNebula) {
+		const auto env = _viewport->handleEnvironment(pick);
+		if (env != EnvironmentObject::None) {
 			auto parentView = static_cast<FredView*>(parentWidget());
 			Q_ASSERT(parentView);
-			parentView->editVolumetricNebula();
+			if (env == EnvironmentObject::VolumetricNebula) {
+				parentView->editVolumetricNebula();
+			} else if (env == EnvironmentObject::AsteroidField) {
+				parentView->editAsteroidField();
+			}
 			event->accept();
 			return;
 		}
@@ -286,10 +291,12 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 		auto pick = _viewport->pick_handle(px, py);
 		if (pick.group_index >= 0) {
 			// Clicking a viewport handle selects its environment entity (mutually
-			// exclusive with object selection) and arms a drag if one can start.
+			// exclusive with object selection), records it as the spinbox target,
+			// and arms a drag if one can start.
 			const auto env = _viewport->handleEnvironment(pick);
 			if (env != EnvironmentObject::None) {
 				fred->selectEnvironment(env);
+				_viewport->setSelectedHandle(pick);
 			}
 			if (_viewport->begin_handle_drag(pick, px, py)) {
 				_handleGrabbed = true;

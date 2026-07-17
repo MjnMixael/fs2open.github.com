@@ -443,6 +443,12 @@ void Editor::clean_up_selections() {
 		currentEnvironment = EnvironmentObject::None;
 		currentEnvironmentChanged();
 	}
+	// Environment visibility is a per-session view toggle; reset to shown for a
+	// fresh/loaded mission so nothing is unexpectedly hidden.
+	if (!show_environment) {
+		show_environment = true;
+		environmentVisibilityChanged();
+	}
 }
 void Editor::unmark_all() {
 	if (numMarked > 0) {
@@ -695,6 +701,19 @@ void Editor::selectEnvironment(EnvironmentObject env) {
 		currentEnvironmentChanged();
 	}
 
+	updateAllViewports();
+}
+
+void Editor::setShowEnvironment(bool show) {
+	if (show_environment == show) {
+		return;
+	}
+	show_environment = show;
+	if (!show_environment) {
+		// Hidden: nothing to select, so drop any environment selection.
+		clearEnvironment();
+	}
+	environmentVisibilityChanged();
 	updateAllViewports();
 }
 void Editor::updateAllViewports() {

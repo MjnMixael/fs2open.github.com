@@ -2,6 +2,7 @@
 
 #include "SceneBrowserModel.h"
 
+#include <asteroid/asteroid.h>
 #include <globalincs/linklist.h>
 #include <iff_defs/iff_defs.h>
 #include <jumpnode/jumpnode.h>
@@ -24,6 +25,11 @@ SceneBrowserModel::SceneBrowserModel(QObject* parent, EditorViewport* viewport)
 
 	connect(_editor, &Editor::currentObjectChanged, this, &SceneBrowserModel::onCurrentObjectChanged);
 	connect(_editor, &Editor::currentEnvironmentChanged, this, &SceneBrowserModel::onCurrentEnvironmentChanged);
+	connect(_editor, &Editor::environmentVisibilityChanged, this, [this]() {
+		if (!_updatingFromBrowser) {
+			modelChanged();  // re-sync the Environment checkbox (fast, no rebuild)
+		}
+	});
 	connect(_editor, &Editor::objectMarkingChanged, this, &SceneBrowserModel::onObjectMarkingChanged);
 	connect(_editor, &Editor::layerVisibilityChanged, this, &SceneBrowserModel::onLayerVisibilityChanged);
 	connect(_editor, &Editor::layerStructureChanged, this, &SceneBrowserModel::onLayerStructureChanged);
@@ -251,15 +257,35 @@ bool SceneBrowserModel::hasVolumetricNebula() const
 	return The_mission.volumetrics.has_value() && The_mission.volumetrics->get_enabled();
 }
 
+bool SceneBrowserModel::hasAsteroidField() const
+{
+	return Asteroid_field.num_initial_asteroids > 0;
+}
+
 EnvironmentObject SceneBrowserModel::currentEnvironment() const
 {
 	return _editor->currentEnvironment;
+}
+
+bool SceneBrowserModel::environmentVisible() const
+{
+	return _editor->showEnvironment();
+}
+
+void SceneBrowserModel::setEnvironmentVisible(bool visible)
+{
+	_editor->setShowEnvironment(visible);
 }
 
 void SceneBrowserModel::selectEnvironmentFromBrowser(EnvironmentObject env)
 {
 	_updatingFromBrowser = true;
 	_editor->selectEnvironment(env);
+	// Selecting from the browser targets the field's default handle (its
+	// outer-box center), not whatever handle was last clicked in the viewport.
+	if (_viewport != nullptr) {
+		_viewport->clearSelectedHandle();
+	}
 	_updatingFromBrowser = false;
 }
 

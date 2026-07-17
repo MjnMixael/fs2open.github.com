@@ -172,10 +172,31 @@ class EditorViewport {
 	// modified; the editor dialog is modal, so it cannot overlap a drag.
 	void refreshVolumetricHandle();
 
-	// Which environment entity (if any) a picked handle belongs to. Only the
-	// viewport-owned volumetric gizmo maps to one today; dialog-owned asteroid
-	// handles return None. Used by the widget to drive environment selection.
+	// Viewport-owned asteroid-field gizmos (outer box, and inner box when
+	// enabled): 6 face + 8 corner + 1 center handle per box, rebuilt from
+	// Asteroid_field. Same always-on / direct-edit / modal-dialog model as the
+	// volumetric handle. Called each frame from the renderer (dirty-checked).
+	void refreshAsteroidHandles();
+
+	// Which environment entity (if any) a picked handle belongs to. The
+	// viewport-owned volumetric and asteroid gizmos map to one; anything else
+	// returns None. Used by the widget to drive environment selection.
 	EnvironmentObject handleEnvironment(HandlePick pick) const;
+
+	// The specific handle the transform-toolbar spinboxes act on (for the
+	// asteroid field, which has many handles). Set on a viewport handle click;
+	// cleared to fall back to the field's outer-box center.
+	void setSelectedHandle(HandlePick pick) { _selected_handle = pick; }
+	void clearSelectedHandle() { _selected_handle = HandlePick{}; }
+
+	// Read/write the currently targeted asteroid handle for the spinboxes.
+	// asteroidSpinboxTarget fills the handle's world position and its editable
+	// axis bitmask, defaulting to the outer-box center; returns false if there
+	// is no asteroid field. applyAsteroidSpinbox moves that handle so its
+	// position becomes new_pos (delta routed through the handle's on_drag, so
+	// clamping and mission-modified marking happen there).
+	bool asteroidSpinboxTarget(vec3d* out_pos, int* out_movable_axes) const;
+	void applyAsteroidSpinbox(const vec3d& new_pos);
 
 	SCP_vector<SCP_string> getLayerNames() const;
 	bool addLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
@@ -330,6 +351,20 @@ private:
 	SCP_string _vol_handle_cached_label;
 	int _vol_handle_cached_color = -1;
 	bool _vol_handle_cached_selected = false;
+
+	// Viewport-owned asteroid gizmo state, plus a dirty cache (bounds + toggles
+	// + selected) to avoid the per-frame repaint loop, and the outer-box center
+	// handle index (spinbox default target).
+	HandleGroupId _asteroid_handle_group;
+	int _asteroid_center_index = -1;
+	bool _ast_handle_cached_present = false;
+	bool _ast_handle_cached_inner = false;
+	bool _ast_handle_cached_selected = false;
+	int _ast_handle_cached_target = -1;
+	vec3d _ast_handle_cached_bounds[4] = {vmd_zero_vector, vmd_zero_vector, vmd_zero_vector, vmd_zero_vector};
+
+	// The transform-toolbar's target handle across all groups. {-1,-1} = none.
+	HandlePick _selected_handle{};
 
 	// Compute the world-space point under the mouse cursor on the same
 	// constraint plane that drag_objects() uses (centered on `anchor`).

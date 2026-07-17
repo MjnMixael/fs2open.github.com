@@ -13,6 +13,7 @@
 #include <QSettings>
 #include <math/fvi.h>
 #include <jumpnode/jumpnode.h>
+#include <asteroid/asteroid.h>
 #include <mission/missionparse.h>
 #include <nebula/volumetrics.h>
 #include <prop/prop.h>
@@ -2036,14 +2037,309 @@ EnvironmentObject EditorViewport::handleEnvironment(HandlePick pick) const {
 		pick.group_index == _volumetric_handle_group.index) {
 		return EnvironmentObject::VolumetricNebula;
 	}
+	if (pick.group_index >= 0 && _asteroid_handle_group.valid() &&
+		pick.group_index == _asteroid_handle_group.index) {
+		return EnvironmentObject::AsteroidField;
+	}
 	return EnvironmentObject::None;
+}
+
+// ---------------------------------------------------------------------------
+// Asteroid-field gizmos (direct edits into the global Asteroid_field)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+enum class AstBox { Outer, Inner };
+enum class AstCorner { Min, Max };
+
+// Minimum gap between a box's min and max on each axis, matching the dialog
+// model's _MIN_BOX_THICKNESS so a fast drag can't invert or collapse the box.
+constexpr float kAstMinThickness = 400.0f;
+
+void getAstBound(AstBox box, vec3d* mn, vec3d* mx) {
+	if (box == AstBox::Outer) {
+		*mn = Asteroid_field.min_bound;
+		*mx = Asteroid_field.max_bound;
+	} else {
+		*mn = Asteroid_field.inner_min_bound;
+		*mx = Asteroid_field.inner_max_bound;
+	}
+}
+
+void setAstBound(AstBox box, const vec3d& mn, const vec3d& mx) {
+	if (box == AstBox::Outer) {
+		Asteroid_field.min_bound = mn;
+		Asteroid_field.max_bound = mx;
+	} else {
+		Asteroid_field.inner_min_bound = mn;
+		Asteroid_field.inner_max_bound = mx;
+	}
+}
+
+// Move one min/max component of a box by delta, clamped so the box keeps at
+// least kAstMinThickness on that axis.
+void nudgeAstComponent(AstBox box, AstCorner corner, int axis, float delta) {
+	if (delta == 0.0f || axis < 0 || axis > 2) {
+		return;
+	}
+	vec3d mn, mx;
+	getAstBound(box, &mn, &mx);
+	if (corner == AstCorner::Min) {
+		float nv = mn.a1d[axis] + delta;
+		nv = std::min(nv, mx.a1d[axis] - kAstMinThickness);
+		mn.a1d[axis] = nv;
+	} else {
+		float nv = mx.a1d[axis] + delta;
+		nv = std::max(nv, mn.a1d[axis] + kAstMinThickness);
+		mx.a1d[axis] = nv;
+	}
+	setAstBound(box, mn, mx);
+}
+
+void translateAst(AstBox box, const vec3d& delta) {
+	vec3d mn, mx;
+	getAstBound(box, &mn, &mx);
+	vm_vec_add2(&mn, &delta);
+	vm_vec_add2(&mx, &delta);
+	setAstBound(box, mn, mx);
+}
+
+} // anonymous namespace
+
+void EditorViewport::refreshAsteroidHandles() {
+	// Gated on the Scene Browser "Environment" visibility toggle, like the
+	// volumetric gizmo — hidden means no handles (and nothing to pick/drag).
+	const bool present = editor != nullptr && editor->showEnvironment() &&
+		Asteroid_field.num_initial_asteroids > 0;
+	const bool inner = present && Asteroid_field.has_inner_bound;
+	const bool selected = present && editor != nullptr &&
+		editor->currentEnvironment == EnvironmentObject::AsteroidField;
+
+	// Only the single selected/spinbox-target handle renders green. Its index is
+	// deterministic: the outer box occupies [0..14] (6 faces, 8 corners, then
+	// center at 14); the inner box, when present, follows. Default target is the
+	// outer center; a viewport click overrides it via _selected_handle.
+	constexpr int kOuterCenterIndex = 14;
+	const int astCount = present ? (inner ? 30 : 15) : 0;
+	int target = -1;
+	if (selected && astCount > 0) {
+		target = kOuterCenterIndex;
+		const int astGroupIdx = _asteroid_handle_group.valid() ? _asteroid_handle_group.index : -1;
+		if (_selected_handle.group_index == astGroupIdx &&
+			_selected_handle.handle_index >= 0 && _selected_handle.handle_index < astCount) {
+			target = _selected_handle.handle_index;
+		}
+	}
+
+	// Dirty check: bounds + toggles + selection + which handle is the target.
+	// Only touch the registry when something changed, or the per-frame refresh
+	// would spin needsUpdate().
+	const vec3d bounds[4] = {Asteroid_field.min_bound, Asteroid_field.max_bound,
+		Asteroid_field.inner_min_bound, Asteroid_field.inner_max_bound};
+	bool boundsSame = true;
+	for (int i = 0; i < 4; ++i) {
+		if (!(bounds[i] == _ast_handle_cached_bounds[i])) {
+			boundsSame = false;
+			break;
+		}
+	}
+	if (present == _ast_handle_cached_present && inner == _ast_handle_cached_inner &&
+		selected == _ast_handle_cached_selected && target == _ast_handle_cached_target &&
+		(!present || boundsSame)) {
+		return;
+	}
+	_ast_handle_cached_present = present;
+	_ast_handle_cached_inner = inner;
+	_ast_handle_cached_selected = selected;
+	_ast_handle_cached_target = target;
+	for (int i = 0; i < 4; ++i) {
+		_ast_handle_cached_bounds[i] = bounds[i];
+	}
+
+	std::vector<ViewportHandle> handles;
+	_asteroid_center_index = -1;
+
+	auto axisAllowed = [this](int axis) {
+		return [this, axis]() {
+			switch (axis) {
+			case 0: return Constraint.xyz.x != 0.0f;
+			case 1: return Constraint.xyz.y != 0.0f;
+			case 2: return Constraint.xyz.z != 0.0f;
+			default: return true;
+			}
+		};
+	};
+	auto markChanged = [this]() {
+		if (editor != nullptr) {
+			editor->missionChanged();
+		}
+	};
+
+	auto buildBox = [&](AstBox box, const vec3d& mn, const vec3d& mx, bool isOuter,
+	                    int fr, int fg, int fb, int cr, int cg, int cb, int mr, int mg, int mb) {
+		const vec3d center{{{(mn.xyz.x + mx.xyz.x) * 0.5f, (mn.xyz.y + mx.xyz.y) * 0.5f,
+			(mn.xyz.z + mx.xyz.z) * 0.5f}}};
+
+		// Six faces — each editable only along its normal axis.
+		struct FaceSpec { int axis; bool is_max; vec3d pos; vec3d normal; };
+		const FaceSpec faces[6] = {
+			{0, false, {{{mn.xyz.x, center.xyz.y, center.xyz.z}}}, {{{-1.0f, 0.0f, 0.0f}}}},
+			{0, true,  {{{mx.xyz.x, center.xyz.y, center.xyz.z}}}, {{{ 1.0f, 0.0f, 0.0f}}}},
+			{1, false, {{{center.xyz.x, mn.xyz.y, center.xyz.z}}}, {{{0.0f, -1.0f, 0.0f}}}},
+			{1, true,  {{{center.xyz.x, mx.xyz.y, center.xyz.z}}}, {{{0.0f,  1.0f, 0.0f}}}},
+			{2, false, {{{center.xyz.x, center.xyz.y, mn.xyz.z}}}, {{{0.0f, 0.0f, -1.0f}}}},
+			{2, true,  {{{center.xyz.x, center.xyz.y, mx.xyz.z}}}, {{{0.0f, 0.0f,  1.0f}}}},
+		};
+		for (const auto& f : faces) {
+			ViewportHandle h;
+			h.kind = ViewportHandle::Kind::Face;
+			h.world_pos = f.pos;
+			h.axis = f.normal;
+			h.color_r = fr; h.color_g = fg; h.color_b = fb;
+			h.is_selected = (static_cast<int>(handles.size()) == target);
+			h.show_coords = true;
+			h.movable_axes = 1 << f.axis;
+			h.is_enabled = axisAllowed(f.axis);
+			const AstCorner corner = f.is_max ? AstCorner::Max : AstCorner::Min;
+			const int axis = f.axis;
+			h.on_drag = [box, corner, axis, markChanged](const vec3d& delta) {
+				nudgeAstComponent(box, corner, axis, delta.a1d[axis]);
+				markChanged();
+			};
+			handles.push_back(std::move(h));
+		}
+
+		// Eight corners — resize the three adjacent faces together.
+		for (int xi = 0; xi < 2; ++xi) {
+			for (int yi = 0; yi < 2; ++yi) {
+				for (int zi = 0; zi < 2; ++zi) {
+					ViewportHandle h;
+					h.kind = ViewportHandle::Kind::Corner;
+					h.world_pos = vec3d{{{xi ? mx.xyz.x : mn.xyz.x, yi ? mx.xyz.y : mn.xyz.y,
+						zi ? mx.xyz.z : mn.xyz.z}}};
+					h.axis = vec3d{{{xi ? 1.0f : -1.0f, yi ? 1.0f : -1.0f, zi ? 1.0f : -1.0f}}};
+					h.color_r = cr; h.color_g = cg; h.color_b = cb;
+					h.is_selected = (static_cast<int>(handles.size()) == target);
+					h.show_coords = true;
+					const AstCorner cx = xi ? AstCorner::Max : AstCorner::Min;
+					const AstCorner cy = yi ? AstCorner::Max : AstCorner::Min;
+					const AstCorner cz = zi ? AstCorner::Max : AstCorner::Min;
+					h.on_drag = [box, cx, cy, cz, markChanged](const vec3d& delta) {
+						nudgeAstComponent(box, cx, 0, delta.xyz.x);
+						nudgeAstComponent(box, cy, 1, delta.xyz.y);
+						nudgeAstComponent(box, cz, 2, delta.xyz.z);
+						markChanged();
+					};
+					handles.push_back(std::move(h));
+				}
+			}
+		}
+
+		// Center — translates the whole box.
+		{
+			ViewportHandle h;
+			h.kind = ViewportHandle::Kind::Center;
+			h.world_pos = center;
+			h.color_r = mr; h.color_g = mg; h.color_b = mb;
+			h.is_selected = (static_cast<int>(handles.size()) == target);
+			h.show_coords = true;
+			h.show_grid_position = true;  // both centers drop a grid line
+			if (isOuter) {
+				h.info_label = "Asteroid Field";  // name shown only for the main center
+				_asteroid_center_index = static_cast<int>(handles.size());
+			}
+			h.on_drag = [box, markChanged](const vec3d& delta) {
+				translateAst(box, delta);
+				markChanged();
+			};
+			handles.push_back(std::move(h));
+		}
+	};
+
+	if (present) {
+		vec3d mn = Asteroid_field.min_bound, mx = Asteroid_field.max_bound;
+		buildBox(AstBox::Outer, mn, mx, true, 255, 160, 64, 255, 200, 64, 255, 220, 96);
+		if (inner) {
+			vec3d imn = Asteroid_field.inner_min_bound, imx = Asteroid_field.inner_max_bound;
+			buildBox(AstBox::Inner, imn, imx, false, 64, 220, 120, 96, 240, 140, 128, 255, 160);
+		}
+	}
+
+	// A rebuild that changed the handle set can invalidate the spinbox target.
+	if (_selected_handle.group_index >= 0 && _asteroid_handle_group.valid() &&
+		_selected_handle.group_index == _asteroid_handle_group.index &&
+		_selected_handle.handle_index >= static_cast<int>(handles.size())) {
+		_selected_handle = HandlePick{};
+	}
+
+	if (_asteroid_handle_group.valid()) {
+		updateHandleGroup(_asteroid_handle_group, std::move(handles));
+	} else {
+		_asteroid_handle_group = registerHandleGroup(std::move(handles));
+	}
+}
+
+bool EditorViewport::asteroidSpinboxTarget(vec3d* out_pos, int* out_movable_axes) const {
+	if (!_asteroid_handle_group.valid() ||
+		_asteroid_handle_group.index >= static_cast<int>(_handle_groups.size())) {
+		return false;
+	}
+	const auto& group = _handle_groups[_asteroid_handle_group.index];
+	if (group.empty()) {
+		return false;
+	}
+
+	int idx = _asteroid_center_index;
+	// Prefer the explicitly clicked handle when it belongs to this field.
+	if (_selected_handle.group_index == _asteroid_handle_group.index &&
+		_selected_handle.handle_index >= 0 &&
+		_selected_handle.handle_index < static_cast<int>(group.size())) {
+		idx = _selected_handle.handle_index;
+	}
+	if (idx < 0 || idx >= static_cast<int>(group.size())) {
+		return false;
+	}
+	if (out_pos != nullptr) {
+		*out_pos = group[idx].world_pos;
+	}
+	if (out_movable_axes != nullptr) {
+		*out_movable_axes = group[idx].movable_axes;
+	}
+	return true;
+}
+
+void EditorViewport::applyAsteroidSpinbox(const vec3d& new_pos) {
+	if (!_asteroid_handle_group.valid() ||
+		_asteroid_handle_group.index >= static_cast<int>(_handle_groups.size())) {
+		return;
+	}
+	const auto& group = _handle_groups[_asteroid_handle_group.index];
+	int idx = _asteroid_center_index;
+	if (_selected_handle.group_index == _asteroid_handle_group.index &&
+		_selected_handle.handle_index >= 0 &&
+		_selected_handle.handle_index < static_cast<int>(group.size())) {
+		idx = _selected_handle.handle_index;
+	}
+	if (idx < 0 || idx >= static_cast<int>(group.size())) {
+		return;
+	}
+	// Copy before invoking: on_drag marks the mission changed, which triggers a
+	// rebuild that replaces the group (and this callback).
+	auto on_drag_copy = group[idx].on_drag;
+	vec3d delta;
+	vm_vec_sub(&delta, &new_pos, &group[idx].world_pos);
+	if (on_drag_copy) {
+		on_drag_copy(delta);
+	}
 }
 
 void EditorViewport::refreshVolumetricHandle() {
 	// The gizmo is present whenever the mission has an enabled volumetric with a
-	// hull (matching what the visualizer actually draws).
-	const bool present = The_mission.volumetrics && The_mission.volumetrics->get_enabled() &&
-		!The_mission.volumetrics->getHullPof().empty();
+	// hull (matching what the visualizer actually draws) and the environment is
+	// not hidden via the Scene Browser toggle.
+	const bool present = editor != nullptr && editor->showEnvironment() && The_mission.volumetrics &&
+		The_mission.volumetrics->get_enabled() && !The_mission.volumetrics->getHullPof().empty();
 
 	vec3d pos = vmd_zero_vector;
 	SCP_string label;
@@ -2087,6 +2383,8 @@ void EditorViewport::refreshVolumetricHandle() {
 		h.color_b = cb;
 		h.info_label = label;
 		h.is_selected = selected;
+		h.show_coords = true;
+		h.show_grid_position = true;
 		h.on_drag = [this](const vec3d& delta) {
 			// Direct edit straight into the mission. The editor dialog is modal,
 			// so a drag can only happen while it is closed — there is no working
