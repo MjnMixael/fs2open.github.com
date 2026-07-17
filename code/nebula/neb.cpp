@@ -209,6 +209,18 @@ void parse_nebula_table(const char* filename)
 
 		reset_parse();
 
+		// old_nebula_parse_buffer() above already consumed any #Old Nebula Patterns/Colors sections.
+		// A game table may contain nothing but those (or lead with them), so skip past any leading
+		// old-nebula sections here -- otherwise the neb2 bitmap parser reads the "#Old Nebula ..."
+		// header as a bitmap name and warns.  (Trailing old-nebula sections after the neb2 #end are
+		// never reached, so they need no handling.)
+		while (check_for_string("#Old Nebula"))
+			skip_to_string("#End");
+
+		// if that was the whole file, there's no neb2 content left to parse
+		if (check_for_eof())
+			return;
+
 		// allow modular tables to not define bitmaps
 		bool skip_background_bitmaps = false;
 		if (Parsing_modular_table && (check_for_string("+Poof:") || check_for_string("$Name:")))
