@@ -160,10 +160,10 @@ void old_nebula_init()
 	// both the neb2 poof parser and old_nebula_parse_buffer() pick over the same buffer.  Doing
 	// the defaults here means neb2_init must call this before it parses those tables.
 	try {
-		read_file_text_from_default(defaults_get_file("old_nebula.tbm"));
+		read_file_text_from_default(defaults_get_file("old_nebula.tbl"));
 		old_nebula_parse_buffer();
 	} catch (const parse::ParseException &e) {
-		mprintf(("TABLES: Unable to parse default old_nebula.tbm!  Error message = %s.\n", e.what()));
+		mprintf(("TABLES: Unable to parse default old_nebula.tbl!  Error message = %s.\n", e.what()));
 	}
 }
 
