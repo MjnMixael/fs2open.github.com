@@ -21,9 +21,9 @@ extern int Nebula_heading;
 
 struct angles;
 
-// A procedural "old" (FS1-style) background nebula pattern.  These are data-driven: the built-in
-// set ships in the embedded old_nebula.tbm default, and mods add/modify them via #Old Nebula
-// sections in a game-data nebula.tbl or any *-neb.tbm.
+// A procedural "old" (FS1-style) background nebula pattern.  The built-in FS1 set (Nebula01..03)
+// is hardcoded in old_nebula_init(); mods add/modify patterns via #Old Nebula Patterns sections in
+// a game-data nebula.tbl or any *-neb.tbm (matched by name, so redefining a built-in overrides it).
 struct old_nebula_pattern {
 	SCP_string name;
 	float density  = 0.30f;    // fraction of bright "knots" (mostly-black otherwise)
@@ -37,31 +37,27 @@ struct old_nebula_pattern {
 	int   res_lat  = 12;       // latitude grid resolution
 	float band_min = 0.0f;     // latitude extent in 0..1; full sphere by default (poles closed)
 	float band_max = 1.0f;
-	bool  builtin  = false;    // came from the embedded default (dropped by +Include Built-in Nebulas: false)
 };
 
-// A named tint color for the old nebula.  Also data-driven via the table.
+// A named tint color for the old nebula.  Built-in set is hardcoded; mods override/add by name.
 struct old_nebula_color {
 	SCP_string name;
 	ubyte r = 255;
 	ubyte g = 255;
 	ubyte b = 255;
-	bool  builtin = false;     // came from the embedded default (dropped by +Include Built-in Nebulas: false)
 };
 
 extern SCP_vector<old_nebula_pattern> Old_nebula_patterns;
 extern SCP_vector<old_nebula_color>   Old_nebula_colors;
 
-// Clear the registries above and load the built-in default patterns/colors.  Called once from
-// neb2_init(), before the neb2 tables are parsed (game data overrides/extends the defaults).
+// Clear the registries above and populate them with the hardcoded built-in patterns/colors.
+// Called once from neb2_init(), before the neb2 tables are parsed (game data overrides/extends).
 void old_nebula_init();
 
 // Parse any #Old Nebula Patterns / #Old Nebula Colors sections out of the table text already
 // loaded in the parse buffer.  Called by parse_nebula_table() so the old-nebula data is read as
-// part of the neb2 nebula.tbl / *-neb.tbm pass rather than re-reading those files.  Pass
-// is_builtin only for the embedded default so its entries are tagged (and can later be dropped by
-// a game table's "+Include Built-in Nebulas: false").
-void old_nebula_parse_buffer(bool is_builtin = false);
+// part of the neb2 nebula.tbl / *-neb.tbm pass rather than re-reading those files.
+void old_nebula_parse_buffer();
 
 // Look up a pattern/color by name; returns the registry index or -1 if not found.
 int old_nebula_pattern_lookup(const char *name);
