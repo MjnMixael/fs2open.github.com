@@ -303,6 +303,12 @@ static float neb_fbm(float lon, float lat, const old_nebula_pattern &p)
 	return (norm > 0.0f) ? (sum / norm) : 0.0f;
 }
 
+// fraction of latitude near each pole over which the pattern fades to black.  The (lon,lat) noise
+// is singular at the poles (every longitude collapses to one point), so we fade the brightness out
+// before it gets there -- that hides the UV-sphere convergence "starburst" and keeps the closed
+// pole caps black-on-black against space, instead of trying to render coherent detail at the seam.
+#define NEBULA_POLE_FADE 0.15f
+
 // brightness 0..1 for a vertex: mostly black, a sparse scatter of bright "knots"
 static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p)
 {
@@ -316,7 +322,14 @@ static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p
 		return 0.0f;
 
 	float b = (n - thr) / (1.0f - thr);
-	return powf(b, p.contrast);
+	b = powf(b, p.contrast);
+
+	// smoothly fade to black approaching either pole
+	float edge = std::min(lat, 1.0f - lat);
+	if (edge < NEBULA_POLE_FADE)
+		b *= neb_smooth(edge / NEBULA_POLE_FADE);
+
+	return b;
 }
 
 // build the procedural gouraud sphere into Nebula_verts
