@@ -70,7 +70,7 @@ private slots:
 	void on_fogOverrideGreenSpinBox_valueChanged(int arg1);
 	void on_fogOverrideBlueSpinBox_valueChanged(int arg1);
 
-	// Old Nebula
+	// Generated BG Nebula
 	void on_oldNebulaPatternCombo_currentIndexChanged(int index);
 	void on_oldNebulaColorCombo_currentIndexChanged(int index);
 	void on_oldNebulaPitchSpinBox_valueChanged(int arg1);

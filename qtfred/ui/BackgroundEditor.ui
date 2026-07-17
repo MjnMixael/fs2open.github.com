@@ -706,7 +706,7 @@
        <item>
         <widget class="QToolButton" name="legacyNebulaToggle">
          <property name="text">
-          <string>Legacy Nebula (deprecated)</string>
+          <string>Generated BG Nebula</string>
          </property>
          <property name="checkable">
           <bool>true</bool>
