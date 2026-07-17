@@ -12,10 +12,12 @@
 #include <algorithm>
 #include <cmath>
 
+#include "bmpman/bmpman.h"
 #include "cfile/cfile.h"
 #include "debugconsole/console.h"
 #include "graphics/2d.h"
 #include "graphics/material.h"
+#include "graphics/matrix.h"
 #include "math/vecmat.h"
 #include "mission/missionparse.h"
 #include "nebula/neb.h"
@@ -205,6 +207,11 @@ void old_nebula_init()
 static vertex *Nebula_verts = nullptr;
 static int Nebula_n_verts = 0;
 
+// baked equirectangular brightness texture (procedural path).  Nebula_tex_data is our own buffer;
+// bm_create() keeps the pointer without copying, so we hold it until bm_release + delete[].
+static ubyte *Nebula_tex_data = nullptr;
+static int Nebula_bitmap = -1;
+
 static int Nebula_loaded = 0;
 static angles Nebula_pbh;
 static matrix Nebula_orient;
@@ -218,6 +225,13 @@ void nebula_close()
 	delete[] Nebula_verts;
 	Nebula_verts = nullptr;
 	Nebula_n_verts = 0;
+
+	if (Nebula_bitmap >= 0) {
+		bm_release(Nebula_bitmap);
+		Nebula_bitmap = -1;
+	}
+	delete[] Nebula_tex_data;
+	Nebula_tex_data = nullptr;
 
 	if (!Nebula_loaded)
 		return;
@@ -320,19 +334,23 @@ static float neb_fbm(float lon, float lat, const old_nebula_pattern &p)
 // pole caps black-on-black against space, instead of trying to render coherent detail at the seam.
 #define NEBULA_POLE_FADE 0.15f
 
-// brightness 0..1 for a vertex: mostly black, a sparse scatter of bright "knots"
+// brightness 0..1 for a texel: mostly black, a soft scatter of bright cloud masses
 static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p)
 {
 	float n = neb_fbm(lon, lat, p);
 
 	float density = p.density;
 	CLAMP(density, 0.0f, 1.0f);
-	float thr = 1.0f - density;
-
-	if (n <= thr || density <= 0.0f)
+	if (density <= 0.0f)
 		return 0.0f;
 
-	float b = (n - thr) / (1.0f - thr);
+	float thr = 1.0f - density;
+
+	// soft (feathered) ramp up from the threshold instead of a hard cutoff -- this, sampled
+	// per-texel into the baked texture, is what gives the smooth FS1 clouds instead of hard edges
+	float t = (n - thr) / (1.0f - thr);
+	CLAMP(t, 0.0f, 1.0f);
+	float b = neb_smooth(t);
 	b = powf(b, p.contrast);
 
 	// smoothly fade to black approaching either pole
@@ -343,8 +361,49 @@ static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p
 	return b;
 }
 
-// build the procedural gouraud sphere into Nebula_verts
-static void nebula_generate_mesh(const old_nebula_pattern &p, const old_nebula_color &col, const matrix *orient)
+// dimensions of the baked equirectangular brightness texture
+#define NEBULA_TEX_W 1024
+#define NEBULA_TEX_H 512
+
+static ubyte nebula_chan(float c, float b)
+{
+	int v = static_cast<int>(c * b);
+	CLAMP(v, 0, 255);
+	return static_cast<ubyte>(v);
+}
+
+// bake the procedural pattern into an equirectangular RGB texture, tinted by the mission color.
+// sampling per-texel here (rather than per-vertex on a coarse mesh) is what removes the triangle
+// facets; the smooth brightness field + bilinear filtering give the soft, feathered FS1 look.
+static void nebula_bake_texture(const old_nebula_pattern &p, const old_nebula_color &col)
+{
+	if (Nebula_tex_data == nullptr)
+		Nebula_tex_data = new ubyte[NEBULA_TEX_W * NEBULA_TEX_H * 3];
+
+	float intensity = (p.intensity > 0.0f) ? p.intensity : 1.0f;
+
+	ubyte *px = Nebula_tex_data;
+	for (int j = 0; j < NEBULA_TEX_H; j++) {
+		float v = (static_cast<float>(j) + 0.5f) / static_cast<float>(NEBULA_TEX_H); // latitude 0..1
+		for (int i = 0; i < NEBULA_TEX_W; i++) {
+			float u = (static_cast<float>(i) + 0.5f) / static_cast<float>(NEBULA_TEX_W); // longitude 0..1
+			float b = nebula_brightness(u, v, p) * intensity;
+			// 24-bit user bitmaps upload as GL_BGR, so store blue-green-red
+			*px++ = nebula_chan(col.b, b);
+			*px++ = nebula_chan(col.g, b);
+			*px++ = nebula_chan(col.r, b);
+		}
+	}
+
+	if (Nebula_bitmap >= 0)
+		bm_release(Nebula_bitmap);
+	// 24-bit (no alpha) so material_set_unlit() picks additive blending
+	Nebula_bitmap = bm_create(24, NEBULA_TEX_W, NEBULA_TEX_H, Nebula_tex_data, 0);
+}
+
+// build the background sphere (positions + equirectangular UVs) into Nebula_verts.  brightness and
+// color live in the baked texture now, so the geometry only needs to be a smooth-enough sphere.
+static void nebula_generate_sphere(const old_nebula_pattern &p, const matrix *orient)
 {
 	delete[] Nebula_verts;
 	Nebula_verts = nullptr;
@@ -364,7 +423,7 @@ static void nebula_generate_mesh(const old_nebula_pattern &p, const old_nebula_c
 
 	int n_grid = (rlon + 1) * (rlat + 1);
 	SCP_vector<vec3d> gpt(n_grid);
-	SCP_vector<float> gbright(n_grid);
+	SCP_vector<uv_pair> guv(n_grid);
 
 	for (int i = 0; i <= rlon; i++) {
 		float u = static_cast<float>(i) / static_cast<float>(rlon); // 0..1 longitude
@@ -379,28 +438,18 @@ static void nebula_generate_mesh(const old_nebula_pattern &p, const old_nebula_c
 
 			int gi = i * (rlat + 1) + j;
 			gpt[gi] = pt;
-			gbright[gi] = nebula_brightness(u, v, p);
+			guv[gi].u = u;
+			guv[gi].v = v;
 		}
 	}
 
 	Nebula_n_verts = rlon * rlat * 6;
 	Nebula_verts = new vertex[Nebula_n_verts];
 
-	float intensity = (p.intensity > 0.0f) ? p.intensity : 1.0f;
-
-	auto chan = [](float c, float b) {
-		int v = static_cast<int>(c * b);
-		CLAMP(v, 0, 255);
-		return static_cast<ubyte>(v);
-	};
-
 	auto set_vert = [&](vertex *vt, int gi) {
 		g3_transfer_vertex(vt, &gpt[gi]);
-		float b = gbright[gi] * intensity;
-		vt->r = chan(col.r, b);
-		vt->g = chan(col.g, b);
-		vt->b = chan(col.b, b);
-		vt->a = 255;
+		vt->texture_position = guv[gi];
+		vt->r = vt->g = vt->b = vt->a = 255;
 	};
 
 	int k = 0;
@@ -421,7 +470,7 @@ static void nebula_generate_mesh(const old_nebula_pattern &p, const old_nebula_c
 		}
 	}
 
-	Assertion(k == Nebula_n_verts, "old nebula mesh vertex count mismatch (%d != %d)", k, Nebula_n_verts);
+	Assertion(k == Nebula_n_verts, "old nebula sphere vertex count mismatch (%d != %d)", k, Nebula_n_verts);
 }
 
 void nebula_init(int index, int pitch, int bank, int heading)
@@ -441,7 +490,8 @@ void nebula_init(int index, int pitch, int bank, int heading)
 	if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size()))
 		col = Old_nebula_colors[Mission_palette];
 
-	nebula_generate_mesh(Old_nebula_patterns[index], col, &Nebula_orient);
+	nebula_bake_texture(Old_nebula_patterns[index], col);
+	nebula_generate_sphere(Old_nebula_patterns[index], &Nebula_orient);
 	Nebula_loaded = 1;
 }
 
@@ -450,13 +500,24 @@ void nebula_render()
 	if (Nebula_verts == nullptr || Nebula_n_verts <= 0)
 		return;
 
-	material mat;
-	mat.set_depth_mode(ZBUFFER_TYPE_NONE);
-	mat.set_blend_mode(ALPHA_BLEND_ADDITIVE);
+	if (Nebula_bitmap >= 0) {
+		// procedural path: additive textured sphere (no depth), instanced around the eye
+		material mat;
+		material_set_unlit(&mat, Nebula_bitmap, 1.0f, true, false);
 
-	g3_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
-	g3_render_primitives_colored(&mat, Nebula_verts, Nebula_n_verts, PRIM_TYPE_TRIS, false);
-	g3_done_instance(true);
+		gr_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
+		g3_render_primitives_textured(&mat, Nebula_verts, Nebula_n_verts, PRIM_TYPE_TRIS, false);
+		gr_end_instance_matrix();
+	} else {
+		// debug .neb reference mesh: per-vertex gouraud (see load_nebula_sub)
+		material mat;
+		mat.set_depth_mode(ZBUFFER_TYPE_NONE);
+		mat.set_blend_mode(ALPHA_BLEND_ADDITIVE);
+
+		g3_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
+		g3_render_primitives_colored(&mat, Nebula_verts, Nebula_n_verts, PRIM_TYPE_TRIS, false);
+		g3_done_instance(true);
+	}
 }
 
 // ----------------------------------------------------------------------------------------------------
