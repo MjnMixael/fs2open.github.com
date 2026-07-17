@@ -9,6 +9,7 @@
 
 
 
+#include <algorithm>
 #include <cmath>
 
 #include "cfile/cfile.h"
@@ -69,11 +70,26 @@ const char *old_nebula_color_name(int index)
 // currently loaded into the parse buffer.  Entries are matched by name, so a later table can
 // either override an existing entry in place or append a brand-new one.  Called by
 // parse_nebula_table() so the old-nebula data rides along on the neb2 table read pass.
-void old_nebula_parse_buffer()
+void old_nebula_parse_buffer(bool is_builtin)
 {
 	// patterns
 	reset_parse();
 	if (skip_to_string("#Old Nebula Patterns") == 1) {
+		// a game table can drop the whole built-in set (patterns + colors) and start from its own;
+		// this only makes sense from a game table, so it is ignored while parsing the embedded default
+		if (!is_builtin && optional_string("+Include Built-in Nebulas:")) {
+			bool include_builtin = true;
+			stuff_boolean(&include_builtin);
+			if (!include_builtin) {
+				Old_nebula_patterns.erase(std::remove_if(Old_nebula_patterns.begin(), Old_nebula_patterns.end(),
+											  [](const old_nebula_pattern &p) { return p.builtin; }),
+					Old_nebula_patterns.end());
+				Old_nebula_colors.erase(std::remove_if(Old_nebula_colors.begin(), Old_nebula_colors.end(),
+											[](const old_nebula_color &c) { return c.builtin; }),
+					Old_nebula_colors.end());
+			}
+		}
+
 		while (optional_string("$Name:")) {
 			SCP_string nm;
 			stuff_string(nm, F_NAME);
@@ -87,6 +103,9 @@ void old_nebula_parse_buffer()
 			} else {
 				p = &Old_nebula_patterns[idx];
 			}
+			// tag built-in entries; any game-table touch (new or override) clears the tag so it
+			// survives a later "+Include Built-in Nebulas: false"
+			p->builtin = is_builtin;
 
 			if (optional_string("+Density:"))
 				stuff_float(&p->density);
@@ -135,6 +154,7 @@ void old_nebula_parse_buffer()
 			} else {
 				c = &Old_nebula_colors[idx];
 			}
+			c->builtin = is_builtin;
 
 			if (optional_string("+RGB:")) {
 				int rgb[3];
@@ -160,10 +180,10 @@ void old_nebula_init()
 	// both the neb2 poof parser and old_nebula_parse_buffer() pick over the same buffer.  Doing
 	// the defaults here means neb2_init must call this before it parses those tables.
 	try {
-		read_file_text_from_default(defaults_get_file("old_nebula.tbl"));
-		old_nebula_parse_buffer();
+		read_file_text_from_default(defaults_get_file("old_nebula.tbm"));
+		old_nebula_parse_buffer(true);
 	} catch (const parse::ParseException &e) {
-		mprintf(("TABLES: Unable to parse default old_nebula.tbl!  Error message = %s.\n", e.what()));
+		mprintf(("TABLES: Unable to parse default old_nebula.tbm!  Error message = %s.\n", e.what()));
 	}
 }
 
