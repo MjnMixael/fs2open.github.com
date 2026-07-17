@@ -719,6 +719,7 @@ void FredRenderer::render_one_model_htl(object* objp,
 		}
 
 		render_info.set_flags(flags);
+		render_info.set_replacement_textures(model_get_instance(propp->model_instance_num)->texture_replace);
 		model_render_immediate(&render_info,
 							   Prop_info[propp->prop_info_index].model_num,
 							   propp->model_instance_num,
