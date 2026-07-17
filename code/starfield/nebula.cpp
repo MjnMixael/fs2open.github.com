@@ -14,7 +14,6 @@
 
 #include "cfile/cfile.h"
 #include "debugconsole/console.h"
-#include "def_files/def_files.h"
 #include "graphics/2d.h"
 #include "graphics/material.h"
 #include "math/vecmat.h"
@@ -70,26 +69,11 @@ const char *old_nebula_color_name(int index)
 // currently loaded into the parse buffer.  Entries are matched by name, so a later table can
 // either override an existing entry in place or append a brand-new one.  Called by
 // parse_nebula_table() so the old-nebula data rides along on the neb2 table read pass.
-void old_nebula_parse_buffer(bool is_builtin)
+void old_nebula_parse_buffer()
 {
 	// patterns
 	reset_parse();
 	if (skip_to_string("#Old Nebula Patterns") == 1) {
-		// a game table can drop the whole built-in set (patterns + colors) and start from its own;
-		// this only makes sense from a game table, so it is ignored while parsing the embedded default
-		if (!is_builtin && optional_string("+Include Built-in Nebulas:")) {
-			bool include_builtin = true;
-			stuff_boolean(&include_builtin);
-			if (!include_builtin) {
-				Old_nebula_patterns.erase(std::remove_if(Old_nebula_patterns.begin(), Old_nebula_patterns.end(),
-											  [](const old_nebula_pattern &p) { return p.builtin; }),
-					Old_nebula_patterns.end());
-				Old_nebula_colors.erase(std::remove_if(Old_nebula_colors.begin(), Old_nebula_colors.end(),
-											[](const old_nebula_color &c) { return c.builtin; }),
-					Old_nebula_colors.end());
-			}
-		}
-
 		while (optional_string("$Name:")) {
 			SCP_string nm;
 			stuff_string(nm, F_NAME);
@@ -103,9 +87,6 @@ void old_nebula_parse_buffer(bool is_builtin)
 			} else {
 				p = &Old_nebula_patterns[idx];
 			}
-			// tag built-in entries; any game-table touch (new or override) clears the tag so it
-			// survives a later "+Include Built-in Nebulas: false"
-			p->builtin = is_builtin;
 
 			if (optional_string("+Density:"))
 				stuff_float(&p->density);
@@ -154,7 +135,6 @@ void old_nebula_parse_buffer(bool is_builtin)
 			} else {
 				c = &Old_nebula_colors[idx];
 			}
-			c->builtin = is_builtin;
 
 			if (optional_string("+RGB:")) {
 				int rgb[3];
@@ -175,16 +155,47 @@ void old_nebula_init()
 	Old_nebula_patterns.clear();
 	Old_nebula_colors.clear();
 
-	// built-in defaults, embedded in the executable.  The game data in nebula.tbl / *-neb.tbm is
-	// then parsed by parse_nebula_table() (see neb2_init), which reads each file once and lets
-	// both the neb2 poof parser and old_nebula_parse_buffer() pick over the same buffer.  Doing
-	// the defaults here means neb2_init must call this before it parses those tables.
-	try {
-		read_file_text_from_default(defaults_get_file("old_nebula.tbm"));
-		old_nebula_parse_buffer(true);
-	} catch (const parse::ParseException &e) {
-		mprintf(("TABLES: Unable to parse default old_nebula.tbm!  Error message = %s.\n", e.what()));
-	}
+	// Hardcoded built-in FS1 set, always present.  neb2_init() calls this before parsing the neb2
+	// tables, so a game-data nebula.tbl / *-neb.tbm can override any of these by name (or add its
+	// own) via #Old Nebula Patterns / #Old Nebula Colors sections.  band left at the struct default
+	// (full sphere); all fields not set here use the struct defaults.
+	auto add_pattern = [](const char *name, float density, float freq_u, float freq_v, float warp,
+						   float contrast, float intensity, int seed, int res_lon, int res_lat) {
+		old_nebula_pattern p;
+		p.name = name;
+		p.density = density;
+		p.freq_u = freq_u;
+		p.freq_v = freq_v;
+		p.warp = warp;
+		p.contrast = contrast;
+		p.intensity = intensity;
+		p.seed = seed;
+		p.res_lon = res_lon;
+		p.res_lat = res_lat;
+		Old_nebula_patterns.push_back(p);
+	};
+	//           name         density  freq_u  freq_v  warp   contrast  intensity  seed  res_lon  res_lat
+	add_pattern("Nebula01",   0.42f,   5.0f,   6.0f,   0.40f, 1.5f,     3.5f,      1,    48,      20);
+	add_pattern("Nebula02",   0.45f,   6.0f,   5.0f,   0.50f, 1.4f,     3.5f,      2,    48,      20);
+	add_pattern("Nebula03",   0.40f,   5.0f,   7.0f,   0.60f, 1.6f,     3.5f,      3,    48,      20);
+
+	auto add_color = [](const char *name, int r, int g, int b) {
+		old_nebula_color c;
+		c.name = name;
+		c.r = static_cast<ubyte>(r);
+		c.g = static_cast<ubyte>(g);
+		c.b = static_cast<ubyte>(b);
+		Old_nebula_colors.push_back(c);
+	};
+	add_color("Red",        200,  40,  40);
+	add_color("Blue",        60,  90, 220);
+	add_color("Gold",       220, 170,  60);
+	add_color("Purple",     150,  70, 200);
+	add_color("Maroon",     140,  40,  60);
+	add_color("Green",       60, 180,  90);
+	add_color("Grey blue",  110, 130, 170);
+	add_color("Violet",     170, 100, 220);
+	add_color("Grey Green", 120, 150, 130);
 }
 
 // ----------------------------------------------------------------------------------------------------
