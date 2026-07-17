@@ -29,6 +29,7 @@ struct old_nebula_pattern {
 	float density  = 0.30f;    // fraction of bright "knots" (mostly-black otherwise)
 	float freq_u   = 2.0f;     // noise frequency along longitude (unequal u/v => streaky)
 	float freq_v   = 5.0f;     // noise frequency along latitude
+	int   octaves  = 4;        // fbm octaves; fewer = smoother/broader masses (1-2 = FS1-like), more = busier
 	float warp     = 0.4f;     // directional warp strength (stretches the wisps)
 	float contrast = 1.5f;     // falloff curve applied to bright knots
 	float intensity = 1.0f;    // overall brightness multiplier (channels are clamped to max)

@@ -98,6 +98,8 @@ void old_nebula_parse_buffer()
 				p->freq_u = f[0];
 				p->freq_v = f[1];
 			}
+			if (optional_string("+Octaves:"))
+				stuff_int(&p->octaves);
 			if (optional_string("+Warp:"))
 				stuff_float(&p->warp);
 			if (optional_string("+Contrast:"))
@@ -316,8 +318,11 @@ static float neb_fbm(float lon, float lat, const old_nebula_pattern &p)
 	// low-frequency directional warp to stretch the wisps
 	float w = (neb_vnoise(lon * base, lat * p.freq_v, p.seed + 777, base) - 0.5f) * p.warp;
 
+	int octaves = p.octaves;
+	CLAMP(octaves, 1, 8);
+
 	float sum = 0.0f, amp = 0.5f, norm = 0.0f;
-	for (int o = 0; o < 4; o++) {
+	for (int o = 0; o < octaves; o++) {
 		int per = base << o;
 		float n = neb_vnoise((lon + w) * per, lat * p.freq_v * static_cast<float>(1 << o), p.seed + o, per);
 		sum += amp * n;
