@@ -59,6 +59,10 @@ class FredView: public QMainWindow, public IDialogProvider {
 	void showWingContextMenu(int wingIndex, const QPoint& globalPos);
 	void showWaypointPathContextMenu(int pathIndex, const QPoint& globalPos);
 
+	// Opens the (modal) Volumetric Nebula editor. Shared by the menu action,
+	// the handle double-click, and the environment context menu.
+	void editVolumetricNebula();
+
 	void restartAutosaveTimer();
 
  public slots:
@@ -320,6 +324,7 @@ class FredView: public QMainWindow, public IDialogProvider {
 	bool           _ctxCachedInWing             = false;
 	int            _ctxCachedSharedWing         = -2;     // multi-select: shared wing index (-1=none, -2=N/A)
 	waypoint_list* _ctxCachedSharedWaypointList = nullptr;
+	int            _ctxCachedEnv                = -1;      // EnvironmentObject as int; -1 = uninitialized
 
 	QToolBar*       _transformToolBar    = nullptr;
 	QLabel*         _transformLabel      = nullptr;

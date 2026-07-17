@@ -76,6 +76,10 @@ private: // NOLINT(readability-redundant-access-specifiers)
 		WptListIndexRole = Qt::UserRole + 2,
 		IsLayerItemRole = Qt::UserRole + 3,
 		LayerNameRole = Qt::UserRole + 4,
+		// The top-level "Environment" node (bool) and its selectable children
+		// (an EnvironmentObject value stored as int).
+		IsEnvironmentRootRole = Qt::UserRole + 5,
+		EnvKindRole = Qt::UserRole + 6,
 	};
 };
 

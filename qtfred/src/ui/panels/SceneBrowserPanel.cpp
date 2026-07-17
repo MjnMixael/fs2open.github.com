@@ -116,6 +116,22 @@ void SceneBrowserPanel::rebuildTree()
 	const auto& layers = _model->getTree();
 	const auto marked = dialogs::SceneBrowserModel::getMarkedSet();
 
+	// "Environment" node: a top-level sibling of the layers, always first, no
+	// checkbox. Its children are non-object entities (volumetric nebula now,
+	// asteroid field later). Only shown when at least one such entity exists.
+	if (_model->hasVolumetricNebula()) {
+		auto* envItem = new QTreeWidgetItem(_tree);
+		envItem->setText(0, tr("Environment"));
+		envItem->setData(0, IsEnvironmentRootRole, true);
+		envItem->setFlags(Qt::ItemIsEnabled);  // header row: visible, not selectable, no checkbox
+		envItem->setExpanded(true);
+
+		auto* volItem = new QTreeWidgetItem(envItem);
+		volItem->setText(0, tr("Volumetric Nebula"));
+		volItem->setData(0, EnvKindRole, static_cast<int>(EnvironmentObject::VolumetricNebula));
+		volItem->setSelected(_model->currentEnvironment() == EnvironmentObject::VolumetricNebula);
+	}
+
 	for (const auto& layer : layers) {
 		// Count total objects across all categories
 		int totalObjects = 0;
@@ -203,6 +219,15 @@ void SceneBrowserPanel::syncSelection()
 	QTreeWidgetItemIterator it(_tree);
 	QTreeWidgetItem* firstSelected = nullptr;
 	while (*it) {
+		auto varEnv = (*it)->data(0, EnvKindRole);
+		if (!varEnv.isNull()) {
+			bool sel = (_model->currentEnvironment() == static_cast<EnvironmentObject>(varEnv.toInt()));
+			(*it)->setSelected(sel);
+			if (sel && !firstSelected)
+				firstSelected = *it;
+			++it;
+			continue;
+		}
 		auto varObjNum = (*it)->data(0, ObjNumRole);
 		if (!varObjNum.isNull()) {
 			bool sel = marked.contains(varObjNum.toInt());
@@ -282,6 +307,9 @@ void SceneBrowserPanel::applyFilter(const QString& filter)
 	// Walk bottom-up: leaves are already handled, now handle wings, paths, categories, layers
 	for (int li = 0; li < _tree->topLevelItemCount(); li++) {
 		auto* layerItem = _tree->topLevelItem(li);
+		// The Environment node has a different (2-level) shape than a layer and
+		// is never hidden by the name filter.
+		if (!layerItem->data(0, IsEnvironmentRootRole).isNull()) continue;
 		bool anyLayerVisible = false;
 		for (int ci = 0; ci < layerItem->childCount(); ci++) {
 			auto* catItem = layerItem->child(ci);
@@ -365,6 +393,19 @@ void SceneBrowserPanel::onItemSelectionChanged()
 {
 	if (_model->isUpdatingFromBrowser()) return;
 
+	// Environment entities are single-select and mutually exclusive with
+	// objects: if one is in the selection, select it and ignore the rest.
+	for (auto* item : _tree->selectedItems()) {
+		auto varEnv = item->data(0, EnvKindRole);
+		if (!varEnv.isNull()) {
+			_model->selectEnvironmentFromBrowser(static_cast<EnvironmentObject>(varEnv.toInt()));
+			// Reconcile the tree with the single-select model (objects were
+			// unmarked); harmless for a plain click, collapses a ctrl+click mix.
+			syncSelection();
+			return;
+		}
+	}
+
 	QVector<int> selectedObjNums;
 	QVector<int> selectedWings;
 
@@ -416,6 +457,23 @@ void SceneBrowserPanel::onCustomContextMenuRequested(const QPoint& pos)
 	if (item->flags() == Qt::ItemIsEnabled) return;  // category item
 
 	const auto globalPos = _tree->viewport()->mapToGlobal(pos);
+
+	// Environment child (volumetric nebula, asteroid later): select it, then
+	// offer its editor, mirroring an object's right-click "Edit ...".
+	auto varEnv = item->data(0, EnvKindRole);
+	if (!varEnv.isNull()) {
+		const auto kind = static_cast<EnvironmentObject>(varEnv.toInt());
+		_model->selectEnvironmentFromBrowser(kind);
+		syncSelection();
+		if (kind == EnvironmentObject::VolumetricNebula) {
+			QMenu menu(this);
+			auto* editAction = menu.addAction(tr("Edit Volumetric Nebula"));
+			if (menu.exec(globalPos) == editAction) {
+				_fredView->editVolumetricNebula();
+			}
+		}
+		return;
+	}
 
 	auto varObjNum = item->data(0, ObjNumRole);
 	auto varWing = item->data(0, WingIndexRole);

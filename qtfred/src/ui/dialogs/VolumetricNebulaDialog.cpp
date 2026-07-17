@@ -21,26 +21,26 @@ VolumetricNebulaDialog::VolumetricNebulaDialog(FredView* parent, EditorViewport*
 	this->setFocus();
 	ui->setupUi(this);
 
+	// Modal: the viewport is frozen while this dialog is open, so the nebula
+	// can only be repositioned through the spinboxes here (not by dragging the
+	// viewport handle). That keeps position editing unambiguous — the handle
+	// drag is a separate, dialog-closed interaction — and lets the drag path
+	// stay a simple direct edit. Position spinbox changes still preview live
+	// and are undone by Cancel via the model's reject() snapshot.
+	setModal(true);
+
 	ui->setModelLineEdit->setMaxLength(MAX_FILENAME_LEN - 1);
 
 	// set our internal values, update the UI
 	initializeUi();
 	updateUi();
 
-	// Refresh the position spinboxes (and the handle) whenever the model
-	// changes. Handle drags route into the model via nudgePos(), which calls
-	// modify() and fires modelChanged; the resulting updateUi() pushes the
-	// new position back into the spinboxes (and re-runs rebuildHandles, which
-	// updateUi() above has already done once to register the initial group).
+	// Refresh the position spinboxes (and swatches) whenever the model changes,
+	// e.g. a spinbox edit routed through modify() → modelChanged.
 	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &VolumetricNebulaDialog::updateUi);
 }
 
-VolumetricNebulaDialog::~VolumetricNebulaDialog()
-{
-	if (_viewport != nullptr && _handle_group.valid()) {
-		_viewport->unregisterHandleGroup(_handle_group);
-	}
-}
+VolumetricNebulaDialog::~VolumetricNebulaDialog() = default;
 
 void VolumetricNebulaDialog::accept()
 {
@@ -133,7 +133,13 @@ void VolumetricNebulaDialog::updateUi()
 	updateColorSwatch();
 	updateNoiseColorSwatch();
 
-	rebuildHandles();
+	// A spinbox edit live-pushes into The_mission.volumetrics (position, and the
+	// hull is drawn from it); request a repaint so the preview and the gizmo
+	// marker follow. Rendering is on-demand, so without this the viewport would
+	// not refresh until some other event scheduled a frame.
+	if (_viewport != nullptr) {
+		_viewport->needsUpdate();
+	}
 }
 
 void VolumetricNebulaDialog::enableDisableControls()
@@ -383,40 +389,6 @@ void VolumetricNebulaDialog::on_setBaseNoiseFunctionButton_clicked()
 void VolumetricNebulaDialog::on_setSubNoiseFunctionButton_clicked()
 {
 	QMessageBox::information(this, "Not Implemented", "Setting the sub noise function is not implemented yet.");
-}
-
-void VolumetricNebulaDialog::rebuildHandles()
-{
-	if (_viewport == nullptr) {
-		return;
-	}
-
-	std::vector<ViewportHandle> handles;
-
-	// Only show the handle while the nebula is enabled AND a hull is set (the
-	// visualizer renders nothing otherwise, so a handle would float in empty
-	// space). We render the hull from The_mission.volumetrics, so checking
-	// model state here matches what the user actually sees.
-	if (_model->getEnabled() && !_model->getHullPof().empty()) {
-		ViewportHandle h;
-		h.kind = ViewportHandle::Kind::Center;
-		h.world_pos = _model->getPos();
-		// Match the nebula color so the handle blends visually with its hull.
-		h.color_r = std::clamp(_model->getColorR(), 64, 255);
-		h.color_g = std::clamp(_model->getColorG(), 64, 255);
-		h.color_b = std::clamp(_model->getColorB(), 64, 255);
-		VolumetricNebulaDialogModel* model = _model.get();
-		h.on_drag = [model](const vec3d& delta) {
-			model->nudgePos(delta);
-		};
-		handles.push_back(std::move(h));
-	}
-
-	if (_handle_group.valid()) {
-		_viewport->updateHandleGroup(_handle_group, std::move(handles));
-	} else {
-		_handle_group = _viewport->registerHandleGroup(std::move(handles));
-	}
 }
 
 } // namespace fso::fred::dialogs

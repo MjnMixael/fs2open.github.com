@@ -14,8 +14,11 @@
 #include <math/fvi.h>
 #include <jumpnode/jumpnode.h>
 #include <mission/missionparse.h>
+#include <nebula/volumetrics.h>
 #include <prop/prop.h>
 #include <FredApplication.h>
+
+#include <algorithm>
 
 namespace {
 
@@ -512,6 +515,15 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 
 	if (Cursor_over != Last_cursor_over) {
 		Last_cursor_over = Cursor_over;
+		needsUpdate();
+	}
+
+	// Same change-detection for the hovered viewport handle, so its hover
+	// balloon appears/updates on mouse-move exactly like an object's Cursor_over
+	// infobox (mouse-move sets the state but does not itself schedule a frame).
+	if (_hovered_handle.group_index != _last_hovered_handle.group_index ||
+		_hovered_handle.handle_index != _last_hovered_handle.handle_index) {
+		_last_hovered_handle = _hovered_handle;
 		needsUpdate();
 	}
 
@@ -1999,6 +2011,104 @@ bool EditorViewport::drag_handle(int cx, int cy) {
 void EditorViewport::end_handle_drag() {
 	_active_handle = {};
 	_active_handle_generation = 0;
+}
+
+void EditorViewport::commit_handle_drag() {
+	// Fire the active handle's on_release (direct-edit handles mark the mission
+	// modified here) before clearing the drag. The group may have been rebuilt
+	// mid-drag, so re-look-up by index and copy the callback before invoking it.
+	if (_active_handle.group_index >= 0 &&
+		_active_handle.group_index < static_cast<int>(_handle_groups.size()) &&
+		_handle_group_generations[_active_handle.group_index] == _active_handle_generation) {
+		const auto& group = _handle_groups[_active_handle.group_index];
+		if (_active_handle.handle_index >= 0 && _active_handle.handle_index < static_cast<int>(group.size())) {
+			auto on_release_copy = group[_active_handle.handle_index].on_release;
+			if (on_release_copy) {
+				on_release_copy();
+			}
+		}
+	}
+	end_handle_drag();
+}
+
+EnvironmentObject EditorViewport::handleEnvironment(HandlePick pick) const {
+	if (pick.group_index >= 0 && _volumetric_handle_group.valid() &&
+		pick.group_index == _volumetric_handle_group.index) {
+		return EnvironmentObject::VolumetricNebula;
+	}
+	return EnvironmentObject::None;
+}
+
+void EditorViewport::refreshVolumetricHandle() {
+	// The gizmo is present whenever the mission has an enabled volumetric with a
+	// hull (matching what the visualizer actually draws).
+	const bool present = The_mission.volumetrics && The_mission.volumetrics->get_enabled() &&
+		!The_mission.volumetrics->getHullPof().empty();
+
+	vec3d pos = vmd_zero_vector;
+	SCP_string label;
+	int cr = 255, cg = 255, cb = 255;
+	if (present) {
+		pos = The_mission.volumetrics->getPos();
+		label = The_mission.volumetrics->getHullPof();
+		const auto& col = The_mission.volumetrics->getNebulaColor();
+		// nebulaColor components are 0..1; clamp the low end so the marker is
+		// never near-black against the hull.
+		cr = std::clamp(static_cast<int>(std::get<0>(col) * 255.0f), 64, 255);
+		cg = std::clamp(static_cast<int>(std::get<1>(col) * 255.0f), 64, 255);
+		cb = std::clamp(static_cast<int>(std::get<2>(col) * 255.0f), 64, 255);
+	}
+	const int packed_color = present ? ((cr << 16) | (cg << 8) | cb) : -1;
+	const bool selected = present && editor != nullptr &&
+		editor->currentEnvironment == EnvironmentObject::VolumetricNebula;
+
+	// Only touch the registry when the rendered state actually changed —
+	// updateHandleGroup calls needsUpdate(), and this runs every frame, so an
+	// unconditional rebuild would spin the repaint loop.
+	if (present == _vol_handle_cached_present &&
+		(!present ||
+			(pos == _vol_handle_cached_pos && label == _vol_handle_cached_label &&
+				packed_color == _vol_handle_cached_color && selected == _vol_handle_cached_selected))) {
+		return;
+	}
+	_vol_handle_cached_present = present;
+	_vol_handle_cached_pos = pos;
+	_vol_handle_cached_label = label;
+	_vol_handle_cached_color = packed_color;
+	_vol_handle_cached_selected = selected;
+
+	std::vector<ViewportHandle> handles;
+	if (present) {
+		ViewportHandle h;
+		h.kind = ViewportHandle::Kind::Center;
+		h.world_pos = pos;
+		h.color_r = cr;
+		h.color_g = cg;
+		h.color_b = cb;
+		h.info_label = label;
+		h.is_selected = selected;
+		h.on_drag = [this](const vec3d& delta) {
+			// Direct edit straight into the mission. The editor dialog is modal,
+			// so a drag can only happen while it is closed — there is no working
+			// copy to route through here. Mark modified here (not on_release) so
+			// a select-click that never moves doesn't dirty the mission.
+			if (The_mission.volumetrics) {
+				vec3d p = The_mission.volumetrics->getPos();
+				vm_vec_add2(&p, &delta);
+				The_mission.volumetrics->setPos(p);
+			}
+			if (editor != nullptr) {
+				editor->missionChanged();
+			}
+		};
+		handles.push_back(std::move(h));
+	}
+
+	if (_volumetric_handle_group.valid()) {
+		updateHandleGroup(_volumetric_handle_group, std::move(handles));
+	} else {
+		_volumetric_handle_group = registerHandleGroup(std::move(handles));
+	}
 }
 
 } // namespace fso::fred

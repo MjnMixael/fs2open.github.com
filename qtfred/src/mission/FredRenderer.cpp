@@ -83,7 +83,15 @@ color Fred_grid_dark;
 // squares overlaid on the visualizer. Disabled handles (those whose
 // is_enabled callback returns false) render as a dim gray "ghost" so the user
 // can see the constraint state without losing track of where the handle is.
-static void draw_viewport_handles(fso::fred::EditorViewport* viewport) {
+//
+// Handles carrying an info_label additionally get object-style overlays: a
+// persistent name/coordinate line gated on the Show Info / Show Coordinates
+// view options, and — when the cursor is over them — the same infobox balloon
+// ships show. Asteroid handles leave info_label empty and so render as bare
+// markers; only the volumetric gizmo opts in.
+static void draw_viewport_handles(fso::fred::EditorViewport* viewport,
+	const fso::fred::ViewSettings& view,
+	fso::fred::EditorViewport::HandlePick hovered) {
 	if (!viewport) {
 		return;
 	}
@@ -92,8 +100,10 @@ static void draw_viewport_handles(fso::fred::EditorViewport* viewport) {
 		return;
 	}
 
-	for (const auto& group : groups) {
-		for (const auto& handle : group) {
+	for (size_t gi = 0; gi < groups.size(); ++gi) {
+		const auto& group = groups[gi];
+		for (size_t hi = 0; hi < group.size(); ++hi) {
+			const auto& handle = group[hi];
 			vertex vt;
 			vec3d pos_copy = handle.world_pos;
 			g3_rotate_vertex(&vt, &pos_copy);
@@ -134,6 +144,55 @@ static void draw_viewport_handles(fso::fred::EditorViewport* viewport) {
 
 			gr_set_color(r, g, b);
 			gr_rect(x - half, y - half, half * 2 + 1, half * 2 + 1);
+
+			if (handle.info_label.empty()) {
+				continue;
+			}
+
+			// Persistent name / coordinate overlay, matching the object-info
+			// text loop (green/yellow-green/white by outline mode).
+			char buf[256];
+			buf[0] = 0;
+			if (view.Show_ship_info) {
+				strcpy_s(buf, handle.info_label.c_str());
+			}
+			if (view.Show_coordinates) {
+				char pos_str[64];
+				sprintf(pos_str, "(%.0f,%.0f,%.0f)", handle.world_pos.xyz.x, handle.world_pos.xyz.y, handle.world_pos.xyz.z);
+				if (*buf) {
+					strcat_s(buf, "\n");
+				}
+				strcat_s(buf, pos_str);
+			}
+			if (*buf) {
+				// Green when this environment entity is selected (matching a
+				// selected object), white otherwise. Deliberately does NOT track
+				// Fred_outline (that reflects the selected *object's* scheme).
+				gr_set_color_fast(handle.is_selected ? &colour_green : &colour_white);
+				gr_string(x + half + 3, y - half, buf);
+			}
+
+			// Hover balloon on the handle under the cursor — same infobox ships
+			// draw, shown regardless of the Show toggles.
+			if (hovered.group_index == static_cast<int>(gi) && hovered.handle_index == static_cast<int>(hi)) {
+				char info[256];
+				sprintf(info,
+					"%s\n( %.1f , %.1f , %.1f ) ",
+					handle.info_label.c_str(),
+					handle.world_pos.xyz.x,
+					handle.world_pos.xyz.y,
+					handle.world_pos.xyz.z);
+				int w, h;
+				gr_get_string_size(&w, &h, info);
+				int bx = x;
+				int by = y + 20;
+				gr_set_color_fast(&colour_white);
+				gr_rect(bx - 7, by - 6, w + 8, h + 7);
+				gr_set_color_fast(&colour_black);
+				gr_rect(bx - 5, by - 5, w + 5, h + 5);
+				gr_set_color_fast(&colour_white);
+				gr_string(bx, by, info);
+			}
 		}
 	}
 }
@@ -1078,10 +1137,26 @@ void FredRenderer::render_frame(int cur_object_index,
 	render_models(cur_object_index);
 	render_volumetric_overlay();
 
+	// Grid-position indicator for the volumetric nebula, drawn like an object's
+	// so its height above/below the grid plane is readable. render_model_x_htl
+	// self-gates on Show_grid_positions; the enable_htl bracket is needed
+	// because render_models() left HTL disabled.
+	if (view().Show_grid_positions && The_mission.volumetrics && The_mission.volumetrics->get_enabled() &&
+		!The_mission.volumetrics->getHullPof().empty()) {
+		enable_htl();
+		vec3d vol_pos = The_mission.volumetrics->getPos();
+		render_model_x_htl(&vol_pos, _viewport->The_grid);
+		disable_htl();
+	}
+
+	// Keep the always-on volumetric gizmo in sync with the mission before it is
+	// drawn/picked (cheap no-op unless the nebula's state actually changed).
+	_viewport->refreshVolumetricHandle();
+
 	// Viewport handles overlay every visualizer (asteroid box, volumetric
 	// hull) and need to draw after them so the markers sit on top of the
 	// wireframe and the translucent hull.
-	draw_viewport_handles(_viewport);
+	draw_viewport_handles(_viewport, view(), _viewport->getHoveredHandle());
 
 	if (view().Show_distances) {
 		display_distances();

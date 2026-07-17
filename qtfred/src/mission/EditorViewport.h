@@ -12,6 +12,12 @@
 
 namespace fso::fred {
 
+// Defined in Editor.h. Forward-declared here because Editor.h and
+// EditorViewport.h include each other: when a TU enters Editor.h first, this
+// header is pulled in before Editor.h's full enum definition. Only used as a
+// return type in a declaration below, so a forward declaration suffices.
+enum class EnvironmentObject;
+
 struct Marking_box {
 	int x1 = 0;
 	int y1 = 0;
@@ -146,7 +152,30 @@ class EditorViewport {
 	bool begin_handle_drag(HandlePick pick, int cx, int cy);
 	bool drag_handle(int cx, int cy);
 	void end_handle_drag();
+	// Genuine mouse-release end: fires the active handle's on_release (if any)
+	// before clearing the drag. Distinct from end_handle_drag(), which is the
+	// cancel path (Escape / right-click) and skips on_release.
+	void commit_handle_drag();
 	bool has_active_handle_drag() const { return _active_handle.group_index >= 0; }
+
+	// Hovered-handle tracking for the in-scene hover balloon. RenderWidget sets
+	// this on mouse-move; FredRenderer reads it to draw the infobox.
+	void setHoveredHandle(HandlePick pick) { _hovered_handle = pick; }
+	HandlePick getHoveredHandle() const { return _hovered_handle; }
+
+	// Viewport-owned volumetric nebula gizmo. Unlike the asteroid handles (owned
+	// by their dialog), this one is always present whenever the mission has an
+	// enabled volumetric with a hull, so the nebula can be dragged with no
+	// dialog open. refreshVolumetricHandle() rebuilds it from The_mission when
+	// its state actually changes (cheap no-op otherwise); it is called each
+	// frame from the renderer. Dragging is a direct edit that marks the mission
+	// modified; the editor dialog is modal, so it cannot overlap a drag.
+	void refreshVolumetricHandle();
+
+	// Which environment entity (if any) a picked handle belongs to. Only the
+	// viewport-owned volumetric gizmo maps to one today; dialog-owned asteroid
+	// handles return None. Used by the widget to drive environment selection.
+	EnvironmentObject handleEnvironment(HandlePick pick) const;
 
 	SCP_vector<SCP_string> getLayerNames() const;
 	bool addLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
@@ -284,6 +313,23 @@ private:
 	HandlePick _active_handle{};
 	int _active_handle_generation = 0;
 	vec3d _active_handle_last_world = vmd_zero_vector;
+
+	// Handle currently under the cursor (for the hover balloon). {-1,-1} = none.
+	// _last_hovered_handle lets game_do_frame schedule a repaint when the hover
+	// changes, mirroring Cursor_over / Last_cursor_over for objects.
+	HandlePick _hovered_handle{};
+	HandlePick _last_hovered_handle{};
+
+	// Viewport-owned volumetric gizmo state.
+	HandleGroupId _volumetric_handle_group;
+	// Cache so refreshVolumetricHandle() only touches the registry (and thus
+	// requests a repaint) when the rendered state actually changes; otherwise
+	// per-frame refresh would loop forever via needsUpdate().
+	bool _vol_handle_cached_present = false;
+	vec3d _vol_handle_cached_pos = vmd_zero_vector;
+	SCP_string _vol_handle_cached_label;
+	int _vol_handle_cached_color = -1;
+	bool _vol_handle_cached_selected = false;
 
 	// Compute the world-space point under the mouse cursor on the same
 	// constraint plane that drag_objects() uses (centered on `anchor`).

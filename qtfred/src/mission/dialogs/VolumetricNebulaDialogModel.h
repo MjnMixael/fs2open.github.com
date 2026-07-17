@@ -53,12 +53,6 @@ public:
 	float getPosZ() const;
     void setPosZ(float z);
 
-	// Used by the viewport center-handle drag. Adds a world-space delta to
-	// the working position and live-pushes to The_mission.volumetrics so the
-	// hull moves under the cursor in real time.
-	vec3d getPos() const { return _volumetrics.pos; }
-	void nudgePos(const vec3d& delta_world);
-
     // Color
 	int getColorR() const;
 	void setColorR(int r);

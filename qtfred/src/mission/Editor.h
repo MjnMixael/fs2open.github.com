@@ -47,6 +47,18 @@ enum class GlobalShieldStatus {
 	MixedShields
 };
 
+// Non-object "environment" entities that can be selected in the viewport /
+// scene browser (volumetric nebula, asteroid field). These are not entries in
+// the Objects[] array, so they use a parallel single-selection concept that is
+// mutually exclusive with object selection. Currently single-select only;
+// multi-select (e.g. an object plus the volume, to read distances) is a
+// planned follow-up.
+enum class EnvironmentObject {
+	None,
+	VolumetricNebula,
+	AsteroidField,
+};
+
 /*! Game editor.
  * Handles everything needed to edit the game,
  * without any knowledge of the actual GUI framework stack.
@@ -81,6 +93,12 @@ class Editor : public QObject {
 	void unmarkObject(int objId);
 
 	void selectObject(int objId);
+
+	// Select a non-object environment entity (volumetric nebula / asteroid
+	// field). Unmarks every object first — environment and object selection are
+	// mutually exclusive. Passing EnvironmentObject::None clears the selection.
+	void selectEnvironment(EnvironmentObject env);
+	void clearEnvironment() { selectEnvironment(EnvironmentObject::None); }
 
 	EditorViewport* createEditorViewport(os::Viewport* renderView);
 
@@ -154,6 +172,11 @@ class Editor : public QObject {
 	void currentObjectChanged(int new_obj);
 
 	/**
+	 * @brief Emitted when the selected environment entity changes (including to None)
+	 */
+	void currentEnvironmentChanged();
+
+	/**
 	 * @brief A signal which is emitted if the marking status of an object changed
 	 * @param obj The object which changed
 	 * @param marked @c true if the object is now marked, @c false otherwise
@@ -180,6 +203,8 @@ class Editor : public QObject {
 	int wing_objects[MAX_WINGS][MAX_SHIPS_PER_WING];
 
 	int currentObject = -1;
+	// The selected environment entity, mutually exclusive with object selection.
+	EnvironmentObject currentEnvironment = EnvironmentObject::None;
 	int cur_wing = -1;
 	int cur_ship = -1;
 

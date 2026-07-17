@@ -5,6 +5,8 @@
 #include <globalincs/linklist.h>
 #include <iff_defs/iff_defs.h>
 #include <jumpnode/jumpnode.h>
+#include <mission/missionparse.h>
+#include <nebula/volumetrics.h>
 #include <object/object.h>
 #include <object/waypoint.h>
 #include <prop/prop.h>
@@ -21,6 +23,7 @@ SceneBrowserModel::SceneBrowserModel(QObject* parent, EditorViewport* viewport)
 	connect(_rebuildTimer, &QTimer::timeout, this, &SceneBrowserModel::onRebuildTimer);
 
 	connect(_editor, &Editor::currentObjectChanged, this, &SceneBrowserModel::onCurrentObjectChanged);
+	connect(_editor, &Editor::currentEnvironmentChanged, this, &SceneBrowserModel::onCurrentEnvironmentChanged);
 	connect(_editor, &Editor::objectMarkingChanged, this, &SceneBrowserModel::onObjectMarkingChanged);
 	connect(_editor, &Editor::layerVisibilityChanged, this, &SceneBrowserModel::onLayerVisibilityChanged);
 	connect(_editor, &Editor::layerStructureChanged, this, &SceneBrowserModel::onLayerStructureChanged);
@@ -243,6 +246,23 @@ void SceneBrowserModel::selectObjectFromBrowser(int objNum)
 	_updatingFromBrowser = false;
 }
 
+bool SceneBrowserModel::hasVolumetricNebula() const
+{
+	return The_mission.volumetrics.has_value() && The_mission.volumetrics->get_enabled();
+}
+
+EnvironmentObject SceneBrowserModel::currentEnvironment() const
+{
+	return _editor->currentEnvironment;
+}
+
+void SceneBrowserModel::selectEnvironmentFromBrowser(EnvironmentObject env)
+{
+	_updatingFromBrowser = true;
+	_editor->selectEnvironment(env);
+	_updatingFromBrowser = false;
+}
+
 void SceneBrowserModel::multiSelectFromBrowser(const QVector<int>& objNums)
 {
 	if (objNums.isEmpty()) return;
@@ -298,6 +318,13 @@ void SceneBrowserModel::setNameFilter(const QString& filter)
 void SceneBrowserModel::onCurrentObjectChanged(int /*newObj*/)
 {
 	if (_updatingFromBrowser) return;
+	modelChanged();
+}
+void SceneBrowserModel::onCurrentEnvironmentChanged()
+{
+	if (_updatingFromBrowser) return;
+	// Selection-only change: fast sync (the Environment node already exists; its
+	// presence is handled by the structural rebuild on missionChanged).
 	modelChanged();
 }
 

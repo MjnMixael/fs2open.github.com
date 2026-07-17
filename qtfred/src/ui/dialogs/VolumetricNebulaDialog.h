@@ -91,19 +91,10 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void updateColorSwatch();
 	void updateNoiseColorSwatch();
 
-	// (Re)builds the single center handle for the volumetric hull and pushes
-	// it to the viewport. Called on construction and from updateUi() so the
-	// handle tracks position spinbox edits made in the dialog.
-	void rebuildHandles();
-
 	// Boilerplate
 	EditorViewport* _viewport = nullptr;
 	std::unique_ptr<Ui::VolumetricNebulaDialog> ui;
 	std::unique_ptr<VolumetricNebulaDialogModel> _model;
-
-	// Identifier for the handle group registered with EditorViewport while
-	// this dialog is open. Set on construction, cleared in the destructor.
-	HandleGroupId _handle_group;
 };
 
 

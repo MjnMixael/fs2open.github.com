@@ -59,6 +59,13 @@ public:
 	void selectWingFromBrowser(int wingIndex);
 	static QVector<int> getWingMemberObjects(int wingIndex);
 
+	// Environment entities (volumetric nebula, asteroid field later). These
+	// live outside the object tree; the panel renders a top-level "Environment"
+	// node for them.
+	bool hasVolumetricNebula() const;
+	EnvironmentObject currentEnvironment() const;
+	void selectEnvironmentFromBrowser(EnvironmentObject env);
+
 	void setNameFilter(const QString& filter);
 	const QString& getNameFilter() const { return _nameFilter; }
 
@@ -92,6 +99,7 @@ private:
 	QTimer* _rebuildTimer = nullptr;
 
 	Q_SLOT void onCurrentObjectChanged(int newObj);
+	Q_SLOT void onCurrentEnvironmentChanged();
 	Q_SLOT void onObjectMarkingChanged(int obj, bool marked);
 	Q_SLOT void onLayerVisibilityChanged();
 	Q_SLOT void onLayerStructureChanged();

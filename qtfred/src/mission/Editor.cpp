@@ -439,6 +439,10 @@ bool Editor::loadMission(const std::string& mission_name, int flags) {
 }
 void Editor::clean_up_selections() {
 	unmark_all();
+	if (currentEnvironment != EnvironmentObject::None) {
+		currentEnvironment = EnvironmentObject::None;
+		currentEnvironmentChanged();
+	}
 }
 void Editor::unmark_all() {
 	if (numMarked > 0) {
@@ -604,6 +608,13 @@ void Editor::initialSetup() {
 
 void Editor::setupCurrentObjectIndices(int selectedObj) {
 	if (query_valid_object(selectedObj)) {
+		// Selecting a real object clears any environment selection — the two are
+		// mutually exclusive.
+		if (currentEnvironment != EnvironmentObject::None) {
+			currentEnvironment = EnvironmentObject::None;
+			currentEnvironmentChanged();
+		}
+
 		currentObject = selectedObj;
 
 		cur_ship = cur_wing = -1;
@@ -670,6 +681,21 @@ void Editor::selectObject(int objId) {
 	}
 
 	setupCurrentObjectIndices(objId);  // select the new object
+}
+
+void Editor::selectEnvironment(EnvironmentObject env) {
+	// Environment and object selection are mutually exclusive: clear objects.
+	unmark_all();
+	if (currentObject != -1) {
+		setupCurrentObjectIndices(-1);
+	}
+
+	if (currentEnvironment != env) {
+		currentEnvironment = env;
+		currentEnvironmentChanged();
+	}
+
+	updateAllViewports();
 }
 void Editor::updateAllViewports() {
 	// This takes all renderers and issues an update request for each of them. For now that is only one but this allows

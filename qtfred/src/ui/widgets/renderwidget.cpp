@@ -171,6 +171,15 @@ void RenderWidget::keyPressEvent(QKeyEvent* key) {
 		return;
 	}
 
+	// Escape with an environment entity selected (and nothing being dragged):
+	// deselect it, mirroring Escape clearing an object selection.
+	if (_viewport != nullptr && key->key() == Qt::Key_Escape &&
+		fred->currentEnvironment != EnvironmentObject::None) {
+		fred->clearEnvironment();
+		key->accept();
+		return;
+	}
+
 	if (!ControlBindings::instance().handleKeyPress(key)) {
 		QWidget::keyPressEvent(key);
 		return;
@@ -197,6 +206,20 @@ bool RenderWidget::event(QEvent* evt) {
 	return QWidget::event(evt);
 }
 void RenderWidget::mouseDoubleClickEvent(QMouseEvent* event) {
+	// Double-clicking the volumetric gizmo opens its editor, like double-clicking
+	// a real object opens its dialog. The first click of the sequence already
+	// selected it via mousePressEvent.
+	if (_viewport != nullptr && event->button() == Qt::LeftButton) {
+		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
+			event->position().y() * _window->devicePixelRatio());
+		if (_viewport->handleEnvironment(pick) == EnvironmentObject::VolumetricNebula) {
+			auto parentView = static_cast<FredView*>(parentWidget());
+			Q_ASSERT(parentView);
+			parentView->editVolumetricNebula();
+			event->accept();
+			return;
+		}
+	}
 	event->ignore();
 }
 void RenderWidget::mousePressEvent(QMouseEvent* event) {
@@ -258,16 +281,29 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	// of "not for translation"). The handles still render so the user can
 	// see them; they just won't grab.
 	if (_viewport != nullptr && _viewport->Editing_mode == CursorMode::Moving) {
-		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
-			event->position().y() * _window->devicePixelRatio());
-		if (pick.group_index >= 0 && _viewport->begin_handle_drag(pick,
-				event->position().x() * _window->devicePixelRatio(),
-				event->position().y() * _window->devicePixelRatio())) {
-			_handleGrabbed = true;
-			_usingMarkingBox = false;
+		const int px = event->position().x() * _window->devicePixelRatio();
+		const int py = event->position().y() * _window->devicePixelRatio();
+		auto pick = _viewport->pick_handle(px, py);
+		if (pick.group_index >= 0) {
+			// Clicking a viewport handle selects its environment entity (mutually
+			// exclusive with object selection) and arms a drag if one can start.
+			const auto env = _viewport->handleEnvironment(pick);
+			if (env != EnvironmentObject::None) {
+				fred->selectEnvironment(env);
+			}
+			if (_viewport->begin_handle_drag(pick, px, py)) {
+				_handleGrabbed = true;
+				_usingMarkingBox = false;
+			}
 			event->accept();
 			return;
 		}
+	}
+
+	// A left-click that missed every handle deselects any environment entity;
+	// the normal object-selection path below is mutually exclusive with it.
+	if (_viewport != nullptr && fred->currentEnvironment != EnvironmentObject::None) {
+		fred->clearEnvironment();
 	}
 
 	int waypoint_instance = -1;
@@ -414,16 +450,15 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 		return;
 	}
 
-	// Track whether the cursor is hovering a pickable handle so updateCursor
-	// can show the move cursor for it. Only relevant in Moving mode, since
-	// that's the only mode that can actually grab a handle (see press-time
-	// pre-pass above).
-	_hoveringHandle = false;
-	if (_viewport->Editing_mode == CursorMode::Moving) {
-		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
-			event->position().y() * _window->devicePixelRatio());
-		_hoveringHandle = (pick.group_index >= 0);
-	}
+	// Hand the hovered handle to the viewport so the renderer can draw its hover
+	// balloon. Computed in every mode, matching how a real object's info shows
+	// on hover regardless of editing mode. The move cursor, though, is only
+	// shown in Moving mode since that's the only mode that can grab a handle
+	// (see the press-time pre-pass above).
+	EditorViewport::HandlePick hoverPick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
+		event->position().y() * _window->devicePixelRatio());
+	_viewport->setHoveredHandle(hoverPick);
+	_hoveringHandle = (hoverPick.group_index >= 0) && (_viewport->Editing_mode == CursorMode::Moving);
 
 	// RT point
 
@@ -484,12 +519,12 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 		return QWidget::mouseReleaseEvent(event);
 	}
 
-	// End any active viewport-handle drag. We deliberately do NOT call
-	// missionChanged() here — the dialog model that owns the handle is
-	// responsible for marking its own dirty state (and the spinboxes have
-	// already been refreshed live via modelChanged → updateUi).
+	// End any active viewport-handle drag via the commit path, which fires the
+	// handle's on_release. Dialog-owned handles leave on_release unset and mark
+	// their own dirty state; the direct-edit volumetric handle uses it to call
+	// missionChanged() exactly once for the drag.
 	if (_handleGrabbed) {
-		_viewport->end_handle_drag();
+		_viewport->commit_handle_drag();
 		_handleGrabbed = false;
 		_viewport->needsUpdate();
 		event->accept();
