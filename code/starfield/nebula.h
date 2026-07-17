@@ -22,7 +22,7 @@ extern int Nebula_heading;
 struct angles;
 
 // A procedural "old" (FS1-style) background nebula pattern.  These are data-driven (defined in
-// the old_nebula.tbm default table and any *-neb.tbm), so modders can add/modify/remove them.
+// the old_nebula.tbl default table and any nebula.tbl / *-neb.tbm), so modders can add/modify/remove them.
 struct old_nebula_pattern {
 	SCP_string name;
 	float density  = 0.30f;    // fraction of bright "knots" (mostly-black otherwise)
@@ -34,8 +34,8 @@ struct old_nebula_pattern {
 	int   seed     = 0;        // noise seed (gives each pattern a distinct look)
 	int   res_lon  = 24;       // longitude grid resolution (coarse = retro chunky gouraud)
 	int   res_lat  = 12;       // latitude grid resolution
-	float band_min = 0.05f;    // latitude extent (skip the poles, matching the originals)
-	float band_max = 0.93f;
+	float band_min = 0.0f;     // latitude extent in 0..1; full sphere by default (poles closed)
+	float band_max = 1.0f;
 };
 
 // A named tint color for the old nebula.  Also data-driven via the table.
