@@ -6,9 +6,12 @@
 
 #include <ui/util/SignalBlockers.h>
 
+#include <QCompleter>
 #include <QHeaderView>
+#include <QIntValidator>
 #include <QItemSelectionModel>
 #include <QMessageBox>
+#include <QStringList>
 
 namespace fso::fred::dialogs {
 
@@ -25,6 +28,13 @@ CustomDataDialog::CustomDataDialog(QWidget* parent, EditorViewport* viewport)
 	  _viewport(viewport)
 {
 	ui->setupUi(this);
+
+	_intValidator = new QIntValidator(this);
+
+	// no schema until setSchema() is called: treat everything as free-form strings
+	ui->valueBoolCombo->setVisible(false);
+	ui->typeValueLabel->setText("string");
+	ui->resetButton->setEnabled(false);
 
 	buildView();
 	refreshTable();
@@ -93,6 +103,23 @@ void CustomDataDialog::setInitial(const SCP_map<SCP_string, SCP_string>& items)
 	} else {
 		clearEditors();
 	}
+}
+
+void CustomDataDialog::setSchema(const SCP_vector<mission_default_custom_data>& schema)
+{
+	_model->setSchema(&schema);
+
+	// offer the schema's keys as completions for the key editor
+	QStringList keys;
+	for (const auto& entry : schema) {
+		keys << QString::fromStdString(entry.key);
+	}
+	auto* completer = new QCompleter(keys, this);
+	completer->setCaseSensitivity(Qt::CaseInsensitive);
+	ui->keyLineEdit->setCompleter(completer);
+
+	// refresh the type-aware controls for whatever key is currently shown
+	applyTypeForKey(ui->keyLineEdit->text());
 }
 
 void CustomDataDialog::buildView()
@@ -169,28 +196,65 @@ void CustomDataDialog::loadRowIntoEditors(int row)
 	const auto* valItem = _tableModel->item(row, ColValue);
 	const auto key = keyItem ? keyItem->text() : QString();
 	ui->keyLineEdit->setText(key);
-	ui->valueLineEdit->setText(valItem ? valItem->text() : QString());
+	applyTypeForKey(key);
+	setValueEditorText(valItem ? valItem->text() : QString());
 	updateHelpTextForKey(key);
 }
 
 void CustomDataDialog::updateHelpTextForKey(const QString& key)
 {
 	auto helpText = tr("No help text provided");
-	for (const auto& entry : Default_custom_data) {
-		if (key == QString::fromStdString(entry.key)) {
-			helpText = QString::fromStdString(entry.description);
-			break;
+	if (const auto* entry = _model->schemaEntry(key.toUtf8().constData())) {
+		if (!entry->description.empty()) {
+			helpText = QString::fromStdString(entry->description);
 		}
 	}
 
 	ui->helpTextBrowser->setPlainText(helpText);
 }
 
+void CustomDataDialog::applyTypeForKey(const QString& key)
+{
+	const auto* entry = _model->schemaEntry(key.toUtf8().constData());
+	const SCP_string type = entry ? entry->type : "string";
+
+	const bool isBool = (type == "bool");
+	_boolEditorActive = isBool;
+	ui->valueBoolCombo->setVisible(isBool);
+	ui->valueLineEdit->setVisible(!isBool);
+
+	// only constrain the line edit to integers for int-typed keys
+	ui->valueLineEdit->setValidator(type == "int" ? _intValidator : nullptr);
+
+	ui->typeValueLabel->setText(QString::fromStdString(type));
+
+	// the schema knows a default only when a matching entry exists
+	ui->resetButton->setEnabled(entry != nullptr);
+}
+
+void CustomDataDialog::setValueEditorText(const QString& value)
+{
+	if (_boolEditorActive) {
+		int idx = ui->valueBoolCombo->findText(value, Qt::MatchFixedString);
+		ui->valueBoolCombo->setCurrentIndex(idx >= 0 ? idx : 0);
+	} else {
+		ui->valueLineEdit->setText(value);
+	}
+}
+
+QString CustomDataDialog::currentValueText() const
+{
+	if (_boolEditorActive) {
+		return ui->valueBoolCombo->currentText();
+	}
+	return ui->valueLineEdit->text();
+}
+
 std::pair<SCP_string, SCP_string> CustomDataDialog::editorsToEntry() const
 {
 	std::pair<SCP_string, SCP_string> e;
 	e.first = ui->keyLineEdit->text().toUtf8().constData();
-	e.second = ui->valueLineEdit->text().toUtf8().constData();
+	e.second = currentValueText().toUtf8().constData();
 	return e;
 }
 
@@ -200,6 +264,7 @@ void CustomDataDialog::clearEditors()
 
 	ui->keyLineEdit->clear();
 	ui->valueLineEdit->clear();
+	ui->valueBoolCombo->setCurrentIndex(0);
 	ui->helpTextBrowser->setPlainText("");
 }
 
@@ -253,6 +318,26 @@ void CustomDataDialog::on_removeButton_clicked()
 		refreshTable();
 		selectRow(next);
 	}
+}
+
+void CustomDataDialog::on_resetButton_clicked()
+{
+	const auto key = ui->keyLineEdit->text();
+	const auto* entry = _model->schemaEntry(key.toUtf8().constData());
+	if (entry == nullptr) {
+		return;
+	}
+
+	setValueEditorText(QString::fromStdString(entry->value));
+}
+
+void CustomDataDialog::on_keyLineEdit_textChanged(const QString& key)
+{
+	// user typed a new key: switch to the matching type-aware control and help text
+	const auto value = currentValueText();
+	applyTypeForKey(key);
+	setValueEditorText(value);
+	updateHelpTextForKey(key);
 }
 
 void CustomDataDialog::on_okAndCancelButtons_accepted()
