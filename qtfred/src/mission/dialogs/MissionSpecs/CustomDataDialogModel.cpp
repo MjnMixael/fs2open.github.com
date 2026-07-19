@@ -1,5 +1,7 @@
 #include "CustomDataDialogModel.h"
 
+#include <cstdlib>
+
 using namespace fso::fred::dialogs;
 
 CustomDataDialogModel::CustomDataDialogModel(QObject* parent, EditorViewport* viewport)
@@ -25,12 +27,49 @@ void CustomDataDialogModel::setInitial(const SCP_map<SCP_string, SCP_string>& in
 	_items = in;
 }
 
+const mission_default_custom_data* CustomDataDialogModel::schemaEntry(const SCP_string& key) const
+{
+	if (_schema == nullptr)
+		return nullptr;
+	for (const auto& entry : *_schema) {
+		if (stricmp(entry.key.c_str(), key.c_str()) == 0)
+			return &entry;
+	}
+	return nullptr;
+}
+
+bool CustomDataDialogModel::validateTypedValue(const SCP_string& key, const SCP_string& val, SCP_string* errorOut) const
+{
+	const mission_default_custom_data* entry = schemaEntry(key);
+	if (entry == nullptr)
+		return true; // no schema constraint for this key
+
+	if (entry->type == "int") {
+		char* endp = nullptr;
+		(void)strtol(val.c_str(), &endp, 10);
+		if (val.empty() || endp == val.c_str() || *endp != '\0') {
+			if (errorOut)
+				*errorOut = "Value must be a whole number for a key of type 'int'.";
+			return false;
+		}
+	} else if (entry->type == "bool") {
+		if (stricmp(val.c_str(), "true") != 0 && stricmp(val.c_str(), "false") != 0) {
+			if (errorOut)
+				*errorOut = "Value must be 'true' or 'false' for a key of type 'bool'.";
+			return false;
+		}
+	}
+	return true;
+}
+
 bool CustomDataDialogModel::add(const std::pair<SCP_string, SCP_string>& e, SCP_string* errorOut)
 {
 	// validation
 	if (!validateKeySyntax(e.first, errorOut))
 		return false;
 	if (!validateValue(e.second, errorOut))
+		return false;
+	if (!validateTypedValue(e.first, e.second, errorOut))
 		return false;
 
 	if (!keyIsUnique(e.first)) {
@@ -68,6 +107,8 @@ bool CustomDataDialogModel::updateAt(size_t index, const std::pair<SCP_string, S
 	if (!validateKeySyntax(e.first, errorOut))
 		return false;
 	if (!validateValue(e.second, errorOut))
+		return false;
+	if (!validateTypedValue(e.first, e.second, errorOut))
 		return false;
 
 	// uniqueness (case-insensitive) ignoring this index

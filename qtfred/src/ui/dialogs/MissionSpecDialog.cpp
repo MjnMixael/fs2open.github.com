@@ -11,6 +11,7 @@
 #include <ui/dialogs/MissionSpecs/SupportRearmDialog.h>
 #include <ui/util/default_dir.h>
 #include <ui/util/SignalBlockers.h>
+#include "mission/missionparse.h"
 #include "mission/util.h"
 #include <QCloseEvent>
 #include <QFileDialog>
@@ -477,6 +478,7 @@ void MissionSpecDialog::on_soundEnvButton_clicked()
 void MissionSpecDialog::on_customDataButton_clicked()
 {
 	CustomDataDialog dlg(this, _viewport);
+	dlg.setSchema(Default_custom_data);
 	dlg.setInitial(_model->getCustomData());
 
 	if (dlg.exec() == QDialog::Accepted) {

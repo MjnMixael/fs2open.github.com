@@ -4,6 +4,7 @@
 
 #include <globalincs/globals.h>
 #include "mission/missioncampaign.h"
+#include "mission/missionparse.h"
 #include "ui/widgets/sexp_tree_view.h"
 #include "ui/widgets/SimpleListSelectDialog.h"
 #include "ui/util/default_dir.h"
@@ -531,6 +532,7 @@ void CampaignEditorDialog::on_resetTechAtStartCheckBox_toggled(bool checked)
 void CampaignEditorDialog::on_campaignCustomDataButton_clicked()
 {
 	CustomDataDialog dlg(this, _viewport);
+	dlg.setSchema(Default_campaign_custom_data);
 	dlg.setInitial(_model->getCustomData());
 
 	if (dlg.exec() == QDialog::Accepted) {

@@ -142,6 +142,22 @@ void ShipEditorDialogModel::applyPlayerOrders(const SCP_vector<std::pair<SCP_str
 	_editor->missionChanged();
 }
 
+SCP_map<SCP_string, SCP_string> ShipEditorDialogModel::getShipCustomData() const
+{
+	if (_multiEdit || _singleShip < 0)
+		return {};
+	return Ships[_singleShip].custom_data;
+}
+
+void ShipEditorDialogModel::setShipCustomData(const SCP_map<SCP_string, SCP_string>& data)
+{
+	if (_multiEdit || _singleShip < 0)
+		return;
+	Ships[_singleShip].custom_data = data;
+	setModified();
+	_editor->missionChanged();
+}
+
 void ShipEditorDialogModel::setArrivalPaths(const SCP_vector<std::pair<SCP_string, bool>>& newPaths)
 {
 	_arrivalPaths = newPaths;

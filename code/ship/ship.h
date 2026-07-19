@@ -815,6 +815,8 @@ public:
 
 	SCP_map<std::pair<int, int>, int> ship_iff_color;
 
+	SCP_map<SCP_string, SCP_string> custom_data;	// per-ship instance custom data (see p_object::custom_data)
+
 	int ammo_low_complaint_count;				// number of times this ship has complained about low ammo
 	int armor_type_idx;
 	int shield_armor_type_idx;

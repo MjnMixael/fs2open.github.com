@@ -1,6 +1,7 @@
 #pragma once
 
 #include "globalincs/pstypes.h"
+#include "mission/missionparse.h"
 
 #include "../AbstractDialogModel.h"
 
@@ -15,6 +16,11 @@ class CustomDataDialogModel : public AbstractDialogModel {
 	void reject() override;
 
 	void setInitial(const SCP_map<SCP_string, SCP_string>& in);
+
+	// optional editor-defined schema for this domain (mission/campaign/ship); drives
+	// type validation and help text.  Null means no schema (free-form key/value).
+	void setSchema(const SCP_vector<mission_default_custom_data>* schema) noexcept { _schema = schema; }
+	const mission_default_custom_data* schemaEntry(const SCP_string& key) const;
 
 	const SCP_map<SCP_string, SCP_string>& items() const noexcept
 	{
@@ -33,8 +39,11 @@ class CustomDataDialogModel : public AbstractDialogModel {
 
   private:
 	bool keyIsUnique(const SCP_string& key, std::optional<size_t> ignoreIndex = std::nullopt) const;
+	// validates a value against the schema-declared type for key, if any
+	bool validateTypedValue(const SCP_string& key, const SCP_string& val, SCP_string* err) const;
 
 	SCP_map<SCP_string, SCP_string> _items;
+	const SCP_vector<mission_default_custom_data>* _schema = nullptr;
 };
 
 } // namespace fso::fred::dialogs

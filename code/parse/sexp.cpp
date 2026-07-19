@@ -290,6 +290,9 @@ SCP_vector<sexp_oper> Operators = {
 	{ "are-wing-flags-set",				OP_ARE_WING_FLAGS_SET,					2,	INT_MAX,	SEXP_BOOLEAN_OPERATOR, },	// Goober5000
 	{ "has-armor-type",					OP_HAS_ARMOR_TYPE,						3,	3,			SEXP_BOOLEAN_OPERATOR, },	// MjnMixael
 	{ "is-ship-emp-active",				OP_IS_SHIP_EMP_ACTIVE,					1,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
+	{ "ship-custom-data-is",			OP_SHIP_CUSTOM_DATA_IS,					3,	3,			SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
+	{ "ship-custom-data-has-key",		OP_SHIP_CUSTOM_DATA_HAS_KEY,			2,	2,			SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
+	{ "ship-custom-data-get-int",		OP_SHIP_CUSTOM_DATA_GET_INT,			2,	2,			SEXP_INTEGER_OPERATOR,	},	// MjnMixael
 
 	//Shields, Engines and Weapons Sub-Category
 	{ "has-primary-weapon",				OP_HAS_PRIMARY_WEAPON,					3,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// Karajorma
@@ -486,6 +489,9 @@ SCP_vector<sexp_oper> Operators = {
 	{ "alter-ship-flag",				OP_ALTER_SHIP_FLAG,						3,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Karajorma
 	{ "alter-wing-flag",				OP_ALTER_WING_FLAG,						2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "cancel-future-waves",			OP_CANCEL_FUTURE_WAVES,					1,	INT_MAX,	SEXP_ACTION_OPERATOR,	}, // naomimyselfandi
+	{ "ship-custom-data-set",			OP_SHIP_CUSTOM_DATA_SET,				3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
+	{ "ship-custom-data-set-int",		OP_SHIP_CUSTOM_DATA_SET_INT,			3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
+	{ "ship-custom-data-clear",			OP_SHIP_CUSTOM_DATA_CLEAR,				2,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 
 	//Shields, Engines and Weapons Sub-Category
 	{ "set-weapon-energy",				OP_SET_WEAPON_ENERGY,					2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Karajorma
@@ -1099,6 +1105,14 @@ void sexp_copy_variable_between_indexes(int node);
 
 int verify_vector(const char *text);
 bool is_descendant_of_when_argument_op(int node);
+
+// custom data operators
+void sexp_ship_custom_data_set(int node);
+void sexp_ship_custom_data_set_int(int node);
+int sexp_ship_custom_data_is(int node);
+int sexp_ship_custom_data_get_int(int node);
+int sexp_ship_custom_data_has_key(int node);
+void sexp_ship_custom_data_clear(int node);
 
 
 #define ARG_ITEM_F_DUP	(1<<0)
@@ -8378,6 +8392,104 @@ void multi_sexp_set_energy_pct()
 				break;
 		}
 	}
+}
+
+// custom data operators - store/query arbitrary key/value strings on a per-ship-instance basis
+void sexp_ship_custom_data_set(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || !ship_entry->has_shipp())
+		return;
+	auto shipp = ship_entry->shipp();
+
+	const char *key = CTEXT(CDR(node));
+	const char *value = CTEXT(CDR(CDR(node)));
+	shipp->custom_data[key] = value;
+}
+
+void sexp_ship_custom_data_set_int(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || !ship_entry->has_shipp())
+		return;
+	auto shipp = ship_entry->shipp();
+
+	const char *key = CTEXT(CDR(node));
+
+	bool is_nan, is_nan_forever;
+	int value = eval_num(CDR(CDR(node)), is_nan, is_nan_forever);
+	if (is_nan || is_nan_forever)
+		return;
+
+	shipp->custom_data[key] = std::to_string(value);
+}
+
+int sexp_ship_custom_data_is(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || ship_entry->status == ShipStatus::NOT_YET_PRESENT)
+		return SEXP_NAN;
+	if (ship_entry->status == ShipStatus::EXITED)
+		return SEXP_NAN_FOREVER;
+	auto shipp = ship_entry->shipp();
+
+	const char *key = CTEXT(CDR(node));
+	const char *value = CTEXT(CDR(CDR(node)));
+
+	auto it = shipp->custom_data.find(key);
+	if (it != shipp->custom_data.end() && it->second == value)
+		return SEXP_TRUE;
+
+	return SEXP_FALSE;
+}
+
+int sexp_ship_custom_data_get_int(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || ship_entry->status == ShipStatus::NOT_YET_PRESENT)
+		return SEXP_NAN;
+	if (ship_entry->status == ShipStatus::EXITED)
+		return SEXP_NAN_FOREVER;
+	auto shipp = ship_entry->shipp();
+
+	const char *key = CTEXT(CDR(node));
+
+	auto it = shipp->custom_data.find(key);
+	if (it != shipp->custom_data.end())
+		return atoi(it->second.c_str());
+
+	return 0;
+}
+
+int sexp_ship_custom_data_has_key(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || ship_entry->status == ShipStatus::NOT_YET_PRESENT)
+		return SEXP_NAN;
+	if (ship_entry->status == ShipStatus::EXITED)
+		return SEXP_NAN_FOREVER;
+	auto shipp = ship_entry->shipp();
+
+	const char *key = CTEXT(CDR(node));
+
+	if (shipp->custom_data.find(key) != shipp->custom_data.end())
+		return SEXP_TRUE;
+
+	return SEXP_FALSE;
+}
+
+void sexp_ship_custom_data_clear(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || !ship_entry->has_shipp())
+		return;
+	auto shipp = ship_entry->shipp();
+
+	int key_node = CDR(node);
+	if (key_node >= 0)
+		shipp->custom_data.erase(CTEXT(key_node));
+	else
+		shipp->custom_data.clear();
 }
 
 int sexp_get_energy_pct (int node, int op_num)
@@ -28693,6 +28805,18 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = sexp_is_ship_emp_active(node);
 				break;
 
+			case OP_SHIP_CUSTOM_DATA_IS:
+				sexp_val = sexp_ship_custom_data_is(node);
+				break;
+
+			case OP_SHIP_CUSTOM_DATA_HAS_KEY:
+				sexp_val = sexp_ship_custom_data_has_key(node);
+				break;
+
+			case OP_SHIP_CUSTOM_DATA_GET_INT:
+				sexp_val = sexp_ship_custom_data_get_int(node);
+				break;
+
 			case OP_CAP_SUBSYS_CARGO_KNOWN_DELAY:
 				sexp_val = sexp_cap_subsys_cargo_known_delay(node);
 				break;
@@ -30278,10 +30402,25 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
-			case OP_SET_AFTERBURNER_ENERGY: 
+			case OP_SET_AFTERBURNER_ENERGY:
 			case OP_SET_WEAPON_ENERGY:
 			case OP_SET_SHIELD_ENERGY:
 				sexp_set_energy_pct(node, op_num);
+				sexp_val = SEXP_TRUE;
+				break;
+
+			case OP_SHIP_CUSTOM_DATA_SET:
+				sexp_ship_custom_data_set(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
+			case OP_SHIP_CUSTOM_DATA_SET_INT:
+				sexp_ship_custom_data_set_int(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
+			case OP_SHIP_CUSTOM_DATA_CLEAR:
+				sexp_ship_custom_data_clear(node);
 				sexp_val = SEXP_TRUE;
 				break;
 
@@ -31537,6 +31676,8 @@ int query_operator_return_type(int op)
 		case OP_LIST_HAS_DATA:
 		case OP_MAP_HAS_KEY:
 		case OP_MAP_HAS_DATA_ITEM:
+		case OP_SHIP_CUSTOM_DATA_IS:
+		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
 			return OPR_BOOL;
 
 		case OP_PLUS:
@@ -31573,6 +31714,7 @@ int query_operator_return_type(int op)
 		case OP_LIST_DATA_INDEX:
 		case OP_ANGLE_VECTORS:
 		case OP_ANGLE_FVEC_TARGET:
+		case OP_SHIP_CUSTOM_DATA_GET_INT:
 			return OPR_NUMBER;
 
 		case OP_ABS:
@@ -32052,6 +32194,9 @@ int query_operator_return_type(int op)
 		case OP_ABORT_REARM:
 		case OP_RESET_EVENT:
 		case OP_RESET_GOAL:
+		case OP_SHIP_CUSTOM_DATA_SET:
+		case OP_SHIP_CUSTOM_DATA_SET_INT:
+		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			return OPR_NULL;
 
 		case OP_AI_CHASE:
@@ -32576,6 +32721,34 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_STRING;
 			else
 				return OPF_SHIP_WING;
+
+		case OP_SHIP_CUSTOM_DATA_SET:
+			if (argnum == 0)
+				return OPF_SHIP;
+			else
+				return OPF_STRING;
+
+		case OP_SHIP_CUSTOM_DATA_SET_INT:
+			if (argnum == 0)
+				return OPF_SHIP;
+			else if (argnum == 1)
+				return OPF_STRING;
+			else
+				return OPF_NUMBER;
+
+		case OP_SHIP_CUSTOM_DATA_IS:
+			if (argnum == 0)
+				return OPF_SHIP;
+			else
+				return OPF_STRING;
+
+		case OP_SHIP_CUSTOM_DATA_GET_INT:
+		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
+		case OP_SHIP_CUSTOM_DATA_CLEAR:
+			if (argnum == 0)
+				return OPF_SHIP;
+			else
+				return OPF_STRING;
 
 		case OP_SET_DEATH_MESSAGE:
 			return OPF_MESSAGE_OR_STRING;
@@ -36858,6 +37031,9 @@ int get_category(int op_id)
 		case OP_USED_CHEAT:
 		case OP_CUTSCENES_GET_FOV:
 		case OP_GET_SUPERNOVA_STAGE:
+		case OP_SHIP_CUSTOM_DATA_IS:
+		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
+		case OP_SHIP_CUSTOM_DATA_GET_INT:
 			return OP_CATEGORY_STATUS;
 
 		case OP_WHEN:
@@ -37278,6 +37454,9 @@ int get_category(int op_id)
 		case OP_CONFIG_FIELD_TARGETS:
 		case OP_SET_WING_FORMATION:
 		case OP_SET_MOTION_DEBRIS:
+		case OP_SHIP_CUSTOM_DATA_SET:
+		case OP_SHIP_CUSTOM_DATA_SET_INT:
+		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			return OP_CATEGORY_CHANGE;
 
 		case OP_AI_CHASE:
@@ -37441,6 +37620,9 @@ int get_subcategory(int op_id)
 		case OP_SET_ARRIVAL_INFO:
 		case OP_SET_DEPARTURE_INFO:
 		case OP_CANCEL_FUTURE_WAVES:
+		case OP_SHIP_CUSTOM_DATA_SET:
+		case OP_SHIP_CUSTOM_DATA_SET_INT:
+		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			return CHANGE_SUBCATEGORY_SHIP_STATUS;
 
 		case OP_SET_WEAPON_ENERGY:
@@ -37851,6 +38033,9 @@ int get_subcategory(int op_id)
 		case OP_ARE_SHIP_FLAGS_SET:
 		case OP_ARE_WING_FLAGS_SET:
 		case OP_IS_SHIP_EMP_ACTIVE:
+		case OP_SHIP_CUSTOM_DATA_IS:
+		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
+		case OP_SHIP_CUSTOM_DATA_GET_INT:
 			return STATUS_SUBCATEGORY_SHIP_STATUS;
 
 		case OP_SHIELD_RECHARGE_PCT:
@@ -40713,6 +40898,45 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\tChanges the callsign of a ship.  Takes 2 or more arguments...\r\n"
 		"\t1:\tThe callsign to display or empty to remove\r\n"
 		"\tRest:\tThe ships to display the new callsign (ships do not need to be in-mission)" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_SET, "ship-custom-data-set\r\n"
+		"\tSets a custom data key/value pair on a ship instance.  If the key already exists, its value is overwritten.  Takes 3 arguments...\r\n"
+		"\t1:\tThe ship on which to store the data\r\n"
+		"\t2:\tThe key\r\n"
+		"\t3:\tThe value to store" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_SET_INT, "ship-custom-data-set-int\r\n"
+		"\tSets a custom data key/value pair on a ship instance, storing a number as the value.  If the key already exists, its value is overwritten.  Takes 3 arguments...\r\n"
+		"\t1:\tThe ship on which to store the data\r\n"
+		"\t2:\tThe key\r\n"
+		"\t3:\tThe number to store" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_IS, "ship-custom-data-is\r\n"
+		"\tReturns true if the ship has the given custom data key and its stored value exactly matches the given value.  Takes 3 arguments...\r\n"
+		"\t1:\tThe ship to query\r\n"
+		"\t2:\tThe key\r\n"
+		"\t3:\tThe value to compare against" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_GET_INT, "ship-custom-data-get-int\r\n"
+		"\tReturns the stored value of the given custom data key interpreted as a number, or 0 if the key is not present.  Takes 2 arguments...\r\n"
+		"\t1:\tThe ship to query\r\n"
+		"\t2:\tThe key" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_HAS_KEY, "ship-custom-data-has-key\r\n"
+		"\tReturns true if the ship has the given custom data key.  Takes 2 arguments...\r\n"
+		"\t1:\tThe ship to query\r\n"
+		"\t2:\tThe key" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_CLEAR, "ship-custom-data-clear\r\n"
+		"\tClears custom data on a ship instance.  If a key is provided, only that key is removed; otherwise all custom data on the ship is cleared.  Takes 2 or 3 arguments...\r\n"
+		"\t1:\tThe ship on which to clear data\r\n"
+		"\t2:\tThe key to remove (optional)" },
 
 	// Goober5000
 	{ OP_SET_DEATH_MESSAGE, "set-death-message\r\n"

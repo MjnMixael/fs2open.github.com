@@ -369,7 +369,10 @@ extern int Num_unknown_loadout_classes;
 extern ushort Current_file_checksum;
 extern int    Current_file_length;
 
-extern SCP_vector<mission_default_custom_data> Default_custom_data;
+// editor-defined custom data schemas (from editor.tbl / *-edt.tbm), one per domain
+extern SCP_vector<mission_default_custom_data> Default_custom_data;			// mission
+extern SCP_vector<mission_default_custom_data> Default_campaign_custom_data;	// campaign
+extern SCP_vector<mission_default_custom_data> Default_ship_custom_data;		// ship instance
 
 #define SUBSYS_STATUS_NO_CHANGE	-999
 
@@ -521,8 +524,10 @@ public:
 	// Goober5000
 	SCP_vector<texture_replace> replacement_textures;
 
-	SCP_vector<alt_class> alt_classes;	
+	SCP_vector<alt_class> alt_classes;
 	SCP_map<std::pair<int, int>, int> alt_iff_color;
+
+	SCP_map<SCP_string, SCP_string> custom_data;	// per-ship instance custom data overrides
 
 	~p_object();
 

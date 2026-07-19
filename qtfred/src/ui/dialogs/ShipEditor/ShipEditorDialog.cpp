@@ -4,6 +4,7 @@
 
 #include "iff_defs/iff_defs.h"
 #include "mission/missionmessage.h"
+#include "mission/missionparse.h"
 #include "missioneditor/common.h"
 #include "mission/object.h"
 
@@ -13,6 +14,7 @@
 
 #include <QCloseEvent>
 #include <ui/dialogs/General/CheckBoxListDialog.h>
+#include <ui/dialogs/MissionSpecs/CustomDataDialog.h>
 #include <QVariant>
 
 namespace fso::fred::dialogs {
@@ -554,6 +556,8 @@ void ShipEditorDialog::enableDisable()
 	const bool noPlayerSelected = (_model->getNumSelectedPlayers() == 0);
 	ui->deleteButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
 	ui->resetButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
+	// custom data is per-ship, so only editable when a single ship is selected
+	ui->customDataButton->setEnabled(_model->getUIEnable() && !_model->getIfMultipleShips() && _model->getSingleShip() >= 0);
 	ui->killScoreEdit->setEnabled(_model->getUIEnable());
 	ui->assistEdit->setEnabled(_model->getUIEnable());
 
@@ -637,6 +641,17 @@ void ShipEditorDialog::on_textureReplacementButton_clicked()
 	auto dialog = new dialogs::ShipTextureReplacementDialog(this, _viewport, getIfMultipleShips());
 	dialog->setAttribute(Qt::WA_DeleteOnClose);
 	dialog->show();
+}
+
+void ShipEditorDialog::on_customDataButton_clicked()
+{
+	CustomDataDialog dlg(this, _viewport);
+	dlg.setSchema(Default_ship_custom_data);
+	dlg.setInitial(_model->getShipCustomData());
+
+	if (dlg.exec() == QDialog::Accepted) {
+		_model->setShipCustomData(dlg.items());
+	}
 }
 
 void ShipEditorDialog::on_playerShipButton_clicked()

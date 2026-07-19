@@ -4306,6 +4306,25 @@ int Fred_mission_save::save_objects()
 
 		// end of texture replacement -------------------------------
 
+		// per-ship instance custom data
+		if (save_config.save_format != MissionFormat::RETAIL && !shipp->custom_data.empty()) {
+			if (optional_string_fred("$begin_custom_data", "$Name:")) {
+				parse_comments(2);
+			} else {
+				fout("\n$begin_custom_data");
+			}
+
+			for (const auto& pair : shipp->custom_data) {
+				fout("\n\t+Val: %s %s", pair.first.c_str(), pair.second.c_str());
+			}
+
+			if (optional_string_fred("$end_custom_data", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n$end_custom_data");
+			}
+		}
+
 		fso_comment_pop();
 	}
 

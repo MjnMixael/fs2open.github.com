@@ -127,6 +127,10 @@ int    Current_file_length   = 0;
 
 // coverity[GLOBAL_INIT_ORDER] -- safe; default-constructed, no cross-TU dependencies
 SCP_vector<mission_default_custom_data> Default_custom_data;
+// coverity[GLOBAL_INIT_ORDER] -- safe; default-constructed, no cross-TU dependencies
+SCP_vector<mission_default_custom_data> Default_campaign_custom_data;
+// coverity[GLOBAL_INIT_ORDER] -- safe; default-constructed, no cross-TU dependencies
+SCP_vector<mission_default_custom_data> Default_ship_custom_data;
 
 // alternate ship type names
 char Mission_alt_types[MAX_ALT_TYPE_NAMES][NAME_LENGTH];
@@ -2420,6 +2424,7 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 
 	shipp->group = p_objp->group;
 	shipp->fred_layer = p_objp->fred_layer;
+	shipp->custom_data = p_objp->custom_data;
 	shipp->escort_priority = p_objp->escort_priority;
 	shipp->ship_guardian_threshold = p_objp->ship_guardian_threshold;
 	shipp->use_special_explosion = p_objp->use_special_explosion;
@@ -4063,6 +4068,11 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 			else
 				mprintf(("Too many replacement textures specified for ship '%s'!\n", p_objp->name));
 		}
+	}
+
+	// per-ship instance custom data overrides
+	if (optional_string("$begin_custom_data")) {
+		parse_string_map(p_objp->custom_data, "$end_custom_data", "+Val:");
 	}
 
 	// for multiplayer, assign a network signature to this parse object.  Doing this here will
@@ -6882,52 +6892,70 @@ void apply_default_custom_data(mission* pm)
 	}
 }
 
+// parse one #...CustomData section (header already consumed) into the given schema
+static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_data>& dest)
+{
+	while (required_string_either("#End", "+Key:")) {
+		required_string("+Key:");
+		mission_default_custom_data def;
+		stuff_string(def.key, F_NAME);
+
+		required_string("+Type:");
+		stuff_string(def.type, F_NAME);
+		SCP_tolower(def.type);
+		if (def.type != "string" && def.type != "int" && def.type != "bool") {
+			Warning(LOCATION, "Editor custom data key '%s' has invalid type '%s'; expected string, int, or bool.  Defaulting to string.", def.key.c_str(), def.type.c_str());
+			def.type = "string";
+		}
+
+		if (optional_string("+Default:")) {
+			stuff_string(def.value, F_RAW);
+		} else {
+			def.value.clear();
+		}
+
+		if (optional_string("+Description:")) {
+			stuff_string(def.description, F_MULTITEXT);
+		}
+
+		dest.emplace_back(std::move(def));
+	}
+	required_string("#End");
+}
+
+// non-capturing so it can be passed to parse_modular_table's function pointer parameter
+static void parse_editor_custom_data_tbl(const char* filename)
+{
+	read_file_text(filename, CF_TYPE_TABLES);
+	reset_parse();
+
+	// sections may appear in any order and any subset; unrelated content is
+	// skipped so editor.tbl can host other editor-focused sections in the future
+	ignore_white_space();
+	while (!check_for_eof()) {
+		if (optional_string("#MissionCustomData")) {
+			parse_editor_custom_data_section(Default_custom_data);
+		} else if (optional_string("#CampaignCustomData")) {
+			parse_editor_custom_data_section(Default_campaign_custom_data);
+		} else if (optional_string("#ShipCustomData")) {
+			parse_editor_custom_data_section(Default_ship_custom_data);
+		} else {
+			advance_to_eoln(nullptr);
+		}
+		ignore_white_space();
+	}
+}
+
 void parse_editor_custom_data_table()
 {
-	auto parse_editor_tbl = [](const char* filename) {
-		read_file_text(filename, CF_TYPE_TABLES);
-		reset_parse();
-
-		while (!check_for_eof()) {
-			if (optional_string("#MissionCustomData")) {
-				while (required_string_either("#End", "+Key:")) {
-					required_string("+Key:");
-					mission_default_custom_data def;
-					stuff_string(def.key, F_NAME);
-
-					required_string("+Type:");
-					stuff_string(def.type, F_NAME);
-
-					if (optional_string("+Default:")) {
-						stuff_string(def.value, F_RAW);
-					} else {
-						def.value.clear();
-					}
-
-					if (optional_string("+Description:")) {
-						stuff_string(def.description, F_MULTITEXT);
-					}
-
-					Default_custom_data.emplace_back(std::move(def));
-				}
-			}
-
-			ignore_white_space();
-			if (!check_for_eof()) {
-				skip_to_start_of_string_either("#MissionCustomData", "#End");
-				if (check_for_string("#End")) {
-					advance_to_eoln(nullptr);
-				}
-			}
-		}
-	};
-
 	Default_custom_data.clear();
+	Default_campaign_custom_data.clear();
+	Default_ship_custom_data.clear();
 
 	if (cf_exists_full("editor.tbl", CF_TYPE_TABLES)) {
-		parse_editor_tbl("editor.tbl");
+		parse_editor_custom_data_tbl("editor.tbl");
 	}
-	parse_modular_table("*-edt.tbm", parse_editor_tbl, CF_TYPE_TABLES);
+	parse_modular_table("*-edt.tbm", parse_editor_custom_data_tbl, CF_TYPE_TABLES);
 }
 
 bool parse_mission(mission *pm, int flags)
