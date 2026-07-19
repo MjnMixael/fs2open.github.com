@@ -1030,7 +1030,14 @@ enum : int {
 	OP_NODE_TARGETED, // FUBAR
 	OP_POINT_TARGETED,
 	OP_IGNORE_KEY, // Karajorma
-	
+
+	OP_SHIP_CUSTOM_DATA_SET,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_SET_INT,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_IS,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_GET_INT,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_HAS_KEY,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_CLEAR,	// MjnMixael
+
 	// this should come after every operator
 	First_available_operator_id
 };

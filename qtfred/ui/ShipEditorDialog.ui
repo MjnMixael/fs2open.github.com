@@ -184,6 +184,16 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QPushButton" name="customDataButton">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Edit this ship's custom data key/value pairs&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>Custom Data</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </item>
        <item>
