@@ -1,4 +1,5 @@
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 
 #include "bmpman/bmpman.h"
@@ -491,6 +492,7 @@ const uint id_fcTL = 0x4C546366; // Frame control chunk
 const uint id_IDAT = 0x54414449; // first frame and/or default image
 const uint id_fdAT = 0x54416466; // Frame data chunk
 const uint id_IEND = 0x444E4549; // end/footer chunk
+const uint id_iTXt = 0x74585469; // UTF-8 text chunk
 
 // Protect against large PNGs. See Mozilla's bug #251381 for more info.
 const unsigned long cMaxPNGSize = 1000000UL;
@@ -518,6 +520,72 @@ static inline void info_callback(png_structp png_ptr, png_infop  /*info_ptr*/)
 static inline void row_callback(png_structp png_ptr, png_bytep new_row, png_uint_32 row_num, int  /*pass*/)
 {
 	static_cast<apng_ani*>(png_get_progressive_ptr(png_ptr))->row_callback(new_row, row_num);
+}
+
+static inline bool parse_fso_keyframe_itxt(const SCP_vector<ubyte>& chunk_data, uint chunk_size, int& out_keyframe)
+{
+	// Expect complete chunk bytes: [length(4)][type(4)][data...][crc(4)]
+	// iTXt data starts at offset 8 and ends before the final CRC.
+	// Note: chunk_data is a grow-only reused buffer, so its size() may exceed
+	// this chunk; chunk_size is the authoritative length for this chunk.
+	if (chunk_size < 13 || chunk_size > chunk_data.size()) {
+		return false;
+	}
+
+	const auto* data_begin = reinterpret_cast<const char*>(&chunk_data[8]);
+	const auto* data_end = reinterpret_cast<const char*>(&chunk_data[chunk_size - 4]);
+	if (data_begin >= data_end) {
+		return false;
+	}
+
+	// keyword\0 compression_flag compression_method language_tag\0 translated_keyword\0 text
+	const auto* keyword_end = static_cast<const char*>(memchr(data_begin, '\0', data_end - data_begin));
+	if (keyword_end == nullptr || keyword_end + 2 >= data_end) {
+		return false;
+	}
+
+	SCP_string keyword(data_begin, keyword_end);
+	if (!lcase_equal(keyword, "FSO.Keyframe")) {
+		return false;
+	}
+
+	const auto* p = keyword_end + 1;
+	const auto compression_flag = static_cast<ubyte>(*p++);
+	// compression method is currently ignored; skip it
+	p++;
+
+	if (compression_flag != 0) {
+		// We only support uncompressed iTXt values for this metadata.
+		return false;
+	}
+
+	// language tag
+	const auto* language_end = static_cast<const char*>(memchr(p, '\0', data_end - p));
+	if (language_end == nullptr) {
+		return false;
+	}
+	p = language_end + 1;
+
+	// translated keyword
+	const auto* translated_end = static_cast<const char*>(memchr(p, '\0', data_end - p));
+	if (translated_end == nullptr) {
+		return false;
+	}
+	p = translated_end + 1;
+
+	if (p >= data_end) {
+		return false;
+	}
+
+	SCP_string text(p, data_end);
+	char* parse_end = nullptr;
+	long parsed = strtol(text.c_str(), &parse_end, 10);
+	if (parse_end != text.c_str() + text.size()) {
+		return false;
+	}
+
+	out_keyframe = static_cast<int>(parsed);
+	return true;
 }
 
 /*
@@ -754,6 +822,17 @@ void apng_ani::_process_chunk()
 	}
 	else if (_id == id_IEND) {
 		return;
+	}
+	else if (_id == id_iTXt) {
+		int parsed_keyframe = 0;
+		if (parse_fso_keyframe_itxt(_chunk.data, _chunk.size, parsed_keyframe)) {
+			keyframe = parsed_keyframe;
+		}
+
+		if (!_got_IDAT) {
+			_processing_data(_chunk.data.data(), _chunk.size);
+			_info_chunks.push_back(_chunk);
+		}
 	}
 	else if (not_chunk(_chunk.data[4]) || not_chunk(_chunk.data[5]) ||
 			not_chunk(_chunk.data[6]) || not_chunk(_chunk.data[7])) {
@@ -1006,6 +1085,7 @@ void apng_ani::_apng_failed(const char* msg)
 	nframes = 0;
 	current_frame = 0;
 	plays = 0;
+	keyframe = 0;
 	anim_time = 0.0f;
 	_cleanup_resources();
 
@@ -1028,6 +1108,7 @@ apng_ani::apng_ani(const char* filename, bool cache)
 	, nframes(0)
 	, current_frame(0)
 	, plays(0)
+	, keyframe(0)
 	, anim_time(0.0f)
 	, _filename(filename)
 	, _pngp(nullptr)

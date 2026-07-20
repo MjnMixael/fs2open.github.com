@@ -45,7 +45,9 @@ public:
 	uint       nframes;
 	uint       current_frame;
 	uint       plays;
+	int        keyframe;
 	float      anim_time;
+	SCP_vector<float> frame_start_times;
 
 	apng_ani(const char* filenamen, bool cache = true);
 	~apng_ani();
