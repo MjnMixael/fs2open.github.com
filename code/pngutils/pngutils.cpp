@@ -577,9 +577,10 @@ static inline bool parse_fso_keyframe_itxt(const SCP_vector<ubyte>& chunk_data, 
 		return false;
 	}
 
+	SCP_string text(p, data_end);
 	char* parse_end = nullptr;
-	long parsed = strtol(p, &parse_end, 10);
-	if (parse_end != data_end) {
+	long parsed = strtol(text.c_str(), &parse_end, 10);
+	if (parse_end != text.c_str() + text.size()) {
 		return false;
 	}
 

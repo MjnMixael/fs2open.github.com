@@ -239,12 +239,19 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 			ga->png.anim->frame_start_times.clear();
 
 			if (cache) {
-				ga->png.anim->frame_start_times.reserve(ga->num_frames);
-				float frame_start = 0.0f;
-				for (int frame = 0; frame < ga->num_frames; ++frame) {
-					ga->png.anim->frame_start_times.push_back(frame_start);
-					ga->png.anim->next_frame();
-					frame_start += ga->png.anim->frame.delay;
+				try {
+					ga->png.anim->frame_start_times.reserve(ga->num_frames);
+					float frame_start = 0.0f;
+					for (int frame = 0; frame < ga->num_frames; ++frame) {
+						ga->png.anim->frame_start_times.push_back(frame_start);
+						ga->png.anim->next_frame();
+						frame_start += ga->png.anim->frame.delay;
+					}
+				}
+				catch (const apng::ApngException& e) {
+					nprintf(("apng", "APNG keyframe %d ignored for '%s' due to load error: %s\n", ga->keyframe, ga->filename, e.what()));
+					ga->png.anim->frame_start_times.clear();
+					ga->keyframe = 0;
 				}
 				ga->png.anim->goto_start();
 			}
