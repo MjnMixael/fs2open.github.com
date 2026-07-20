@@ -2,6 +2,8 @@
 #include "globalincs/globals.h"
 #include "graphics/2d.h"
 #include "graphics/generic.h"
+#include "cutscene/Decoder.h"
+#include "cutscene/player.h"
 #define BMPMAN_INTERNAL
 #include "bmpman/bm_internal.h"
 #ifdef _WIN32
@@ -9,10 +11,74 @@
 #else
 #define MAX_PATH	255
 #endif
+
+#include <algorithm>
+#include <cmath>
+#include <cstring>
+#include <thread>
 //#define TIMER
 #ifdef TIMER
 #include "io/timer.h"
 #endif
+
+// Movie file extensions handled by generic_anim itself (not by bm_load_animation).
+// Kept local to avoid polluting bm_ani_ext_list, which is used elsewhere for
+// EFF/ANI frame-name parsing.
+// IMPORTANT: every extension here MUST be 3 characters. cf_find_file_location_ext
+// filters its pack/loose index matches by a single precomputed length derived from
+// ext_list[0] (see the "assumes that everything in ext_list[] is the same length"
+// FIXME in cfilesystem.cpp), so a mixed-length list silently fails to find files
+// whose extension differs in length from the first. That is why .webm (4-char) is
+// not supported for movie anims -- it would break lookups of .mp4/.ogg files.
+static const char* movie_ext_list[] = { ".mp4", ".ogg" };
+static const int MOVIE_NUM_TYPES = sizeof(movie_ext_list) / sizeof(movie_ext_list[0]);
+
+// Directories searched for movie-format generic anims. Deliberately excludes
+// CF_TYPE_MOVIES so a tech anim referencing "intro" does not pick up
+// data/movies/intro.mp4 (the FS2 cutscene), and the cutscene system's default
+// search (ROOT + MOVIES) keeps cutscenes from picking up tech anims.
+static const int generic_anim_movie_dirs[] = {
+	CF_TYPE_INTEL_ANIMS,
+	CF_TYPE_CBANIMS,
+	CF_TYPE_INTERFACE,
+	CF_TYPE_HUD,
+	CF_TYPE_MAPS,
+	CF_TYPE_EFFECTS,
+};
+
+// Look up a movie file (mp4/ogg) for a generic_anim base name across the
+// anim directories in priority order. Returns the first hit. On success, *out_dir
+// (if non-null) receives the CF_TYPE directory the file was found in, so the caller
+// can constrain the decoder to that same directory. extension_index is filled with
+// the matched movie_ext_list index.
+static CFileLocationExt find_movie_for_generic_anim(const char* filename, int* out_dir = nullptr)
+{
+	for (int dir : generic_anim_movie_dirs) {
+		auto res = cf_find_file_location_ext(filename, MOVIE_NUM_TYPES, movie_ext_list, dir);
+		if (res.found) {
+			if (out_dir != nullptr)
+				*out_dir = dir;
+			return res;
+		}
+	}
+	return CFileLocationExt();
+}
+
+// Holds the heavyweight state for a streaming movie generic_anim. The generic_anim
+// union only carries a raw pointer to this (mirroring apng's apng_ani*); the real
+// state lives here so cutscene headers stay out of generic.h.
+struct movie_anim_state {
+	std::unique_ptr<cutscene::Decoder> decoder;
+	std::unique_ptr<std::thread> decoder_thread;
+	cutscene::VideoFramePtr current_frame;	// most recently displayed frame
+	cutscene::VideoFramePtr next_frame;		// peeked-ahead frame whose frameTime we use to detect loop wrap
+	double playback_time = 0.0;	// seconds since last loop wrap
+	float fps = 0.0f;
+	float duration = 0.0f;
+	bool looping = true;
+	bool finished = false;		// true once a NOLOOP playthrough has completed
+	bool warned_backwards = false;
+};
  
 //we check background type to avoid messed up colours for ANI
 #define ANI_BPP_CHECK		(ga->ani.bg_type == BM_TYPE_PCX) ? 16 : 32
@@ -25,7 +91,9 @@ bool generic_bitmap_exists(const char *filename)
 
 bool generic_anim_exists(const char *filename)
 {
-	return cf_exists_full_ext(filename, CF_TYPE_ANY, BM_ANI_NUM_TYPES, bm_ani_ext_list) != 0;
+	if (cf_exists_full_ext(filename, CF_TYPE_ANY, BM_ANI_NUM_TYPES, bm_ani_ext_list) != 0)
+		return true;
+	return find_movie_for_generic_anim(filename).found;
 }
 
 // Goober5000
@@ -145,8 +213,16 @@ int generic_anim_load(generic_anim *ga)
 	ga->first_frame = bm_load_animation(ga->filename, &ga->num_frames, &fps, &ga->keyframe, &ga->total_time);
 	//mprintf(("generic_anim_load: %s - keyframe = %d\n", ga->filename, ga->keyframe));
 
-	if (ga->first_frame < 0)
+	if (ga->first_frame < 0) {
+		// Movie-format anims (mp4/ogg) can only be played by generic_anim_stream,
+		// which drives the decoder on a background thread. There's no way to load one
+		// frame-by-frame here, so point the modder at the streaming path rather than
+		// failing with an indistinguishable "not found".
+		if (find_movie_for_generic_anim(ga->filename).found) {
+			mprintf(("generic_anim_load: '%s' is a movie file; movie anims are only supported when streamed (generic_anim_stream), not via generic_anim_load.\n", ga->filename));
+		}
 		return -1;
+	}
 
 	ga->done_playing = 0;
 	ga->anim_time = 0.0f;
@@ -164,9 +240,18 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 
 	auto res = cf_find_file_location_ext(ga->filename, BM_ANI_NUM_TYPES, bm_ani_ext_list, CF_TYPE_ANY);
 
-	// could not be found, or is invalid for some reason
-	if ( !res.found )
-		return -1;
+	// Fall back to looking for a movie file (mp4/ogg) if no ani/eff/apng matched.
+	// Order matters: ani/eff/apng take priority, so a .png is still treated as apng, not as a movie.
+	// Movies are searched only in anim directories (intelanims, cbanims, interface, etc.)
+	// to avoid conflicts with fullscreen cutscenes that may share a base name in data/movies.
+	bool is_movie = false;
+	int movie_dir = -1;
+	if ( !res.found ) {
+		res = find_movie_for_generic_anim(ga->filename, &movie_dir);
+		if ( !res.found )
+			return -1;
+		is_movie = true;
+	}
 
 	//make sure we can open it
 	img_cfp = cfopen_special(res, "rb", CF_TYPE_ANY);
@@ -175,8 +260,13 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 		return -1;
 	}
 
-	strcat_s(ga->filename, bm_ani_ext_list[res.extension_index]);
-	ga->type = bm_ani_type_list[res.extension_index];
+	if (is_movie) {
+		strcat_s(ga->filename, movie_ext_list[res.extension_index]);
+		ga->type = BM_TYPE_MOVIE;
+	} else {
+		strcat_s(ga->filename, bm_ani_ext_list[res.extension_index]);
+		ga->type = bm_ani_type_list[res.extension_index];
+	}
 	//seek to the end
 	cfseek(img_cfp, 0, CF_SEEK_END);
 
@@ -236,6 +326,85 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 		ga->buffer = ga->png.anim->frame.data.data();
 		ga->bitmap_id = bm_create(ga->png.anim->bpp, ga->width, ga->height, ga->buffer, 0);
 	}
+	else if (ga->type == BM_TYPE_MOVIE) {
+		cutscene::PlaybackProperties props;
+		props.with_audio = false;
+		props.looping = true;
+		props.force_rgba = true;
+		// Constrain the decoder to the exact directory we resolved the file in
+		// above. Combined with movie_ext_list matching the decoder's extension
+		// precedence, this guarantees the decoder opens the same file we detected
+		// and never wanders into data/movies to grab a fullscreen cutscene.
+		props.search_dirs.assign(1, movie_dir);
+
+		auto decoder = cutscene::findDecoder(ga->filename, props);
+		if (!decoder) {
+			mprintf(("generic_anim: failed to open movie '%s'\n", ga->filename));
+			ga->type = BM_TYPE_NONE;
+			return -1;
+		}
+
+		const auto movie_props = decoder->getProperties();
+		if (movie_props.size.width == 0 || movie_props.size.height == 0) {
+			mprintf(("generic_anim: movie '%s' has zero dimensions\n", ga->filename));
+			ga->type = BM_TYPE_NONE;
+			return -1;
+		}
+
+		ga->width = static_cast<int>(movie_props.size.width);
+		ga->height = static_cast<int>(movie_props.size.height);
+		// Some containers (notably some ogg files) don't report a duration.
+		// Looping playback is unaffected, but total_time then stays 0 — callers that
+		// derive progress as anim_time/total_time must guard against that. Warn so a
+		// modder relying on duration-based timing knows why it's unavailable.
+		if (movie_props.duration <= 0.0f) {
+			mprintf(("generic_anim: movie '%s' reports no duration; total_time will be 0 (looping playback is unaffected).\n", ga->filename));
+		}
+		ga->total_time = movie_props.duration > 0.0f ? movie_props.duration : 0.0f;
+		const int est_frames = (movie_props.fps > 0.0f && movie_props.duration > 0.0f)
+			? std::max(1, (int)std::lround(movie_props.fps * movie_props.duration))
+			: 1;
+		ga->num_frames = est_frames;
+		ga->current_frame = 0;
+		ga->previous_frame = -1;
+
+		// Allocate a BGRA staging buffer for the decoded frame and create a
+		// 32-bpp bitmap pointing at it. Zero-initialized so the bitmap reads as
+		// fully transparent until the first frame arrives from the decoder.
+		const size_t buf_bytes = static_cast<size_t>(ga->width) * static_cast<size_t>(ga->height) * 4;
+		ga->buffer = (ubyte*)vm_malloc(buf_bytes);
+		memset(ga->buffer, 0, buf_bytes);
+		ga->bitmap_id = bm_create(32, ga->width, ga->height, ga->buffer, 0);
+		if (ga->bitmap_id < 0) {
+			vm_free(ga->buffer);
+			ga->buffer = nullptr;
+			ga->type = BM_TYPE_NONE;
+			return -1;
+		}
+
+		auto state = new movie_anim_state();
+		state->decoder = std::move(decoder);
+		state->fps = movie_props.fps;
+		state->duration = movie_props.duration;
+		state->looping = props.looping;
+		state->finished = false;
+
+		// Spawn the decode loop on its own thread. startDecoding() is blocking
+		// (it runs the read/decode loop until stopDecoder() flips the flag);
+		// see Player::decoderThread() in cutscene/player.cpp.
+		auto raw = state->decoder.get();
+		state->decoder_thread.reset(new std::thread([raw]() {
+			try {
+				raw->startDecoding();
+			} catch (const std::exception& e) {
+				mprintf(("generic_anim: exception in movie decode thread: %s\n", e.what()));
+			} catch (...) {
+				mprintf(("generic_anim: unknown exception in movie decode thread\n"));
+			}
+		}));
+
+		ga->movie.state = state;
+	}
 	else {
 		bpp = 32;
 		if(ga->use_hud_color)
@@ -293,6 +462,9 @@ int generic_anim_stream(generic_anim *ga, const bool cache)
 	if (ga->type == BM_TYPE_PNG) {
 		ga->total_time = ga->png.anim->anim_time;
 	}
+	else if (ga->type == BM_TYPE_MOVIE) {
+		// total_time was set from MovieProperties::duration above.
+	}
 	else {
 		if (anim_fps == 0) {
 			Error(LOCATION, "animation (%s) has invalid fps of zero, fix this!", ga->filename);
@@ -327,7 +499,7 @@ void generic_anim_unload(generic_anim *ga)
 				anim_free(ga->ani.animation);
 			}
 			if(ga->type == BM_TYPE_EFF) {
-				if(ga->eff.next_frame >= 0) 
+				if(ga->eff.next_frame >= 0)
 					bm_release(ga->eff.next_frame);
 				if(ga->bitmap_id >= 0)
 					bm_release(ga->bitmap_id);
@@ -340,12 +512,38 @@ void generic_anim_unload(generic_anim *ga)
 					ga->png.anim = nullptr;
 				}
 			}
+			if(ga->type == BM_TYPE_MOVIE) {
+				if (ga->movie.state != nullptr) {
+					auto* state = ga->movie.state;
+					// stopDecoder() closes the bounded queues, which unblocks any push
+					// currently waiting on a full queue (push throws sync_queue_is_closed,
+					// which Decoder::pushFrameData catches). The decode loop then sees
+					// !isDecoding() and exits cleanly, so we can join.
+					if (state->decoder) {
+						state->decoder->stopDecoder();
+					}
+					if (state->decoder_thread && state->decoder_thread->joinable()) {
+						state->decoder_thread->join();
+					}
+					if (ga->bitmap_id >= 0) {
+						bm_release(ga->bitmap_id);
+					}
+					if (ga->buffer != nullptr) {
+						vm_free(ga->buffer);
+						ga->buffer = nullptr;
+					}
+					delete state;
+					ga->movie.state = nullptr;
+				}
+			}
 		}
 		else {
 			//trying to release the first frame will release ALL frames
 			bm_release(ga->first_frame);
 		}
-		if(ga->buffer) {
+		// Movies already released their bitmap + buffer above; skip the generic path
+		// (the buffer is heap-owned and the bitmap was already released).
+		if(ga->buffer && ga->type != BM_TYPE_MOVIE) {
 			bm_release(ga->bitmap_id);
 		}
 	}
@@ -688,6 +886,104 @@ void generic_anim_render_variable_frame_delay(generic_anim* ga, float frametime,
 }
 
 
+// Copy the latest decoded video frame (plane 0, BGRA) into the staging buffer
+// and push it to the bitmap. Respects sws stride padding.
+static void generic_render_movie_upload(generic_anim* ga, cutscene::VideoFrame* frame)
+{
+	const auto plane_size = frame->getPlaneSize(0);
+	const auto* src = reinterpret_cast<const ubyte*>(frame->getPlaneData(0));
+	const size_t row_bytes = static_cast<size_t>(ga->width) * 4;
+	const size_t src_stride = plane_size.stride;
+	if (src_stride == row_bytes) {
+		memcpy(ga->buffer, src, row_bytes * static_cast<size_t>(ga->height));
+	} else {
+		ubyte* dst = ga->buffer;
+		for (int row = 0; row < ga->height; ++row) {
+			memcpy(dst, src, row_bytes);
+			dst += row_bytes;
+			src += src_stride;
+		}
+	}
+	gr_update_texture(ga->bitmap_id, 32, ga->buffer, ga->width, ga->height);
+}
+
+/*
+ * @brief render path for streaming movie files (mp4/ogg)
+ *
+ * Movies decode on a background thread; here we pull due frames from the queue
+ * and blit the latest one into the generic_anim bitmap. Backwards play and
+ * keyframes are not supported — they fall back to forward play with a
+ * one-time warning per anim.
+ */
+void generic_anim_render_movie(generic_anim* ga, float frametime, float alpha)
+{
+	auto* state = ga->movie.state;
+	Assertion(state != nullptr, "movie generic_anim with null state!");
+
+	// Backwards / keyframe requests are not supported for movies. Warn once and proceed forward.
+	if ((ga->direction & GENERIC_ANIM_DIRECTION_BACKWARDS) || ga->keyframe != 0) {
+		if (!state->warned_backwards) {
+			Warning(LOCATION, "Movie generic_anim '%s' does not support reverse playback or keyframes; playing forward.", ga->filename);
+			state->warned_backwards = true;
+		}
+	}
+
+	const bool paused = (ga->direction & GENERIC_ANIM_DIRECTION_PAUSED) != 0;
+	const bool noloop = (ga->direction & GENERIC_ANIM_DIRECTION_NOLOOP) != 0;
+
+	if (!paused && !state->finished) {
+		state->playback_time += frametime;
+		ga->anim_time += frametime;
+		if (ga->total_time > 0.0f && ga->anim_time > ga->total_time) {
+			ga->anim_time = noloop ? ga->total_time : fmodf(ga->anim_time, ga->total_time);
+		}
+	}
+
+	// Prime the pipeline by pulling a frame if we don't have one queued yet.
+	if (!state->next_frame) {
+		state->decoder->tryPopVideoFrame(state->next_frame);
+	}
+
+	// Advance through any frames whose timestamp has already passed. Track whether
+	// we actually swapped in a new frame this call so we can skip the (expensive)
+	// texture re-upload when the displayed frame hasn't changed. ga->buffer always
+	// holds the latest frame, so a later page-in still reads correct pixels.
+	bool advanced = false;
+	while (state->next_frame && state->playback_time >= state->next_frame->frameTime) {
+		// Detect loop wrap: a frame whose timestamp is earlier than the currently
+		// displayed one means the decoder has seeked back to the start. Mirror
+		// player.cpp::processVideoData. For NOLOOP, stop here on the last frame.
+		if (state->current_frame && state->next_frame->frameTime < state->current_frame->frameTime) {
+			if (noloop) {
+				if (!state->finished) {
+					state->finished = true;
+					ga->done_playing = 1;
+					ga->anim_time = ga->total_time;
+					state->decoder->stopDecoder();
+				}
+				// Discard the post-wrap frame; we want to hold the last frame instead.
+				state->next_frame.reset();
+				break;
+			}
+			state->playback_time = state->next_frame->frameTime;
+			ga->anim_time = 0.0f;
+			ga->done_playing = 1;	// completed one cycle
+		}
+		state->current_frame = std::move(state->next_frame);
+		advanced = true;
+		if (!state->decoder->tryPopVideoFrame(state->next_frame)) {
+			state->next_frame.reset();
+			break;
+		}
+	}
+
+	if (state->current_frame && advanced) {
+		generic_render_movie_upload(ga, state->current_frame.get());
+	}
+
+	gr_set_bitmap(ga->bitmap_id, GR_ALPHABLEND_FILTER, GR_BITBLT_MODE_NORMAL, alpha);
+}
+
 /*
  * @brief render animations
  *
@@ -710,6 +1006,9 @@ void generic_anim_render(generic_anim *ga, float frametime, int x, int y, bool m
 	}
 	if (ga->type == BM_TYPE_PNG) {
 		generic_anim_render_variable_frame_delay(ga, frametime, a);
+	}
+	else if (ga->type == BM_TYPE_MOVIE) {
+		generic_anim_render_movie(ga, frametime, a);
 	}
 	else {
 		generic_anim_render_fixed_frame_delay(ga, frametime, a);
@@ -748,6 +1047,9 @@ void generic_anim_bitmap_set(generic_anim* ga, float frametime, const generic_ex
 	if (ga->type == BM_TYPE_PNG) {
 		generic_anim_render_variable_frame_delay(ga, frametime, a);
 	}
+	else if (ga->type == BM_TYPE_MOVIE) {
+		generic_anim_render_movie(ga, frametime, a);
+	}
 	else {
 		generic_anim_render_fixed_frame_delay(ga, frametime, a);
 	}
@@ -767,5 +1069,16 @@ void generic_anim_reset(generic_anim *ga) {
 	if (ga->type == BM_TYPE_PNG) {
 		ga->png.previous_frame_time = 0.0f;
 		ga->png.anim->goto_start();
+	}
+	else if (ga->type == BM_TYPE_MOVIE) {
+		// Intentionally a no-op for the decoder. Movies are for continuous/looping
+		// playback: the decoder loops on its own, so a looping movie needs no reset.
+		// We deliberately do NOT rebase state->playback_time here — doing so desyncs
+		// the local clock from the frames already queued and freezes the picture for
+		// seconds until it catches back up. A true seek isn't safe from this thread
+		// (the decoder owns av_seek_frame inside its own loop), so the timer-driven
+		// "play once then replay" pattern (e.g. intermittent main hall anims) is not
+		// supported for movies; such a slot should use an ANI/EFF/APNG, or accept
+		// that a looping movie simply keeps looping rather than restarting on cue.
 	}
 }

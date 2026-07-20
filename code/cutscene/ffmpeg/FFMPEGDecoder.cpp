@@ -190,14 +190,28 @@ FFMPEGDecoder::~FFMPEGDecoder() {
 }
 
 namespace {
-std::unique_ptr<InputStream> openStream(const SCP_string& name) {
-	// Only check the root and movies folders
-	int dirType;
-	if (cf_exists_full(name.c_str(), CF_TYPE_ROOT)) {
-		dirType = CF_TYPE_ROOT;
-	} else if (cf_exists_full(name.c_str(), CF_TYPE_MOVIES)) {
-		dirType = CF_TYPE_MOVIES;
+// Default directories searched when PlaybackProperties::search_dirs is empty —
+// the original behavior for fullscreen cutscenes.
+const int DEFAULT_SEARCH_DIRS[] = { CF_TYPE_ROOT, CF_TYPE_MOVIES };
+
+std::unique_ptr<InputStream> openStream(const SCP_string& name, const SCP_vector<int>& search_dirs) {
+	int dirType = -1;
+	if (search_dirs.empty()) {
+		for (int d : DEFAULT_SEARCH_DIRS) {
+			if (cf_exists_full(name.c_str(), d)) {
+				dirType = d;
+				break;
+			}
+		}
 	} else {
+		for (int d : search_dirs) {
+			if (cf_exists_full(name.c_str(), d)) {
+				dirType = d;
+				break;
+			}
+		}
+	}
+	if (dirType < 0) {
 		return nullptr;
 	}
 
@@ -424,13 +438,13 @@ std::unique_ptr<DecoderStatus> initializeStatus(std::unique_ptr<InputStream>& st
 	return status;
 }
 
-std::unique_ptr<InputStream> openInputStream(const SCP_string& name) {
+std::unique_ptr<InputStream> openInputStream(const SCP_string& name, const SCP_vector<int>& search_dirs) {
 	// Check a list of extensions we might use
 	// The actual format of the file may be whatever FFmpeg supports
 	for (auto ext : CHECKED_EXTENSIONS) {
 		auto fileName = name + "." + ext;
 
-		auto input = openStream(fileName);
+		auto input = openStream(fileName, search_dirs);
 
 		if (input) {
 			return input;
@@ -440,7 +454,7 @@ std::unique_ptr<InputStream> openInputStream(const SCP_string& name) {
 	return nullptr;
 }
 
-std::unique_ptr<InputStream> openSubtitleStream(const SCP_string& name)
+std::unique_ptr<InputStream> openSubtitleStream(const SCP_string& name, const SCP_vector<int>& search_dirs)
 {
 	auto& current_language = Lcl_languages[lcl_get_current_lang_index()];
 
@@ -452,7 +466,7 @@ std::unique_ptr<InputStream> openSubtitleStream(const SCP_string& name)
 			fileName = name + "-" + current_language.lang_ext + "." + ext;
 		}
 
-		auto input = openStream(fileName);
+		auto input = openStream(fileName, search_dirs);
 
 		if (input) {
 			return input;
@@ -469,19 +483,32 @@ bool FFMPEGDecoder::initialize(const SCP_string& fileName, const PlaybackPropert
 	// First make the file name lower case
 	SCP_tolower(movieName);
 
-	// Then remove the extension
-	size_t dotPos = movieName.find('.');
+	// Base name with the extension removed (used for extension probing and subtitles).
+	SCP_string baseName = movieName;
+	size_t dotPos = baseName.find('.');
 	if (dotPos != SCP_string::npos) {
-		movieName.resize(dotPos);
+		baseName.resize(dotPos);
 	}
 
-	// Try to open the input stream
-	auto input = openInputStream(movieName);
+	// If the caller passed a filename that already carries an extension, honor that
+	// exact file first. generic_anim resolves a specific movie (e.g. "intro.mp4") before
+	// calling us, and we must open that exact file rather than re-probing
+	// CHECKED_EXTENSIONS, which could otherwise pick a same-named file with a different
+	// extension. openStream returns null if the exact file is missing or is not a movie
+	// FFmpeg can open, so we fall through cleanly to the probe below. Fullscreen cutscenes
+	// pass a bare base name (no dot), so this exact try is skipped entirely.
+	std::unique_ptr<InputStream> input;
+	if (dotPos != SCP_string::npos) {
+		input = openStream(movieName, properties.search_dirs);
+	}
+	if (!input) {
+		input = openInputStream(baseName, properties.search_dirs);
+	}
 	if (!input) {
 		return false;
 	}
 
-	auto subt = openSubtitleStream(movieName);
+	auto subt = openSubtitleStream(baseName, properties.search_dirs);
 
 	// We now have a valid input stream, try to find the correct streams
 	auto status = initializeStatus(input, subt, properties);
@@ -509,13 +536,13 @@ MovieProperties FFMPEGDecoder::getProperties() const
 	props.fps = static_cast<float>(getFrameRate(m_status->videoStream, m_status->videoCodecCtx));
 	props.duration = static_cast<float>(m_status->videoStream->duration * av_q2d(m_status->videoStream->time_base));
 
-	props.pixelFormat = getPixelFormat(getConversionFormat(m_status->videoCodecPars.pixel_format));
+	props.pixelFormat = getPixelFormat(m_properties.force_rgba ? AV_PIX_FMT_BGRA : getConversionFormat(m_status->videoCodecPars.pixel_format));
 
 	return props;
 }
 
 void FFMPEGDecoder::startDecoding() {
-	std::unique_ptr<VideoDecoder> videoDecoder(new VideoDecoder(m_status.get(), getConversionFormat(m_status->videoCodecPars.pixel_format)));
+	std::unique_ptr<VideoDecoder> videoDecoder(new VideoDecoder(m_status.get(), m_properties.force_rgba ? AV_PIX_FMT_BGRA : getConversionFormat(m_status->videoCodecPars.pixel_format)));
 
 	std::unique_ptr<AudioDecoder> audioDecoder;
 	std::unique_ptr<SubtitleDecoder> subtitleDecoder;

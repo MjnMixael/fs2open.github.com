@@ -72,6 +72,7 @@ enum BM_TYPE
 	BM_TYPE_JPG,        //!< 32 bit jpeg
 	BM_TYPE_ANI,        //!< in-house ANI format
 	BM_TYPE_EFF,        //!< specifies any type of animated image, the EFF itself is just text
+	BM_TYPE_MOVIE,      //!< movie file streamed via the cutscene/FFmpeg decoder
 
 	// special types
 	BM_TYPE_RENDER_TARGET_STATIC,   //!< 24/32 bit setup internally as a static render target
