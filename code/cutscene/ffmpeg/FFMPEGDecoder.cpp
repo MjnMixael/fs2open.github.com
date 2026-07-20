@@ -483,19 +483,32 @@ bool FFMPEGDecoder::initialize(const SCP_string& fileName, const PlaybackPropert
 	// First make the file name lower case
 	SCP_tolower(movieName);
 
-	// Then remove the extension
-	size_t dotPos = movieName.find('.');
+	// Base name with the extension removed (used for extension probing and subtitles).
+	SCP_string baseName = movieName;
+	size_t dotPos = baseName.find('.');
 	if (dotPos != SCP_string::npos) {
-		movieName.resize(dotPos);
+		baseName.resize(dotPos);
 	}
 
-	// Try to open the input stream
-	auto input = openInputStream(movieName, properties.search_dirs);
+	// If the caller passed a filename that already carries an extension, honor that
+	// exact file first. generic_anim resolves a specific movie (e.g. "intro.mp4") before
+	// calling us, and we must open that exact file rather than re-probing
+	// CHECKED_EXTENSIONS, which could otherwise pick a same-named file with a different
+	// extension. openStream returns null if the exact file is missing or is not a movie
+	// FFmpeg can open, so we fall through cleanly to the probe below. Fullscreen cutscenes
+	// pass a bare base name (no dot), so this exact try is skipped entirely.
+	std::unique_ptr<InputStream> input;
+	if (dotPos != SCP_string::npos) {
+		input = openStream(movieName, properties.search_dirs);
+	}
+	if (!input) {
+		input = openInputStream(baseName, properties.search_dirs);
+	}
 	if (!input) {
 		return false;
 	}
 
-	auto subt = openSubtitleStream(movieName, properties.search_dirs);
+	auto subt = openSubtitleStream(baseName, properties.search_dirs);
 
 	// We now have a valid input stream, try to find the correct streams
 	auto status = initializeStatus(input, subt, properties);
