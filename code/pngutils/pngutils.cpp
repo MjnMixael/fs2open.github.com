@@ -550,7 +550,7 @@ static inline bool parse_fso_keyframe_itxt(const SCP_vector<ubyte>& chunk_data, 
 	}
 
 	const auto* p = keyword_end + 1;
-	const ubyte compression_flag = static_cast<ubyte>(*p++);
+	const auto compression_flag = static_cast<ubyte>(*p++);
 	// compression method is currently ignored; skip it
 	p++;
 
@@ -829,7 +829,7 @@ void apng_ani::_process_chunk()
 		}
 
 		if (!_got_IDAT) {
-			_processing_data(&_chunk.data[0], _chunk.size);
+			_processing_data(_chunk.data.data(), _chunk.size);
 			_info_chunks.push_back(_chunk);
 		}
 	}
