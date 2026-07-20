@@ -12447,6 +12447,13 @@ void ai_process_subobjects(int objnum)
 				}
 			}
 		}
+	} 	
+	// Goober5000 and wookieejedi - conversely, if the engines are no longer blown (e.g. after repair), resume normal chase behavior.
+	// The rest of the AI assumes SM_ATTACK_FOREVER implies blown engines, 
+	// so don't leave the submode set after the engines recover, or the ship will never evade and will ignore being hit.
+	else if (The_mission.ai_profile->flags[AI::Profile_Flags::Fix_small_ai_recover_after_engines_repaired] && ((aip->mode == AIM_CHASE) && (aip->submode == SM_ATTACK_FOREVER))) {
+		aip->submode = SM_ATTACK;
+		aip->submode_start_time = Missiontime;
 	}
 }
 
@@ -15506,8 +15513,13 @@ void ai_frame(int objnum)
 		En_objp = NULL;
 	}
 
-	if (aip->mode == AIM_CHASE) {
-		if (En_objp == NULL) {
+	if (aip->mode == AIM_CHASE || ((The_mission.ai_profile->flags[AI::Profile_Flags::Fix_target_updating_with_strafe]) && aip->mode == AIM_STRAFE)) {
+		// If we're chasing or strafing against large ship but have lost our target, clear the active goal
+		// to ensure ai_process_mission_orders() re-evaluates our orders next frame.
+		// Without this fighter/bomber whose strafe target is destroyed drops to AIM_NONE (see ai_execute_behavior)
+		// with its active_goal still set, so a standing order like attack-any is never re-processed
+		// and the ship slows to zero and remains still until another order is issued.  
+		if (En_objp == nullptr) {
 			aip->active_goal = -1;
 		}
 	}
