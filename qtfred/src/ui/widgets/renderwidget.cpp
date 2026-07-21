@@ -27,6 +27,8 @@
 
 #include "mission/Editor.h"
 #include "mission/commands/FredCommands.h"
+#include "mission/dialogs/BackgroundEditorDialogModel.h"
+#include "mission/dialogs/BackgroundEditCommand.h"
 #include "FredApplication.h"
 #include "ui/FredView.h"
 
@@ -162,6 +164,24 @@ void RenderWidget::focusInEvent(QFocusEvent* e) {
 }
 
 void RenderWidget::keyPressEvent(QKeyEvent* key) {
+	// Escape during a background-element drag reverts to the pre-drag state.
+	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _bgDragging) {
+		_bgDragging = false;
+		_viewport->end_background_drag();
+		_viewport->button_down = false;
+		if (_bgMoved) {
+			if (auto* bgModel = _viewport->backgroundEditModel()) {
+				const auto sel = dialogs::BackgroundEditorDialogModel::restoreGlobalState(_bgDragBefore, fred);
+				bgModel->applyRestoredSelection(sel.first, sel.second);
+			}
+		}
+		_bgDragBefore.clear();
+		_bgMoved = false;
+		_viewport->needsUpdate();
+		key->accept();
+		return;
+	}
+
 	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _viewport->button_down) {
 		_viewport->cancel_drag();
 		_usingMarkingBox = false;
@@ -249,6 +269,34 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	_wasDupDrag = false;
 	_wasInsertDrag = false;
 	_preCloneSourceSignatures.clear();
+
+	// Background editor: grab a sun/bitmap handle under the cursor before touching
+	// scene objects, so clicking a background element selects (and lets you drag)
+	// it instead of marking ships. A miss falls through to normal object handling.
+	if (auto* bgModel = _viewport->backgroundEditModel()) {
+		const int bx = event->position().x() * _window->devicePixelRatio();
+		const int by = event->position().y() * _window->devicePixelRatio();
+		bool isSun = false;
+		int bgIndex = -1;
+		if (_viewport->select_background_element(bx, by, isSun, bgIndex)) {
+			if (isSun) {
+				bgModel->selectSunFromViewport(bgIndex);
+			} else {
+				bgModel->selectBitmapFromViewport(bgIndex);
+			}
+			_bgDragBefore = bgModel->captureState();
+			_viewport->begin_background_drag(isSun, bgIndex);
+			_bgDragging = true;
+			_bgMoved = false;
+			_bgLastMouse = event->pos();
+			_viewport->on_object = -1;
+			_viewport->moved = 0;
+			_viewport->button_down = 1;
+			_viewport->needsUpdate();
+			event->accept();
+			return;
+		}
+	}
 
 	_viewport->on_object = _viewport->select_object(event->position().x() * _window->devicePixelRatio(),
 		event->position().y() * _window->devicePixelRatio());
@@ -394,6 +442,28 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 		}
 	}
 
+	// Background-element drag: re-point (Move) or bank (Rotate) the grabbed handle.
+	if (_bgDragging) {
+		if (!event->buttons().testFlag(Qt::LeftButton)) {
+			return; // button released off-widget; release handler will finalize
+		}
+		const int bx = event->position().x() * _window->devicePixelRatio();
+		const int by = event->position().y() * _window->devicePixelRatio();
+		const auto delta = event->pos() - _bgLastMouse;
+		_bgLastMouse = event->pos();
+		if (abs(_markingBox.x1 - bx) > 2 || abs(_markingBox.y1 - by) > 2) {
+			_bgMoved = true;
+		}
+		if (_bgMoved) {
+			if (_viewport->Editing_mode == CursorMode::Rotating) {
+				_viewport->rotate_background_element(delta.x());
+			} else {
+				_viewport->drag_background_element(bx, by);
+			}
+		}
+		return;
+	}
+
 // Update marking box
 	_markingBox.x2 = event->position().x() * _window->devicePixelRatio();
 	_markingBox.y2 = event->position().y() * _window->devicePixelRatio();
@@ -455,6 +525,31 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 	if (event->button() != Qt::LeftButton) {
 		// Ignore everything that has nothing to do with the left button
 		return QWidget::mouseReleaseEvent(event);
+	}
+
+	// Finalize a background-element drag: a genuine move produces one undo step;
+	// a click with no drag just leaves the new selection in place.
+	if (_bgDragging) {
+		_bgDragging = false;
+		_viewport->end_background_drag();
+		_viewport->button_down = false;
+
+		if (_bgMoved) {
+			if (auto* bgModel = _viewport->backgroundEditModel()) {
+				const QByteArray after = bgModel->captureState();
+				if (after != _bgDragBefore) {
+					_fredView->mainUndoStack()->push(
+					    new dialogs::BackgroundEditCommand(bgModel, fred, _bgDragBefore, after,
+					                                       -1, tr("Move Background Element")));
+				}
+			}
+		}
+
+		_bgDragBefore.clear();
+		_bgMoved = false;
+		_viewport->needsUpdate();
+		event->accept();
+		return;
 	}
 
 	_markingBox.x2 = event->position().x() * _window->devicePixelRatio();

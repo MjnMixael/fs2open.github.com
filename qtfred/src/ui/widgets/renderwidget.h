@@ -4,6 +4,7 @@
 
 #include <QWindow>
 #include <QWidget>
+#include <QByteArray>
 #include <mission/EditorViewport.h>
 
 #include "osapi/osapi.h"
@@ -76,6 +77,13 @@ class RenderWidget: public QWidget {
 	bool            _wasInsertDrag           = false;
 	int             _preCloneCurrentObj      = -1;
 	SCP_vector<int> _preCloneSourceSignatures;
+
+	// Background-element drag tracking — set on press when a background handle
+	// is grabbed, consumed on release (pushes one undo command for the drag).
+	bool       _bgDragging = false;
+	bool       _bgMoved    = false;
+	QByteArray _bgDragBefore;
+	QPoint     _bgLastMouse;
 
  public:
 	explicit RenderWidget(QWidget* parent);

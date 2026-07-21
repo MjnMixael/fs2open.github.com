@@ -74,6 +74,7 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/AboutDialogModel.h
 	src/mission/dialogs/AsteroidEditorDialogModel.cpp
 	src/mission/dialogs/AsteroidEditorDialogModel.h
+	src/mission/dialogs/BackgroundEditCommand.h
 	src/mission/dialogs/BackgroundEditorDialogModel.h
 	src/mission/dialogs/BackgroundEditorDialogModel.cpp
 	src/mission/dialogs/BriefingEditorDialogModel.cpp

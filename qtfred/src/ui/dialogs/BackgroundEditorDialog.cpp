@@ -1,6 +1,9 @@
 #include "BackgroundEditorDialog.h"
+#include <mission/dialogs/BackgroundEditCommand.h>
 #include <ui/util/DialogUndo.h>
 #include <QCloseEvent>
+#include <QShowEvent>
+#include <QHideEvent>
 #include "ui/util/default_dir.h"
 #include "ui/util/SignalBlockers.h"
 #include "ui/dialogs/General/ImagePickerDialog.h"
@@ -17,53 +20,6 @@
 #include <QStringList>
 
 namespace fso::fred::dialogs {
-
-namespace {
-
-class BackgroundEditCommand : public QUndoCommand {
-	// The command lives on the main stack and outlives the dialog, so it
-	// restores through the model's static path and only uses the (guarded)
-	// model pointer to resync the dialog while it is still open.
-	QPointer<BackgroundEditorDialogModel> _model;
-	Editor* _editor;
-	QByteArray _before, _after;
-	int _fieldId;
-	bool _skipFirstRedo;
-
-	void apply(const QByteArray& data) {
-		const auto selection = BackgroundEditorDialogModel::restoreGlobalState(data, _editor);
-		if (_model) {
-			_model->applyRestoredSelection(selection.first, selection.second);
-		}
-	}
-
-public:
-	BackgroundEditCommand(BackgroundEditorDialogModel* model, Editor* editor,
-	                      QByteArray before, QByteArray after,
-	                      int fieldId, const QString& text,
-	                      bool skipFirstRedo = true)
-		: QUndoCommand(text), _model(model), _editor(editor), _before(std::move(before)),
-		  _after(std::move(after)), _fieldId(fieldId), _skipFirstRedo(skipFirstRedo) {}
-
-	void undo() override { apply(_before); }
-	void redo() override {
-		if (_skipFirstRedo) { _skipFirstRedo = false; return; }
-		apply(_after);
-	}
-
-	bool mergeWith(const QUndoCommand* other) override {
-		if (_fieldId < 0) return false;
-		if (typeid(*other) != typeid(*this)) return false;
-		const auto* o = static_cast<const BackgroundEditCommand*>(other);
-		if (o->_fieldId != _fieldId) return false;
-		_after = o->_after;
-		return true;
-	}
-
-	int id() const override { return _fieldId; }
-};
-
-} // anonymous namespace
 
 // Helper macro to reduce boilerplate for simple setter slots
 #define BG_PUSH(fieldId, setter, text) \
@@ -97,7 +53,26 @@ BackgroundEditorDialog::BackgroundEditorDialog(FredView* parent, EditorViewport*
 	resize(QDialog::sizeHint());
 }
 
-BackgroundEditorDialog::~BackgroundEditorDialog() = default;
+BackgroundEditorDialog::~BackgroundEditorDialog()
+{
+	if (_viewport->backgroundEditModel() == _model.get()) {
+		_viewport->setBackgroundEditModel(nullptr);
+	}
+}
+
+void BackgroundEditorDialog::showEvent(QShowEvent* e)
+{
+	_viewport->setBackgroundEditModel(_model.get());
+	QDialog::showEvent(e);
+}
+
+void BackgroundEditorDialog::hideEvent(QHideEvent* e)
+{
+	if (_viewport->backgroundEditModel() == _model.get()) {
+		_viewport->setBackgroundEditModel(nullptr);
+	}
+	QDialog::hideEvent(e);
+}
 
 void BackgroundEditorDialog::changeEvent(QEvent* e)
 {
