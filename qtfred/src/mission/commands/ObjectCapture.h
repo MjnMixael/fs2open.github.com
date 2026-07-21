@@ -300,6 +300,23 @@ struct CapturedProp {
 	char       prop_name[NAME_LENGTH] = {};
 	bool       no_collide      = false; // !Objects[].flags[Object_Flags::Collides]
 	SCP_string fred_layer;
+
+	// ---- Spawn / despawn ----
+	int spawn_cue_dup   = SHIP_CUE_NONE; // owned dup; see SHIP_CUE_* sentinels
+	int despawn_cue_dup = SHIP_CUE_NONE; // owned dup
+	int spawn_delay     = 0;
+	int despawn_delay   = 0;
+
+	// ---- Texture replacements ----
+	// The prop's full replacement_textures vector (class + instance entries).
+	SCP_vector<texture_replace> replacement_textures;
+
+	CapturedProp()                               = default;
+	~CapturedProp();
+	CapturedProp(const CapturedProp&)            = delete;
+	CapturedProp& operator=(const CapturedProp&) = delete;
+	CapturedProp(CapturedProp&&) noexcept;
+	CapturedProp& operator=(CapturedProp&&) noexcept;
 };
 
 CapturedProp captureProp(int objNum);

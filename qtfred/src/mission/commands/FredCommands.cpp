@@ -1745,4 +1745,81 @@ void TextureReplacementCommand::apply(const SCP_vector<texture_replace>& entries
 void TextureReplacementCommand::undo() { apply(_before); }
 void TextureReplacementCommand::redo() { apply(_after);  }
 
+// ---------------------------------------------------------------------------
+// ChangePropClassCommand
+// ---------------------------------------------------------------------------
+
+ChangePropClassCommand::ChangePropClassCommand(SCP_vector<PropClassChange> changes,
+                                               Editor*                     editor,
+                                               QUndoCommand*               parent)
+    : QUndoCommand(QObject::tr("Change Prop Class"), parent)
+    , _changes(std::move(changes))
+    , _editor(editor)
+{}
+
+void ChangePropClassCommand::redo()
+{
+    for (const auto& c : _changes) {
+        const int n = obj_get_by_signature(c.signature);
+        if (n < 0 || Objects[n].type != OBJ_PROP) continue;
+        prop* p = prop_id_lookup(Objects[n].instance);
+        if (p == nullptr) continue;
+        if (p->prop_info_index != c.afterClass)
+            change_prop_type(Objects[n].instance, c.afterClass);
+    }
+    _editor->missionChanged();
+}
+
+void ChangePropClassCommand::undo()
+{
+    for (const auto& c : _changes) {
+        const int n = obj_get_by_signature(c.signature);
+        if (n < 0 || Objects[n].type != OBJ_PROP) continue;
+        prop* p = prop_id_lookup(Objects[n].instance);
+        if (p == nullptr) continue;
+        // Swap the model back, then override change_prop_type's texture reseed and
+        // collision-flag toggle with the exact captured pre-change values.
+        if (p->prop_info_index != c.beforeClass)
+            change_prop_type(Objects[n].instance, c.beforeClass);
+        p->replacement_textures = c.beforeTextures;
+        prop_apply_replacement_textures(p);
+        Objects[n].flags.set(Object::Object_Flags::Collides, c.beforeCollides);
+    }
+    _editor->missionChanged();
+}
+
+// ---------------------------------------------------------------------------
+// PropTextureReplacementCommand
+// ---------------------------------------------------------------------------
+
+PropTextureReplacementCommand::PropTextureReplacementCommand(int                         signature,
+                                                             SCP_vector<texture_replace> before,
+                                                             Editor*                     editor,
+                                                             QUndoCommand*               parent)
+    : QUndoCommand(QObject::tr("Edit Texture Replacements"), parent)
+    , _signature(signature)
+    , _before(std::move(before))
+    , _editor(editor)
+{}
+
+void PropTextureReplacementCommand::setAfter(SCP_vector<texture_replace> after)
+{
+    _after = std::move(after);
+}
+
+void PropTextureReplacementCommand::apply(const SCP_vector<texture_replace>& entries)
+{
+    const int n = obj_get_by_signature(_signature);
+    if (n < 0 || Objects[n].type != OBJ_PROP) return;
+    prop* p = prop_id_lookup(Objects[n].instance);
+    if (p == nullptr) return;
+
+    p->replacement_textures = entries;
+    prop_apply_replacement_textures(p);
+    _editor->missionChanged();
+}
+
+void PropTextureReplacementCommand::undo() { apply(_before); }
+void PropTextureReplacementCommand::redo() { apply(_after);  }
+
 } // namespace fso::fred

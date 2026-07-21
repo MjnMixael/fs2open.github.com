@@ -35,9 +35,10 @@ class PropEditorDialogModel : public AbstractDialogModel {
 	SCP_string getLayer() const;
 	void setLayer(const SCP_string& layer);
 
-	// prop class - index into Prop_info, or -1 if the selection has no single shared class
+	// prop class - index into Prop_info, or -1 if the selection has no single shared class.
+	// Changing the class is done through ChangePropClassCommand (see PropEditorDialog), not a
+	// model setter, so the model/undo history don't diverge.
 	int getPropClass() const;
-	void setPropClass(int prop_class);
 
 	// spawn/despawn cues - edited only for a single selected prop (see getSelectedPropObject).
 	// The formula getters return the sexp node index to load into the tree; the dirty-setters take

@@ -327,29 +327,6 @@ int PropEditorDialogModel::getPropClass() const
 	return _propClass;
 }
 
-void PropEditorDialogModel::setPropClass(int prop_class)
-{
-	if (prop_class < 0 || prop_class >= prop_info_size())
-		return;
-	if (_propClass == prop_class)
-		return;
-
-	_propClass = prop_class;
-	for (auto obj_idx : _selectedPropObjects) {
-		if (!query_valid_object(obj_idx) || Objects[obj_idx].type != OBJ_PROP)
-			continue;
-		auto prp = prop_id_lookup(Objects[obj_idx].instance);
-		if (prp == nullptr)
-			continue;
-		if (prp->prop_info_index != prop_class)
-			change_prop_type(Objects[obj_idx].instance, prop_class);
-	}
-
-	set_modified();
-	_editor->missionChanged();
-	Q_EMIT modelDataChanged();
-}
-
 int PropEditorDialogModel::getSpawnFormula() const
 {
 	return _spawnFormula;

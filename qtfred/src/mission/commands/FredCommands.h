@@ -558,7 +558,9 @@ namespace FieldId {
     constexpr int WP_ColorG         = 4004;
     constexpr int WP_ColorB         = 4005;
     // Prop editor             4101–4199
-    constexpr int Prop_Flags = 4101;
+    constexpr int Prop_Flags       = 4101;
+    constexpr int Prop_SpawnDelay  = 4102;
+    constexpr int Prop_DespawnDelay = 4103;
     // Background editor       4201–4299
     constexpr int BG_AngleFormat    = 4201;
     constexpr int BG_BitmapName     = 4202;
@@ -1105,6 +1107,65 @@ public:
 	                          SCP_vector<texture_replace> before,
 	                          Editor*                  editor,
 	                          QUndoCommand*            parent = nullptr);
+	void setAfter(SCP_vector<texture_replace> after);
+	void undo() override;
+	void redo() override;
+
+private:
+	void apply(const SCP_vector<texture_replace>& entries);
+};
+
+// ---------------------------------------------------------------------------
+// ChangePropClassCommand — change the prop class on one or more marked props
+//
+// change_prop_type() swaps the model, reseeds replacement_textures from the new
+// class table (discarding instance replacements), and toggles the Collides flag
+// per the class's no_collide flag. Redo re-runs change_prop_type (deterministic);
+// undo restores the captured class, then overrides the reseeded textures and the
+// Collides flag with the exact pre-change values so instance replacements and a
+// manually-toggled collision flag survive the round-trip.
+// ---------------------------------------------------------------------------
+
+struct PropClassChange {
+	int                         signature;
+	int                         beforeClass;
+	int                         afterClass;
+	SCP_vector<texture_replace> beforeTextures; // full vector before the change
+	bool                        beforeCollides;
+};
+
+class ChangePropClassCommand : public QUndoCommand {
+	SCP_vector<PropClassChange> _changes;
+	Editor*                     _editor;
+
+public:
+	ChangePropClassCommand(SCP_vector<PropClassChange> changes,
+	                       Editor*                     editor,
+	                       QUndoCommand*               parent = nullptr);
+	void undo() override;
+	void redo() override;
+	bool isEmpty() const { return _changes.empty(); }
+};
+
+// ---------------------------------------------------------------------------
+// PropTextureReplacementCommand — undo/redo for the Prop Texture Replacement
+// dialog. Props store their replacements in the per-prop replacement_textures
+// vector (unlike ships, which use the global Fred_texture_replacements), so this
+// captures/restores that whole vector by prop signature.
+// ---------------------------------------------------------------------------
+
+class PropTextureReplacementCommand : public QUndoCommand {
+	int                         _signature;
+	SCP_vector<texture_replace> _before;
+	SCP_vector<texture_replace> _after;
+	Editor*                     _editor;
+
+public:
+	// Construct with the before-state already captured; call setAfter() once apply() succeeds.
+	PropTextureReplacementCommand(int                         signature,
+	                              SCP_vector<texture_replace> before,
+	                              Editor*                     editor,
+	                              QUndoCommand*               parent = nullptr);
 	void setAfter(SCP_vector<texture_replace> after);
 	void undo() override;
 	void redo() override;
