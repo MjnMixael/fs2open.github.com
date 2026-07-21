@@ -15,6 +15,13 @@ namespace dialogs {
 class BackgroundEditorDialogModel;
 }
 
+// Eye-space distance at which background-element handles are placed for
+// projection and picking. Backgrounds are effectively at infinity, so only the
+// direction matters; any positive value projects to the same screen point. Both
+// the picker (EditorViewport) and the renderer (FredRenderer) use this so the
+// drawn handle and its click target stay in sync.
+constexpr float BG_HANDLE_DISTANCE = 1000.0f;
+
 struct Marking_box {
 	int x1 = 0;
 	int y1 = 0;
