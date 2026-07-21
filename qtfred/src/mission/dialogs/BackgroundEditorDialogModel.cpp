@@ -2,6 +2,7 @@
 #include "BackgroundEditorDialogModel.h"
 
 #include "graphics/light.h"
+#include "math/vecmat.h"
 #include <QDataStream>
 #include <QIODevice>
 #include "math/bitarray.h"
@@ -948,6 +949,142 @@ void BackgroundEditorDialogModel::setSunScale(float v)
 	CLAMP(v, getSunScaleLimit().first, getSunScaleLimit().second);
 	modify(s->scale_x, v);
 	refreshBackgroundPreview();
+}
+
+// --- Viewport mouse-editing support -------------------------------------
+
+namespace {
+// A background element's stored PBH angles describe an orientation whose
+// forward vector is the direction it points at on the celestial sphere (this
+// matches stars_get_sun_pos(), which unrotates the z-axis by the same matrix).
+vec3d bg_angles_to_direction(const angles& ang)
+{
+	matrix m;
+	vm_angles_2_matrix(&m, &ang);
+	return m.vec.fvec;
+}
+
+// Point an element at a new world direction while preserving its bank (roll).
+// Only pitch and heading change, which is what a drag-to-reposition wants.
+void bg_point_angles_at(angles& ang, const vec3d& dir)
+{
+	vec3d fvec = dir;
+	if (vm_vec_mag(&fvec) < 1e-6f)
+		return;
+	vm_vec_normalize(&fvec);
+
+	matrix m;
+	vm_vector_2_matrix(&m, &fvec, nullptr, nullptr);
+
+	angles derived;
+	vm_extract_angles_matrix(&derived, &m);
+	ang.p = derived.p;
+	ang.h = derived.h;
+	// ang.b (bank) intentionally left untouched
+}
+} // namespace
+
+int BackgroundEditorDialogModel::getSunCount() const
+{
+	return static_cast<int>(getActiveBackground().suns.size());
+}
+
+int BackgroundEditorDialogModel::getBitmapCount() const
+{
+	return static_cast<int>(getActiveBackground().bitmaps.size());
+}
+
+bool BackgroundEditorDialogModel::getSunDirection(int index, vec3d& dir) const
+{
+	auto& list = getActiveBackground().suns;
+	if (!SCP_vector_inbounds(list, index))
+		return false;
+	dir = bg_angles_to_direction(list[index].ang);
+	return true;
+}
+
+bool BackgroundEditorDialogModel::getBitmapDirection(int index, vec3d& dir) const
+{
+	auto& list = getActiveBackground().bitmaps;
+	if (!SCP_vector_inbounds(list, index))
+		return false;
+	dir = bg_angles_to_direction(list[index].ang);
+	return true;
+}
+
+SCP_string BackgroundEditorDialogModel::getSunNameAt(int index) const
+{
+	auto& list = getActiveBackground().suns;
+	if (!SCP_vector_inbounds(list, index))
+		return "";
+	return list[index].filename;
+}
+
+SCP_string BackgroundEditorDialogModel::getBitmapNameAt(int index) const
+{
+	auto& list = getActiveBackground().bitmaps;
+	if (!SCP_vector_inbounds(list, index))
+		return "";
+	return list[index].filename;
+}
+
+void BackgroundEditorDialogModel::selectSunFromViewport(int index)
+{
+	if (index >= 0 && !SCP_vector_inbounds(getActiveBackground().suns, index))
+		return;
+	if (_selectedSunIndex == index)
+		return;
+	_selectedSunIndex = index;
+	Q_EMIT modelDataChanged();
+}
+
+void BackgroundEditorDialogModel::selectBitmapFromViewport(int index)
+{
+	if (index >= 0 && !SCP_vector_inbounds(getActiveBackground().bitmaps, index))
+		return;
+	if (_selectedBitmapIndex == index)
+		return;
+	_selectedBitmapIndex = index;
+	Q_EMIT modelDataChanged();
+}
+
+void BackgroundEditorDialogModel::setSunDirectionFromViewport(int index, const vec3d& dir)
+{
+	auto& list = getActiveBackground().suns;
+	if (!SCP_vector_inbounds(list, index))
+		return;
+	bg_point_angles_at(list[index].ang, dir);
+	set_modified();
+	refreshBackgroundPreview();
+	Q_EMIT modelDataChanged();
+}
+
+void BackgroundEditorDialogModel::setBitmapDirectionFromViewport(int index, const vec3d& dir)
+{
+	auto& list = getActiveBackground().bitmaps;
+	if (!SCP_vector_inbounds(list, index))
+		return;
+	bg_point_angles_at(list[index].ang, dir);
+	set_modified();
+	refreshBackgroundPreview();
+	Q_EMIT modelDataChanged();
+}
+
+void BackgroundEditorDialogModel::nudgeBitmapBankFromViewport(int index, float deltaDeg)
+{
+	auto& list = getActiveBackground().bitmaps;
+	if (!SCP_vector_inbounds(list, index))
+		return;
+	float b = list[index].ang.b + fl_radians(deltaDeg);
+	// keep bank within [0, 2pi)
+	while (b < 0.0f)
+		b += PI2;
+	while (b >= PI2)
+		b -= PI2;
+	list[index].ang.b = b;
+	set_modified();
+	refreshBackgroundPreview();
+	Q_EMIT modelDataChanged();
 }
 
 SCP_vector<SCP_string> BackgroundEditorDialogModel::getLightningNames()

@@ -18,6 +18,7 @@
 #include <mission/missionparse.h>
 #include <prop/prop.h>
 #include <FredApplication.h>
+#include "mission/dialogs/BackgroundEditorDialogModel.h"
 
 namespace {
 
@@ -1841,6 +1842,126 @@ void EditorViewport::view_object(int obj_num) {
 	                 Objects[obj_num].radius * -3.0f);
 
 	needsUpdate();
+}
+
+// --- Background element mouse editing ---------------------------------------
+
+// Distance (in eye space) at which we place a background element's handle so it
+// projects to the correct screen direction. Backgrounds are effectively at
+// infinity, so the exact value only needs to be safely in front of the near
+// plane; the screen position depends only on direction.
+static const float BG_HANDLE_DISTANCE = 1000.0f;
+
+void EditorViewport::setBackgroundEditModel(dialogs::BackgroundEditorDialogModel* model)
+{
+	_bgEditModel = model;
+	_bgDragIndex = -1;
+	needsUpdate();
+}
+
+bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int& index) const
+{
+	if (_bgEditModel == nullptr) {
+		return false;
+	}
+
+	// Projection requires an active frame (same guard as select_object).
+	if (g3_in_frame() != 1) {
+		return false;
+	}
+
+	// pixel radius (squared) within which a handle counts as clicked
+	double best_dist = 16.0 * 16.0;
+	int best_index = -1;
+	bool best_is_sun = false;
+
+	auto test_list = [&](bool sun, int count) {
+		for (int i = 0; i < count; i++) {
+			vec3d dir;
+			const bool ok = sun ? _bgEditModel->getSunDirection(i, dir)
+			                    : _bgEditModel->getBitmapDirection(i, dir);
+			if (!ok) {
+				continue;
+			}
+
+			vec3d world;
+			vm_vec_scale_add(&world, &camera.eye_pos, &dir, BG_HANDLE_DISTANCE);
+
+			vertex vt;
+			g3_rotate_vertex(&vt, &world);
+			if (vt.codes & CC_BEHIND) {
+				continue;
+			}
+			if (g3_project_vertex(&vt) & PF_OVERFLOW) {
+				continue;
+			}
+
+			const double dx = vt.screen.xyw.x - cx;
+			const double dy = vt.screen.xyw.y - cy;
+			const double dist = dx * dx + dy * dy;
+			if (dist < best_dist) {
+				best_dist = dist;
+				best_index = i;
+				best_is_sun = sun;
+			}
+		}
+	};
+
+	// Suns take priority over bitmaps on a tie since they are the smaller target.
+	test_list(false, _bgEditModel->getBitmapCount());
+	test_list(true, _bgEditModel->getSunCount());
+
+	if (best_index < 0) {
+		return false;
+	}
+
+	isSun = best_is_sun;
+	index = best_index;
+	return true;
+}
+
+void EditorViewport::begin_background_drag(bool isSun, int index)
+{
+	_bgDragIsSun = isSun;
+	_bgDragIndex = index;
+}
+
+void EditorViewport::drag_background_element(int x, int y)
+{
+	if (_bgEditModel == nullptr || _bgDragIndex < 0) {
+		return;
+	}
+
+	// Mouse ray direction becomes the element's new pointing direction.
+	vec3d dir;
+	g3_point_to_vec_delayed(&dir, x, y);
+	if (!dir.xyz.x && !dir.xyz.y && !dir.xyz.z) {
+		return;
+	}
+
+	if (_bgDragIsSun) {
+		_bgEditModel->setSunDirectionFromViewport(_bgDragIndex, dir);
+	} else {
+		_bgEditModel->setBitmapDirectionFromViewport(_bgDragIndex, dir);
+	}
+
+	needsUpdate();
+}
+
+void EditorViewport::rotate_background_element(int mouse_dx)
+{
+	// Only bitmaps carry a meaningful bank (suns are radially symmetric).
+	if (_bgEditModel == nullptr || _bgDragIndex < 0 || _bgDragIsSun) {
+		return;
+	}
+
+	_bgEditModel->nudgeBitmapBankFromViewport(_bgDragIndex, static_cast<float>(mouse_dx) * -0.2f);
+	needsUpdate();
+}
+
+void EditorViewport::end_background_drag()
+{
+	_bgDragIndex = -1;
 }
 
 } // namespace fso::fred

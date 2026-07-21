@@ -33,6 +33,7 @@
 #include "mission/object.h"
 #include "prop/prop.h"
 #include "weapon/weapon.h"
+#include "mission/dialogs/BackgroundEditorDialogModel.h"
 
 
 namespace {
@@ -896,6 +897,102 @@ void FredRenderer::render_one_model_htl(object* objp,
 	rendering_order.push_back(OBJ_INDEX(objp));
 }
 
+void FredRenderer::draw_background_handles()
+{
+	auto* model = _viewport->backgroundEditModel();
+	if (model == nullptr) {
+		return;
+	}
+
+	// Handles are only meaningful when the background is actually drawn.
+	if (!view().Show_stars) {
+		return;
+	}
+
+	const int selectedSun = model->getSelectedSunIndex();
+	const int selectedBitmap = model->getSelectedBitmapIndex();
+
+	// Same reference distance the viewport uses for picking; backgrounds are at
+	// infinity so only the direction matters for the projected screen position.
+	constexpr float handle_distance = 1000.0f;
+
+	auto draw_one = [&](bool isSun, int index, bool selected) {
+		vec3d dir;
+		const bool ok = isSun ? model->getSunDirection(index, dir)
+		                      : model->getBitmapDirection(index, dir);
+		if (!ok) {
+			return;
+		}
+
+		vec3d world;
+		vm_vec_scale_add(&world, &_viewport->camera.eye_pos, &dir, handle_distance);
+
+		vertex vt;
+		g3_rotate_vertex(&vt, &world);
+		if (vt.codes & CC_BEHIND) {
+			return;
+		}
+		if (g3_project_vertex(&vt) & PF_OVERFLOW) {
+			return;
+		}
+
+		const int sx = static_cast<int>(vt.screen.xyw.x);
+		const int sy = static_cast<int>(vt.screen.xyw.y);
+		const int r = selected ? 12 : 7;
+
+		if (selected) {
+			gr_set_color(255, 255, 0);   // highlight
+		} else if (isSun) {
+			gr_set_color(255, 200, 0);   // suns: amber
+		} else {
+			gr_set_color(0, 200, 255);   // bitmaps: cyan
+		}
+
+		// unfilled box around the element's direction
+		gr_line(sx - r, sy - r, sx + r, sy - r);
+		gr_line(sx + r, sy - r, sx + r, sy + r);
+		gr_line(sx + r, sy + r, sx - r, sy + r);
+		gr_line(sx - r, sy + r, sx - r, sy - r);
+
+		if (selected) {
+			// crosshair ticks + name label so the active element stands out
+			gr_line(sx - r - 5, sy, sx - r, sy);
+			gr_line(sx + r, sy, sx + r + 5, sy);
+			gr_line(sx, sy - r - 5, sx, sy - r);
+			gr_line(sx, sy + r, sx, sy + r + 5);
+
+			const SCP_string name = isSun ? model->getSunNameAt(index) : model->getBitmapNameAt(index);
+			if (!name.empty()) {
+				int w, h;
+				gr_get_string_size(&w, &h, name.c_str());
+				gr_set_color_fast(&colour_white);
+				gr_string(sx - w / 2, sy + r + 6, name.c_str());
+			}
+		}
+	};
+
+	// Draw unselected handles first, then the selected one on top.
+	const int sunCount = model->getSunCount();
+	const int bitmapCount = model->getBitmapCount();
+
+	for (int i = 0; i < sunCount; i++) {
+		if (i != selectedSun) {
+			draw_one(true, i, false);
+		}
+	}
+	for (int i = 0; i < bitmapCount; i++) {
+		if (i != selectedBitmap) {
+			draw_one(false, i, false);
+		}
+	}
+	if (selectedSun >= 0) {
+		draw_one(true, selectedSun, true);
+	}
+	if (selectedBitmap >= 0) {
+		draw_one(false, selectedBitmap, true);
+	}
+}
+
 void FredRenderer::render_volumetric_overlay() {
 	if (!The_mission.volumetrics) {
 		return;
@@ -1147,6 +1244,8 @@ void FredRenderer::render_frame(int cur_object_index,
 				hiddenLayerCount == 1 ? "Layer" : "Layers");
 		gr_string(8, 8, buf);
 	}
+
+	draw_background_handles();
 
 	g3_end_frame(); // ** Accounted for
 	render_compass();

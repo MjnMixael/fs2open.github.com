@@ -11,6 +11,10 @@
 
 namespace fso::fred {
 
+namespace dialogs {
+class BackgroundEditorDialogModel;
+}
+
 struct Marking_box {
 	int x1 = 0;
 	int y1 = 0;
@@ -125,6 +129,24 @@ class EditorViewport {
 	int object_check_collision(object* objp, vec3d* p0, vec3d* p1, vec3d* hitpos);
 
 	int select_object(int cx, int cy);
+
+	// --- Background element mouse editing --------------------------------
+	// Set while the Background editor dialog is open so the viewport can draw
+	// draggable handles for its suns/bitmaps and route clicks/drags to it.
+	dialogs::BackgroundEditorDialogModel* backgroundEditModel() const { return _bgEditModel; }
+	void setBackgroundEditModel(dialogs::BackgroundEditorDialogModel* model);
+
+	// Pick the background element (sun or bitmap) whose projected handle is
+	// nearest the cursor. Returns true and fills isSun/index on a hit.
+	bool select_background_element(int cx, int cy, bool& isSun, int& index) const;
+
+	// Begin/continue/finish dragging the given background element. Move mode
+	// re-points it at the cursor; rotate mode adjusts a bitmap's bank.
+	void begin_background_drag(bool isSun, int index);
+	void drag_background_element(int x, int y);
+	void rotate_background_element(int mouse_dx);
+	void end_background_drag();
+	bool background_drag_active() const { return _bgDragIndex >= 0; }
 
 	SCP_vector<SCP_string> getLayerNames() const;
 	bool addLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
@@ -241,6 +263,14 @@ class EditorViewport {
 	IDialogProvider* dialogProvider = nullptr;
 
 private:
+	// Background editor integration (non-owning; valid only while the dialog lives)
+	dialogs::BackgroundEditorDialogModel* _bgEditModel = nullptr;
+	// Active background drag: -1 = none, else index into suns/bitmaps of the
+	// active background (which list is chosen by _bgDragIsSun).
+	int  _bgDragIndex = -1;
+	bool _bgDragIsSun = false;
+
+
 	fix _lasttime = 0;
 	vec3d Last_control_pos = vmd_zero_vector;
 	matrix Last_control_orient = vmd_identity_matrix;
