@@ -1131,6 +1131,11 @@ void EditorViewport::registerObjectInLayer(int objectIndex) {
 			layerName = wl->get_fred_layer();
 		}
 		break;
+	case OBJ_COORDINATE_POINT:
+		if (auto* cp = find_coordinate_point_by_objnum(objectIndex)) {
+			layerName = cp->fred_layer;
+		}
+		break;
 	default:
 		return;
 	}
