@@ -135,6 +135,14 @@ CreateObjectCommand::CreateObjectCommand(const vec3d&    pos,
 				}
 			}
 		}
+
+		// Coordinate points are likewise referenced by name in SEXPs; capture it so redo()
+		// restores the original name instead of letting create_coordinate_point() auto-name it.
+		if (Objects[initialObjNum].type == OBJ_COORDINATE_POINT) {
+			const mission_coordinate_point* cp = find_coordinate_point_by_objnum(initialObjNum);
+			if (cp != nullptr)
+				_coordPointName = cp->name;
+		}
 	}
 }
 
@@ -193,6 +201,13 @@ void CreateObjectCommand::redo()
 				break;
 			}
 		}
+	}
+
+	// Restore the original coordinate point name (create_coordinate_point auto-named the new one).
+	if (_createdObjNum >= 0 && !_coordPointName.empty()) {
+		mission_coordinate_point* cp = find_coordinate_point_by_objnum(_createdObjNum);
+		if (cp != nullptr)
+			cp->name = _coordPointName;
 	}
 
 	if (_createdObjNum >= 0) {
@@ -424,6 +439,8 @@ DeleteObjectsCommand::DeleteObjectsCommand(Editor* editor, EditorViewport* viewp
 			_jumpNodes.push_back(captureJumpNode(obj));
 		} else if (p->type == OBJ_PROP) {
 			_props.push_back(captureProp(obj));
+		} else if (p->type == OBJ_COORDINATE_POINT) {
+			_coordPoints.push_back(captureCoordinatePoint(obj));
 		}
 	}
 
@@ -497,7 +514,8 @@ DeleteObjectsCommand::~DeleteObjectsCommand()
 
 bool DeleteObjectsCommand::isEmpty() const
 {
-	return _ships.empty() && _waypointGroups.empty() && _jumpNodes.empty() && _props.empty();
+	return _ships.empty() && _waypointGroups.empty() && _jumpNodes.empty() && _props.empty() &&
+	       _coordPoints.empty();
 }
 
 void DeleteObjectsCommand::redo()
@@ -622,6 +640,10 @@ void DeleteObjectsCommand::undo()
 	}
 	for (const auto& pd : _props) {
 		const int newObj = restoreProp(pd, _editor);
+		if (newObj >= 0) _currentObjNums.push_back(newObj);
+	}
+	for (const auto& cpd : _coordPoints) {
+		const int newObj = restoreCoordinatePoint(cpd, _editor);
 		if (newObj >= 0) _currentObjNums.push_back(newObj);
 	}
 
@@ -780,6 +802,8 @@ void RenameObjectCommand::applyName(const SCP_string& name, const SCP_string& cu
 			_editor->rename_jump_node(objNum, name.c_str());
 		} else if (type == OBJ_PROP) {
 			_editor->rename_prop(objNum, name.c_str());
+		} else if (type == OBJ_COORDINATE_POINT) {
+			_editor->rename_coordinate_point(objNum, name.c_str());
 		}
 	} else {
 		// Waypoint path: current holds the name it has right now; name is what to rename to.

@@ -1083,7 +1083,8 @@ enum class sexp_ref_type
 	WING,
 	PLAYER,
 	WAYPOINT,
-	WAYPOINT_PATH
+	WAYPOINT_PATH,
+	COORDINATE_POINT
 };
 
 enum class sexp_src

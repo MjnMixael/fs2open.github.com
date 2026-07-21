@@ -19,6 +19,10 @@ public:
 	static bool hasAnyCoordinatePointsInMission();
 	int getSelectionCount() const;
 
+	// Object numbers of the currently-selected (marked) coordinate points, in selection order.
+	// Used by the dialog to build per-point undo commands keyed by object signature.
+	const SCP_vector<int>& getSelectedObjnums() const { return _selectedObjnums; }
+
 	// Name (disabled in multi-select). Returns false on validation failure.
 	const SCP_string& getCurrentName() const;
 	bool setCurrentName(const SCP_string& name);

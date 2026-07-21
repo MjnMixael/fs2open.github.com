@@ -243,6 +243,7 @@ class Editor : public QObject {
 
 	void rename_jump_node(int objNum, const char* name);
 	void rename_prop(int objNum, const char* name);
+	void rename_coordinate_point(int objNum, const char* name);
 	void rename_waypoint_list(const char* old_name, const char* new_name);
 
 	/**

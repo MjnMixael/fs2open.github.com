@@ -1359,6 +1359,14 @@ int EditorViewport::createJumpNodeAtScreenPos(int x, int y) {
 	return obj;
 }
 
+int EditorViewport::createCoordinatePointAtScreenPos(int x, int y) {
+	OtherKind savedKind = cur_other_kind;
+	cur_other_kind = OtherKind::CoordinatePoint;
+	int obj = create_object_on_grid(x, y, -1, CreateKind::Other);
+	cur_other_kind = savedKind;
+	return obj;
+}
+
 void EditorViewport::initialSetup() {
 	cur_model_index = get_default_player_ship_index();
 	cur_other_kind = OtherKind::Waypoint;

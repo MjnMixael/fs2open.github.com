@@ -2248,6 +2248,13 @@ void FredView::initializePopupMenus() {
 	});
 	createOtherSubmenu->addAction(createJumpNodeAction);
 
+	auto* createCoordinatePointAction = new QAction(tr("Coordinate Point"), createOtherSubmenu);
+	connect(createCoordinatePointAction, &QAction::triggered, this, [this]() {
+		_viewport->createCoordinatePointAtScreenPos(_lastContextMenuLocalPos.x() * this->devicePixelRatio(),
+			_lastContextMenuLocalPos.y() * this->devicePixelRatio());
+	});
+	createOtherSubmenu->addAction(createCoordinatePointAction);
+
 	_createSubmenu->addMenu(createOtherSubmenu);
 
 	_viewPopup->addMenu(_createSubmenu);

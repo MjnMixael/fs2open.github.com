@@ -208,11 +208,12 @@ bool CoordinatePointEditorDialogModel::setCurrentName(const SCP_string& name)
 	auto* cp = getSelected(_selectedObjnums.front());
 	if (cp == nullptr) return false;
 
-	cp->name = trimmed;
-	_currentName = trimmed;
+	// Route through the editor so SEXP references to the point are updated to the new name
+	// (matches the jump-node rename path). rename_coordinate_point emits missionChanged itself.
 	_suppressRefresh = true;
+	_editor->rename_coordinate_point(_selectedObjnums.front(), trimmed.c_str());
+	_currentName = trimmed;
 	set_modified();
-	_editor->missionChanged();
 	_suppressRefresh = false;
 	return true;
 }

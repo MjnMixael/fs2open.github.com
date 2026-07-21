@@ -2827,9 +2827,13 @@ void ai_update_goal_references(ai_goal *goals, sexp_ref_type type, const char *o
 				{
 					case AI_GOAL_WAYPOINTS:
 					case AI_GOAL_WAYPOINTS_ONCE:
-					
+
 						flag = 1;
 				}
+				break;
+
+			case sexp_ref_type::COORDINATE_POINT:
+				// Coordinate points are never AI-goal targets, so there is nothing to update here.
 				break;
 
 			default:
@@ -2905,6 +2909,10 @@ bool query_referenced_in_ai_goals(ai_goal *goals, sexp_ref_type type, const char
 					case AI_GOAL_WAYPOINTS_ONCE:
 						flag = 1;
 				}
+				break;
+
+			case sexp_ref_type::COORDINATE_POINT:
+				// Coordinate points are never AI-goal targets, so nothing references them here.
 				break;
 		}
 

@@ -161,6 +161,7 @@ class EditorViewport {
 	int createPropAtScreenPos(int x, int y, int propIndex);
 	int createWaypointAtScreenPos(int x, int y, int waypoint_instance = -1);
 	int createJumpNodeAtScreenPos(int x, int y);
+	int createCoordinatePointAtScreenPos(int x, int y);
 
 	// When `insert_waypoints` is true, marked waypoints get a new waypoint
 	// inserted into their source path (right after the source waypoint) instead

@@ -1156,6 +1156,21 @@ int Editor::common_object_delete(int obj) {
 		// find the jump node while the object still exists; the defunct entry is removed below
 		jnp = std::find_if(Jump_nodes.begin(), Jump_nodes.end(),
 			[obj](const CJumpNode &jn) { return jn.GetSCPObjectNumber() == obj; });
+
+	} else if (type == OBJ_COORDINATE_POINT) {
+		// Coordinate points are referenced by name in SEXPs (the widened SHIP_WING_POINT family,
+		// point-targeted, toggle-point-visibility). Prompt if referenced, then bash those
+		// references to <name> just like ships and waypoints.
+		const mission_coordinate_point* cp = find_coordinate_point_by_objnum(obj);
+		if (cp != nullptr) {
+			strcpy_s(msg, cp->name.c_str());
+			name = msg;
+			r = reference_handler(name, sexp_ref_type::COORDINATE_POINT, obj);
+			if (r) {
+				return r;
+			}
+			invalidate_references(name, sexp_ref_type::COORDINATE_POINT);
+		}
 	}
 
 	unmarkObject(obj);
@@ -1212,6 +1227,10 @@ int Editor::reference_handler(const char* name, sexp_ref_type type, int obj) {
 
 	case sexp_ref_type::WAYPOINT_PATH:
 		sprintf(type_name, "Waypoint path \"%s\"", name);
+		break;
+
+	case sexp_ref_type::COORDINATE_POINT:
+		sprintf(type_name, "Coordinate point \"%s\"", name);
 		break;
 
 	default:
@@ -1544,6 +1563,20 @@ void Editor::rename_prop(int objNum, const char* name)
 	prop* p = prop_id_lookup(Objects[objNum].instance);
 	if (p)
 		strcpy_s(p->prop_name, name);
+	missionChanged();
+}
+
+void Editor::rename_coordinate_point(int objNum, const char* name)
+{
+	mission_coordinate_point* cp = find_coordinate_point_by_objnum(objNum);
+	if (cp != nullptr) {
+		// Coordinate points are name-referenced in SEXPs but are never AI-goal targets, so (like
+		// jump nodes) only the SEXP text references need updating.
+		SCP_string oldName = cp->name;
+		cp->name = name;
+		if (stricmp(oldName.c_str(), name) != 0)
+			update_sexp_references(oldName.c_str(), name);
+	}
 	missionChanged();
 }
 

@@ -1,6 +1,7 @@
 #pragma once
 #include <QDialog>
 #include <mission/dialogs/CoordinatePointEditorDialogModel.h>
+#include <mission/commands/FredCommands.h>
 #include <ui/FredView.h>
 
 namespace fso::fred::dialogs {
@@ -14,6 +15,9 @@ class CoordinatePointEditorDialog : public QDialog {
 public:
 	CoordinatePointEditorDialog(FredView* parent, EditorViewport* viewport);
 	~CoordinatePointEditorDialog() override;
+
+protected:
+	void changeEvent(QEvent* e) override;
 
 private slots:
 	void on_prevPointButton_clicked();
@@ -39,6 +43,7 @@ private slots:
 	void on_colorASpinBox_valueChanged(int value);
 
 private: // NOLINT(readability-redundant-access-specifiers)
+	FredView*       _fredView;
 	EditorViewport* _viewport;
 	std::unique_ptr<Ui::CoordinatePointEditorDialog> ui;
 	std::unique_ptr<CoordinatePointEditorDialogModel> _model;
@@ -46,6 +51,12 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeUi();
 	void updateUi();
 	void updateColorSwatch();
+
+	// Applies a single-field edit through the model (which writes every selected point), then
+	// pushes a merging FieldEditCommand to the main stack so the change is undoable. read/write
+	// operate on one mission_coordinate_point; applyModel invokes the matching model setter.
+	template<typename T, typename ReadFn, typename WriteFn, typename ApplyFn>
+	void pushCoordinatePointField(int fieldId, const QString& text, ReadFn read, WriteFn write, ApplyFn applyModel);
 };
 
 } // namespace fso::fred::dialogs

@@ -58,6 +58,7 @@ class CreateObjectCommand : public QUndoCommand {
 	int             _waypointInstance;
 	SCP_string      _waypointListName; // name of list to append to (empty = create new list)
 	SCP_string      _jumpNodeName;     // original JN name; restored on redo for stable identity
+	SCP_string      _coordPointName;   // original coordinate-point name; restored on redo for stable SEXP refs
 	CreateKind      _createKind;
 	OtherKind       _otherKind;        // only meaningful when _createKind == Other
 	int             _createdObjNum;
@@ -145,6 +146,7 @@ class DeleteObjectsCommand : public QUndoCommand {
 	SCP_vector<CapturedWaypointList> _waypointGroups;
 	SCP_vector<CapturedJumpNode>    _jumpNodes;
 	SCP_vector<CapturedProp>        _props;
+	SCP_vector<CapturedCoordinatePoint> _coordPoints;
 	SCP_vector<SavedWingData>       _affectedWings; // wings with ≥1 deleted member
 	// current live obj nums — repopulated by undo(), consumed by redo()
 	SCP_vector<int>               _currentObjNums;
@@ -899,6 +901,24 @@ namespace FieldId {
     constexpr int Spec_MissionDesc     = 7626;
     constexpr int Spec_DesignerNotes   = 7627;
     constexpr int Spec_MissionFlag     = 7700; // + flag list index
+    // Coordinate Point editor (direct-edit; pushes to the main stack). One id
+    // per field so consecutive spinbox scrubs of the same control merge into a
+    // single undo step while distinct controls do not. Name is a RenameObjectCommand
+    // (updates SEXP refs); layer moves push a MoveLayerCommand instead.
+    constexpr int CP_Group          = 7801;
+    constexpr int CP_ColorR         = 7802;
+    constexpr int CP_ColorG         = 7803;
+    constexpr int CP_ColorB         = 7804;
+    constexpr int CP_ColorA         = 7805;
+    constexpr int CP_ShapeKind      = 7806;
+    constexpr int CP_Sides          = 7807;
+    constexpr int CP_Points         = 7808;
+    constexpr int CP_InnerRadius    = 7809;
+    constexpr int CP_Angle          = 7810;
+    constexpr int CP_Size           = 7811;
+    constexpr int CP_EscortPriority = 7812;
+    constexpr int CP_MultiTeam      = 7813;
+    constexpr int CP_Visible        = 7814;
     // Briefing icon-edit snapshot merge ids (DialogSnapshotCommand): base +
     // (team * MAX_BRIEF_STAGES + stage) + firstSelectedIcon * 80, so edits to
     // a different stage or selection never merge.
