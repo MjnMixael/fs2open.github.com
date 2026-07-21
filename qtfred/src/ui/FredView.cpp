@@ -2250,8 +2250,13 @@ void FredView::initializePopupMenus() {
 
 	auto* createCoordinatePointAction = new QAction(tr("Coordinate Point"), createOtherSubmenu);
 	connect(createCoordinatePointAction, &QAction::triggered, this, [this]() {
-		_viewport->createCoordinatePointAtScreenPos(_lastContextMenuLocalPos.x() * this->devicePixelRatio(),
+		const int objNum = _viewport->createCoordinatePointAtScreenPos(_lastContextMenuLocalPos.x() * this->devicePixelRatio(),
 			_lastContextMenuLocalPos.y() * this->devicePixelRatio());
+		if (objNum >= 0) {
+			_mainStack->push(new fso::fred::CreateObjectCommand(Objects[objNum].pos,
+				_viewport->cur_model_index, _viewport->cur_prop_index, -1,
+				CreateKind::Other, OtherKind::CoordinatePoint, objNum, fred, _viewport)); // first redo() is a no-op
+		}
 	});
 	createOtherSubmenu->addAction(createCoordinatePointAction);
 
