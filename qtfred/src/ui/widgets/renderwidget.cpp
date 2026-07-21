@@ -542,6 +542,11 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 					    new dialogs::BackgroundEditCommand(bgModel, fred, _bgDragBefore, after,
 					                                       -1, tr("Move Background Element")));
 				}
+			} else {
+				// The dialog went away mid-drag, so we can't record an undo step for
+				// the partial move. Revert to the pre-drag state (static path, no
+				// model instance needed) rather than leaving an un-undoable change.
+				dialogs::BackgroundEditorDialogModel::restoreGlobalState(_bgDragBefore, fred);
 			}
 		}
 
