@@ -5,6 +5,8 @@
 #include <ship/ship.h>
 #include <globalincs/linklist.h>
 #include <iff_defs/iff_defs.h>
+#include <jumpnode/jumpnode.h>
+#include <prop/prop.h>
 #include "FormWingDialogModel.h"
 
 namespace fso {
@@ -74,6 +76,15 @@ bool FormWingDialogModel::apply() {
 		}
 	}
 
+	// prop name collision
+	if (prop_name_lookup(_name.c_str()) >= 0) {
+		_viewport->dialogProvider->showButtonDialog(DialogType::Error,
+													"Error",
+													"This wing name is already being used by a prop",
+													{ DialogButton::Ok });
+		return false;
+	}
+
 	// We don't need to check teams.  "Unknown" is a valid name and also an IFF.
 
 	for (auto i = 0; i < (int) Ai_tp_list.size(); i++) {
@@ -93,6 +104,14 @@ bool FormWingDialogModel::apply() {
 		_viewport->dialogProvider->showButtonDialog(DialogType::Error,
 													"Error",
 													"This wing name is already being used by a waypoint path",
+													{ DialogButton::Ok });
+		return false;
+	}
+
+	if (jumpnode_get_by_name(_name.c_str()) != nullptr) {
+		_viewport->dialogProvider->showButtonDialog(DialogType::Error,
+													"Error",
+													"This wing name is already being used by a jump node",
 													{ DialogButton::Ok });
 		return false;
 	}

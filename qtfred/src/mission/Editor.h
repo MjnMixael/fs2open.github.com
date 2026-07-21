@@ -31,6 +31,7 @@ enum class WingNameError {
 	TooLong,
 	DuplicateWing,
 	DuplicateShip,
+	DuplicateProp,
 	DuplicateTargetPriority,
 	DuplicateWaypointList,
 	DuplicateJumpNode,

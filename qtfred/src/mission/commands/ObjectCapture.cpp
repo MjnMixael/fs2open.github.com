@@ -702,6 +702,45 @@ int restoreJumpNode(const CapturedJumpNode& data, Editor* /*editor*/)
 // captureProp / restoreProp
 // ===========================================================================
 
+CapturedProp::~CapturedProp()
+{
+	freeSexpCueDup(spawn_cue_dup);
+	freeSexpCueDup(despawn_cue_dup);
+}
+
+CapturedProp& CapturedProp::operator=(CapturedProp&& o) noexcept
+{
+	if (this == &o) return *this;
+
+	// Release any cues we currently own before overwriting
+	freeSexpCueDup(spawn_cue_dup);
+	freeSexpCueDup(despawn_cue_dup);
+
+	signature       = o.signature;
+	pos             = o.pos;
+	orient          = o.orient;
+	prop_info_index = o.prop_info_index;
+	memcpy(prop_name, o.prop_name, sizeof(prop_name));
+	no_collide      = o.no_collide;
+	fred_layer      = std::move(o.fred_layer);
+
+	spawn_cue_dup     = o.spawn_cue_dup;
+	o.spawn_cue_dup   = SHIP_CUE_NONE;
+	despawn_cue_dup   = o.despawn_cue_dup;
+	o.despawn_cue_dup = SHIP_CUE_NONE;
+	spawn_delay       = o.spawn_delay;
+	despawn_delay     = o.despawn_delay;
+
+	replacement_textures = std::move(o.replacement_textures);
+
+	return *this;
+}
+
+CapturedProp::CapturedProp(CapturedProp&& o) noexcept
+{
+	*this = std::move(o);
+}
+
 CapturedProp captureProp(int objNum)
 {
 	CapturedProp cp{};
@@ -715,6 +754,11 @@ CapturedProp captureProp(int objNum)
 		cp.prop_info_index = propp->prop_info_index;
 		strcpy_s(cp.prop_name, propp->prop_name);
 		cp.fred_layer = propp->fred_layer;
+		cp.spawn_cue_dup   = captureSexpCue(propp->spawn_cue);
+		cp.despawn_cue_dup = captureSexpCue(propp->despawn_cue);
+		cp.spawn_delay     = propp->spawn_delay;
+		cp.despawn_delay   = propp->despawn_delay;
+		cp.replacement_textures = propp->replacement_textures;
 	}
 	return cp;
 }
@@ -734,6 +778,14 @@ int restoreProp(const CapturedProp& data, Editor* /*editor*/)
 	if (propp) {
 		strcpy_s(propp->prop_name, data.prop_name);
 		propp->fred_layer = data.fred_layer;
+		propp->spawn_cue    = materializeSexpCue(data.spawn_cue_dup);
+		propp->despawn_cue  = materializeSexpCue(data.despawn_cue_dup);
+		propp->spawn_delay  = data.spawn_delay;
+		propp->despawn_delay = data.despawn_delay;
+		// prop_create seeds replacement_textures from the class table; restore the
+		// captured set (class + instance) so instance replacements survive undelete.
+		propp->replacement_textures = data.replacement_textures;
+		prop_apply_replacement_textures(propp);
 	}
 
 	if (data.no_collide)

@@ -40,6 +40,7 @@ private slots:
 	void on_showSexpHelpMissionCutscenes_toggled(bool checked);
 	void on_showSexpHelpShipEditor_toggled(bool checked);
 	void on_showSexpHelpWingEditor_toggled(bool checked);
+	void on_showSexpHelpPropEditor_toggled(bool checked);
 
 	// Grid
 	void on_xyPlaneRadio_toggled(bool checked);

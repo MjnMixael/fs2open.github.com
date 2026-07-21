@@ -728,63 +728,13 @@ void ShipEditorDialogModel::setShipName(const SCP_string& m_ship_name)
 		return;
 	}
 
-	// Check for duplicate ship names
-	for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
-		if (((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) && (ptr->instance != _singleShip)) {
-			if (!stricmp(new_name.c_str(), Ships[ptr->instance].ship_name)) {
-				_viewport->dialogProvider->showButtonDialog(DialogType::Error,
-					"Ship Name Error",
-					"This ship name is already being used by another ship.",
-					{DialogButton::Ok});
-				_shipName = Ships[_singleShip].ship_name;
-				modelChanged();
-				return;
-			}
-		}
-	}
-
-	// Check for conflict with wing names
-	for (auto& w : Wings) {
-		if (w.wave_count && !stricmp(w.name, new_name.c_str())) {
-			_viewport->dialogProvider->showButtonDialog(DialogType::Error,
-				"Ship Name Error",
-				"This ship name is already being used by a wing.",
-				{DialogButton::Ok});
-			_shipName = Ships[_singleShip].ship_name;
-			modelChanged();
-			return;
-		}
-	}
-
-	// Check for conflict with AI target priority group names
-	for (auto& tp : Ai_tp_list) {
-		if (!stricmp(new_name.c_str(), tp.name)) {
-			_viewport->dialogProvider->showButtonDialog(DialogType::Error,
-				"Ship Name Error",
-				"This ship name is already being used by a target priority group.",
-				{DialogButton::Ok});
-			_shipName = Ships[_singleShip].ship_name;
-			modelChanged();
-			return;
-		}
-	}
-
-	// Check for conflict with waypoint paths
-	if (find_matching_waypoint_list(new_name.c_str()) != nullptr) {
+	// Check for a conflict anywhere in the shared object-name namespace (ships, props, wings,
+	// target priority groups, waypoint paths, jump nodes)
+	SCP_string collision = fred_object_name_collision(new_name.c_str(), Ships[_singleShip].objnum);
+	if (!collision.empty()) {
 		_viewport->dialogProvider->showButtonDialog(DialogType::Error,
 			"Ship Name Error",
-			"This ship name is already being used by a waypoint path.",
-			{DialogButton::Ok});
-		_shipName = Ships[_singleShip].ship_name;
-		modelChanged();
-		return;
-	}
-
-	// Check for conflict with jump nodes
-	if (jumpnode_get_by_name(new_name.c_str()) != nullptr) {
-		_viewport->dialogProvider->showButtonDialog(DialogType::Error,
-			"Ship Name Error",
-			"This ship name is already being used by a jump node.",
+			"This ship name is already being used by " + collision + ".",
 			{DialogButton::Ok});
 		_shipName = Ships[_singleShip].ship_name;
 		modelChanged();

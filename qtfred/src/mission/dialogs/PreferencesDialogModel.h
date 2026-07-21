@@ -57,6 +57,8 @@ public:
 	void setShowSexpHelpShipEditor(bool value);
 	bool getShowSexpHelpWingEditor() const;
 	void setShowSexpHelpWingEditor(bool value);
+	bool getShowSexpHelpPropEditor() const;
+	void setShowSexpHelpPropEditor(bool value);
 
 	ThemeMode getThemeMode() const;
 	void setThemeMode(ThemeMode value);
@@ -105,6 +107,7 @@ private:
 	bool _showSexpHelpMissionCutscenes;
 	bool _showSexpHelpShipEditor;
 	bool _showSexpHelpWingEditor;
+	bool _showSexpHelpPropEditor;
 	ThemeMode _themeMode;
 	int  _toolbarIconSize;
 	int  _outlineLod;

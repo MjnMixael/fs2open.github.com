@@ -4,8 +4,6 @@
 #include <mission/object.h>
 #include <prop/prop.h>
 
-#include <unordered_set>
-
 namespace fso::fred::dialogs {
 
 PropEditorDialogModel::PropEditorDialogModel(QObject* parent, EditorViewport* viewport) : AbstractDialogModel(parent, viewport) {
@@ -33,11 +31,41 @@ void PropEditorDialogModel::initializeData() {
 		_flagState.push_back(Qt::Unchecked);
 	}
 
+	// cues are only meaningful for a single selected prop
+	_spawnFormula = -1;
+	_despawnFormula = -1;
+	_spawnDelay = 0;
+	_despawnDelay = 0;
+
+	// prop class: shared class across the selection, or -1 if mixed/none
+	_propClass = -1;
+	{
+		bool first = true;
+		for (auto obj_idx : _selectedPropObjects) {
+			if (!query_valid_object(obj_idx) || Objects[obj_idx].type != OBJ_PROP)
+				continue;
+			auto prp = prop_id_lookup(Objects[obj_idx].instance);
+			if (prp == nullptr)
+				continue;
+			if (first) {
+				_propClass = prp->prop_info_index;
+				first = false;
+			} else if (_propClass != prp->prop_info_index) {
+				_propClass = -1;
+				break;
+			}
+		}
+	}
+
 	if (hasValidSelection()) {
 		if (!hasMultipleSelection()) {
 			auto prp = prop_id_lookup(Objects[_selectedPropObjects.front()].instance);
 			Assertion(prp != nullptr, "Selected prop could not be found.");
 			_propName = prp->prop_name;
+			_spawnFormula = prp->spawn_cue;
+			_despawnFormula = prp->despawn_cue;
+			_spawnDelay = prp->spawn_delay;
+			_despawnDelay = prp->despawn_delay;
 		} else {
 			_propName.clear();
 		}
@@ -167,6 +195,13 @@ bool PropEditorDialogModel::hasMultipleSelection() const {
 	return _selectedPropObjects.size() > 1;
 }
 
+int PropEditorDialogModel::getSelectedPropObject() const {
+	if (_selectedPropObjects.size() != 1) {
+		return -1;
+	}
+	return _selectedPropObjects.front();
+}
+
 bool PropEditorDialogModel::hasAnyPropsInMission() {
 	for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
 		if (ptr->type == OBJ_PROP) {
@@ -196,24 +231,15 @@ bool PropEditorDialogModel::setPropName(const SCP_string& name) {
 		return false;
 	}
 
-	std::unordered_set<int> selected_instances;
-	for (auto obj_idx : _selectedPropObjects) {
-		if (query_valid_object(obj_idx) && Objects[obj_idx].type == OBJ_PROP) {
-			selected_instances.insert(Objects[obj_idx].instance);
-		}
-	}
-
-	for (size_t i = 0; i < Props.size(); ++i) {
-		if (selected_instances.find(static_cast<int>(i)) != selected_instances.end() || !Props[i].has_value()) {
-			continue;
-		}
-		if (!stricmp(trimmed.c_str(), Props[i].value().prop_name)) {
-			showErrorDialogNoCancel("This prop name is already being used by another prop.");
-			return false;
-		}
-	}
-
 	auto obj_idx = _selectedPropObjects.front();
+
+	// prop names share a single namespace with ships, wings, waypoints, jump nodes, etc.
+	SCP_string collision = fred_object_name_collision(trimmed.c_str(), obj_idx);
+	if (!collision.empty()) {
+		showErrorDialogNoCancel("This prop name is already being used by " + collision + ".");
+		return false;
+	}
+
 	auto prp = prop_id_lookup(Objects[obj_idx].instance);
 	if (prp == nullptr) {
 		return false;
@@ -292,6 +318,101 @@ void PropEditorDialogModel::setLayer(const SCP_string& layer)
 			continue;
 		_viewport->moveObjectToLayer(obj_idx, layer);
 	}
+	set_modified();
+	_editor->missionChanged();
+}
+
+int PropEditorDialogModel::getPropClass() const
+{
+	return _propClass;
+}
+
+int PropEditorDialogModel::getSpawnFormula() const
+{
+	return _spawnFormula;
+}
+
+int PropEditorDialogModel::getDespawnFormula() const
+{
+	return _despawnFormula;
+}
+
+void PropEditorDialogModel::setSpawnTreeDirty(int formula)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+
+	_spawnFormula = formula;
+	if (prp->spawn_cue >= 0 && prp->spawn_cue != formula)
+		free_sexp2(prp->spawn_cue);
+	prp->spawn_cue = formula;
+
+	set_modified();
+	_editor->missionChanged();
+}
+
+void PropEditorDialogModel::setDespawnTreeDirty(int formula)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+
+	_despawnFormula = formula;
+	if (prp->despawn_cue >= 0 && prp->despawn_cue != formula)
+		free_sexp2(prp->despawn_cue);
+	prp->despawn_cue = formula;
+
+	set_modified();
+	_editor->missionChanged();
+}
+
+int PropEditorDialogModel::getSpawnDelay() const
+{
+	return _spawnDelay;
+}
+
+void PropEditorDialogModel::setSpawnDelay(int delay)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+	if (delay < 0)
+		delay = 0;
+
+	_spawnDelay = delay;
+	prp->spawn_delay = delay; // FRED stores the positive value; the game negates it on load
+	set_modified();
+	_editor->missionChanged();
+}
+
+int PropEditorDialogModel::getDespawnDelay() const
+{
+	return _despawnDelay;
+}
+
+void PropEditorDialogModel::setDespawnDelay(int delay)
+{
+	int obj_idx = getSelectedPropObject();
+	if (obj_idx < 0)
+		return;
+	auto prp = prop_id_lookup(Objects[obj_idx].instance);
+	if (prp == nullptr)
+		return;
+	if (delay < 0)
+		delay = 0;
+
+	_despawnDelay = delay;
+	prp->despawn_delay = delay;
 	set_modified();
 	_editor->missionChanged();
 }

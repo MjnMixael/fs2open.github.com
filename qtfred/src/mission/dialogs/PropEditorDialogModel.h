@@ -16,6 +16,8 @@ class PropEditorDialogModel : public AbstractDialogModel {
 
 	bool hasValidSelection() const;
 	bool hasMultipleSelection() const;
+	// object number of the single selected prop, or -1 if there isn't exactly one
+	int getSelectedPropObject() const;
 	static bool hasAnyPropsInMission();
 	const SCP_vector<int>& getSelectedPropObjects() const;
 	const SCP_string& getPropName() const;
@@ -32,6 +34,23 @@ class PropEditorDialogModel : public AbstractDialogModel {
 
 	SCP_string getLayer() const;
 	void setLayer(const SCP_string& layer);
+
+	// prop class - index into Prop_info, or -1 if the selection has no single shared class.
+	// Changing the class is done through ChangePropClassCommand (see PropEditorDialog), not a
+	// model setter, so the model/undo history don't diverge.
+	int getPropClass() const;
+
+	// spawn/despawn cues - edited only for a single selected prop (see getSelectedPropObject).
+	// The formula getters return the sexp node index to load into the tree; the dirty-setters take
+	// the index produced by the tree's save_tree() and store it on the prop, freeing the old cue.
+	int getSpawnFormula() const;
+	int getDespawnFormula() const;
+	void setSpawnTreeDirty(int formula);
+	void setDespawnTreeDirty(int formula);
+	int getSpawnDelay() const;
+	void setSpawnDelay(int delay);
+	int getDespawnDelay() const;
+	void setDespawnDelay(int delay);
 
  signals:
 	void modelDataChanged();
@@ -54,6 +73,11 @@ class PropEditorDialogModel : public AbstractDialogModel {
 	SCP_vector<int> _flagState;
 	SCP_vector<int> _selectedPropObjects;
 	bool _bypass_errors = false;
+	int _propClass = -1;
+	int _spawnFormula = -1;
+	int _despawnFormula = -1;
+	int _spawnDelay = 0;
+	int _despawnDelay = 0;
 };
 
 }
