@@ -1866,6 +1866,10 @@ bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int&
 		return false;
 	}
 
+	// The element getters read global background state and are static; the
+	// _bgEditModel pointer is only a gate for "is the dialog open".
+	using BgModel = dialogs::BackgroundEditorDialogModel;
+
 	// pixel radius (squared) within which a handle counts as clicked
 	double best_dist = 16.0 * 16.0;
 	int best_index = -1;
@@ -1874,8 +1878,8 @@ bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int&
 	auto test_list = [&](bool sun, int count) {
 		for (int i = 0; i < count; i++) {
 			vec3d dir;
-			const bool ok = sun ? _bgEditModel->getSunDirection(i, dir)
-			                    : _bgEditModel->getBitmapDirection(i, dir);
+			const bool ok = sun ? BgModel::getSunDirection(i, dir)
+			                    : BgModel::getBitmapDirection(i, dir);
 			if (!ok) {
 				continue;
 			}
@@ -1905,8 +1909,8 @@ bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int&
 
 	// Test suns first so they win an exact tie: they are the smaller target and
 	// usually sit in front of large bitmaps (the pick uses a strict < compare).
-	test_list(true, _bgEditModel->getSunCount());
-	test_list(false, _bgEditModel->getBitmapCount());
+	test_list(true, BgModel::getSunCount());
+	test_list(false, BgModel::getBitmapCount());
 
 	if (best_index < 0) {
 		return false;

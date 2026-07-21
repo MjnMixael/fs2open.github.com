@@ -909,13 +909,16 @@ void FredRenderer::draw_background_handles()
 		return;
 	}
 
+	// The element getters read global background state, so they're static; only
+	// the current selection is per-instance and comes through the pointer.
+	using BgModel = dialogs::BackgroundEditorDialogModel;
 	const int selectedSun = model->getSelectedSunIndex();
 	const int selectedBitmap = model->getSelectedBitmapIndex();
 
 	auto draw_one = [&](bool isSun, int index, bool selected) {
 		vec3d dir;
-		const bool ok = isSun ? model->getSunDirection(index, dir)
-		                      : model->getBitmapDirection(index, dir);
+		const bool ok = isSun ? BgModel::getSunDirection(index, dir)
+		                      : BgModel::getBitmapDirection(index, dir);
 		if (!ok) {
 			return;
 		}
@@ -957,7 +960,7 @@ void FredRenderer::draw_background_handles()
 			gr_line(sx, sy - r - 5, sx, sy - r);
 			gr_line(sx, sy + r, sx, sy + r + 5);
 
-			const SCP_string name = isSun ? model->getSunNameAt(index) : model->getBitmapNameAt(index);
+			const SCP_string name = isSun ? BgModel::getSunNameAt(index) : BgModel::getBitmapNameAt(index);
 			if (!name.empty()) {
 				int w, h;
 				gr_get_string_size(&w, &h, name.c_str());
@@ -968,8 +971,8 @@ void FredRenderer::draw_background_handles()
 	};
 
 	// Draw unselected handles first, then the selected one on top.
-	const int sunCount = model->getSunCount();
-	const int bitmapCount = model->getBitmapCount();
+	const int sunCount = BgModel::getSunCount();
+	const int bitmapCount = BgModel::getBitmapCount();
 
 	for (int i = 0; i < sunCount; i++) {
 		if (i != selectedSun) {
