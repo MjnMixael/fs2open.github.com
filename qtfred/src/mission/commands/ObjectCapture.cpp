@@ -744,4 +744,66 @@ int restoreProp(const CapturedProp& data, Editor* /*editor*/)
 	return newObj;
 }
 
+// ===========================================================================
+// captureCoordinatePoint / restoreCoordinatePoint
+// ===========================================================================
+
+CapturedCoordinatePoint captureCoordinatePoint(int objNum)
+{
+	CapturedCoordinatePoint ccp{};
+	ccp.signature = Objects[objNum].signature;
+	ccp.pos       = Objects[objNum].pos;
+
+	const mission_coordinate_point* cp = find_coordinate_point_by_objnum(objNum);
+	if (cp != nullptr) {
+		ccp.name               = cp->name;
+		ccp.group              = cp->group;
+		ccp.display_color      = cp->display_color;
+		ccp.shape_kind         = cp->shape_kind;
+		ccp.shape_sides        = cp->shape_sides;
+		ccp.shape_points       = cp->shape_points;
+		ccp.shape_inner_radius = cp->shape_inner_radius;
+		ccp.shape_table_index  = cp->shape_table_index;
+		ccp.shape_angle_deg    = cp->shape_angle_deg;
+		ccp.size_scale         = cp->size_scale;
+		ccp.escort_priority    = cp->escort_priority;
+		ccp.multi_team         = cp->multi_team;
+		ccp.flags              = cp->flags;
+		ccp.fred_layer         = cp->fred_layer;
+	}
+	return ccp;
+}
+
+int restoreCoordinatePoint(const CapturedCoordinatePoint& data, Editor* /*editor*/)
+{
+	vec3d pos = data.pos;
+	// The point was deleted, so its name is free; pass it so undo keeps the name (and thus any
+	// SEXP references) stable. The field copy below then forces the exact captured name anyway.
+	const int newObj = coordinate_point_create(&pos, data.name.c_str());
+	if (newObj < 0) return -1;
+
+	// Reapply the original signature so signature-keyed commands stay valid.
+	if (data.signature > 0)
+		Objects[newObj].signature = data.signature;
+
+	mission_coordinate_point* cp = find_coordinate_point_by_objnum(newObj);
+	if (cp != nullptr) {
+		cp->name               = data.name;
+		cp->group              = data.group;
+		cp->display_color      = data.display_color;
+		cp->shape_kind         = data.shape_kind;
+		cp->shape_sides        = data.shape_sides;
+		cp->shape_points       = data.shape_points;
+		cp->shape_inner_radius = data.shape_inner_radius;
+		cp->shape_table_index  = data.shape_table_index;
+		cp->shape_angle_deg    = data.shape_angle_deg;
+		cp->size_scale         = data.size_scale;
+		cp->escort_priority    = data.escort_priority;
+		cp->multi_team         = data.multi_team;
+		cp->flags              = data.flags;
+		cp->fred_layer         = data.fred_layer;
+	}
+	return newObj;
+}
+
 } // namespace fso::fred

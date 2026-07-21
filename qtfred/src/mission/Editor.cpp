@@ -14,6 +14,7 @@
 #include <asteroid/asteroid.h>
 #include <jumpnode/jumpnode.h>
 #include <prop/prop.h>
+#include <coordinate_points/coordinate_point.h>
 #include <util.h>
 #include <mission/missionmessage.h>
 #include <missioneditor/common.h>
@@ -881,6 +882,14 @@ int Editor::create_waypoint(vec3d* pos, int waypoint_instance) {
 
 	return obj;
 }
+
+int Editor::create_coordinate_point(vec3d* pos) {
+	int obj = coordinate_point_create(pos);
+
+	missionChanged();
+
+	return obj;
+}
 int Editor::getNumMarked() {
 	return numMarked;
 }
@@ -968,6 +977,28 @@ int Editor::dup_object(object* objp) {
 			obj = prop_create(&objp->orient, &objp->pos, propp->prop_info_index);
 			if (obj != -1) {
 				clone_prop_instance_data(inst, Objects[obj].instance);
+			}
+		}
+	} else if (objp->type == OBJ_COORDINATE_POINT) {
+		auto* src = find_coordinate_point_by_objnum(OBJ_INDEX(objp));
+		obj = coordinate_point_create(&objp->pos);
+		if (obj >= 0 && src != nullptr) {
+			auto* clone = find_coordinate_point_by_objnum(obj);
+			if (clone != nullptr) {
+				// Copy every field except the auto-generated unique name and the objnum.
+				clone->group              = src->group;
+				clone->display_color      = src->display_color;
+				clone->shape_kind         = src->shape_kind;
+				clone->shape_sides        = src->shape_sides;
+				clone->shape_points       = src->shape_points;
+				clone->shape_inner_radius = src->shape_inner_radius;
+				clone->shape_table_index  = src->shape_table_index;
+				clone->shape_angle_deg    = src->shape_angle_deg;
+				clone->size_scale         = src->size_scale;
+				clone->escort_priority    = src->escort_priority;
+				clone->multi_team         = src->multi_team;
+				clone->flags              = src->flags;
+				clone->fred_layer         = src->fred_layer;
 			}
 		}
 	}
@@ -1125,6 +1156,21 @@ int Editor::common_object_delete(int obj) {
 		// find the jump node while the object still exists; the defunct entry is removed below
 		jnp = std::find_if(Jump_nodes.begin(), Jump_nodes.end(),
 			[obj](const CJumpNode &jn) { return jn.GetSCPObjectNumber() == obj; });
+
+	} else if (type == OBJ_COORDINATE_POINT) {
+		// Coordinate points are referenced by name in SEXPs (the widened SHIP_WING_POINT family,
+		// point-targeted, toggle-point-visibility). Prompt if referenced, then bash those
+		// references to <name> just like ships and waypoints.
+		const mission_coordinate_point* cp = find_coordinate_point_by_objnum(obj);
+		if (cp != nullptr) {
+			strcpy_s(msg, cp->name.c_str());
+			name = msg;
+			r = reference_handler(name, sexp_ref_type::COORDINATE_POINT, obj);
+			if (r) {
+				return r;
+			}
+			invalidate_references(name, sexp_ref_type::COORDINATE_POINT);
+		}
 	}
 
 	unmarkObject(obj);
@@ -1181,6 +1227,10 @@ int Editor::reference_handler(const char* name, sexp_ref_type type, int obj) {
 
 	case sexp_ref_type::WAYPOINT_PATH:
 		sprintf(type_name, "Waypoint path \"%s\"", name);
+		break;
+
+	case sexp_ref_type::COORDINATE_POINT:
+		sprintf(type_name, "Coordinate point \"%s\"", name);
 		break;
 
 	default:
@@ -1513,6 +1563,20 @@ void Editor::rename_prop(int objNum, const char* name)
 	prop* p = prop_id_lookup(Objects[objNum].instance);
 	if (p)
 		strcpy_s(p->prop_name, name);
+	missionChanged();
+}
+
+void Editor::rename_coordinate_point(int objNum, const char* name)
+{
+	mission_coordinate_point* cp = find_coordinate_point_by_objnum(objNum);
+	if (cp != nullptr) {
+		// Coordinate points are name-referenced in SEXPs but are never AI-goal targets, so (like
+		// jump nodes) only the SEXP text references need updating.
+		SCP_string oldName = cp->name;
+		cp->name = name;
+		if (stricmp(oldName.c_str(), name) != 0)
+			update_sexp_references(oldName.c_str(), name);
+	}
 	missionChanged();
 }
 

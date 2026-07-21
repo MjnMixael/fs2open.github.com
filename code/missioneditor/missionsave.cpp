@@ -43,6 +43,8 @@
 #include "parse/sexp.h"
 #include "parse/sexp_container.h"
 #include "prop/prop.h"
+#include "coordinate_points/coordinate_point.h"
+#include "coordinate_points/coordinate_shapes.h"
 #include "sound/ds.h"
 #include "sound/sound.h"
 #include "starfield/nebula.h"
@@ -3254,6 +3256,8 @@ void Fred_mission_save::save_mission_internal(const char* pathname)
 		err = -8;
 	} else if (save_props()) {
 		err = -18;
+	} else if (save_coordinate_points()) {
+		err = -19;
 	} else if (save_events()) {
 		err = -9;
 	} else if (save_goals()) {
@@ -5462,6 +5466,179 @@ int Fred_mission_save::save_props()
 				fso_comment_pop();
 			}
 		}
+	}
+
+	fso_comment_pop(true);
+	return err;
+}
+
+int Fred_mission_save::save_coordinate_points()
+{
+	if (save_config.save_format == MissionFormat::RETAIL || Coordinate_points.empty()) {
+		return err;
+	}
+
+	fred_parse_flag = 0;
+	size_t count = 0;
+
+	if (optional_string_fred("#Coordinate Points", "#End")) {
+		parse_comments(2);
+	} else {
+		fout("\n\n#Coordinate Points");
+	}
+	fout("\t\t;! " SIZE_T_ARG " total\n", Coordinate_points.size());
+
+	for (const auto& cp : Coordinate_points) {
+		if (cp.objnum < 0) {
+			continue;
+		}
+
+		required_string_either_fred("$Name:", "#Events");
+		required_string_fred("$Name:");
+		parse_comments(count ? 2 : 1);
+		fout(" %s", cp.name.c_str());
+
+		count++;
+
+		required_string_fred("\n$Location:");
+		parse_comments(0);
+		save_vector(Objects[cp.objnum].pos);
+
+		if (!cp.group.empty()) {
+			if (optional_string_fred("+Group:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Group:");
+			}
+			fout(" %s", cp.group.c_str());
+		}
+
+		const bool color_is_default =
+			(cp.display_color.red == 255 && cp.display_color.green == 255 &&
+			 cp.display_color.blue == 255 && cp.display_color.alpha == 255);
+		if (!color_is_default) {
+			if (optional_string_fred("+Color:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Color:");
+			}
+			fout(" ( %d %d %d %d )", cp.display_color.red, cp.display_color.green,
+				 cp.display_color.blue, cp.display_color.alpha);
+		}
+
+		// +Shape: omit when it's the default (NGon with default sides). For Tabled we look
+		// up the registered name; if the index is somehow stale, just skip the line.
+		const char* shape_name = nullptr;
+		if (cp.shape_kind == CoordinatePointShapeKind::Star) {
+			shape_name = "Star";
+		} else if (cp.shape_kind == CoordinatePointShapeKind::Tabled &&
+				   cp.shape_table_index >= 0 &&
+				   cp.shape_table_index < static_cast<int>(Coordinate_shapes.size())) {
+			shape_name = Coordinate_shapes[cp.shape_table_index].name.c_str();
+		}
+		if (shape_name != nullptr) {
+			if (optional_string_fred("+Shape:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Shape:");
+			}
+			fout(" %s", shape_name);
+		}
+
+		// +Sides: only emit for NGon, only when non-default.
+		if (cp.shape_kind == CoordinatePointShapeKind::NGon && cp.shape_sides != 4) {
+			if (optional_string_fred("+Sides:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Sides:");
+			}
+			fout(" %d", cp.shape_sides);
+		}
+
+		// +Points: / +Inner Radius: only for Star, only when non-default.
+		if (cp.shape_kind == CoordinatePointShapeKind::Star && cp.shape_points != 5) {
+			if (optional_string_fred("+Points:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Points:");
+			}
+			fout(" %d", cp.shape_points);
+		}
+
+		if (cp.shape_kind == CoordinatePointShapeKind::Star && cp.shape_inner_radius != STAR_INNER_DEFAULT) {
+			if (optional_string_fred("+Inner Radius:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Inner Radius:");
+			}
+			fout(" %f", cp.shape_inner_radius);
+		}
+
+		// +Angle: applies to every kind; emit when non-zero.
+		if (cp.shape_angle_deg != 0.0f) {
+			if (optional_string_fred("+Angle:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Angle:");
+			}
+			fout(" %f", cp.shape_angle_deg);
+		}
+
+		if (cp.size_scale != 1.0f) {
+			if (optional_string_fred("+Size:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Size:");
+			}
+			fout(" %f", cp.size_scale);
+		}
+
+		if (cp.escort_priority > 0) {
+			if (optional_string_fred("+Escort Priority:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Escort Priority:");
+			}
+			fout(" %d", cp.escort_priority);
+		}
+
+		if (cp.multi_team >= 0) {
+			if (optional_string_fred("+Multi Team:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Multi Team:");
+			}
+			fout(" %d", cp.multi_team);
+		}
+
+		if (cp.flags.any_set()) {
+			if (optional_string_fred("+Flags:", "$Name:")) {
+				parse_comments();
+				fout(" (");
+			} else {
+				fout("\n+Flags: (");
+			}
+			for (size_t fi = 0; fi < Num_parse_coordinate_point_flags; ++fi) {
+				const auto& def = Parse_coordinate_point_flags[fi];
+				if (cp.flags[def.def]) {
+					fout(" \"%s\"", def.name);
+				}
+			}
+			fout(" )");
+		}
+
+		if (save_config.save_format != MissionFormat::RETAIL &&
+			!cp.fred_layer.empty() &&
+			!lcase_equal(cp.fred_layer, "Default")) {
+			if (optional_string_fred("+Layer:", "$Name:")) {
+				parse_comments();
+			} else {
+				fout("\n+Layer:");
+			}
+			fout(" %s", cp.fred_layer.c_str());
+		}
+
+		fso_comment_pop();
 	}
 
 	fso_comment_pop(true);

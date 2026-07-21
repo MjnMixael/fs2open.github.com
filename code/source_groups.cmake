@@ -311,6 +311,7 @@ add_file_folder("Default files\\\\data\\\\tables"
 	def_files/data/tables/post_processing.tbl
 	def_files/data/tables/species_defs.tbl
 	def_files/data/tables/cheats.tbl
+	def_files/data/tables/coordinate_points.tbl
 )
 
 # These files will be included in the executable but not in CFile
@@ -1243,6 +1244,17 @@ add_file_folder("Prop"
 	prop/prop_flags.h
 )
 
+# Coordinate Points files
+add_file_folder("Coordinate Points"
+	coordinate_points/coordinate_point.cpp
+	coordinate_points/coordinate_point.h
+	coordinate_points/coordinate_point_flags.h
+	coordinate_points/coordinate_point_render.cpp
+	coordinate_points/coordinate_point_render.h
+	coordinate_points/coordinate_shapes.cpp
+	coordinate_points/coordinate_shapes.h
+)
+
 # Radar files
 add_file_folder("Radar"
 	radar/radar.cpp
@@ -1535,6 +1547,8 @@ add_file_folder("Scripting\\\\Api\\\\Objs"
 	scripting/api/objs/shipwepselect.h
 	scripting/api/objs/sound.cpp
 	scripting/api/objs/sound.h
+	scripting/api/objs/coordinatepoint.cpp
+	scripting/api/objs/coordinatepoint.h
 	scripting/api/objs/species.cpp
 	scripting/api/objs/species.h
 	scripting/api/objs/support_rearm_pool.cpp

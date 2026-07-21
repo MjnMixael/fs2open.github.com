@@ -97,6 +97,8 @@ class Editor : public QObject {
 
 	int create_waypoint(vec3d* pos, int waypoint_instance);
 
+	int create_coordinate_point(vec3d* pos);
+
 	bool query_ship_name_duplicate(int ship);
 
 	void fix_ship_name(int ship);
@@ -236,6 +238,7 @@ class Editor : public QObject {
 
 	void rename_jump_node(int objNum, const char* name);
 	void rename_prop(int objNum, const char* name);
+	void rename_coordinate_point(int objNum, const char* name);
 	void rename_waypoint_list(const char* old_name, const char* new_name);
 
 	/**

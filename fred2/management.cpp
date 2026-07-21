@@ -77,6 +77,7 @@
 #include "scripting/scripting.h"
 #include "scripting/global_hooks.h"
 #include "utils/Random.h"
+#include "coordinate_points/coordinate_shapes.h"
 #include "prop/prop.h"
 
 #include <direct.h>
@@ -388,6 +389,7 @@ bool fred_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	glowpoint_init();
 	ship_init();
 	prop_init();
+	coordinate_shapes_init();
 
 	techroom_intel_init();
 	hud_positions_init();

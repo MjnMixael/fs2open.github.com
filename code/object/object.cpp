@@ -21,6 +21,8 @@
 #include "globalincs/vmallocator.h"
 #include "iff_defs/iff_defs.h"
 #include "io/timer.h"
+#include "coordinate_points/coordinate_point.h"
+#include "coordinate_points/coordinate_point_render.h"
 #include "jumpnode/jumpnode.h"
 #include "lighting/lighting.h"
 #include "lighting/lighting_profiles.h"
@@ -142,7 +144,9 @@ const char *Object_type_names[MAX_OBJECT_TYPES] = {
 	"Asteroid",
 	"Jump Node",
 	"Beam",
-	"Raw Pof"
+	"Raw Pof",
+	"Prop",
+	"Coordinate Point"
 //XSTR:ON
 };
 
@@ -284,6 +288,7 @@ int free_object_slots(int target_num_used)
 				case OBJ_BEAM:
 				case OBJ_RAW_POF:
 				case OBJ_PROP:
+				case OBJ_COORDINATE_POINT:
 					break;
 				default:
 					Int3();	//	Hey, what kind of object is this?  Unknown!
@@ -768,6 +773,11 @@ void obj_delete(int objnum)
 		break;
 	case OBJ_PROP:
 		prop_delete(objp);
+		break;
+	case OBJ_COORDINATE_POINT:
+		// Remove the matching entry from Coordinate_points so the list stays in sync with Objects[].
+		// During level close the list is cleared up-front, so this call becomes a no-op then.
+		coordinate_point_delete(objnum);
 		break;
 	case OBJ_NONE:
 		Int3();
@@ -1280,6 +1290,8 @@ void obj_move_all_pre(object *objp, float frametime)
 		break;
 	case OBJ_PROP:
 		break;
+	case OBJ_COORDINATE_POINT:
+		break;  // coordinate points don't move.
 	case OBJ_NONE:
 		Int3();
 		break;
@@ -1544,6 +1556,9 @@ void obj_move_all_post(object *objp, float frametime)
 
 		case OBJ_PROP:
 			break;
+
+		case OBJ_COORDINATE_POINT:
+			break;  // coordinate points don't move.
 
 		case OBJ_NONE:
 			Int3();
@@ -1968,6 +1983,10 @@ void obj_queue_render(object* obj, model_draw_list* scene)
 	case OBJ_PROP:
 		prop_render(obj, scene);
 		break;
+	case OBJ_COORDINATE_POINT:
+		// Coordinate points are drawn in their own post-scene pass (coordinate_points_render_all_in_mission)
+		// to avoid immediate-mode state leaking into the queued scene render.
+		break;
 	default:
 		Error( LOCATION, "Unhandled obj type %d in obj_render", obj->type );
 	}
@@ -2063,15 +2082,19 @@ int obj_team(object *objp)
 			break;
 
 		case OBJ_JUMP_NODE:
+		case OBJ_COORDINATE_POINT:
+			// No real team, but reporting the player's team short-circuits "same-team don't lock"
+			// logic everywhere and keeps the team != -1 invariant the assertion below requires.
+			// Jump nodes have done this since forever; coordinate points piggyback on the same trick.
 			team = Player_ship->team;
 			break;
-					
+
 		case OBJ_FIREBALL:
 		case OBJ_WAYPOINT:
 		case OBJ_START:
 		case OBJ_NONE:
 		case OBJ_GHOST:
-		case OBJ_SHOCKWAVE:		
+		case OBJ_SHOCKWAVE:
 		case OBJ_BEAM:
 		case OBJ_RAW_POF:
 		case OBJ_PROP:

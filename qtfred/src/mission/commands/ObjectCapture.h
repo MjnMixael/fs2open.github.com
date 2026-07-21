@@ -22,6 +22,7 @@
 #include <ship/ship.h>
 #include <ai/aigoals.h>
 #include <mission/missionparse.h>
+#include <coordinate_points/coordinate_point.h>
 
 namespace fso::fred {
 
@@ -304,5 +305,31 @@ struct CapturedProp {
 
 CapturedProp captureProp(int objNum);
 int restoreProp(const CapturedProp& data, Editor* editor);
+
+// ===========================================================================
+// Coordinate Point
+// ===========================================================================
+
+struct CapturedCoordinatePoint {
+	int    signature = -1; // reapplied on restore; see CapturedShip::signature
+	vec3d  pos       = vmd_zero_vector;
+	SCP_string name;
+	SCP_string group;
+	color      display_color{};
+	CoordinatePointShapeKind shape_kind = CoordinatePointShapeKind::NGon;
+	int   shape_sides        = 4;
+	int   shape_points       = 5;
+	float shape_inner_radius = STAR_INNER_DEFAULT;
+	int   shape_table_index  = -1;
+	float shape_angle_deg    = 0.0f;
+	float size_scale         = 1.0f;
+	int   escort_priority    = 0;
+	int   multi_team         = -1;
+	flagset<CoordinatePoint::Flags> flags;
+	SCP_string fred_layer;
+};
+
+CapturedCoordinatePoint captureCoordinatePoint(int objNum);
+int restoreCoordinatePoint(const CapturedCoordinatePoint& data, Editor* editor);
 
 } // namespace fso::fred

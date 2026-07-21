@@ -1,0 +1,412 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>fso::fred::dialogs::CoordinatePointEditorDialog</class>
+ <widget class="QDialog" name="fso::fred::dialogs::CoordinatePointEditorDialog">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>320</width>
+    <height>300</height>
+   </rect>
+  </property>
+  <property name="windowTitle">
+   <string>Coordinate Point Editor</string>
+  </property>
+  <layout class="QFormLayout" name="formLayout">
+   <property name="sizeConstraint">
+    <enum>QLayout::SetFixedSize</enum>
+   </property>
+   <item row="0" column="0" colspan="2">
+    <layout class="QVBoxLayout" name="rootLayout">
+     <item>
+      <layout class="QFormLayout" name="fieldLayout">
+       <property name="labelAlignment">
+        <set>Qt::AlignRight|Qt::AlignTrailing|Qt::AlignVCenter</set>
+       </property>
+       <item row="0" column="0" colspan="2">
+        <layout class="QHBoxLayout" name="navigationLayout">
+         <item>
+          <widget class="QPushButton" name="prevPointButton">
+           <property name="text">
+            <string>&amp;Prev</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="nextPointButton">
+           <property name="text">
+            <string>&amp;Next</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="1" column="0">
+        <widget class="QLabel" name="nameLabel">
+         <property name="text">
+          <string>&amp;Name</string>
+         </property>
+         <property name="buddy">
+          <cstring>nameEdit</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="1" column="1">
+        <widget class="QLineEdit" name="nameEdit"/>
+       </item>
+       <item row="2" column="0">
+        <widget class="QLabel" name="multiTeamLabel">
+         <property name="text">
+          <string>&amp;Multi Team</string>
+         </property>
+         <property name="toolTip">
+          <string>Multiplayer team filter. &quot;Any team&quot; (default) is visible to everyone; selecting a specific team makes the point visible only to that team in multiplayer. Disabled when the mission is not a team mission.</string>
+         </property>
+         <property name="buddy">
+          <cstring>multiTeamCombo</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="2" column="1">
+        <widget class="QComboBox" name="multiTeamCombo">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+         <property name="toolTip">
+          <string>Multiplayer team filter. &quot;Any team&quot; makes the point visible to everyone; selecting a team restricts it to that team only.</string>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="0">
+        <widget class="QLabel" name="layerLabel">
+         <property name="text">
+          <string>&amp;Layer</string>
+         </property>
+         <property name="buddy">
+          <cstring>layerCombo</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="3" column="1">
+        <widget class="QComboBox" name="layerCombo">
+         <property name="sizePolicy">
+          <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+           <horstretch>0</horstretch>
+           <verstretch>0</verstretch>
+          </sizepolicy>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0">
+        <widget class="QLabel" name="groupLabel">
+         <property name="text">
+          <string>&amp;Group</string>
+         </property>
+         <property name="buddy">
+          <cstring>groupEdit</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="1">
+        <widget class="QLineEdit" name="groupEdit"/>
+       </item>
+       <item row="5" column="0">
+        <widget class="QLabel" name="shapeLabel">
+         <property name="text">
+          <string>&amp;Shape</string>
+         </property>
+         <property name="buddy">
+          <cstring>shapeNGonRadio</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="5" column="1">
+        <layout class="QHBoxLayout" name="shapeRowLayout">
+         <item>
+          <widget class="QRadioButton" name="shapeNGonRadio">
+           <property name="toolTip">
+            <string>A regular polygon generated from the Sides value.</string>
+           </property>
+           <property name="text">
+            <string>NGon</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="shapeStarRadio">
+           <property name="toolTip">
+            <string>A star generated from the Points and Inner Radius values.</string>
+           </property>
+           <property name="text">
+            <string>Star</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QRadioButton" name="shapeCustomRadio">
+           <property name="toolTip">
+            <string>A tabled shape from coordinate_points.tbl or a *-cps.tbm. Disabled when no tabled shapes are loaded.</string>
+           </property>
+           <property name="text">
+            <string>Custom</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QComboBox" name="shapeCombo">
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Expanding" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>The tabled shape to use. Only available when Custom is selected.</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item row="6" column="0">
+        <widget class="QLabel" name="sidesLabel">
+         <property name="text">
+          <string>Sides</string>
+         </property>
+         <property name="toolTip">
+          <string>Number of sides for an NGon shape. Only relevant when Shape is NGon.</string>
+         </property>
+         <property name="buddy">
+          <cstring>sidesSpinBox</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="6" column="1">
+        <widget class="QSpinBox" name="sidesSpinBox">
+         <property name="minimum">
+          <number>2</number>
+         </property>
+         <property name="maximum">
+          <number>32</number>
+         </property>
+         <property name="specialValueText">
+          <string notr="true"> </string>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="0">
+        <widget class="QLabel" name="pointsLabel">
+         <property name="text">
+          <string>Points</string>
+         </property>
+         <property name="toolTip">
+          <string>Number of points for a Star shape. Only relevant when Shape is Star.</string>
+         </property>
+         <property name="buddy">
+          <cstring>pointsSpinBox</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="7" column="1">
+        <widget class="QSpinBox" name="pointsSpinBox">
+         <property name="minimum">
+          <number>2</number>
+         </property>
+         <property name="maximum">
+          <number>32</number>
+         </property>
+         <property name="specialValueText">
+          <string notr="true"> </string>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="0">
+        <widget class="QLabel" name="innerRadiusLabel">
+         <property name="text">
+          <string>Inner Radius</string>
+         </property>
+         <property name="toolTip">
+          <string>Inner-vertex radius for a Star shape, as a fraction of the outer radius. Only relevant when Shape is Star.</string>
+         </property>
+         <property name="buddy">
+          <cstring>innerRadiusSpinBox</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="8" column="1">
+        <widget class="QDoubleSpinBox" name="innerRadiusSpinBox">
+         <property name="decimals">
+          <number>3</number>
+         </property>
+         <property name="minimum">
+          <double>-0.010000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>0.950000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>0.050000000000000</double>
+         </property>
+         <property name="specialValueText">
+          <string notr="true"> </string>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="0">
+        <widget class="QLabel" name="angleLabel">
+         <property name="text">
+          <string>Angle</string>
+         </property>
+         <property name="toolTip">
+          <string>In-plane rotation in degrees applied to the shape.</string>
+         </property>
+         <property name="buddy">
+          <cstring>angleSpinBox</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="9" column="1">
+        <widget class="QDoubleSpinBox" name="angleSpinBox">
+         <property name="decimals">
+          <number>2</number>
+         </property>
+         <property name="minimum">
+          <double>-360.000000000000000</double>
+         </property>
+         <property name="maximum">
+          <double>360.000000000000000</double>
+         </property>
+         <property name="singleStep">
+          <double>5.000000000000000</double>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="0">
+        <widget class="QLabel" name="sizeLabel">
+         <property name="text">
+          <string>S&amp;ize</string>
+         </property>
+         <property name="buddy">
+          <cstring>sizeSpinBox</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="10" column="1">
+        <widget class="QDoubleSpinBox" name="sizeSpinBox">
+         <property name="decimals">
+          <number>2</number>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="0">
+        <widget class="QLabel" name="escortPriorityLabel">
+         <property name="text">
+          <string>&amp;Escort Priority</string>
+         </property>
+         <property name="buddy">
+          <cstring>escortPrioritySpinBox</cstring>
+         </property>
+        </widget>
+       </item>
+       <item row="11" column="1">
+        <widget class="QSpinBox" name="escortPrioritySpinBox">
+         <property name="maximum">
+          <number>9999</number>
+         </property>
+        </widget>
+       </item>
+       <item row="12" column="0" colspan="2">
+        <widget class="QCheckBox" name="visibleInMissionCheck">
+         <property name="text">
+          <string>&amp;Visible in mission (renders in-game, target-in-front works)</string>
+         </property>
+        </widget>
+       </item>
+       <item row="13" column="0" colspan="2">
+        <layout class="QHBoxLayout" name="colorLayout">
+         <item>
+          <widget class="QLabel" name="colorRLabel">
+           <property name="text">
+            <string>R:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="colorRSpinBox">
+           <property name="maximum">
+            <number>255</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="colorGLabel">
+           <property name="text">
+            <string>G:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="colorGSpinBox">
+           <property name="maximum">
+            <number>255</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="colorBLabel">
+           <property name="text">
+            <string>B:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="colorBSpinBox">
+           <property name="maximum">
+            <number>255</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="colorALabel">
+           <property name="text">
+            <string>A:</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QSpinBox" name="colorASpinBox">
+           <property name="maximum">
+            <number>255</number>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QLabel" name="colorSwatch">
+           <property name="minimumSize">
+            <size>
+             <width>28</width>
+             <height>28</height>
+            </size>
+           </property>
+           <property name="frameShape">
+            <enum>QFrame::Box</enum>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+      </layout>
+     </item>
+    </layout>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

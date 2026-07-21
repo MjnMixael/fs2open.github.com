@@ -66,6 +66,7 @@
 #include "parse/parselo.h"
 #include "parse/sexp_container.h"
 #include "prop/prop.h"
+#include "coordinate_points/coordinate_point.h"
 #include "scripting/global_hooks.h"
 #include "scripting/hook_api.h"
 #include "scripting/hook_conditions.h"
@@ -642,6 +643,17 @@ parse_object_flag_description<Mission::Parse_Object_Flags> Parse_prop_flag_descr
 
 const size_t Num_parse_prop_flags = sizeof(Parse_prop_flags) / sizeof(flag_def_list_new<Mission::Parse_Object_Flags>);
 const size_t Num_parse_prop_flag_descriptions = sizeof(Parse_prop_flag_descriptions) / sizeof(parse_object_flag_description<Mission::Parse_Object_Flags>);
+
+flag_def_list_new<CoordinatePoint::Flags> Parse_coordinate_point_flags[] = {
+    { "visible_in_mission",				CoordinatePoint::Flags::Visible_in_mission,				true, false },
+};
+
+parse_object_flag_description<CoordinatePoint::Flags> Parse_coordinate_point_flag_descriptions[] = {
+    { CoordinatePoint::Flags::Visible_in_mission,					"Render the shape in-game so the player can see and target it, not just in the editor."},
+};
+
+const size_t Num_parse_coordinate_point_flags = sizeof(Parse_coordinate_point_flags) / sizeof(flag_def_list_new<CoordinatePoint::Flags>);
+const size_t Num_parse_coordinate_point_flag_descriptions = sizeof(Parse_coordinate_point_flag_descriptions) / sizeof(parse_object_flag_description<CoordinatePoint::Flags>);
 
 // These are only the flags that are saved to the mission file.  See the MEF_ #defines.
 flag_def_list Mission_event_flags[] = {
@@ -5437,9 +5449,9 @@ void parse_wings(mission* pm)
 {
 	required_string("#Wings");
 	while (true) {
-		int which = required_string_one_of(3, "#Events", "#Props", "$Name:");
+		int which = required_string_one_of(4, "#Events", "#Props", "#Coordinate Points", "$Name:");
 
-		if (which == -1 || which == 0 || which == 1) // #Events or #Props
+		if (which == -1 || which == 0 || which == 1 || which == 2) // any section terminator
 			break;
 
 		Assert(Num_wings < MAX_WINGS);
@@ -5451,8 +5463,135 @@ void parse_wings(mission* pm)
 void parse_props(mission* pm)
 {
 	if (optional_string("#Props")) {
-		while (required_string_either("#Events", "$Name:")) {
+		while (true) {
+			int which = required_string_one_of(3, "#Coordinate Points", "#Events", "$Name:");
+			if (which == -1 || which == 0 || which == 1) {  // #Coordinate Points or #Events
+				break;
+			}
 			parse_prop(pm);
+		}
+	}
+}
+
+void parse_coordinate_point(mission* /*pm*/)
+{
+	parsed_coordinate_point cp;
+
+	required_string("$Name:");
+	stuff_string(cp.name, F_NAME);
+
+	required_string("$Location:");
+	stuff_vec3d(&cp.position);
+
+	if (optional_string("+Group:")) {
+		stuff_string(cp.group, F_NAME);
+	}
+
+	if (optional_string("+Color:")) {
+		// rgba is pre-initialized so a three-value list (R G B) still leaves alpha at 255;
+		// stuff_int_list parses up to 4 ints and leaves trailing entries untouched.
+		int rgba[4] = { 255, 255, 255, 255 };
+		stuff_int_list(rgba, 4, ParseLookupType::RAW_INTEGER_TYPE);
+		for (int& c : rgba) {
+			CLAMP(c, 0, 255);
+		}
+		gr_init_alphacolor(&cp.display_color, rgba[0], rgba[1], rgba[2], rgba[3]);
+	}
+
+	if (optional_string("+Shape:")) {
+		SCP_string shape_name;
+		stuff_string(shape_name, F_NAME);
+
+		// Built-in primitive kinds.
+		if (!stricmp(shape_name.c_str(), "NGon")) {
+			cp.shape_kind = CoordinatePointShapeKind::NGon;
+		} else if (!stricmp(shape_name.c_str(), "Star")) {
+			cp.shape_kind = CoordinatePointShapeKind::Star;
+		} else if (!stricmp(shape_name.c_str(), "Triangle")) {
+			// Legacy alias from before the shape-kind refactor. Equivalent to NGon(3).
+			cp.shape_kind  = CoordinatePointShapeKind::NGon;
+			cp.shape_sides = 3;
+		} else if (!stricmp(shape_name.c_str(), "Diamond")) {
+			// Legacy alias: NGon(4) with point-up convention (the default).
+			cp.shape_kind  = CoordinatePointShapeKind::NGon;
+			cp.shape_sides = 4;
+		} else if (!stricmp(shape_name.c_str(), "Pentagon")) {
+			cp.shape_kind  = CoordinatePointShapeKind::NGon;
+			cp.shape_sides = 5;
+		} else {
+			// Anything else: treat as a tabled shape name; index resolved at post-process.
+			cp.shape_kind       = CoordinatePointShapeKind::Tabled;
+			cp.shape_table_name = shape_name;
+		}
+	}
+
+	if (optional_string("+Sides:")) {
+		stuff_int(&cp.shape_sides);
+		CLAMP(cp.shape_sides, NGON_SIDES_MIN, NGON_SIDES_MAX);
+	}
+
+	if (optional_string("+Points:")) {
+		stuff_int(&cp.shape_points);
+		CLAMP(cp.shape_points, STAR_POINTS_MIN, STAR_POINTS_MAX);
+	}
+
+	if (optional_string("+Inner Radius:")) {
+		stuff_float(&cp.shape_inner_radius);
+		CLAMP(cp.shape_inner_radius, STAR_INNER_MIN, STAR_INNER_MAX);
+	}
+
+	if (optional_string("+Angle:")) {
+		stuff_float(&cp.shape_angle_deg);
+	}
+
+	if (optional_string("+Size:")) {
+		stuff_float(&cp.size_scale);
+		CLAMP(cp.size_scale, COORDINATE_POINT_SIZE_MIN, COORDINATE_POINT_SIZE_MAX);
+	}
+
+	if (optional_string("+Escort Priority:")) {
+		stuff_int(&cp.escort_priority);
+		if (cp.escort_priority < 0) {
+			cp.escort_priority = 0;
+		}
+	}
+
+	if (optional_string("+Multi Team:")) {
+		stuff_int(&cp.multi_team);
+		if (cp.multi_team < -1 || cp.multi_team >= MAX_TVT_TEAMS) {
+			cp.multi_team = -1;
+		}
+	}
+
+	if (optional_string("+Flags:")) {
+		SCP_vector<SCP_string> unparsed;
+		parse_string_flag_list(cp.flags, Parse_coordinate_point_flags, Num_parse_coordinate_point_flags, &unparsed);
+		if (!unparsed.empty()) {
+			for (const auto& f : unparsed) {
+				WarningEx(LOCATION, "Unknown flag in coordinate point flags: %s", f.c_str());
+			}
+		}
+	}
+
+	if (optional_string("+Layer:")) {
+		stuff_string(cp.fred_layer, F_NAME);
+		if (!mission_has_layer_name(&The_mission, cp.fred_layer)) {
+			if (cp.fred_layer.empty()) {
+				cp.fred_layer = "Default";
+			} else {
+				The_mission.fred_layers.push_back(cp.fred_layer);
+			}
+		}
+	}
+
+	Parse_coordinate_points.emplace_back(std::move(cp));
+}
+
+void parse_coordinate_points(mission* pm)
+{
+	if (optional_string("#Coordinate Points")) {
+		while (required_string_either("#Events", "$Name:")) {
+			parse_coordinate_point(pm);
 		}
 	}
 }
@@ -6937,6 +7076,7 @@ bool parse_mission(mission *pm, int flags)
 	parse_objects(pm, flags);
 	parse_wings(pm);
 	parse_props(pm);
+	parse_coordinate_points(pm);
 	parse_events(pm);
 	parse_goals(pm);
 	parse_waypoints_and_jumpnodes(pm);
@@ -7027,6 +7167,7 @@ bool post_process_mission(mission *pm)
 	ship_obj *so;
 
 	post_process_mission_props();
+	post_process_mission_coordinate_points();
 
 	// Goober5000 - this must be done even before post_process_ships_wings because it is a prerequisite
 	ship_clear_ship_type_counts();
@@ -7498,6 +7639,7 @@ void mission_init(mission *pm, bool quick_init)
 	jumpnode_level_close();
 	waypoint_level_close();
 	props_level_close();
+	coordinate_points_level_close();
 
 	red_alert_invalidate_timestamp();
 	event_music_reset_choices();
@@ -7530,6 +7672,7 @@ void mission_init(mission *pm, bool quick_init)
 	Reinforcements.clear();
 
 	Parse_props.clear();
+	Parse_coordinate_points.clear();
 
 	Asteroid_field.num_initial_asteroids = 0;
 

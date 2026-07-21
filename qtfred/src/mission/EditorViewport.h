@@ -27,6 +27,7 @@ enum class CreateKind {
 enum class OtherKind {
 	Waypoint,
 	JumpNode,
+	CoordinatePoint,
 };
 
 struct ViewSettings {
@@ -53,6 +54,7 @@ struct ViewSettings {
 	bool Show_waypoints = true;
 	bool Show_props = true;
 	bool Show_jump_nodes = true;
+	bool Show_coordinate_points = true;
 	bool Show_compass = true;
 	bool Highlight_selectable_subsys = false;
 	int Outline_lod = 1;
@@ -159,6 +161,7 @@ class EditorViewport {
 	int createPropAtScreenPos(int x, int y, int propIndex);
 	int createWaypointAtScreenPos(int x, int y, int waypoint_instance = -1);
 	int createJumpNodeAtScreenPos(int x, int y);
+	int createCoordinatePointAtScreenPos(int x, int y);
 
 	// When `insert_waypoints` is true, marked waypoints get a new waypoint
 	// inserted into their source path (right after the source waypoint) instead
