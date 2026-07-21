@@ -98,7 +98,7 @@ Snapshot the affected state before the action, run it, snapshot after, and push 
 2. Implement `captureState()`/`restoreState()` in a new `state/<Name>State.cpp` (add it to `qtfred/source_groups.cmake`), restoring **everything** `apply()` can change — including apply-time side effects such as reference renames, which must be inverted on undo.
 3. Implement the accept flow (capture → `apply()` → capture → push `ApplyDialogCommand` → clear dialog stack → reactivate main stack) and route `reject()`/`closeEvent()` through `rejectOrCloseHandler()`.
 4. Add working-state capture/restore for the in-dialog stack, then wire each control as above.
-5. Guard the `FredView` action with `raiseExistingEditor<T>()` — two live instances of the same editor would interleave apply commands.
+5. Open it via `showSingleInstanceDialog<T>()` from the `FredView` action — two live instances of the same editor would interleave apply commands.
 
 ## Review checklist
 

@@ -1214,6 +1214,11 @@ void MissionEventsDialog::on_btnNewMsg_clicked()
 	rebuildMessageList();
 	updateMessageUi();
 	pushMessageStateSnapshot(before, tr("Add Message"));
+
+	// Let the user name the new message right away: focus the name field and
+	// select its placeholder text so typing immediately replaces it.
+	ui->messageName->setFocus();
+	ui->messageName->selectAll();
 }
 
 void MissionEventsDialog::on_btnInsertMsg_clicked()
@@ -1232,6 +1237,11 @@ void MissionEventsDialog::on_btnInsertMsg_clicked()
 	}
 	updateMessageUi();
 	pushMessageStateSnapshot(before, tr("Insert Message"));
+
+	// Let the user name the new message right away: focus the name field and
+	// select its placeholder text so typing immediately replaces it.
+	ui->messageName->setFocus();
+	ui->messageName->selectAll();
 }
 
 void MissionEventsDialog::on_btnDeleteMsg_clicked()

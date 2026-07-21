@@ -305,21 +305,21 @@ void BackgroundEditorDialog::refreshSunList()
 	const auto names = _model->getMissionSunNames();
 
 	const int targetRow = _model->getSelectedSunIndex();
-	ui->sunsListWidget->setUpdatesEnabled(false);
-	ui->sunsListWidget->clear();
+	ui->sunListWidget->setUpdatesEnabled(false);
+	ui->sunListWidget->clear();
 
 	QStringList items;
 	items.reserve(static_cast<int>(names.size()));
 	for (const auto& s : names)
 		items << QString::fromStdString(s);
-	ui->sunsListWidget->addItems(items);
+	ui->sunListWidget->addItems(items);
 
 	if (!items.isEmpty()) {
-		const int clamped = qBound(0, targetRow, ui->sunsListWidget->count() - 1);
-		ui->sunsListWidget->setCurrentRow(clamped);
+		const int clamped = qBound(0, targetRow, ui->sunListWidget->count() - 1);
+		ui->sunListWidget->setCurrentRow(clamped);
 	}
 
-	ui->sunsListWidget->setUpdatesEnabled(true);
+	ui->sunListWidget->setUpdatesEnabled(true);
 
 	updateSunControls();
 }
@@ -738,7 +738,7 @@ void BackgroundEditorDialog::on_deleteBitmapButton_clicked()
 
 // ---- Suns ----
 
-void BackgroundEditorDialog::on_sunsListWidget_currentRowChanged(int row)
+void BackgroundEditorDialog::on_sunListWidget_currentRowChanged(int row)
 {
 	// Navigation only — no undo entry
 	_model->setSelectedSunIndex(row);

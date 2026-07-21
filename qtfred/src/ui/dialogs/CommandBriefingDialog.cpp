@@ -25,8 +25,8 @@ _viewport(viewport), _fredView(parent)
 	_fredView->undoGroup()->addStack(_dialogStack);
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Command Briefing"));
 
-	ui->speechFileName->setMaxLength(NAME_LENGTH - 1);
-	ui->animationFileName->setMaxLength(NAME_LENGTH - 1);
+	ui->speechFilename->setMaxLength(NAME_LENGTH - 1);
+	ui->animationFilename->setMaxLength(NAME_LENGTH - 1);
 	ui->actionHighResolutionFilenameEdit->setMaxLength(NAME_LENGTH - 1);
 	ui->actionLowResolutionFilenameEdit->setMaxLength(NAME_LENGTH - 1);
 
@@ -116,8 +116,8 @@ void CommandBriefingDialog::updateUi()
 	ui->actionChangeTeams->setCurrentIndex(ui->actionChangeTeams->findData(_model->getCurrentTeam()));
 
 	ui->actionBriefingTextEditor->setPlainText(_model->getBriefingText().c_str());
-	ui->animationFileName->setText(_model->getAnimationFilename().c_str());
-	ui->speechFileName->setText(_model->getSpeechFilename().c_str());
+	ui->animationFilename->setText(_model->getAnimationFilename().c_str());
+	ui->speechFilename->setText(_model->getSpeechFilename().c_str());
 	ui->actionLowResolutionFilenameEdit->setText(_model->getLowResolutionFilename().c_str());
 	ui->actionHighResolutionFilenameEdit->setText(_model->getHighResolutionFilename().c_str());
 
@@ -149,9 +149,9 @@ void CommandBriefingDialog::enableDisableControls()
 	ui->actionChangeTeams->setEnabled(_model->getMissionIsMultiTeam());
 	ui->actionCopyToOtherTeams->setEnabled(_model->getMissionIsMultiTeam());
 
-	ui->animationFileName->setEnabled(total_stages > 0);
+	ui->animationFilename->setEnabled(total_stages > 0);
 	ui->actionBrowseAnimation->setEnabled(total_stages > 0);
-	ui->speechFileName->setEnabled(total_stages > 0);
+	ui->speechFilename->setEnabled(total_stages > 0);
 	ui->actionBrowseSpeechFile->setEnabled(total_stages > 0);
 	ui->actionTestSpeechFileButton->setEnabled(total_stages > 0 && !_model->getSpeechFilename().empty());
 
@@ -343,12 +343,12 @@ void CommandBriefingDialog::changeSpeechFilename(const SCP_string& newFilename)
 	_dialogStack->push(cmd);
 }
 
-void CommandBriefingDialog::on_animationFileName_textChanged(const QString& string)
+void CommandBriefingDialog::on_animationFilename_textChanged(const QString& string)
 {
 	changeAnimationFilename(string.toUtf8().constData());
 }
 
-void CommandBriefingDialog::on_speechFileName_textChanged(const QString& string)
+void CommandBriefingDialog::on_speechFilename_textChanged(const QString& string)
 {
 	changeSpeechFilename(string.toUtf8().constData());
 }

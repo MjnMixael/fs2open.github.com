@@ -47,8 +47,8 @@ private slots:
 
 	void on_actionChangeTeams_currentIndexChanged(int index);
 	void on_actionBriefingTextEditor_textChanged();
-	void on_animationFileName_textChanged(const QString& string);
-	void on_speechFileName_textChanged(const QString& string);
+	void on_animationFilename_textChanged(const QString& string);
+	void on_speechFilename_textChanged(const QString& string);
 	void on_actionLowResolutionFilenameEdit_textChanged(const QString& string);
 	void on_actionHighResolutionFilenameEdit_textChanged(const QString& string);
 
