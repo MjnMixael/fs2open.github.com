@@ -1816,6 +1816,26 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 				cfread_string_len(sm->name, MAX_NAME_LEN, fp);		// get the name
 				cfread_string_len(props, MAX_PROP_LEN, fp);			// and the user properties
 
+				// designer-set default dimensions for a generated "nameplate" texture.  These
+				// live in a subobject's user properties (usually the detail0/root hull); an
+				// unknown token is simply skipped, so no POF version bump is required.
+				{
+					char np_buf[NAME_LENGTH];
+					char *np_p;
+					if (in(np_p, props, "$nameplate_width")) {
+						get_user_prop_value(np_p + 16, np_buf);		// strlen("$nameplate_width")
+						int val = atoi(np_buf);
+						if (val > 0)
+							pm->nameplate_width = val;
+					}
+					if (in(np_p, props, "$nameplate_height")) {
+						get_user_prop_value(np_p + 17, np_buf);		// strlen("$nameplate_height")
+						int val = atoi(np_buf);
+						if (val > 0)
+							pm->nameplate_height = val;
+					}
+				}
+
 				// Check for unrealistic radii
 				if ( sm->rad <= 0.00001f ) {
 					Warning(LOCATION, "Submodel <%s> in model <%s> has a radius <= 0.00001f\n", sm->name, filename);

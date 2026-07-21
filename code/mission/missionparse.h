@@ -397,6 +397,19 @@ typedef struct texture_replace {
 
 extern SCP_vector<texture_replace> Fred_texture_replacements;
 
+// Nameplate config for a ship's "nameplate" model texture slot - either a generated text
+// texture or a picked file.  Applies only to models that have a texture named "nameplate".
+typedef struct nameplate_info {
+	bool		enabled = false;			// feature active for this ship
+	bool		use_file = false;			// true = use texture_file; false = generate from text
+	SCP_string	text;						// generate mode: the string to render
+	SCP_string	font_filename;				// generate mode: font, stored by filename
+	float		font_scale = 1.0f;			// generate mode: gr_string scale multiplier
+	SCP_string	texture_file;				// file mode: replacement texture (bare name, no extension)
+	int			width = -1;					// per-instance override, -1 = use POF/default
+	int			height = -1;				// per-instance override, -1 = use POF/default
+} nameplate_info;
+
 // which ships have had the "immobile" flag migrated to "don't-change-position" and "don't-change-orientation"
 extern SCP_unordered_set<int> Fred_migrated_immobile_ships;
 
@@ -519,6 +532,9 @@ public:
 
 	// Goober5000
 	SCP_vector<texture_replace> replacement_textures;
+
+	// nameplate config for this ship's "nameplate" texture slot
+	nameplate_info nameplate;
 
 	SCP_vector<alt_class> alt_classes;	
 	SCP_map<std::pair<int, int>, int> alt_iff_color;

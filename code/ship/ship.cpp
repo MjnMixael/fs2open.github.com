@@ -24,9 +24,12 @@
 #include "gamesnd/eventmusic.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/alphacolors.h"
+#include "bmpman/bmpman.h"
 #include "graphics/light.h"
 #include "graphics/matrix.h"
+#include "graphics/nameplate.h"
 #include "graphics/shadows.h"
+#include "graphics/software/FontManager.h"
 #include "def_files/def_files.h"
 #include "globalincs/linklist.h"
 #include "hud/hud.h"
@@ -7068,6 +7071,9 @@ void ship::clear()
 
 	cockpit_model_instance = -1;
 
+	nameplate = nameplate_info();
+	nameplate_bm_handle = -1;
+
 	multi_client_collision_timestamp = TIMESTAMP::immediate();
 
 	passive_arc_next_times.clear();
@@ -7109,7 +7115,80 @@ void ship::apply_replacement_textures(const SCP_vector<texture_replace> &replace
 	}
 }
 
-void ship_weapon::clear() 
+void ship::apply_nameplate()
+{
+	// release any previously generated nameplate texture before (re)applying.  Only the
+	// generated (render-target) texture is owned here; file-based bitmaps are managed by bmpman
+	// like any other replacement texture, so they are not tracked in nameplate_bm_handle.
+	if (nameplate_bm_handle >= 0) {
+		bm_release(nameplate_bm_handle);
+		nameplate_bm_handle = -1;
+	}
+
+	if (!nameplate.enabled)
+		return;
+
+	auto pm = model_get(Ship_info[ship_info_index].model_num);
+
+	// find the "nameplate" texture slot on the model; bail if this model doesn't have one
+	int np_map = -1;
+	int np_tnum = -1;
+	for (int j = 0; j < pm->n_textures; j++) {
+		int tnum = pm->maps[j].FindTexture("nameplate");
+		if (tnum > -1) {
+			np_map = j;
+			np_tnum = tnum;
+			break;
+		}
+	}
+	if (np_map < 0)
+		return;
+
+	// resolve the bitmap to place in the nameplate slot, either from a file or generated from text
+	int bm = -1;
+	if (nameplate.use_file) {
+		if (nameplate.texture_file.empty())
+			return;
+		bm = bm_load_either(nameplate.texture_file.c_str());
+		if (bm < 0)
+			return;
+	} else {
+		if (nameplate.text.empty())
+			return;
+
+		// resolve dimensions: per-ship override, then POF default, then engine default
+		int width = (nameplate.width > 0) ? nameplate.width
+			: ((pm->nameplate_width > 0) ? pm->nameplate_width : NAMEPLATE_DEFAULT_WIDTH);
+		int height = (nameplate.height > 0) ? nameplate.height
+			: ((pm->nameplate_height > 0) ? pm->nameplate_height : NAMEPLATE_DEFAULT_HEIGHT);
+
+		// resolve the font by filename; -1 means "use whatever font is current"
+		int font_index = -1;
+		if (!nameplate.font_filename.empty())
+			font_index = font::FontManager::getFontIndexByFilename(nameplate.font_filename);
+
+		color text_color;
+		gr_init_color(&text_color, 255, 255, 255);
+
+		bm = nameplate_generate_texture(nameplate.text.c_str(), font_index, nameplate.font_scale, width, height, text_color);
+		if (bm < 0)
+			return;
+
+		// we own this generated bitmap and must free it later
+		nameplate_bm_handle = bm;
+	}
+
+	// inject the bitmap into the model instance's replacement array so the renderer draws it in
+	// place of the model's "nameplate" texture (no render-path changes required).  We only set
+	// the single nameplate slot, preserving any other replacement textures already applied.
+	polymodel_instance* pmi = model_get_instance(model_instance_num);
+	if (pmi->texture_replace == nullptr)
+		pmi->texture_replace = std::make_shared<model_texture_replace>();
+
+	(*pmi->texture_replace)[np_map * TM_NUM_TYPES + np_tnum] = bm;
+}
+
+void ship_weapon::clear()
 {
     flags.reset();
 
@@ -8614,6 +8693,12 @@ void ship_delete( object * obj )
 
 	// glow point banks
 	shipp->glow_point_bank_active.clear();
+
+	// free any nameplate texture we generated for this ship
+	if ( shipp->nameplate_bm_handle >= 0 ) {
+		bm_release(shipp->nameplate_bm_handle);
+		shipp->nameplate_bm_handle = -1;
+	}
 
 	if ( shipp->ship_list_index != -1 ) {
 		ship_obj_list_remove(shipp->ship_list_index);

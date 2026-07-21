@@ -136,6 +136,8 @@ add_file_folder("Source/Mission/Dialogs/ShipEditor"
 	src/mission/dialogs/ShipEditor/ShipSpecialStatsDialogModel.cpp
 	src/mission/dialogs/ShipEditor/ShipTextureReplacementDialogModel.h
 	src/mission/dialogs/ShipEditor/ShipTextureReplacementDialogModel.cpp
+	src/mission/dialogs/ShipEditor/NameplateDialogModel.h
+	src/mission/dialogs/ShipEditor/NameplateDialogModel.cpp
 	src/mission/dialogs/ShipEditor/ShipWeaponsDialogModel.cpp
 	src/mission/dialogs/ShipEditor/ShipWeaponsDialogModel.h
 	src/mission/dialogs/ShipEditor/ShipCustomWarpDialogModel.h
@@ -264,6 +266,8 @@ add_file_folder("Source/UI/Dialogs/ShipEditor"
 	src/ui/dialogs/ShipEditor/ShipSpecialStatsDialog.h
 	src/ui/dialogs/ShipEditor/ShipTextureReplacementDialog.h
 	src/ui/dialogs/ShipEditor/ShipTextureReplacementDialog.cpp
+	src/ui/dialogs/ShipEditor/NameplateDialog.h
+	src/ui/dialogs/ShipEditor/NameplateDialog.cpp
 	src/ui/dialogs/ShipEditor/ShipWeaponsDialog.cpp
 	src/ui/dialogs/ShipEditor/ShipWeaponsDialog.h
 	src/ui/dialogs/ShipEditor/ShipCustomWarpDialog.h
@@ -382,6 +386,7 @@ add_file_folder("UI"
 	ui/ShipSpecialStatsDialog.ui
 	ui/ShipFlagsDialog.ui
 	ui/ShipTextureReplacementDialog.ui
+	ui/NameplateDialog.ui
 	ui/ShipCustomWarpDialog.ui
 	ui/ShipAltShipClass.ui
 	ui/ShipWeaponsDialog.ui

@@ -501,12 +501,28 @@ void ShipEditorDialog::enableDisable()
 		ui->weaponsButton->setEnabled(false);
 		ui->miscButton->setEnabled(false);
 		ui->textureReplacementButton->setEnabled(false);
+		ui->nameplateButton->setEnabled(false);
 		ui->altShipClassButton->setEnabled(false);
 		ui->specialStatsButton->setEnabled(false);
 	}
 
 	// disable textures unless exactly one ship/player is selected
 	ui->textureReplacementButton->setEnabled(_model->getNumSelectedObjects() == 1);
+
+	// the nameplate editor is only available for a single ship whose model has a "nameplate" slot
+	{
+		bool hasNameplate = false;
+		if (_model->getNumSelectedObjects() == 1 && _viewport->editor->cur_ship >= 0) {
+			polymodel* pm = model_get(Ship_info[Ships[_viewport->editor->cur_ship].ship_info_index].model_num);
+			for (int j = 0; j < pm->n_textures; ++j) {
+				if (pm->maps[j].FindTexture("nameplate") > -1) {
+					hasNameplate = true;
+					break;
+				}
+			}
+		}
+		ui->nameplateButton->setEnabled(hasNameplate);
+	}
 
 	ui->AIClassCombo->setEnabled(_model->getUIEnable());
 	ui->cargoCombo->setEnabled(_model->getUIEnable());
@@ -635,6 +651,13 @@ void ShipEditorDialog::callsignChanged()
 void ShipEditorDialog::on_textureReplacementButton_clicked()
 {
 	auto dialog = new dialogs::ShipTextureReplacementDialog(this, _viewport, getIfMultipleShips());
+	dialog->setAttribute(Qt::WA_DeleteOnClose);
+	dialog->show();
+}
+
+void ShipEditorDialog::on_nameplateButton_clicked()
+{
+	auto dialog = new dialogs::NameplateDialog(this, _viewport);
 	dialog->setAttribute(Qt::WA_DeleteOnClose);
 	dialog->show();
 }

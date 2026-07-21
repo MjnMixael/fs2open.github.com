@@ -4280,7 +4280,8 @@ int Fred_mission_save::save_objects()
 			fso_comment_push(";;FSO 3.6.8;;");
 
 			for (auto& ii : Fred_texture_replacements) {
-				if (!stricmp(shipp->ship_name, ii.ship_name) && !(ii.from_table)) {
+				// the "nameplate" slot is written via the dedicated $Nameplate: block below
+				if (!stricmp(shipp->ship_name, ii.ship_name) && !(ii.from_table) && stricmp(ii.old_texture, "nameplate")) {
 					if (needs_header) {
 						if (optional_string_fred("$Texture Replace:")) {
 							parse_comments(1);
@@ -4314,6 +4315,78 @@ int Fred_mission_save::save_objects()
 		}
 
 		// end of texture replacement -------------------------------
+
+		// nameplate ------------------------------------------------
+		if (shipp->nameplate.enabled) {
+			fso_comment_push(";;FSO 25.0.0;;");
+
+			if (optional_string_fred("$Nameplate:", "$Name:")) {
+				parse_comments(1);
+			} else {
+				fout_version("\n$Nameplate:");
+			}
+
+			if (optional_string_fred("+Mode:", "$Name:")) {
+				parse_comments(1);
+				fout(" %s", shipp->nameplate.use_file ? "file" : "generate");
+			} else {
+				fout_version("\n\t+Mode: %s", shipp->nameplate.use_file ? "file" : "generate");
+			}
+
+			if (shipp->nameplate.use_file) {
+				if (!shipp->nameplate.texture_file.empty()) {
+					if (optional_string_fred("+Texture:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", shipp->nameplate.texture_file.c_str());
+					} else {
+						fout_version("\n\t+Texture: %s", shipp->nameplate.texture_file.c_str());
+					}
+				}
+			} else {
+				if (!shipp->nameplate.text.empty()) {
+					if (optional_string_fred("+Text:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", shipp->nameplate.text.c_str());
+					} else {
+						fout_version("\n\t+Text: %s", shipp->nameplate.text.c_str());
+					}
+				}
+				if (!shipp->nameplate.font_filename.empty()) {
+					if (optional_string_fred("+Font:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", shipp->nameplate.font_filename.c_str());
+					} else {
+						fout_version("\n\t+Font: %s", shipp->nameplate.font_filename.c_str());
+					}
+				}
+				if (optional_string_fred("+Font Scale:", "$Name:")) {
+					parse_comments(1);
+					fout(" %.2f", shipp->nameplate.font_scale);
+				} else {
+					fout_version("\n\t+Font Scale: %.2f", shipp->nameplate.font_scale);
+				}
+			}
+
+			if (shipp->nameplate.width > 0) {
+				if (optional_string_fred("+Width:", "$Name:")) {
+					parse_comments(1);
+					fout(" %d", shipp->nameplate.width);
+				} else {
+					fout_version("\n\t+Width: %d", shipp->nameplate.width);
+				}
+			}
+			if (shipp->nameplate.height > 0) {
+				if (optional_string_fred("+Height:", "$Name:")) {
+					parse_comments(1);
+					fout(" %d", shipp->nameplate.height);
+				} else {
+					fout_version("\n\t+Height: %d", shipp->nameplate.height);
+				}
+			}
+
+			fso_comment_pop();
+		}
+		// end of nameplate -----------------------------------------
 
 		fso_comment_pop();
 	}

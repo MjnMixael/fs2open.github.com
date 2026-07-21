@@ -903,7 +903,12 @@ public:
 	// texture maps for model
 	int n_textures;
 	texture_map	maps[MAX_MODEL_TEXTURES];
-	
+
+	// designer-set default size (in pixels) for a generated "nameplate" texture, read from
+	// POF subobject user properties ($nameplate_width / $nameplate_height).  -1 = unset.
+	int nameplate_width = -1;
+	int nameplate_height = -1;
+
 	std::shared_ptr<bsp_info[]> submodel;							// an array of size n_models of submodel info.
 
 	// linked lists for special polygon types on this model.  Most ships I think will have most

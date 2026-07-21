@@ -469,6 +469,8 @@ add_file_folder("Graphics"
 	graphics/openxr.cpp
 	graphics/openxr.h
 	graphics/openxr_internal.h
+	graphics/nameplate.cpp
+	graphics/nameplate.h
 	graphics/post_processing.cpp
 	graphics/post_processing.h
 	graphics/render.cpp

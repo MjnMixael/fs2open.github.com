@@ -901,6 +901,10 @@ public:
 
 	int cockpit_model_instance;
 
+	// nameplate config + the runtime bitmap generated for it (-1 if none / file-based)
+	nameplate_info nameplate;
+	int nameplate_bm_handle = -1;
+
 	TIMESTAMP	multi_client_collision_timestamp;
 
 	enum warpstage {
@@ -944,6 +948,9 @@ public:
 	bool has_display_name() const;
 
 	void apply_replacement_textures(const SCP_vector<texture_replace> &replacements);
+
+	// generate/apply the nameplate texture (from nameplate config) onto this ship's model instance
+	void apply_nameplate();
 };
 
 struct ai_target_priority {
