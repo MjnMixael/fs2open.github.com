@@ -9,26 +9,46 @@
 <nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; Custom Data</nav>
 <h1>Custom Data</h1>
 <p>Accessed via <strong>Custom Data</strong> in the
-<a href="MissionSpecsDialog.html">Mission Specs</a> dialog or the
-<a href="CampaignEditorDialog.html">Campaign Editor</a>.</p>
-<p>Attaches arbitrary key-value string pairs to a mission or campaign. Custom data
-has no built-in effect on gameplay; it is intended to be read by Lua scripts that
-know to look for specific keys.</p>
+<a href="MissionSpecsDialog.html">Mission Specs</a> dialog, the
+<a href="CampaignEditorDialog.html">Campaign Editor</a>, or the
+<a href="ShipEditorDialog.html">Ship Editor</a>.</p>
+<p>Attaches arbitrary key-value pairs to a mission, campaign, or ship. Custom data has
+no built-in effect on gameplay; it is intended to be read by Lua scripts and SEXPs that
+know to look for specific keys. See <a href="../concepts/custom-data.html">Custom
+Data</a> in Concepts for the full picture, including how per-domain schemas are
+defined.</p>
 
-<h2>Pre-defined keys</h2>
-<p>Lua scripts can register expected custom data keys by calling
-<code>mn.addDefaultCustomData(key, defaultValue, description)</code>. When a
-mission is opened in FRED, any registered key that is not already present in the
-mission is automatically added with its default value. This ensures the expected
-entries exist without the mission designer having to create them by hand.</p>
-<p>The <strong>Description</strong> box on the left of the dialog shows the
-description the script author provided for whichever entry is currently selected.
-If the selected key is not one registered by a script, the box reads
-<em>No help text provided</em>.</p>
+<h2>Schemas and pre-defined keys</h2>
+<p>An editor-defined schema (from <code>editor.tbl</code>) or a script calling
+<code>mn.addDefaultCustomData(key, defaultValue, description)</code> can register the
+keys an editor is expected to use. Registered keys drive three conveniences in this
+dialog:</p>
+<ul>
+    <li>The <strong>Key</strong> field auto-completes registered key names.</li>
+    <li>The value editor adapts to the key's declared type (see below).</li>
+    <li>The <strong>Description</strong> box shows the description registered for the
+        selected key, or <em>No help text provided</em> if none was registered.</li>
+</ul>
+<p>When no schema applies, every entry is treated as a free-form string. For the mission
+domain, any registered key not already present is added automatically when the mission
+is opened, so the expected entries exist without being created by hand.</p>
+
+<h2>Type-aware value editing</h2>
+<table>
+    <tr><th>Type</th><th>Value control</th></tr>
+    <tr><td><code>string</code> (or unregistered)</td><td>A plain text field.</td></tr>
+    <tr><td><code>int</code></td><td>A text field that only accepts whole
+        numbers.</td></tr>
+    <tr><td><code>bool</code></td><td>A drop-down offering <code>true</code> or
+        <code>false</code>.</td></tr>
+</table>
+<p>Click <strong>Reset</strong> to restore the value editor to the selected key's
+schema default. Reset is available only for keys that have a registered default.</p>
 
 <h2>Adding an entry</h2>
 <p>Fill in the <strong>Key</strong> and <strong>Value</strong> fields and click
-<strong>Add</strong> to create a new entry.</p>
+<strong>Add</strong> to create a new entry. Values are validated against the key's type
+before being added.</p>
 
 <h2>Editing an entry</h2>
 <p>Select an entry in the list to load it into the Key and Value fields. Modify the

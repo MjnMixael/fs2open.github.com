@@ -8,7 +8,79 @@
 <body>
 <nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; Concepts &rsaquo; Custom Data</nav>
 <h1>Custom Data</h1>
+<p>Custom data attaches arbitrary key-value pairs to a mission, a campaign, or an
+individual ship. It has no built-in effect on gameplay; it exists to be read by Lua
+scripts or SEXPs that know to look for specific keys. Values are stored as strings.</p>
 
-<div class="stub-notice">Full documentation for this concept is not yet written.</div>
+<h2>Domains</h2>
+<table>
+    <tr><th>Domain</th><th>Attached to</th><th>Edited via</th></tr>
+    <tr><td>Mission</td><td>The mission</td><td><a href="../dialogs/MissionSpecsDialog.html">Mission Specs</a>
+        &rsaquo; <a href="../dialogs/CustomDataDialog.html">Custom Data</a></td></tr>
+    <tr><td>Campaign</td><td>The campaign</td><td><a href="../dialogs/CampaignEditorDialog.html">Campaign Editor</a>
+        &rsaquo; <a href="../dialogs/CustomDataDialog.html">Custom Data</a></td></tr>
+    <tr><td>Ship</td><td>A single ship instance</td><td><a href="../dialogs/ShipEditorDialog.html">Ship Editor</a>
+        &rsaquo; <a href="../dialogs/CustomDataDialog.html">Custom Data</a></td></tr>
+</table>
+<p>Per-ship custom data is saved to the mission file in a <code>$begin_custom_data</code>
+&hellip; <code>$end_custom_data</code> block on the ship. Scripts read a ship's data
+through the ship object's custom-data methods, and SEXPs such as
+<code>ship-custom-data-get-int</code> and <code>ship-custom-data-set</code> read and
+write it during the mission.</p>
+
+<h2>Editor-defined schemas</h2>
+<p>A schema declares the keys an editor is <em>expected</em> to use, along with a type,
+an optional default, and an optional description. Declaring a schema is optional &mdash;
+without one the dialog treats every entry as a free-form string &mdash; but a schema
+gives the <a href="../dialogs/CustomDataDialog.html">Custom Data</a> dialog type-aware
+value controls, help text, and reset-to-default support.</p>
+<p>Schemas are defined in <code>editor.tbl</code> (or any modular
+<code>*-edt.tbm</code>), in one section per domain. Sections may appear in any order,
+and any subset may be present:</p>
+<pre>#MissionCustomData
+	+Key:         music_track
+	+Type:        string
+	+Default:     Aquitaine
+	+Description: Name of the ambient track this mission requests.
+
+	+Key:         intro_seen
+	+Type:        bool
+	+Default:     false
+#End
+
+#CampaignCustomData
+	+Key:         starting_credits
+	+Type:        int
+	+Default:     5000
+#End
+
+#ShipCustomData
+	+Key:         escort_priority
+	+Type:        int
+	+Default:     0
+	+Description: Higher values are escorted first by allied AI.
+#End</pre>
+<table>
+    <tr><th>Field</th><th>Required</th><th>Notes</th></tr>
+    <tr><td><code>+Key:</code></td><td>Yes</td><td>The key name.</td></tr>
+    <tr><td><code>+Type:</code></td><td>Yes</td><td><code>string</code>, <code>int</code>,
+        or <code>bool</code>. An unrecognized type produces a warning and falls back to
+        <code>string</code>.</td></tr>
+    <tr><td><code>+Default:</code></td><td>No</td><td>Value used by the dialog's
+        <strong>Reset</strong> button, and &mdash; for mission keys only &mdash; the value
+        seeded into new missions (see below). Omitted defaults are empty.</td></tr>
+    <tr><td><code>+Description:</code></td><td>No</td><td>Shown as help text in the dialog
+        when the key is selected.</td></tr>
+</table>
+
+<h2>Mission keys and defaults</h2>
+<p>When a mission is opened in FRED, any mission-domain key that is not already present
+in the mission is automatically added with its default value, so the expected entries
+exist without the designer creating them by hand. Campaign and ship entries are
+<em>not</em> auto-added; use the dialog's schema assistance to add them where needed.</p>
+<p>Scripts can also register mission-domain keys at runtime by calling
+<code>mn.addDefaultCustomData(key, defaultValue, description)</code>. Script-registered
+keys are always treated as <code>string</code>, and, like all defaults, are a FRED-only
+convenience that never affects gameplay directly.</p>
 </body>
 </html>
