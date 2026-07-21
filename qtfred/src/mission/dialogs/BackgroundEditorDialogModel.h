@@ -100,17 +100,17 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	// and translate a drag into new PBH angles.
 
 	// counts of elements in the active background
-	int getSunCount() const;
-	int getBitmapCount() const;
+	static int getSunCount();
+	static int getBitmapCount();
 
 	// world-space unit direction that an element points at, derived from its
 	// stored PBH angles. Returns false if the index is out of range.
-	bool getSunDirection(int index, vec3d& dir) const;
-	bool getBitmapDirection(int index, vec3d& dir) const;
+	static bool getSunDirection(int index, vec3d& dir);
+	static bool getBitmapDirection(int index, vec3d& dir);
 
 	// names by index (for viewport handle labels)
-	SCP_string getSunNameAt(int index) const;
-	SCP_string getBitmapNameAt(int index) const;
+	static SCP_string getSunNameAt(int index);
+	static SCP_string getBitmapNameAt(int index);
 
 	// select an element from the viewport (updates the selection and syncs
 	// the dialog UI via modelDataChanged); index -1 clears.

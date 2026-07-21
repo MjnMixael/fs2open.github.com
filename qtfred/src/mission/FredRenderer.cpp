@@ -912,10 +912,6 @@ void FredRenderer::draw_background_handles()
 	const int selectedSun = model->getSelectedSunIndex();
 	const int selectedBitmap = model->getSelectedBitmapIndex();
 
-	// Same reference distance the viewport uses for picking; backgrounds are at
-	// infinity so only the direction matters for the projected screen position.
-	constexpr float handle_distance = 1000.0f;
-
 	auto draw_one = [&](bool isSun, int index, bool selected) {
 		vec3d dir;
 		const bool ok = isSun ? model->getSunDirection(index, dir)
@@ -925,7 +921,7 @@ void FredRenderer::draw_background_handles()
 		}
 
 		vec3d world;
-		vm_vec_scale_add(&world, &_viewport->camera.eye_pos, &dir, handle_distance);
+		vm_vec_scale_add(&world, &_viewport->camera.eye_pos, &dir, BG_HANDLE_DISTANCE);
 
 		vertex vt;
 		g3_rotate_vertex(&vt, &world);

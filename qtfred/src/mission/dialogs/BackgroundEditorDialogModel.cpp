@@ -984,17 +984,17 @@ void bg_point_angles_at(angles& ang, const vec3d& dir)
 }
 } // namespace
 
-int BackgroundEditorDialogModel::getSunCount() const
+int BackgroundEditorDialogModel::getSunCount()
 {
 	return static_cast<int>(getActiveBackground().suns.size());
 }
 
-int BackgroundEditorDialogModel::getBitmapCount() const
+int BackgroundEditorDialogModel::getBitmapCount()
 {
 	return static_cast<int>(getActiveBackground().bitmaps.size());
 }
 
-bool BackgroundEditorDialogModel::getSunDirection(int index, vec3d& dir) const
+bool BackgroundEditorDialogModel::getSunDirection(int index, vec3d& dir)
 {
 	auto& list = getActiveBackground().suns;
 	if (!SCP_vector_inbounds(list, index))
@@ -1003,7 +1003,7 @@ bool BackgroundEditorDialogModel::getSunDirection(int index, vec3d& dir) const
 	return true;
 }
 
-bool BackgroundEditorDialogModel::getBitmapDirection(int index, vec3d& dir) const
+bool BackgroundEditorDialogModel::getBitmapDirection(int index, vec3d& dir)
 {
 	auto& list = getActiveBackground().bitmaps;
 	if (!SCP_vector_inbounds(list, index))
@@ -1012,7 +1012,7 @@ bool BackgroundEditorDialogModel::getBitmapDirection(int index, vec3d& dir) cons
 	return true;
 }
 
-SCP_string BackgroundEditorDialogModel::getSunNameAt(int index) const
+SCP_string BackgroundEditorDialogModel::getSunNameAt(int index)
 {
 	auto& list = getActiveBackground().suns;
 	if (!SCP_vector_inbounds(list, index))
@@ -1020,7 +1020,7 @@ SCP_string BackgroundEditorDialogModel::getSunNameAt(int index) const
 	return list[index].filename;
 }
 
-SCP_string BackgroundEditorDialogModel::getBitmapNameAt(int index) const
+SCP_string BackgroundEditorDialogModel::getBitmapNameAt(int index)
 {
 	auto& list = getActiveBackground().bitmaps;
 	if (!SCP_vector_inbounds(list, index))

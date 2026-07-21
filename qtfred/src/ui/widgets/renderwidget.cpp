@@ -173,6 +173,10 @@ void RenderWidget::keyPressEvent(QKeyEvent* key) {
 			if (auto* bgModel = _viewport->backgroundEditModel()) {
 				const auto sel = dialogs::BackgroundEditorDialogModel::restoreGlobalState(_bgDragBefore, fred);
 				bgModel->applyRestoredSelection(sel.first, sel.second);
+			} else {
+				// Dialog closed mid-drag: still revert so the partial move doesn't
+				// linger with no way to undo it.
+				dialogs::BackgroundEditorDialogModel::restoreGlobalState(_bgDragBefore, fred);
 			}
 		}
 		_bgDragBefore.clear();
@@ -290,8 +294,8 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 			_bgMoved = false;
 			_bgLastMouse = event->pos();
 			_viewport->on_object = -1;
-			_viewport->moved = 0;
-			_viewport->button_down = 1;
+			_viewport->moved = false;
+			_viewport->button_down = true;
 			_viewport->needsUpdate();
 			event->accept();
 			return;
@@ -418,6 +422,34 @@ void RenderWidget::wheelEvent(QWheelEvent* event)
 	event->accept();
 }
 
+void RenderWidget::finalizeBackgroundDrag() {
+	_bgDragging = false;
+	_viewport->end_background_drag();
+	_viewport->button_down = false;
+
+	if (_bgMoved) {
+		if (auto* bgModel = _viewport->backgroundEditModel()) {
+			const QByteArray after = bgModel->captureState();
+			if (after != _bgDragBefore) {
+				const QString text = (_viewport->Editing_mode == CursorMode::Rotating)
+				                         ? tr("Rotate Background Element")
+				                         : tr("Move Background Element");
+				_fredView->mainUndoStack()->push(
+				    new dialogs::BackgroundEditCommand(bgModel, fred, _bgDragBefore, after, -1, text));
+			}
+		} else {
+			// The dialog went away mid-drag, so we can't record an undo step for
+			// the partial move. Revert to the pre-drag state (static path, no
+			// model instance needed) rather than leaving an un-undoable change.
+			dialogs::BackgroundEditorDialogModel::restoreGlobalState(_bgDragBefore, fred);
+		}
+	}
+
+	_bgDragBefore.clear();
+	_bgMoved = false;
+	_viewport->needsUpdate();
+}
+
 void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 	auto mouseDX = event->pos() - _lastMouse;
 	_lastMouse = event->pos();
@@ -445,7 +477,11 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 	// Background-element drag: re-point (Move) or bank (Rotate) the grabbed handle.
 	if (_bgDragging) {
 		if (!event->buttons().testFlag(Qt::LeftButton)) {
-			return; // button released off-widget; release handler will finalize
+			// The button came up without a release reaching us (e.g. the mouse
+			// grab was stolen mid-drag). Finalize now so we don't get stuck in
+			// background-drag mode.
+			finalizeBackgroundDrag();
+			return;
 		}
 		const int bx = event->position().x() * _window->devicePixelRatio();
 		const int by = event->position().y() * _window->devicePixelRatio();
@@ -530,29 +566,7 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 	// Finalize a background-element drag: a genuine move produces one undo step;
 	// a click with no drag just leaves the new selection in place.
 	if (_bgDragging) {
-		_bgDragging = false;
-		_viewport->end_background_drag();
-		_viewport->button_down = false;
-
-		if (_bgMoved) {
-			if (auto* bgModel = _viewport->backgroundEditModel()) {
-				const QByteArray after = bgModel->captureState();
-				if (after != _bgDragBefore) {
-					_fredView->mainUndoStack()->push(
-					    new dialogs::BackgroundEditCommand(bgModel, fred, _bgDragBefore, after,
-					                                       -1, tr("Move Background Element")));
-				}
-			} else {
-				// The dialog went away mid-drag, so we can't record an undo step for
-				// the partial move. Revert to the pre-drag state (static path, no
-				// model instance needed) rather than leaving an un-undoable change.
-				dialogs::BackgroundEditorDialogModel::restoreGlobalState(_bgDragBefore, fred);
-			}
-		}
-
-		_bgDragBefore.clear();
-		_bgMoved = false;
-		_viewport->needsUpdate();
+		finalizeBackgroundDrag();
 		event->accept();
 		return;
 	}

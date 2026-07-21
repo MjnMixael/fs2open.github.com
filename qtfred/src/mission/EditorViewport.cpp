@@ -1845,12 +1845,8 @@ void EditorViewport::view_object(int obj_num) {
 }
 
 // --- Background element mouse editing ---------------------------------------
-
-// Distance (in eye space) at which we place a background element's handle so it
-// projects to the correct screen direction. Backgrounds are effectively at
-// infinity, so the exact value only needs to be safely in front of the near
-// plane; the screen position depends only on direction.
-static const float BG_HANDLE_DISTANCE = 1000.0f;
+// The handle placement distance (BG_HANDLE_DISTANCE) is shared with the
+// renderer via EditorViewport.h so picking and drawing stay aligned.
 
 void EditorViewport::setBackgroundEditModel(dialogs::BackgroundEditorDialogModel* model)
 {
@@ -1963,6 +1959,7 @@ void EditorViewport::rotate_background_element(int mouse_dx)
 void EditorViewport::end_background_drag()
 {
 	_bgDragIndex = -1;
+	_bgDragIsSun = false;
 }
 
 } // namespace fso::fred

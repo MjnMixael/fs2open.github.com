@@ -72,6 +72,11 @@ class RenderWidget: public QWidget {
 
 	void handleOrbitDrag(QPoint point, Qt::KeyboardModifiers modifiers);
 
+	// Commit an in-progress background-element drag: push one undo command (or
+	// revert if the dialog closed mid-drag) and clear the drag state. Shared by
+	// the release handler and the "button released off-widget" recovery path.
+	void finalizeBackgroundDrag();
+
 	// Ctrl+drag clone tracking — set on press, consumed on release.
 	bool            _wasDupDrag              = false;
 	bool            _wasInsertDrag           = false;
