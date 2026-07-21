@@ -185,6 +185,16 @@
           </widget>
          </item>
          <item>
+          <widget class="QPushButton" name="nameplateButton">
+           <property name="toolTip">
+            <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Edit this ship's nameplate (only available if the model has a &quot;nameplate&quot; texture)&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
+           </property>
+           <property name="text">
+            <string>Nameplate</string>
+           </property>
+          </widget>
+         </item>
+         <item>
           <widget class="QPushButton" name="customDataButton">
            <property name="toolTip">
             <string>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;Edit this ship's custom data key/value pairs&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</string>
