@@ -49,7 +49,11 @@ void PropTextureReplacementDialogModel::initializeData()
 		return;
 
 	polymodel_instance* pmi = model_get_instance(propp->model_instance_num);
+	if (pmi == nullptr)
+		return;
 	polymodel* pm = model_get(pmi->model_num);
+	if (pm == nullptr)
+		return;
 
 	_defaultTextures.clear();
 	_defaultTextures.resize(pm->n_textures);

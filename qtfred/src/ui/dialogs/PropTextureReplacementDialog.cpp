@@ -85,8 +85,14 @@ PropTextureReplacementDialog::PropTextureReplacementDialog(QDialog* parent, Edit
 	ui->TexturesList->setModel(_listModel);
 	QItemSelectionModel* selectionModel = ui->TexturesList->selectionModel();
 	connect(selectionModel, &QItemSelectionModel::selectionChanged, this, &PropTextureReplacementDialog::updateUiFull);
-	QModelIndex index = _listModel->index(0);
-	ui->TexturesList->setCurrentIndex(index);
+	// Select the first non-empty row. Blank/duplicate texture slots are sized into the model but
+	// left empty (and hidden via SizeHintRole); selecting one would edit an empty old_texture.
+	for (int row = 0; row < _listModel->rowCount(); ++row) {
+		if (!_model->getDefaultName(static_cast<size_t>(row)).empty()) {
+			ui->TexturesList->setCurrentIndex(_listModel->index(row));
+			break;
+		}
+	}
 
 	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &PropTextureReplacementDialog::updateUi);
 
