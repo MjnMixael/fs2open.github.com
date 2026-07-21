@@ -1907,9 +1907,10 @@ bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int&
 		}
 	};
 
-	// Suns take priority over bitmaps on a tie since they are the smaller target.
-	test_list(false, _bgEditModel->getBitmapCount());
+	// Test suns first so they win an exact tie: they are the smaller target and
+	// usually sit in front of large bitmaps (the pick uses a strict < compare).
 	test_list(true, _bgEditModel->getSunCount());
+	test_list(false, _bgEditModel->getBitmapCount());
 
 	if (best_index < 0) {
 		return false;

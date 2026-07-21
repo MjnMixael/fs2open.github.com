@@ -146,7 +146,6 @@ class EditorViewport {
 	void drag_background_element(int x, int y);
 	void rotate_background_element(int mouse_dx);
 	void end_background_drag();
-	bool background_drag_active() const { return _bgDragIndex >= 0; }
 
 	SCP_vector<SCP_string> getLayerNames() const;
 	bool addLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
@@ -269,7 +268,6 @@ private:
 	// active background (which list is chosen by _bgDragIsSun).
 	int  _bgDragIndex = -1;
 	bool _bgDragIsSun = false;
-
 
 	fix _lasttime = 0;
 	vec3d Last_control_pos = vmd_zero_vector;
