@@ -18,6 +18,7 @@
 #include <QButtonGroup>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QTextCursor>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDebug>
@@ -309,6 +310,25 @@ void MissionEventsDialog::initViewToggle()
 	ui->advancedTextEdit->setFont(mono);
 	ui->advancedErrorList->setFont(mono);
 
+	// Find controls: the search box is dual-purpose (filter in tree view,
+	// find-in-text in advanced view); the arrows step through matches.
+	fso::fred::bindStandardIcon(ui->btnFindPrev, QStyle::SP_ArrowUp);
+	fso::fred::bindStandardIcon(ui->btnFindNext, QStyle::SP_ArrowDown);
+
+	connect(ui->eventSearchEdit, &QLineEdit::returnPressed, this, [this] {
+		if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
+			findInAdvancedText(/*forward=*/true, /*incremental=*/false);
+	});
+
+	// Ctrl+F focuses the search box for whichever view is active.
+	auto* findShortcut = new QShortcut(QKeySequence::Find, this);
+	connect(findShortcut, &QShortcut::activated, this, [this] {
+		if (ui->eventSearchEdit->isEnabled()) {
+			ui->eventSearchEdit->setFocus();
+			ui->eventSearchEdit->selectAll();
+		}
+	});
+
 	// Restore the view used last time this session. A view whose button is
 	// disabled (currently the graph view) can't be restored into.
 	int view = s_lastEventViewIndex;
@@ -382,6 +402,15 @@ void MissionEventsDialog::setCurrentEventView(int index)
 		btn->setChecked(true);
 	}
 
+	// The search box is per-view (filter vs. find), so start each view visit
+	// with an empty box rather than carrying the other view's term over.
+	// Blocked so this doesn't run a filter/find before the view is set up.
+	{
+		QSignalBlocker blocker(ui->eventSearchEdit);
+		ui->eventSearchEdit->clear();
+	}
+	applyEventFilter();
+
 	// Regenerate the section text whenever the advanced view becomes current.
 	if (index == AdvancedViewIndex)
 		loadAdvancedText();
@@ -429,12 +458,33 @@ void MissionEventsDialog::on_btnValidateEvents_clicked()
 void MissionEventsDialog::applyViewChrome(int index)
 {
 	const bool treeView = (index == TreeViewIndex);
+	const bool advancedView = (index == AdvancedViewIndex);
 
-	// The search field filters tree items, and the whole event-controls
-	// column acts on the tree selection/order — disable it wholesale
-	// (labels included) outside the tree view.
-	ui->eventSearchEdit->setEnabled(treeView);
+	// The search box filters in tree view and finds-in-text in advanced view;
+	// its placeholder follows suit. Disabled in the graph view (neither).
+	ui->eventSearchEdit->setEnabled(treeView || advancedView);
+	ui->eventSearchEdit->setPlaceholderText(advancedView ? tr("Find text...") : tr("Filter by name..."));
+
+	// The find arrows only apply to the advanced text; hide them elsewhere
+	// (they, like the validation panel, are advanced-view-only chrome).
+	ui->btnFindPrev->setVisible(advancedView);
+	ui->btnFindNext->setVisible(advancedView);
+	ui->btnFindPrev->setEnabled(advancedView);
+	ui->btnFindNext->setEnabled(advancedView);
+
+	// The whole event-controls column acts on the tree selection/order —
+	// disable it wholesale (labels included) outside the tree view.
 	ui->eventControlsContainer->setEnabled(treeView);
+
+	// The sexp help panels describe the selected tree node, so they're
+	// meaningless outside the tree view: clear them on the way out and
+	// recompute for the current selection when the tree view returns.
+	if (treeView) {
+		ui->eventTree->update_help(ui->eventTree->currentItem());
+	} else {
+		ui->miniHelpBox->clear();
+		ui->helpBox->clear();
+	}
 
 	// The per-event fields key off the tree selection; updateEventUi()
 	// disables them whenever the tree view isn't current.
@@ -963,6 +1013,12 @@ void MissionEventsDialog::applyMessageFilter()
 
 void MissionEventsDialog::on_eventSearchEdit_textChanged(const QString& /*text*/)
 {
+	// In the advanced view the box is a find-as-you-type field over the text.
+	if (ui->eventViewStack->currentIndex() == AdvancedViewIndex) {
+		findInAdvancedText(/*forward=*/true, /*incremental=*/true);
+		return;
+	}
+
 	applyEventFilter();
 
 	// Deselect if the current item's event got filtered out, so the event
@@ -977,6 +1033,49 @@ void MissionEventsDialog::on_eventSearchEdit_textChanged(const QString& /*text*/
 		_model->setCurrentlySelectedEvent(-1);
 		updateEventUi();
 	}
+}
+
+void MissionEventsDialog::findInAdvancedText(bool forward, bool incremental)
+{
+	auto* edit = ui->advancedTextEdit;
+	const QString term = ui->eventSearchEdit->text();
+	if (term.isEmpty()) {
+		// Drop any highlighted match so an emptied box doesn't look "stuck".
+		QTextCursor c = edit->textCursor();
+		c.clearSelection();
+		edit->setTextCursor(c);
+		return;
+	}
+
+	// While typing, re-search from the start of the current match so the
+	// selection grows in place instead of jumping to the next occurrence.
+	if (incremental) {
+		QTextCursor c = edit->textCursor();
+		c.setPosition(c.selectionStart());
+		edit->setTextCursor(c);
+	}
+
+	QTextDocument::FindFlags flags;
+	if (!forward)
+		flags |= QTextDocument::FindBackward;
+
+	if (!edit->find(term, flags)) {
+		// Wrap around: retry from the far end.
+		QTextCursor c = edit->textCursor();
+		c.movePosition(forward ? QTextCursor::Start : QTextCursor::End);
+		edit->setTextCursor(c);
+		edit->find(term, flags);
+	}
+}
+
+void MissionEventsDialog::on_btnFindNext_clicked()
+{
+	findInAdvancedText(/*forward=*/true, /*incremental=*/false);
+}
+
+void MissionEventsDialog::on_btnFindPrev_clicked()
+{
+	findInAdvancedText(/*forward=*/false, /*incremental=*/true);
 }
 
 void MissionEventsDialog::on_messageSearchEdit_textChanged(const QString& /*text*/)

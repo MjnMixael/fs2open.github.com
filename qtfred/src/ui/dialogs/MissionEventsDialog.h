@@ -77,6 +77,8 @@ private slots:
 	void on_messageSearchEdit_textChanged(const QString& text);
 
 	void on_btnValidateEvents_clicked();
+	void on_btnFindPrev_clicked();
+	void on_btnFindNext_clicked();
 
 	void on_messageList_currentRowChanged(int row);
 	void on_messageList_itemDoubleClicked(QListWidgetItem* item);
@@ -145,6 +147,10 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	// Advanced Edit view helpers.
 	void loadAdvancedText();
 	void showAdvancedResults(const SCP_vector<SCP_string>& errors, const SCP_vector<SCP_string>& warnings);
+	// Find-in-text for the advanced editor. incremental=true re-searches from
+	// the start of the current match (used while typing) so the selection
+	// refines in place; otherwise it steps to the next/previous match.
+	void findInAdvancedText(bool forward, bool incremental);
 
 	// Baseline text shown when the Advanced view was last (re)loaded; an
 	// unchanged editor commits nothing.
