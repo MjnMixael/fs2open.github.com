@@ -40,6 +40,7 @@ enum class CustomIcon {
 	MoveToBottom,
 	MoveToLeft,
 	MoveToRight,
+	Settings, // a cog / gear
 };
 
 // Draw a palette-aware icon for a CustomIcon using QPainter.

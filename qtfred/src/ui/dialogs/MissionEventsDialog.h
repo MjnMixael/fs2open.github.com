@@ -1,6 +1,7 @@
 #pragma once
 
 #include "mission/dialogs/MissionEventsDialogModel.h"
+#include "mission/dialogs/EventReferenceIndex.h"
 #include "ui/FredView.h"
 
 #include <QDialog>
@@ -143,6 +144,17 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void setCurrentEventView(int index);
 	bool canLeaveEventView(int index);
 	void applyViewChrome(int index);
+
+	// Graph view (relationship visualizer).
+	void initGraphView();
+	void rebuildReferenceIndex();
+	void refreshGraphView();
+	void selectEventInTree(int eventIndex); // select the event's root, no view switch
+	void jumpToEventInTree(int eventIndex);  // switch to tree view, then select
+	void jumpToNodeInTree(int treeNode);     // switch to tree view, then hilite the node
+
+	EventReferenceIndex _refIndex;
+	bool _graphDirty = true; // graph needs a rebuild (events changed since last build)
 
 	// Advanced Edit view helpers.
 	void loadAdvancedText();

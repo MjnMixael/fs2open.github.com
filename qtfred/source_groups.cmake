@@ -101,6 +101,8 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/MissionCutscenesDialogModel.h
 	src/mission/dialogs/MissionEventsDialogModel.cpp
 	src/mission/dialogs/MissionEventsDialogModel.h
+	src/mission/dialogs/EventReferenceIndex.cpp
+	src/mission/dialogs/EventReferenceIndex.h
 	src/mission/dialogs/MissionGoalsDialogModel.cpp
 	src/mission/dialogs/MissionGoalsDialogModel.h
 	src/mission/dialogs/MissionStatsDialogModel.cpp
@@ -352,6 +354,8 @@ add_file_folder("Source/UI/Widgets"
     src/ui/widgets/BriefingMapWidget.h
 	src/ui/widgets/CampaignMissionGraph.cpp
 	src/ui/widgets/CampaignMissionGraph.h
+	src/ui/widgets/EventGraphView.cpp
+	src/ui/widgets/EventGraphView.h
 	src/ui/widgets/ObjectComboBox.cpp
 	src/ui/widgets/ObjectComboBox.h
 	src/ui/widgets/LineEditDelegate.cpp

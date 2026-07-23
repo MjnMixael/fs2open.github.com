@@ -10,6 +10,7 @@
 #include <QPixmap>
 #include <QSettings>
 #include <QStyleHints>
+#include <QtMath>
 
 namespace {
 class PaletteChangeFilter : public QObject {
@@ -551,6 +552,30 @@ QIcon makeThemedIcon(CustomIcon icon, const QColor& color, int size)
 		p.drawRect(QRectF(full.right() - bar, full.top(), bar, full.height()));
 		drawHArrow(QRectF(full.left(), full.top(), full.width() - bar - gap, full.height()), false);
 		break;
+	case CustomIcon::Settings: {
+		// A cog: alternating outer/inner radius points make flat-topped teeth,
+		// with a hub hole cut out via the odd-even fill rule.
+		const QPointF cc = full.center();
+		const qreal R = full.width() * 0.50; // tooth tip
+		const qreal rb = R * 0.72;           // tooth base
+		const qreal hole = R * 0.34;         // hub hole
+		const int steps = 32;                // 8 teeth * 4 points each
+		QPainterPath gear;
+		for (int k = 0; k < steps; ++k) {
+			const qreal a = k * (2.0 * M_PI / steps);
+			const qreal rad = ((k % 4) < 2) ? R : rb;
+			const QPointF pt(cc.x() + rad * qCos(a), cc.y() + rad * qSin(a));
+			if (k == 0)
+				gear.moveTo(pt);
+			else
+				gear.lineTo(pt);
+		}
+		gear.closeSubpath();
+		gear.addEllipse(cc, hole, hole);
+		gear.setFillRule(Qt::OddEvenFill);
+		p.drawPath(gear);
+		break;
+	}
 	}
 
 	p.end();
