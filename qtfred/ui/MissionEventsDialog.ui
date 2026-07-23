@@ -53,11 +53,8 @@
          </item>
          <item>
           <widget class="QPushButton" name="btnViewGraph">
-           <property name="enabled">
-            <bool>false</bool>
-           </property>
            <property name="toolTip">
-            <string>Node graph view (not yet implemented)</string>
+            <string>Relationship graph view</string>
            </property>
            <property name="text">
             <string>Graph</string>
@@ -174,18 +171,20 @@
          </widget>
          <widget class="QWidget" name="graphViewPage">
           <layout class="QVBoxLayout" name="graphViewPageLayout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
            <item>
-            <widget class="QLabel" name="graphPlaceholderLabel">
-             <property name="enabled">
-              <bool>false</bool>
-             </property>
-             <property name="text">
-              <string>Node graph view is not yet implemented.</string>
-             </property>
-             <property name="alignment">
-              <set>Qt::AlignCenter</set>
-             </property>
-            </widget>
+            <widget class="fso::fred::EventGraphView" name="eventGraph"/>
            </item>
           </layout>
          </widget>
@@ -1020,6 +1019,11 @@ in Milliseconds</string>
    <class>fso::fred::sexp_tree_view</class>
    <extends>QTreeView</extends>
    <header>ui/widgets/sexp_tree_view.h</header>
+  </customwidget>
+  <customwidget>
+   <class>fso::fred::EventGraphView</class>
+   <extends>QGraphicsView</extends>
+   <header>ui/widgets/EventGraphView.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>

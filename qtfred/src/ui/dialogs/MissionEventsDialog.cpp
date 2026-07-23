@@ -3,6 +3,7 @@
 
 #include <QShortcut>
 #include "ui/Theme.h"
+#include "ui/widgets/EventGraphView.h"
 #include "ui/util/default_dir.h"
 #include "ui/util/SignalBlockers.h"
 #include "ui/dialogs/EventEditor/HeadAnimationPickerDialog.h"
@@ -23,9 +24,55 @@
 #include <QFileInfo>
 #include <QDebug>
 #include <QKeyEvent>
+#include <QVector>
 #include <mission/missionmessage.h>
+#include <globalincs/linklist.h>
+#include <object/object.h>
+#include <object/waypoint.h>
+#include <ship/ship.h>
+#include <prop/prop.h>
+#include <jumpnode/jumpnode.h>
+#include <coordinate_points/coordinate_point.h>
 
 namespace fso::fred::dialogs {
+
+// Enumerate every first-class object type for the graph's object selector:
+// ships (incl. player starts), wings, props, waypoint paths, jump nodes,
+// coordinate points. The selector then hides any with zero references.
+static QVector<GraphObject> buildGraphObjects()
+{
+	QVector<GraphObject> objs;
+	auto add = [&objs](RefObjectKind kind, const QString& name) {
+		GraphObject o;
+		o.kind = kind;
+		o.name = name;
+		objs.push_back(o);
+	};
+
+	for (object* objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list);
+	     objp = GET_NEXT(objp)) {
+		if (objp->instance < 0)
+			continue;
+		// OBJ_START = player-start markers (Alpha 1, etc.); they are ships too,
+		// indexing Ships[] just like OBJ_SHIP. Mirrors get_listing_opf_ship.
+		if (objp->type == OBJ_SHIP || objp->type == OBJ_START)
+			add(RefObjectKind::Ship, QString::fromUtf8(Ships[objp->instance].ship_name));
+		else if (objp->type == OBJ_PROP && Props[objp->instance].has_value())
+			add(RefObjectKind::Prop, QString::fromUtf8(Props[objp->instance]->prop_name));
+	}
+	for (int i = 0; i < Num_wings; ++i) {
+		if (Wings[i].wave_count > 0)
+			add(RefObjectKind::Wing, QString::fromUtf8(Wings[i].name));
+	}
+	for (const auto& wl : Waypoint_lists)
+		add(RefObjectKind::Waypoint, QString::fromUtf8(wl.get_name()));
+	for (const auto& jn : Jump_nodes)
+		add(RefObjectKind::JumpNode, QString::fromUtf8(jn.GetName()));
+	for (const auto& cp : Coordinate_points)
+		add(RefObjectKind::CoordinatePoint, QString::fromStdString(cp.name));
+
+	return objs;
+}
 
 // The events-side view (tree/graph/advanced) chosen last time the dialog was
 // open; persists for the qtFRED session only.
@@ -210,6 +257,8 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 
 	initEventWidgets();
 
+	initGraphView();
+
 	initViewToggle();
 
 	// The before-state for the next tree edit: the tree mutates before
@@ -222,6 +271,9 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 		// the stack, which emits indexChanged with no model left.
 		if (_model)
 			_workingStateCache = _model->captureEventWorkingState();
+		// Any edit/undo/redo invalidates the relationship graph; it will
+		// rebuild next time the graph view is shown (or now if it's current).
+		_graphDirty = true;
 	});
 }
 
@@ -415,8 +467,94 @@ void MissionEventsDialog::setCurrentEventView(int index)
 	if (index == AdvancedViewIndex)
 		loadAdvancedText();
 
+	// Rebuild the relationship graph when the graph view becomes current, but
+	// only if the events changed since we last built it — otherwise leave the
+	// widget untouched so its zoom/scroll/selection carry over.
+	if (index == GraphViewIndex && _graphDirty)
+		refreshGraphView();
+
 	s_lastEventViewIndex = index;
 	applyViewChrome(index);
+}
+
+void MissionEventsDialog::initGraphView()
+{
+	ui->eventGraph->setReferenceIndex(&_refIndex);
+	// Single-click selects the event in the tree (kept in sync for when the
+	// tree view is next shown); double-click switches to the tree view.
+	connect(ui->eventGraph, &EventGraphView::eventSelected, this, &MissionEventsDialog::selectEventInTree);
+	connect(ui->eventGraph, &EventGraphView::eventActivated, this, &MissionEventsDialog::jumpToEventInTree);
+	connect(ui->eventGraph, &EventGraphView::nodeActivated, this, &MissionEventsDialog::jumpToNodeInTree);
+	// Data is (re)loaded when the graph view is first shown (refreshGraphView),
+	// mirroring how the advanced view loads its text on entry.
+}
+
+void MissionEventsDialog::rebuildReferenceIndex()
+{
+	_refIndex.rebuild(ui->eventTree->_model, _model->getEventList());
+}
+
+void MissionEventsDialog::refreshGraphView()
+{
+	rebuildReferenceIndex();
+
+	QVector<QString> names;
+	const auto& events = _model->getEventList();
+	names.reserve(static_cast<int>(events.size()));
+	for (const auto& e : events)
+		names.push_back(QString::fromStdString(e.name));
+
+	ui->eventGraph->setEventNames(std::move(names));
+	ui->eventGraph->setObjects(buildGraphObjects());
+	ui->eventGraph->reload();
+
+	_graphDirty = false;
+}
+
+// Select an event's root item in the tree without changing the current view.
+// Keeps the tree selection (and the model's current event) in sync with a
+// graph selection, so switching to the tree view lands on the same event.
+void MissionEventsDialog::selectEventInTree(int eventIndex)
+{
+	const auto& events = _model->getEventList();
+	if (eventIndex < 0 || eventIndex >= static_cast<int>(events.size()))
+		return;
+	const int formula = events[eventIndex].formula;
+
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* it = ui->eventTree->topLevelItem(i);
+		if (it && it->data(0, sexp_tree_view::FormulaDataRole).toInt() == formula) {
+			ui->eventTree->setCurrentItem(it);
+			ui->eventTree->scrollToItem(it);
+			break;
+		}
+	}
+}
+
+// Double-clicking an event in the graph brings the tree view forward and
+// selects that event.
+void MissionEventsDialog::jumpToEventInTree(int eventIndex)
+{
+	// Switch to the tree view (through the veto gate, though graph never vetoes).
+	if (ui->eventViewStack->currentIndex() != TreeViewIndex) {
+		requestViewChange(TreeViewIndex);
+		if (ui->eventViewStack->currentIndex() != TreeViewIndex)
+			return;
+	}
+	selectEventInTree(eventIndex);
+}
+
+// Double-clicking a condition/action node in the graph brings the tree view
+// forward and highlights that exact sexp node.
+void MissionEventsDialog::jumpToNodeInTree(int treeNode)
+{
+	if (ui->eventViewStack->currentIndex() != TreeViewIndex) {
+		requestViewChange(TreeViewIndex);
+		if (ui->eventViewStack->currentIndex() != TreeViewIndex)
+			return;
+	}
+	if (treeNode >= 0)
+		ui->eventTree->hilite_item(treeNode);
 }
 
 // (Re)populate the advanced editor from the current working events and reset
@@ -561,6 +699,9 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			// under it; regenerate the text (discarding any unparsed edits).
 			if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
 				loadAdvancedText();
+			// Likewise keep the relationship graph in sync on undo/redo.
+			if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+				refreshGraphView();
 			_suppressTreeUndo = false;
 		},
 		label));
