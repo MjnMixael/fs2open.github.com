@@ -11,6 +11,7 @@
 #include <QVector>
 #include <QString>
 #include <QColor>
+#include <QSet>
 
 class QGraphicsScene;
 class QComboBox;
@@ -112,7 +113,9 @@ class EventGraphView final : public QGraphicsView {
 	void wheelEvent(QWheelEvent* e) override;
 	void drawBackground(QPainter* painter, const QRectF& rect) override;
 	void mousePressEvent(QMouseEvent* e) override;
+	void mouseReleaseEvent(QMouseEvent* e) override;
 	void mouseDoubleClickEvent(QMouseEvent* e) override;
+	void keyPressEvent(QKeyEvent* e) override;
 	void resizeEvent(QResizeEvent* e) override;
 	void showEvent(QShowEvent* e) override;
 	void scrollContentsBy(int dx, int dy) override;
@@ -125,7 +128,15 @@ class EventGraphView final : public QGraphicsView {
 	void positionOverlay();
 	void applyTheme(bool dark);
 	void populateSelector();
+	void populateKindFilter();
+	void setMode(Mode mode);
+	void rebuildCurrent();
 	void rebuildRadial();
+	void rebuildSwimlanes();
+	// Swimlanes cross-filter: focus an object row / event column (Ctrl adds).
+	void toggleSwimObjectFocus(const QString& objectKey, bool add);
+	void toggleSwimEventFocus(int eventIndex, bool add);
+	void clearSwimFocus();
 	void showEmptyMessage(const QString& text);
 	int  selectedObjectRow() const;
 
@@ -155,6 +166,15 @@ class EventGraphView final : public QGraphicsView {
 	QString m_framedKey;
 	bool    m_hasFramed = false;
 	bool    m_suppressSelectionSignal = false;
+
+	// Swimlanes filters. m_swimKind == Unknown means "all kinds".
+	RefObjectKind m_swimKind = RefObjectKind::Unknown;
+	QSet<QString> m_focusObjects; // object row keys
+	QSet<int>     m_focusEvents;
+	// Track an empty-space press so a click (not a pan-drag) on empty canvas
+	// clears the swimlanes filter on release.
+	bool   m_pressOnEmpty = false;
+	QPoint m_pressPos;
 };
 
 } // namespace fso::fred
