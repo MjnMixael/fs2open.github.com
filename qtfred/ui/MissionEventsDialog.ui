@@ -37,6 +37,62 @@
         <number>0</number>
        </property>
        <item>
+        <layout class="QHBoxLayout" name="eventViewToggleLayout">
+         <item>
+          <widget class="QPushButton" name="btnViewTree">
+           <property name="text">
+            <string>Tree</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnViewGraph">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="toolTip">
+            <string>Node graph view (not yet implemented)</string>
+           </property>
+           <property name="text">
+            <string>Graph</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnViewAdvanced">
+           <property name="text">
+            <string>Advanced</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="eventViewToggleSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
         <widget class="QLineEdit" name="eventSearchEdit">
          <property name="placeholderText">
           <string>Filter by name...</string>
@@ -47,10 +103,64 @@
         </widget>
        </item>
        <item>
-        <widget class="fso::fred::sexp_tree_view" name="eventTree">
-         <attribute name="headerVisible">
-          <bool>false</bool>
-         </attribute>
+        <widget class="QStackedWidget" name="eventViewStack">
+         <widget class="QWidget" name="treeViewPage">
+          <layout class="QVBoxLayout" name="treeViewPageLayout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="fso::fred::sexp_tree_view" name="eventTree">
+             <attribute name="headerVisible">
+              <bool>false</bool>
+             </attribute>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="graphViewPage">
+          <layout class="QVBoxLayout" name="graphViewPageLayout">
+           <item>
+            <widget class="QLabel" name="graphPlaceholderLabel">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Node graph view is not yet implemented.</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="advancedViewPage">
+          <layout class="QVBoxLayout" name="advancedViewPageLayout">
+           <item>
+            <widget class="QLabel" name="advancedPlaceholderLabel">
+             <property name="enabled">
+              <bool>false</bool>
+             </property>
+             <property name="text">
+              <string>Advanced edit view is not yet implemented.</string>
+             </property>
+             <property name="alignment">
+              <set>Qt::AlignCenter</set>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
        <item>
