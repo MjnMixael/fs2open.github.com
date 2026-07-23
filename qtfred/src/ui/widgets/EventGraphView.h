@@ -95,6 +95,9 @@ class EventGraphView final : public QGraphicsView {
 	void reload();
 
 	void zoomToFitAll(qreal margin = 40.0);
+	// Zoom one step in/out, centered on the current view center (used by the
+	// minimap wheel, which is away from the content).
+	void zoomStep(bool zoomIn);
 
   signals:
 	// Single-click (select) an event or node card → sync-select that event

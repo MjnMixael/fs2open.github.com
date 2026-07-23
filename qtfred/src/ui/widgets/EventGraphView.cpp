@@ -361,11 +361,13 @@ class RefEdgeItem final : public QGraphicsPathItem {
 // zooming stay cheap even on huge missions.
 class MinimapWidget final : public QWidget {
   public:
-	MinimapWidget(QGraphicsView* view, QGraphicsScene* scene, const EventGraphStyle* style, QWidget* parent)
+	MinimapWidget(EventGraphView* view, QGraphicsScene* scene, const EventGraphStyle* style, QWidget* parent)
 		: QWidget(parent), m_view(view), m_scene(scene), m_style(style)
 	{
 		setFixedSize(190, 130);
-		setToolTip(QStringLiteral("Overview - click to recenter"));
+		setToolTip(QStringLiteral("Overview - drag to pan, scroll to zoom"));
+		setCursor(Qt::ArrowCursor); // not the pan hand inherited from the viewport
+		setMouseTracking(true);     // so hover updates the cursor without a button
 	}
 
 	// Re-render the scene into the cached pixmap. Call when the graph content
@@ -415,6 +417,7 @@ class MinimapWidget final : public QWidget {
 		if (!m_cache.isNull())
 			p.drawPixmap(0, 0, m_cache);
 
+		m_boxRect = QRectF();
 		if (!m_src.isEmpty() && m_dst.isValid()) {
 			const qreal s = m_dst.width() / m_src.width();
 			const QRectF viewScene = m_view->mapToScene(m_view->viewport()->rect()).boundingRect();
@@ -422,6 +425,7 @@ class MinimapWidget final : public QWidget {
 				m_dst.top() + (viewScene.top() - m_src.top()) * s, viewScene.width() * s,
 				viewScene.height() * s);
 			vr = vr.intersected(m_dst);
+			m_boxRect = vr;
 			p.setPen(QPen(QColor(217, 79, 42), 1.5));
 			p.setBrush(Qt::NoBrush);
 			p.drawRect(vr);
@@ -434,19 +438,57 @@ class MinimapWidget final : public QWidget {
 
 	void mousePressEvent(QMouseEvent* e) override
 	{
-		if (!m_dst.isValid() || !m_dst.contains(e->pos()) || m_src.isEmpty())
+		if (e->button() != Qt::LeftButton || !m_dst.isValid() || m_src.isEmpty())
 			return;
-		const qreal s = m_dst.width() / m_src.width();
-		m_view->centerOn(m_src.left() + (e->pos().x() - m_dst.left()) / s,
-			m_src.top() + (e->pos().y() - m_dst.top()) / s);
+		m_dragging = true;
+		setCursor(Qt::ClosedHandCursor);
+		recenterTo(e->pos());
+	}
+
+	void mouseMoveEvent(QMouseEvent* e) override
+	{
+		if (m_dragging) {
+			recenterTo(e->pos());
+			return;
+		}
+		// Hover affordance: open hand over the view box, arrow elsewhere.
+		setCursor(m_boxRect.contains(QPointF(e->pos())) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+	}
+
+	void mouseReleaseEvent(QMouseEvent* e) override
+	{
+		if (e->button() != Qt::LeftButton)
+			return;
+		m_dragging = false;
+		setCursor(m_boxRect.contains(QPointF(e->pos())) ? Qt::OpenHandCursor : Qt::ArrowCursor);
+	}
+
+	void wheelEvent(QWheelEvent* e) override
+	{
+		const int dy = e->angleDelta().y();
+		if (dy != 0)
+			m_view->zoomStep(dy > 0);
+		e->accept();
 	}
 
   private:
-	QGraphicsView* m_view;
+	// Recenter the main view on the scene point under the given minimap position.
+	void recenterTo(const QPoint& pos)
+	{
+		if (!m_dst.isValid() || m_src.isEmpty())
+			return;
+		const qreal s = m_dst.width() / m_src.width();
+		const qreal x = m_src.left() + (qBound(m_dst.left(), qreal(pos.x()), m_dst.right()) - m_dst.left()) / s;
+		const qreal y = m_src.top() + (qBound(m_dst.top(), qreal(pos.y()), m_dst.bottom()) - m_dst.top()) / s;
+		m_view->centerOn(x, y);
+	}
+
+	EventGraphView* m_view;
 	QGraphicsScene* m_scene;
 	const EventGraphStyle* m_style;
 	QPixmap m_cache;
-	QRectF m_src, m_dst;
+	QRectF m_src, m_dst, m_boxRect;
+	bool m_dragging = false;
 };
 
 } // namespace graphdetail
@@ -511,6 +553,9 @@ void EventGraphView::buildOverlay()
 {
 	m_overlay = new QWidget(viewport());
 	m_overlay->setAttribute(Qt::WA_StyledBackground, true);
+	// Children of the pan-hand viewport inherit its cursor; force the normal
+	// pointer over the control strip.
+	m_overlay->setCursor(Qt::ArrowCursor);
 	auto* lay = new QHBoxLayout(m_overlay);
 	lay->setContentsMargins(6, 6, 6, 6);
 	lay->setSpacing(4);
@@ -828,6 +873,19 @@ void EventGraphView::rebuildRadial()
 	m_suppressSelectionSignal = false;
 	if (m_minimap)
 		m_minimap->regenerate(); // content changed → re-render the cached overview
+}
+
+void EventGraphView::zoomStep(bool zoomIn)
+{
+	const qreal step = zoomIn ? 1.10 : (1.0 / 1.10);
+	const qreal next = qBound(kMinScale, m_currentScale * step, kMaxScale);
+	const qreal factor = next / m_currentScale;
+	if (qFuzzyCompare(factor, 1.0))
+		return;
+	const QPointF center = mapToScene(viewport()->rect().center());
+	scale(factor, factor);
+	m_currentScale = next;
+	centerOn(center); // keep the view centered (the wheel came from the minimap)
 }
 
 void EventGraphView::zoomToFitAll(qreal margin)
