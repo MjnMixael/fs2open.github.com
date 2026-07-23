@@ -76,6 +76,8 @@ private slots:
 	void on_eventSearchEdit_textChanged(const QString& text);
 	void on_messageSearchEdit_textChanged(const QString& text);
 
+	void on_btnValidateEvents_clicked();
+
 	void on_messageList_currentRowChanged(int row);
 	void on_messageList_itemDoubleClicked(QListWidgetItem* item);
 
@@ -139,6 +141,14 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void setCurrentEventView(int index);
 	bool canLeaveEventView(int index);
 	void applyViewChrome(int index);
+
+	// Advanced Edit view helpers.
+	void loadAdvancedText();
+	void showAdvancedResults(const SCP_vector<SCP_string>& errors, const SCP_vector<SCP_string>& warnings);
+
+	// Baseline text shown when the Advanced view was last (re)loaded; an
+	// unchanged editor commits nothing.
+	QString _advancedBaseline;
 
 	void applyEventFilter();
 	void applyMessageFilter();

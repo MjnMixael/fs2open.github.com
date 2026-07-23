@@ -304,6 +304,11 @@ void MissionEventsDialog::initViewToggle()
 
 	connect(_viewGroup, &QButtonGroup::idClicked, this, &MissionEventsDialog::requestViewChange);
 
+	// Monospace, matching the sexp help boxes, so the mission-file text lines up.
+	const QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+	ui->advancedTextEdit->setFont(mono);
+	ui->advancedErrorList->setFont(mono);
+
 	// Restore the view used last time this session. A view whose button is
 	// disabled (currently the graph view) can't be restored into.
 	int view = s_lastEventViewIndex;
@@ -332,10 +337,39 @@ void MissionEventsDialog::requestViewChange(int index)
 	setCurrentEventView(index);
 }
 
-// Gate for leaving a view. Nothing vetoes yet; the advanced edit view will
-// refuse to yield (and to accept the dialog) until its text parses cleanly.
-bool MissionEventsDialog::canLeaveEventView(int /*index*/)
+// Gate for leaving a view. The advanced edit view refuses to yield (and to
+// accept the dialog) until its hand-edited text parses and validates cleanly;
+// a clean parse is committed to the working events as a single undo step.
+bool MissionEventsDialog::canLeaveEventView(int index)
 {
+	if (index != AdvancedViewIndex)
+		return true;
+
+	const QString text = ui->advancedTextEdit->toPlainText();
+
+	// Unchanged text: nothing to commit, always allowed to leave.
+	if (text == _advancedBaseline)
+		return true;
+
+	SCP_vector<SCP_string> errors, warnings;
+	const QByteArray before = _model->captureEventWorkingState();
+
+	_suppressTreeUndo = true;
+	const bool ok = _model->applyEventsText(text.toUtf8().constData(), /*dryRun=*/false, errors, warnings);
+	_suppressTreeUndo = false;
+
+	showAdvancedResults(errors, warnings);
+
+	if (!ok)
+		return false;
+
+	// Commit the whole hand-edit as one undo entry, then refresh the baseline
+	// so a subsequent no-op leave doesn't re-commit.
+	pushEventStateSnapshot(before, tr("Advanced Edit Events"));
+	_advancedBaseline = text;
+	m_last_message_node = -1;
+	applyEventFilter();
+	updateEventUi();
 	return true;
 }
 
@@ -348,8 +382,45 @@ void MissionEventsDialog::setCurrentEventView(int index)
 		btn->setChecked(true);
 	}
 
+	// Regenerate the section text whenever the advanced view becomes current.
+	if (index == AdvancedViewIndex)
+		loadAdvancedText();
+
 	s_lastEventViewIndex = index;
 	applyViewChrome(index);
+}
+
+// (Re)populate the advanced editor from the current working events and reset
+// its baseline and native undo history.
+void MissionEventsDialog::loadAdvancedText()
+{
+	const SCP_string text = _model->generateEventsSectionText(_fredView->missionSaveFormat());
+	_advancedBaseline = QString::fromStdString(text);
+
+	QSignalBlocker blocker(ui->advancedTextEdit);
+	ui->advancedTextEdit->setPlainText(_advancedBaseline);
+	ui->advancedErrorList->clear();
+}
+
+void MissionEventsDialog::showAdvancedResults(const SCP_vector<SCP_string>& errors,
+	const SCP_vector<SCP_string>& warnings)
+{
+	QString out;
+	for (const auto& e : errors)
+		out += QStringLiteral("ERROR: ") + QString::fromStdString(e) + QLatin1Char('\n');
+	for (const auto& w : warnings)
+		out += QStringLiteral("WARNING: ") + QString::fromStdString(w) + QLatin1Char('\n');
+	if (errors.empty() && warnings.empty())
+		out = tr("No problems found.");
+	ui->advancedErrorList->setPlainText(out);
+}
+
+void MissionEventsDialog::on_btnValidateEvents_clicked()
+{
+	SCP_vector<SCP_string> errors, warnings;
+	_model->applyEventsText(ui->advancedTextEdit->toPlainText().toUtf8().constData(),
+		/*dryRun=*/true, errors, warnings);
+	showAdvancedResults(errors, warnings);
 }
 
 // Each view declares which of the surrounding event controls make sense. Per
@@ -436,6 +507,10 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			applyEventFilter();
 			m_last_message_node = -1;
 			updateEventUi();
+			// If the advanced view is showing, the working events just changed
+			// under it; regenerate the text (discarding any unparsed edits).
+			if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
+				loadAdvancedText();
 			_suppressTreeUndo = false;
 		},
 		label));
