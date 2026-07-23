@@ -345,6 +345,7 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			// subtreeAdded/annotationApplied/rootSelected signals.
 			_model->restoreEventWorkingState(blob);
 			ui->eventTree->restoreExpansionState(expanded);
+			applyEventFilter();
 			m_last_message_node = -1;
 			updateEventUi();
 			_suppressTreeUndo = false;
@@ -468,6 +469,9 @@ void MissionEventsDialog::rootNodeRenamed(int node) {
 		syncEventRootLabel(index);
 	});
 	_dialogStack->push(cmd);
+
+	// The new name may change whether the event matches an active filter.
+	applyEventFilter();
 }
 
 void MissionEventsDialog::syncEventRootLabel(int eventIndex)
@@ -484,6 +488,9 @@ void MissionEventsDialog::syncEventRootLabel(int eventIndex)
 			break;
 		}
 	}
+
+	// The restored name may change whether the event matches an active filter.
+	applyEventFilter();
 }
 
 void MissionEventsDialog::rootNodeFormulaChanged(int old, int node) {
@@ -516,6 +523,8 @@ void MissionEventsDialog::rebuildMessageList() {
 	if (curRow >= 0 && curRow < ui->messageList->count()) {
 		ui->messageList->setCurrentRow(curRow);
 	}
+
+	applyMessageFilter();
 }
 
 // The log-state checkboxes only apply to a selected event, so gray them out (and
@@ -614,9 +623,13 @@ void MissionEventsDialog::updateEventMoveButtons()
 	const bool isRoot = (cur && !cur->parent());
 	const int count = ui->eventTree->topLevelItemCount();
 
+	// Moving while the tree is filtered would reorder relative to hidden
+	// neighbors, which looks like nothing happened; disable the buttons.
+	const bool filtered = !ui->eventSearchEdit->text().isEmpty();
+
 	bool canUp = false, canDown = false;
 
-	if (isRoot && count > 1) {
+	if (isRoot && count > 1 && !filtered) {
 		const int idx = ui->eventTree->indexOfTopLevelItem(cur);
 		canUp = (idx > 0);
 		canDown = (idx >= 0 && idx < count - 1);
@@ -736,7 +749,10 @@ void MissionEventsDialog::updateMessageMoveButtons()
 	const int count = ui->messageList->count();
 	const int row = ui->messageList->currentItem() ? ui->messageList->row(ui->messageList->currentItem()) : -1;
 
-	const bool hasSel = (row >= 0);
+	// Same reasoning as updateEventMoveButtons: no reordering while filtered.
+	const bool filtered = !ui->messageSearchEdit->text().isEmpty();
+
+	const bool hasSel = (row >= 0) && !filtered;
 	const bool canUp = hasSel && row > 0;
 	const bool canDown = hasSel && row < count - 1;
 
@@ -744,6 +760,60 @@ void MissionEventsDialog::updateMessageMoveButtons()
 	ui->msgUpBtn->setEnabled(canUp);
 	ui->msgDownBtn->setEnabled(canDown);
 	ui->msgMoveBottomBtn->setEnabled(canDown);
+}
+
+// Hide top-level event items whose names don't contain the search text.
+// Hidden items keep their top-level indices, so the formula-order reads and
+// move logic that iterate topLevelItem(i) are unaffected.
+void MissionEventsDialog::applyEventFilter()
+{
+	const QString text = ui->eventSearchEdit->text();
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* item = ui->eventTree->topLevelItem(i);
+		item->setHidden(!item->text(0).contains(text, Qt::CaseInsensitive));
+	}
+	updateEventMoveButtons();
+}
+
+// Hide message rows that don't contain the search text. Rows are hidden in
+// place (never removed) so the row == model-index mapping stays intact.
+void MissionEventsDialog::applyMessageFilter()
+{
+	const QString text = ui->messageSearchEdit->text();
+	for (int i = 0; i < ui->messageList->count(); ++i) {
+		auto* item = ui->messageList->item(i);
+		item->setHidden(!item->text().contains(text, Qt::CaseInsensitive));
+	}
+	updateMessageMoveButtons();
+}
+
+void MissionEventsDialog::on_eventSearchEdit_textChanged(const QString& /*text*/)
+{
+	applyEventFilter();
+
+	// Deselect if the current item's event got filtered out, so the event
+	// controls on the right don't keep editing an invisible event.
+	auto* root = ui->eventTree->currentItem();
+	while (root && root->parent())
+		root = root->parent();
+	if (root && root->isHidden()) {
+		ui->eventTree->setCurrentItem(nullptr);
+		// selectedRootChanged(-1) can't resolve a formula, so clear the model
+		// selection directly.
+		_model->setCurrentlySelectedEvent(-1);
+		updateEventUi();
+	}
+}
+
+void MissionEventsDialog::on_messageSearchEdit_textChanged(const QString& /*text*/)
+{
+	applyMessageFilter();
+
+	// Deselect if the selected message got filtered out.
+	const int row = ui->messageList->currentRow();
+	if (row >= 0 && ui->messageList->item(row)->isHidden()) {
+		ui->messageList->setCurrentRow(-1);
+	}
 }
 
 SCP_vector<int> MissionEventsDialog::read_root_formula_order(sexp_tree_view* tree)
@@ -808,6 +878,9 @@ void MissionEventsDialog::on_okAndCancelButtons_rejected()
 
 void MissionEventsDialog::on_btnNewEvent_clicked()
 {
+	// Clear any active filter so the new event is visible.
+	ui->eventSearchEdit->clear();
+
 	const QByteArray before = _model->captureEventWorkingState();
 	_suppressTreeUndo = true;
 	_model->createEvent();
@@ -819,6 +892,9 @@ void MissionEventsDialog::on_btnNewEvent_clicked()
 
 void MissionEventsDialog::on_btnInsertEvent_clicked()
 {
+	// Clear any active filter so the new event is visible.
+	ui->eventSearchEdit->clear();
+
 	const QByteArray before = _model->captureEventWorkingState();
 	_suppressTreeUndo = true;
 	_model->insertEvent();
@@ -1186,6 +1262,10 @@ void MissionEventsDialog::on_messageList_itemDoubleClicked(QListWidgetItem* item
 	if (!item || !ui->eventTree)
 		return;
 
+	// This jumps to the message's use in the event tree, so drop any event
+	// filter that might be hiding the target event.
+	ui->eventSearchEdit->clear();
+
 	const QString name = item->text();
 	if (name != m_last_message_name) {
 		m_last_message_name = name;
@@ -1218,6 +1298,9 @@ void MissionEventsDialog::on_messageList_itemDoubleClicked(QListWidgetItem* item
 
 void MissionEventsDialog::on_btnNewMsg_clicked()
 {
+	// Clear any active filter so the new message is visible.
+	ui->messageSearchEdit->clear();
+
 	const QByteArray before = _model->captureMessageWorkingState();
 	_model->createMessage();
 
@@ -1233,6 +1316,9 @@ void MissionEventsDialog::on_btnNewMsg_clicked()
 
 void MissionEventsDialog::on_btnInsertMsg_clicked()
 {
+	// Clear any active filter so the new message is visible.
+	ui->messageSearchEdit->clear();
+
 	const QByteArray before = _model->captureMessageWorkingState();
 	_model->insertMessage();
 

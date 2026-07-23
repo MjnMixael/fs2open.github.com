@@ -72,6 +72,9 @@ private slots:
 	void on_checkLogFirstTrigger_toggled(bool checked);
 	void on_checkLogLastTrigger_toggled(bool checked);
 
+	void on_eventSearchEdit_textChanged(const QString& text);
+	void on_messageSearchEdit_textChanged(const QString& text);
+
 	void on_messageList_currentRowChanged(int row);
 	void on_messageList_itemDoubleClicked(QListWidgetItem* item);
 
@@ -121,6 +124,9 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void changeMessageWave(const SCP_string& name);
 	void syncEventRootLabel(int eventIndex);
 	void updateEventBitmapAt(int eventIndex);
+
+	void applyEventFilter();
+	void applyMessageFilter();
 
 	void updateEventUi();
 	void updateEventMoveButtons();
