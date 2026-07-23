@@ -15,6 +15,7 @@
 
 #include <ui/util/DialogUndo.h>
 
+#include <QButtonGroup>
 #include <QInputDialog>
 #include <QMessageBox>
 #include <QFileDialog>
@@ -24,6 +25,10 @@
 #include <mission/missionmessage.h>
 
 namespace fso::fred::dialogs {
+
+// The events-side view (tree/graph/advanced) chosen last time the dialog was
+// open; persists for the qtFRED session only.
+static int s_lastEventViewIndex = 0; // MissionEventsDialog::TreeViewIndex
 
 // Compute the annotation key for a Qt tree item. For regular tree nodes this is
 // the tree_nodes[] index; for root labels (event name rows, which aren't stored
@@ -204,6 +209,8 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 
 	initEventWidgets();
 
+	initViewToggle();
+
 	// The before-state for the next tree edit: the tree mutates before
 	// modified() fires, so a fresh capture at handler time would already
 	// contain the edit. indexChanged fires on every push/undo/redo, keeping
@@ -287,6 +294,82 @@ void MissionEventsDialog::initEventWidgets() {
 	updateEventUi();
 }
 
+void MissionEventsDialog::initViewToggle()
+{
+	_viewGroup = new QButtonGroup(this);
+	_viewGroup->setExclusive(true);
+	_viewGroup->addButton(ui->btnViewTree, TreeViewIndex);
+	_viewGroup->addButton(ui->btnViewGraph, GraphViewIndex);
+	_viewGroup->addButton(ui->btnViewAdvanced, AdvancedViewIndex);
+
+	connect(_viewGroup, &QButtonGroup::idClicked, this, &MissionEventsDialog::requestViewChange);
+
+	// Restore the view used last time this session. A view whose button is
+	// disabled (currently the graph view) can't be restored into.
+	int view = s_lastEventViewIndex;
+	auto* btn = _viewGroup->button(view);
+	if (!btn || !btn->isEnabled())
+		view = TreeViewIndex;
+	setCurrentEventView(view);
+}
+
+void MissionEventsDialog::requestViewChange(int index)
+{
+	const int current = ui->eventViewStack->currentIndex();
+	if (index == current)
+		return;
+
+	if (!canLeaveEventView(current)) {
+		// Veto: the clicked button already took the checked state, give it
+		// back to the current view's button.
+		if (auto* btn = _viewGroup->button(current)) {
+			QSignalBlocker blocker(_viewGroup);
+			btn->setChecked(true);
+		}
+		return;
+	}
+
+	setCurrentEventView(index);
+}
+
+// Gate for leaving a view. Nothing vetoes yet; the advanced edit view will
+// refuse to yield (and to accept the dialog) until its text parses cleanly.
+bool MissionEventsDialog::canLeaveEventView(int /*index*/)
+{
+	return true;
+}
+
+void MissionEventsDialog::setCurrentEventView(int index)
+{
+	ui->eventViewStack->setCurrentIndex(index);
+
+	if (auto* btn = _viewGroup->button(index)) {
+		QSignalBlocker blocker(_viewGroup);
+		btn->setChecked(true);
+	}
+
+	s_lastEventViewIndex = index;
+	applyViewChrome(index);
+}
+
+// Each view declares which of the surrounding event controls make sense. Per
+// the dialog's UI-stability rule the controls are disabled, never hidden, so
+// the layout doesn't shift between views.
+void MissionEventsDialog::applyViewChrome(int index)
+{
+	const bool treeView = (index == TreeViewIndex);
+
+	// The search field filters tree items, and the whole event-controls
+	// column acts on the tree selection/order — disable it wholesale
+	// (labels included) outside the tree view.
+	ui->eventSearchEdit->setEnabled(treeView);
+	ui->eventControlsContainer->setEnabled(treeView);
+
+	// The per-event fields key off the tree selection; updateEventUi()
+	// disables them whenever the tree view isn't current.
+	updateEventUi();
+}
+
 int MissionEventsDialog::getRootReturnType() const
 {
 	return OPR_NULL;
@@ -294,6 +377,11 @@ int MissionEventsDialog::getRootReturnType() const
 
 void MissionEventsDialog::accept()
 {
+	// The active view gets to veto OK (e.g. advanced-edit text that doesn't
+	// parse), same as it can veto a view switch.
+	if (!canLeaveEventView(ui->eventViewStack->currentIndex()))
+		return;
+
 	QByteArray stateBefore = _model->captureState();
 	if (_model->apply()) {
 		QByteArray stateAfter = _model->captureState();
@@ -544,7 +632,11 @@ void MissionEventsDialog::updateEventUi() {
 
 	updateEventMoveButtons();
 
-	if (!_model->eventIsValid()) {
+	// Outside the tree view the per-event fields have no (visible) selection
+	// to act on, so take the same disabled path as "no event selected".
+	const bool treeViewActive = (ui->eventViewStack->currentIndex() == TreeViewIndex);
+
+	if (!_model->eventIsValid() || !treeViewActive) {
 		ui->repeatCountBox->setValue(1);
 		ui->triggerCountBox->setValue(1);
 		ui->intervalTimeBox->setValue(1);
@@ -556,7 +648,11 @@ void MissionEventsDialog::updateEventUi() {
 		ui->repeatCountBox->setEnabled(false);
 		ui->triggerCountBox->setEnabled(false);
 		ui->intervalTimeBox->setEnabled(false);
+		ui->chainedCheckBox->setChecked(false);
+		ui->chainedCheckBox->setEnabled(false);
 		ui->chainDelayBox->setEnabled(false);
+		ui->scoreBox->setValue(0);
+		ui->scoreBox->setEnabled(false);
 		ui->useMsecsCheckBox->setChecked(false);
 		ui->useMsecsCheckBox->setEnabled(false);
 		ui->teamCombo->setEnabled(false);
@@ -627,9 +723,12 @@ void MissionEventsDialog::updateEventMoveButtons()
 	// neighbors, which looks like nothing happened; disable the buttons.
 	const bool filtered = !ui->eventSearchEdit->text().isEmpty();
 
+	// The move buttons act on the tree order, so they need the tree in view.
+	const bool treeViewActive = (ui->eventViewStack->currentIndex() == TreeViewIndex);
+
 	bool canUp = false, canDown = false;
 
-	if (isRoot && count > 1 && !filtered) {
+	if (isRoot && count > 1 && !filtered && treeViewActive) {
 		const int idx = ui->eventTree->indexOfTopLevelItem(cur);
 		canUp = (idx > 0);
 		canDown = (idx >= 0 && idx < count - 1);
@@ -1261,6 +1360,14 @@ void MissionEventsDialog::on_messageList_itemDoubleClicked(QListWidgetItem* item
 {
 	if (!item || !ui->eventTree)
 		return;
+
+	// The jump targets the tree, so bring the tree view forward first. The
+	// switch can be vetoed by the active view.
+	if (ui->eventViewStack->currentIndex() != TreeViewIndex) {
+		requestViewChange(TreeViewIndex);
+		if (ui->eventViewStack->currentIndex() != TreeViewIndex)
+			return;
+	}
 
 	// This jumps to the message's use in the event tree, so drop any event
 	// filter that might be hiding the target event.

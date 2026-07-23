@@ -14,6 +14,7 @@
 
 #include <memory>
 
+class QButtonGroup;
 class QCheckBox;
 
 namespace fso::fred::dialogs {
@@ -102,10 +103,18 @@ private slots:
 
 
 private: // NOLINT(readability-redundant-access-specifiers)
+	// Indices into eventViewStack; also the QButtonGroup ids of the toggle buttons.
+	enum EventViewIndex {
+		TreeViewIndex = 0,
+		GraphViewIndex = 1,
+		AdvancedViewIndex = 2,
+	};
+
 	std::unique_ptr<Ui::MissionEventsDialog> ui;
 	EditorViewport* _viewport;
 	FredView*       _fredView    = nullptr;
 	QUndoStack*     _dialogStack = nullptr;
+	QButtonGroup*   _viewGroup   = nullptr;
 	std::unique_ptr<MissionEventsDialogModel> _model;
 
 	int m_last_message_node = -1;
@@ -124,6 +133,12 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void changeMessageWave(const SCP_string& name);
 	void syncEventRootLabel(int eventIndex);
 	void updateEventBitmapAt(int eventIndex);
+
+	void initViewToggle();
+	void requestViewChange(int index);
+	void setCurrentEventView(int index);
+	bool canLeaveEventView(int index);
+	void applyViewChrome(int index);
 
 	void applyEventFilter();
 	void applyMessageFilter();
