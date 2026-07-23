@@ -11,6 +11,7 @@
 #include <QFontMetricsF>
 #include <QHash>
 #include <QHBoxLayout>
+#include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
@@ -23,6 +24,7 @@
 #include <QShowEvent>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QStringList>
 #include <QToolButton>
 #include <QTransform>
 #include <QVBoxLayout>
@@ -32,12 +34,19 @@
 
 #include <algorithm>
 #include <cmath>
+#include <utility>
 
 namespace fso::fred {
 
 // Distance between adjacent radial rings; a graph setting that persists for the
 // session (across object and view changes), adjustable via the settings gear.
 static qreal s_ringSpacing = 210.0;
+
+// Stable identity key for a swimlanes object row (kind + case-insensitive name).
+static QString swimRowKey(RefObjectKind kind, const QString& name)
+{
+	return QString::number(static_cast<int>(kind)) + QLatin1Char('|') + name.toLower();
+}
 
 // ---------------------------------------------------------------------------
 // Style
@@ -131,6 +140,9 @@ class CardItem : public QGraphicsItem {
 
 	QString titleText() const { return m_title; }
 
+	// Distinct highlight for a swimlanes filter item (independent of selection).
+	void setFocusHighlight(bool on) { m_focusHighlight = on; update(); }
+
 	// If the click landed on the expand/collapse toggle, flip it. Returns true
 	// if it consumed the click.
 	bool handleToggleClick(const QPointF& scenePos)
@@ -151,8 +163,17 @@ class CardItem : public QGraphicsItem {
 		p->setRenderHint(QPainter::Antialiasing, true);
 		const QRectF r = boundingRect();
 
-		const bool sel = isSelected();
-		p->setPen(QPen(sel ? QColor(217, 79, 42) : m_style.cardBorder, sel ? 2.4 : 1.4));
+		// Filter focus (red) wins over tree selection (orange) wins over normal.
+		QColor borderColor = m_style.cardBorder;
+		qreal borderW = 1.4;
+		if (m_focusHighlight) {
+			borderColor = QColor(214, 40, 40);
+			borderW = 2.8;
+		} else if (isSelected()) {
+			borderColor = QColor(217, 79, 42);
+			borderW = 2.4;
+		}
+		p->setPen(QPen(borderColor, borderW));
 		p->setBrush(m_fill);
 		p->drawRoundedRect(r, m_style.nodeRadius, m_style.nodeRadius);
 
@@ -279,6 +300,7 @@ class CardItem : public QGraphicsItem {
 	bool    m_expandable;
 	int     m_collapsedMax;
 	bool    m_expanded = false;
+	bool    m_focusHighlight = false;
 	QRectF  m_toggleRect;
 	EventGraphStyle m_style;
 };
@@ -530,6 +552,7 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 	setBackgroundBrush(m_style.bgColor);
 	setFrameShape(QFrame::NoFrame);
 	setAlignment(Qt::AlignCenter);
+	setFocusPolicy(Qt::StrongFocus); // receive Esc to clear the swimlanes filter
 
 	buildOverlay();
 
@@ -575,8 +598,10 @@ void EventGraphView::buildOverlay()
 		lay->addWidget(btn);
 	};
 	addModeButton(tr("Radial"), Mode::Radial, true, QString());
-	addModeButton(tr("Swimlanes"), Mode::Swimlanes, false, tr("Coming soon"));
+	addModeButton(tr("Swimlanes"), Mode::Swimlanes, true, QString());
 	addModeButton(tr("Basic"), Mode::Basic, false, tr("Coming soon"));
+
+	connect(m_modeGroup, &QButtonGroup::idClicked, this, [this](int id) { setMode(static_cast<Mode>(id)); });
 
 	auto* sep = new QLabel(QStringLiteral("  "), m_overlay);
 	lay->addWidget(sep);
@@ -587,8 +612,16 @@ void EventGraphView::buildOverlay()
 	lay->addWidget(m_objectCombo);
 
 	connect(m_objectCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
-		if (m_mode == Mode::Radial)
+		if (m_mode == Mode::Radial) {
 			rebuildRadial();
+		} else if (m_mode == Mode::Swimlanes) {
+			bool ok = false;
+			const int k = m_objectCombo->currentData().toInt(&ok);
+			m_swimKind = (ok && k >= 0) ? static_cast<RefObjectKind>(k) : RefObjectKind::Unknown;
+			clearSwimFocus(); // a focused object may be filtered out by the kind change
+			m_hasFramed = false;
+			rebuildSwimlanes();
+		}
 	});
 
 	// Settings gear — global + per-view graph settings.
@@ -710,9 +743,109 @@ void EventGraphView::populateSelector()
 
 void EventGraphView::reload()
 {
-	populateSelector();
-	positionOverlay(); // the combo width changes with the object labels
-	if (m_mode == Mode::Radial)
+	if (m_mode == Mode::Swimlanes)
+		populateKindFilter();
+	else
+		populateSelector();
+	positionOverlay(); // the combo width changes with the labels
+	rebuildCurrent();
+}
+
+void EventGraphView::setMode(Mode mode)
+{
+	if (mode == m_mode)
+		return;
+	m_mode = mode;
+	// The combo drives the object (radial) or the kind filter (swimlanes).
+	if (mode == Mode::Swimlanes)
+		populateKindFilter();
+	else
+		populateSelector();
+	positionOverlay();
+	m_hasFramed = false; // re-fit for the new mode
+	rebuildCurrent();
+}
+
+// Swimlanes: fill the combo with "All object types" + each kind that is
+// actually referenced. Selecting a kind filters the rows to it.
+void EventGraphView::populateKindFilter()
+{
+	if (!m_objectCombo)
+		return;
+	QSignalBlocker blocker(m_objectCombo);
+	m_objectCombo->clear();
+	m_objectCombo->addItem(tr("All object types"), -1);
+
+	// Distinct kinds present, in enum order.
+	QVector<int> present;
+	if (m_index) {
+		for (const EventObjectRef& r : m_index->allReferences()) {
+			const int k = static_cast<int>(r.kind);
+			if (!present.contains(k))
+				present.push_back(k);
+		}
+	}
+	std::sort(present.begin(), present.end());
+	for (int k : present)
+		m_objectCombo->addItem(QString::fromLatin1(EventReferenceIndex::kindLabel(static_cast<RefObjectKind>(k))), k);
+
+	// Restore the current kind filter if still present.
+	int row = 0;
+	if (m_swimKind != RefObjectKind::Unknown) {
+		const int idx = m_objectCombo->findData(static_cast<int>(m_swimKind));
+		if (idx >= 0)
+			row = idx;
+		else
+			m_swimKind = RefObjectKind::Unknown;
+	}
+	m_objectCombo->setCurrentIndex(row);
+}
+
+void EventGraphView::toggleSwimObjectFocus(const QString& objectKey, bool add)
+{
+	if (add) {
+		if (m_focusObjects.contains(objectKey))
+			m_focusObjects.remove(objectKey);
+		else
+			m_focusObjects.insert(objectKey);
+	} else {
+		const bool wasSole = m_focusEvents.isEmpty() && m_focusObjects.size() == 1
+			&& m_focusObjects.contains(objectKey);
+		m_focusObjects.clear();
+		m_focusEvents.clear();
+		if (!wasSole)
+			m_focusObjects.insert(objectKey);
+	}
+}
+
+void EventGraphView::toggleSwimEventFocus(int eventIndex, bool add)
+{
+	if (add) {
+		if (m_focusEvents.contains(eventIndex))
+			m_focusEvents.remove(eventIndex);
+		else
+			m_focusEvents.insert(eventIndex);
+	} else {
+		const bool wasSole = m_focusObjects.isEmpty() && m_focusEvents.size() == 1
+			&& m_focusEvents.contains(eventIndex);
+		m_focusObjects.clear();
+		m_focusEvents.clear();
+		if (!wasSole)
+			m_focusEvents.insert(eventIndex);
+	}
+}
+
+void EventGraphView::clearSwimFocus()
+{
+	m_focusObjects.clear();
+	m_focusEvents.clear();
+}
+
+void EventGraphView::rebuildCurrent()
+{
+	if (m_mode == Mode::Swimlanes)
+		rebuildSwimlanes();
+	else
 		rebuildRadial();
 }
 
@@ -875,6 +1008,255 @@ void EventGraphView::rebuildRadial()
 		m_minimap->regenerate(); // content changed → re-render the cached overview
 }
 
+void EventGraphView::rebuildSwimlanes()
+{
+	// Viewport + selection continuity (same pattern as radial).
+	const QTransform savedTransform = transform();
+	const QPointF savedCenter = mapToScene(viewport()->rect().center());
+	int selEvent = -1;
+	for (QGraphicsItem* gi : m_scene->selectedItems()) {
+		if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(gi)) { selEvent = ev->eventIndex(); break; }
+		if (auto* nd = qgraphicsitem_cast<graphdetail::SexpNodeItem*>(gi)) { selEvent = nd->eventIndex(); break; }
+	}
+
+	m_suppressSelectionSignal = true;
+	m_scene->clear();
+
+	if (!m_index) {
+		m_suppressSelectionSignal = false;
+		showEmptyMessage(tr("No data."));
+		return;
+	}
+	const SCP_vector<EventObjectRef>& refs = m_index->allReferences();
+	if (refs.empty()) {
+		m_suppressSelectionSignal = false;
+		showEmptyMessage(tr("No object references in events."));
+		return;
+	}
+
+	const bool allKinds = (m_swimKind == RefObjectKind::Unknown);
+
+	// Distinct rows (objects) and columns (events), over the kind-allowed refs.
+	QVector<std::pair<RefObjectKind, QString>> rows;
+	QHash<QString, int> rowSeen;
+	QVector<int> cols;
+	QHash<int, int> colSeen;
+	for (const EventObjectRef& r : refs) {
+		if (!allKinds && r.kind != m_swimKind)
+			continue;
+		const QString name = QString::fromStdString(r.name);
+		const QString rk = swimRowKey(r.kind, name);
+		if (!rowSeen.contains(rk)) { rowSeen.insert(rk, 0); rows.push_back({r.kind, name}); }
+		if (!colSeen.contains(r.eventIndex)) { colSeen.insert(r.eventIndex, 0); cols.push_back(r.eventIndex); }
+	}
+	std::sort(rows.begin(), rows.end(), [](const std::pair<RefObjectKind, QString>& a,
+											 const std::pair<RefObjectKind, QString>& b) {
+		if (a.first != b.first)
+			return static_cast<int>(a.first) < static_cast<int>(b.first);
+		return a.second.toLower() < b.second.toLower();
+	});
+	std::sort(cols.begin(), cols.end());
+
+	QVector<QString> rowKeyOf(rows.size());
+	QHash<QString, int> rowIndex;
+	for (int i = 0; i < rows.size(); ++i) {
+		rowKeyOf[i] = swimRowKey(rows[i].first, rows[i].second);
+		rowIndex.insert(rowKeyOf[i], i);
+	}
+	QHash<int, int> colIndex;
+	for (int j = 0; j < cols.size(); ++j)
+		colIndex.insert(cols[j], j);
+
+	// Gather the referencing operator nodes per (object row, event column),
+	// deduped by node. A node that names several objects appears in each object's
+	// row (option #1); the column connector ties the copies together.
+	struct Site {
+		int treeNode = -1;
+		int eventIndex = -1;
+		bool isCond = false;
+		QString opName;
+		QVector<QString> args;
+		QString expr;
+	};
+	QHash<qint64, QVector<Site>> cellSites;
+	for (const EventObjectRef& r : refs) {
+		if (!allKinds && r.kind != m_swimKind)
+			continue;
+		const int ri = rowIndex.value(swimRowKey(r.kind, QString::fromStdString(r.name)));
+		const int ci = colIndex.value(r.eventIndex);
+		QVector<Site>& sites = cellSites[static_cast<qint64>(ri) * 1000000 + ci];
+		bool dup = false;
+		for (const Site& s : sites)
+			if (s.treeNode == r.operatorNode) { dup = true; break; }
+		if (dup)
+			continue;
+		Site s;
+		s.treeNode = r.operatorNode;
+		s.eventIndex = r.eventIndex;
+		s.isCond = (r.role == RefRole::Condition);
+		s.opName = QString::fromStdString(r.operatorText);
+		s.expr = QString::fromStdString(r.expression);
+		for (const auto& a : r.args)
+			s.args.push_back(QString::fromStdString(a));
+		sites.push_back(std::move(s));
+	}
+
+	// Cross-filter: a focused object restricts the visible columns to its events;
+	// a focused event restricts the visible rows to its objects. The two compose,
+	// and rows/columns left empty are dropped.
+	const bool objFocus = !m_focusObjects.isEmpty();
+	const bool evFocus = !m_focusEvents.isEmpty();
+	QSet<int> eventsOfFocusObj;
+	QSet<QString> objsOfFocusEv;
+	if (objFocus || evFocus) {
+		for (auto it = cellSites.constBegin(); it != cellSites.constEnd(); ++it) {
+			const int ri = static_cast<int>(it.key() / 1000000);
+			const int ci = static_cast<int>(it.key() % 1000000);
+			if (objFocus && m_focusObjects.contains(rowKeyOf[ri]))
+				eventsOfFocusObj.insert(cols[ci]);
+			if (evFocus && m_focusEvents.contains(cols[ci]))
+				objsOfFocusEv.insert(rowKeyOf[ri]);
+		}
+	}
+	auto colPasses = [&](int ci) { return !objFocus || eventsOfFocusObj.contains(cols[ci]); };
+	auto rowPasses = [&](int ri) { return !evFocus || objsOfFocusEv.contains(rowKeyOf[ri]); };
+
+	QSet<int> rowsWithCell, colsWithCell;
+	for (auto it = cellSites.constBegin(); it != cellSites.constEnd(); ++it) {
+		const int ri = static_cast<int>(it.key() / 1000000);
+		const int ci = static_cast<int>(it.key() % 1000000);
+		if (rowPasses(ri) && colPasses(ci)) { rowsWithCell.insert(ri); colsWithCell.insert(ci); }
+	}
+	QVector<int> keepRows, keepCols;
+	for (int i = 0; i < rows.size(); ++i)
+		if (rowPasses(i) && rowsWithCell.contains(i)) keepRows.push_back(i);
+	for (int j = 0; j < cols.size(); ++j)
+		if (colPasses(j) && colsWithCell.contains(j)) keepCols.push_back(j);
+
+	if (keepRows.isEmpty() || keepCols.isEmpty()) {
+		m_suppressSelectionSignal = false;
+		showEmptyMessage(tr("No references match the current filter (Esc to clear)."));
+		return;
+	}
+	QHash<int, int> rowPos, colPos;
+	for (int p = 0; p < keepRows.size(); ++p) rowPos.insert(keepRows[p], p);
+	for (int p = 0; p < keepCols.size(); ++p) colPos.insert(keepCols[p], p);
+
+	// Create the node cards per kept cell and measure their stacked height so each
+	// row can grow to fit. No event badge in swimlanes -- the column identifies it.
+	const qreal leftGutter = 244.0, topGutter = 66.0, colW = 252.0, cardGap = 10.0, rowPad = 16.0, minRowH = 60.0;
+	QHash<qint64, QVector<graphdetail::SexpNodeItem*>> cellCards;
+	QHash<qint64, qreal> cellHeight;
+	QVector<qreal> rowHeight(keepRows.size(), minRowH);
+	for (auto it = cellSites.constBegin(); it != cellSites.constEnd(); ++it) {
+		const int ri = static_cast<int>(it.key() / 1000000);
+		const int ci = static_cast<int>(it.key() % 1000000);
+		if (!rowPos.contains(ri) || !colPos.contains(ci))
+			continue;
+		QVector<graphdetail::SexpNodeItem*> cards;
+		qreal h = 0.0;
+		for (const Site& s : it.value()) {
+			auto* card = new graphdetail::SexpNodeItem(s.treeNode, s.eventIndex, s.isCond, s.opName, s.args,
+				QString(), s.expr, m_style);
+			cards.push_back(card);
+			h += card->boundingRect().height();
+		}
+		if (cards.size() > 1)
+			h += cardGap * (cards.size() - 1);
+		cellCards.insert(it.key(), cards);
+		cellHeight.insert(it.key(), h);
+		rowHeight[rowPos[ri]] = std::max(rowHeight[rowPos[ri]], h + rowPad);
+	}
+
+	// Cumulative row tops (variable heights).
+	QVector<qreal> rowTop(keepRows.size());
+	qreal yCursor = topGutter;
+	for (int p = 0; p < keepRows.size(); ++p) { rowTop[p] = yCursor; yCursor += rowHeight[p]; }
+	const qreal contentW = leftGutter + keepCols.size() * colW;
+	auto colXc = [&](int pos) { return leftGutter + pos * colW + colW / 2.0; };
+	auto rowCenter = [&](int pos) { return rowTop[pos] + rowHeight[pos] / 2.0; };
+
+	// Alternating lane stripes.
+	for (int p = 0; p < keepRows.size(); ++p) {
+		QColor tint = m_style.cardBorder;
+		tint.setAlpha(p % 2 ? 40 : 0);
+		auto* stripe = m_scene->addRect(QRectF(0, rowTop[p], contentW, rowHeight[p]), QPen(Qt::NoPen), QBrush(tint));
+		stripe->setZValue(-3.0);
+	}
+
+	// Position node cards; stack them centered in each row band; track the lowest
+	// card per column for the connector line.
+	QHash<int, qreal> colBottom;
+	for (auto it = cellCards.constBegin(); it != cellCards.constEnd(); ++it) {
+		const int ri = static_cast<int>(it.key() / 1000000);
+		const int ci = static_cast<int>(it.key() % 1000000);
+		const int rp = rowPos[ri], cp = colPos[ci];
+		const qreal stackH = cellHeight.value(it.key());
+		qreal top = rowCenter(rp) - stackH / 2.0;
+		for (graphdetail::SexpNodeItem* card : it.value()) {
+			const qreal ch = card->boundingRect().height();
+			card->setPos(colXc(cp), top + ch / 2.0);
+			card->setZValue(1.0);
+			if (card->eventIndex() == selEvent)
+				card->setSelected(true);
+			m_scene->addItem(card);
+			top += ch + cardGap;
+		}
+		const qreal bottom = rowCenter(rp) + stackH / 2.0;
+		if (!colBottom.contains(cp) || bottom > colBottom[cp]) colBottom[cp] = bottom;
+	}
+
+	// Vertical connector per column: header down to the lowest card.
+	for (auto it = colBottom.constBegin(); it != colBottom.constEnd(); ++it) {
+		auto* line = m_scene->addLine(colXc(it.key()), topGutter / 2.0, colXc(it.key()), it.value(),
+			QPen(m_style.entity, 1.6, Qt::DashLine));
+		line->setZValue(-1.0);
+	}
+
+	// Column headers (events).
+	for (int p = 0; p < keepCols.size(); ++p) {
+		const int ev = cols[keepCols[p]];
+		const QString name = (ev >= 0 && ev < m_eventNames.size()) ? m_eventNames[ev] : tr("<event %1>").arg(ev);
+		auto* hdr = new graphdetail::EventNodeItem(ev, name, m_style);
+		hdr->setPos(colXc(p), topGutter / 2.0);
+		hdr->setZValue(1.0);
+		if (m_focusEvents.contains(ev))
+			hdr->setFocusHighlight(true); // filter item (red)
+		else if (ev == selEvent)
+			hdr->setSelected(true); // tree-synced selection (orange)
+		m_scene->addItem(hdr);
+	}
+
+	// Row headers (objects); carry their key for the cross-filter click handler.
+	for (int p = 0; p < keepRows.size(); ++p) {
+		const int ri = keepRows[p];
+		auto* hdr = new graphdetail::ObjectNodeItem(
+			QString::fromLatin1(EventReferenceIndex::kindLabel(rows[ri].first)), m_style.colorFor(rows[ri].first),
+			rows[ri].second, QString(), m_style);
+		hdr->setPos(leftGutter / 2.0, rowCenter(p));
+		hdr->setZValue(1.0);
+		hdr->setData(0, rowKeyOf[ri]);
+		if (m_focusObjects.contains(rowKeyOf[ri]))
+			hdr->setFocusHighlight(true); // filter item (red)
+		m_scene->addItem(hdr);
+	}
+
+	const QString curKey = QStringLiteral("swim");
+	if (m_hasFramed && curKey == m_framedKey) {
+		setTransform(savedTransform);
+		centerOn(savedCenter);
+		m_currentScale = transform().m11();
+	} else {
+		zoomToFitAll();
+		m_framedKey = curKey;
+		m_hasFramed = true;
+	}
+
+	m_suppressSelectionSignal = false;
+	if (m_minimap)
+		m_minimap->regenerate();
+}
+
 void EventGraphView::zoomStep(bool zoomIn)
 {
 	const qreal step = zoomIn ? 1.10 : (1.0 / 1.10);
@@ -939,6 +1321,40 @@ void EventGraphView::drawBackground(QPainter* p, const QRectF& rect)
 void EventGraphView::mousePressEvent(QMouseEvent* e)
 {
 	const QPointF sp = mapToScene(e->pos());
+
+	// Swimlanes cross-filter: clicking a row header (object) or column header
+	// (event) drives the filter; Ctrl adds to the selection. Clicking empty
+	// canvas (a click, not a pan) clears the filter — handled on release.
+	m_pressOnEmpty = false;
+	if (m_mode == Mode::Swimlanes && e->button() == Qt::LeftButton) {
+		const bool ctrl = e->modifiers().testFlag(Qt::ControlModifier);
+		bool onNode = false;
+		for (QGraphicsItem* it : m_scene->items(sp)) {
+			if (auto* obj = qgraphicsitem_cast<graphdetail::ObjectNodeItem*>(it)) {
+				toggleSwimObjectFocus(obj->data(0).toString(), ctrl);
+				m_hasFramed = false;
+				rebuildSwimlanes();
+				e->accept();
+				return;
+			}
+			if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(it)) {
+				toggleSwimEventFocus(ev->eventIndex(), ctrl);
+				m_hasFramed = false;
+				rebuildSwimlanes();
+				e->accept();
+				return;
+			}
+			if (qgraphicsitem_cast<graphdetail::SexpNodeItem*>(it)) {
+				onNode = true; // node cards fall through to normal selection / jump
+				break;
+			}
+		}
+		if (!onNode) {
+			m_pressOnEmpty = true;
+			m_pressPos = e->pos();
+		}
+	}
+
 	for (QGraphicsItem* it : m_scene->items(sp)) {
 		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
 			card->bringToFront(); // clicked card jumps above overlaps
@@ -950,6 +1366,36 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 		}
 	}
 	QGraphicsView::mousePressEvent(e);
+}
+
+void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
+{
+	// A click (not a pan-drag) on empty canvas clears the swimlanes filter.
+	const bool emptyClick = m_pressOnEmpty && e->button() == Qt::LeftButton
+		&& (e->pos() - m_pressPos).manhattanLength() < 6
+		&& (!m_focusObjects.isEmpty() || !m_focusEvents.isEmpty());
+	m_pressOnEmpty = false;
+
+	QGraphicsView::mouseReleaseEvent(e); // let ScrollHandDrag settle its state first
+
+	if (emptyClick) {
+		clearSwimFocus();
+		m_hasFramed = false;
+		rebuildSwimlanes();
+	}
+}
+
+void EventGraphView::keyPressEvent(QKeyEvent* e)
+{
+	if (m_mode == Mode::Swimlanes && e->key() == Qt::Key_Escape
+		&& (!m_focusObjects.isEmpty() || !m_focusEvents.isEmpty())) {
+		clearSwimFocus();
+		m_hasFramed = false;
+		rebuildSwimlanes();
+		e->accept();
+		return;
+	}
+	QGraphicsView::keyPressEvent(e);
 }
 
 void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
