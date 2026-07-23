@@ -9,6 +9,9 @@
 #include <mission/missionmessage.h>
 #include <mission/missionparse.h>
 
+// Defined in missioneditor/missionsave.h; only the name is needed here.
+enum class MissionFormat;
+
 namespace fso::fred::dialogs {
 
 class MissionEventsDialogModel : public AbstractDialogModel {
@@ -31,6 +34,16 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void restoreEventWorkingState(const QByteArray& state);
 	QByteArray captureMessageWorkingState() const;
 	void restoreMessageWorkingState(const QByteArray& state);
+
+	// Advanced Edit view: generate the #Events section exactly as a real save
+	// would print it, and parse hand-edited text back into the working events.
+	// generateEventsSectionText returns the section body (from the "#Events"
+	// line up to, but excluding, "#Goals"). applyEventsText validates the text;
+	// on success (and !dryRun) it rebuilds the working events/tree from it.
+	// Both leave the mission globals untouched (swapped in and out internally).
+	SCP_string generateEventsSectionText(MissionFormat fmt);
+	bool applyEventsText(const SCP_string& text, bool dryRun,
+		SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings);
 
 	bool eventIsValid() const;
 	bool messageIsValid() const;

@@ -66,6 +66,11 @@ class FredView: public QMainWindow, public IDialogProvider {
 
 	void restartAutosaveTimer();
 
+	// The save format the user has selected via the File menu; dialogs that
+	// generate mission-file text (e.g. the events Advanced Edit view) use it
+	// so their output matches a real save.
+	MissionFormat missionSaveFormat() const { return _missionSaveFormat; }
+
  public slots:
 	void openLoadMissionDialog();
 

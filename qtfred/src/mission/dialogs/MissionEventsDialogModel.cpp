@@ -1,7 +1,22 @@
 #include "MissionEventsDialogModel.h"
+#include "state/DialogStateHelpers.h"
 
 #include <sound/audiostr.h>
 #include <localization/localize.h>
+#include <missioneditor/missionsave.h>
+#include <parse/parselo.h>
+#include <parse/sexp.h>
+#include <cmdline/cmdline.h>
+
+#include <QDir>
+#include <QFile>
+
+// Parse globals used by the Advanced Edit round-trip. Not exposed in the
+// public headers, so we declare them here.
+extern char Fred_alt_names[MAX_SHIPS][NAME_LENGTH + 1];
+extern char Fred_callsigns[MAX_SHIPS][NAME_LENGTH + 1];
+extern int Warning_count, Error_count;
+void parse_event(mission* pm);
 
 namespace fso::fred::dialogs {
 
@@ -1480,6 +1495,320 @@ bool MissionEventsDialogModel::getMissionIsMultiTeam()
 
 void MissionEventsDialogModel::setModified() {
 	set_modified();
+}
+
+// ---------------------------------------------------------------------------
+// Advanced Edit view: text <-> working events round-trip
+// ---------------------------------------------------------------------------
+
+SCP_string MissionEventsDialogModel::generateEventsSectionText(MissionFormat fmt)
+{
+	// Materialize working events with real Sexp_nodes formulas (as apply() and
+	// captureEventWorkingState do), in dialog order.
+	SCP_vector<mission_event> tempEvents;
+	tempEvents.reserve(m_events.size());
+	for (const auto& e : m_events) {
+		tempEvents.push_back(e);
+		tempEvents.back().formula = m_tree_model.save_tree(e.formula);
+	}
+
+	// Build annotations for the temp events, mirroring
+	// SexpAnnotationModel::saveToGlobal but into a local vector so the working
+	// annotation state is left untouched. Paths are keyed by dialog event
+	// index, which matches tempEvents' order.
+	SCP_vector<event_annotation> tempAnn;
+	for (const auto& src : m_annotation_model.annotations()) {
+		event_annotation ea = src;
+		const int key = ea.node_index;
+		ea.path.clear();
+		if ((key >= 0 && key < static_cast<int>(m_tree_model.tree_nodes.size()) &&
+		        m_tree_model.tree_nodes[key].type != SEXPT_UNUSED) ||
+		    SexpAnnotationModel::isRootKey(key)) {
+			ea.path = SexpAnnotationModel::buildPath(key, m_tree_model.tree_nodes, m_events);
+		}
+		ea.node_index = -1;
+		if (ea.path.empty() || SexpAnnotationModel::isDefault(ea))
+			continue;
+		tempAnn.push_back(std::move(ea));
+	}
+
+	// Snapshot global parse state that a full save mutates (bypass_comment
+	// permanently edits Parse_text_raw; save_mission_internal touches these
+	// mission fields), so a later real save is unaffected.
+	const SCP_string savedRaw = (Parse_text_raw != nullptr) ? SCP_string(Parse_text_raw) : SCP_string();
+	const SCP_string savedModified = The_mission.modified;
+	const auto savedVersion = The_mission.required_fso_version;
+
+	SCP_string sectionText;
+
+	{
+		std::swap(Mission_events, tempEvents);
+		std::swap(Event_annotations, tempAnn);
+
+		// A scratch path outside the mission tree; save_autosave_file writes to
+		// an absolute path with no .bak dance.
+		const QString scratch = QDir(QDir::tempPath()).filePath(QStringLiteral("qtfred_events_preview.fs2"));
+		const QByteArray scratchUtf8 = scratch.toUtf8();
+
+		Fred_mission_save save;
+		save.set_save_format(fmt);
+		save.set_fred_alt_names(Fred_alt_names);
+		save.set_fred_callsigns(Fred_callsigns);
+		save.save_autosave_file(scratchUtf8.constData());
+
+		std::swap(Mission_events, tempEvents);
+		std::swap(Event_annotations, tempAnn);
+
+		QFile f(scratch);
+		if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+			sectionText = f.readAll().constData();
+			f.close();
+		}
+		f.remove();
+	}
+
+	// Free the transient global formulas we allocated.
+	for (const auto& e : tempEvents)
+		fso::fred::state::freeSexpFormula(e.formula);
+
+	// Restore snapshotted globals.
+	if (Parse_text_raw != nullptr)
+		strcpy(Parse_text_raw, savedRaw.c_str());
+	strcpy_s(The_mission.modified, savedModified.c_str());
+	The_mission.required_fso_version = savedVersion;
+
+	// Slice the "#Events" section (from its header line up to, but excluding,
+	// the "#Goals" header line).
+	auto lineStartFind = [&sectionText](const char* token, size_t from) -> size_t {
+		size_t pos = from;
+		while ((pos = sectionText.find(token, pos)) != SCP_string::npos) {
+			if (pos == 0 || sectionText[pos - 1] == '\n')
+				return pos;
+			pos += 1;
+		}
+		return SCP_string::npos;
+	};
+
+	const size_t start = lineStartFind("#Events", 0);
+	if (start == SCP_string::npos)
+		return sectionText; // fallback: return whatever we got
+	const size_t end = lineStartFind("#Goals", start + 1);
+	if (end == SCP_string::npos)
+		return sectionText.substr(start);
+	return sectionText.substr(start, end - start);
+}
+
+bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryRun,
+	SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings)
+{
+	errors.clear();
+	warnings.clear();
+
+	// Comment-strip / version-tag process the user's text into our own buffers,
+	// never the global Parse_text/Parse_text_raw the real save/load rely on.
+	SCP_string raw = text;
+	SCP_vector<char> processed(raw.size() + 1, '\0');
+	SCP_vector<char> rawCopy(raw.begin(), raw.end());
+	rawCopy.push_back('\0');
+	process_raw_file_text(processed.data(), rawCopy.data());
+
+	// Results are collected into these before we decide whether to commit.
+	SCP_vector<mission_event> parsedEvents;
+	SCP_vector<event_annotation> parsedAnnotations;
+	bool ok = true;
+
+	// Defuse fatal parse errors (level-1 error_display -> Error() -> abort) into
+	// non-fatal warnings for the duration of the parse.
+	const int savedNoParseErrors = Cmdline_noparseerrors;
+	Cmdline_noparseerrors = 1;
+
+	// Parse into temporary globals so nothing in the live mission is touched.
+	SCP_vector<mission_event> tempEvents;
+	SCP_vector<event_annotation> tempAnn;
+	std::swap(Mission_events, tempEvents);
+	std::swap(Event_annotations, tempAnn);
+	const size_t warnBaseline = Mission_parse_warnings.size();
+
+	pause_parse();
+	reset_parse(processed.data());
+	// get_line_num() walks from Parse_text to Mp; point it at our buffer so it
+	// doesn't stride across two unrelated allocations. reset_parse only moves Mp.
+	char* savedParseText = Parse_text;
+	Parse_text = processed.data();
+
+	try {
+		if (!optional_string("#Events")) {
+			errors.push_back("Missing '#Events' section header.");
+			ok = false;
+		} else {
+			int ordinal = 0;
+			while (check_for_string("$Formula:")) {
+				const int wBefore = Warning_count;
+				const int eBefore = Error_count;
+
+				parse_event(&The_mission); // appends to global Mission_events
+
+				const bool hadEvent = !Mission_events.empty();
+				const SCP_string evName = hadEvent && !Mission_events.back().name.empty()
+					? Mission_events.back().name
+					: SCP_string("<event ") + std::to_string(ordinal + 1) + ">";
+
+				if (Warning_count > wBefore || Error_count > eBefore) {
+					errors.push_back("Problem parsing event '" + evName + "' near line "
+						+ std::to_string(get_line_num()) + ".");
+					ok = false;
+				}
+				++ordinal;
+			}
+
+			// Anything left (beyond trailing whitespace and an optional trailing
+			// "#Goals" header) is stray text the user shouldn't have added.
+			ignore_white_space();
+			if (!check_for_string("#Goals") && *Mp != '\0') {
+				errors.push_back("Unexpected text after the last event near line "
+					+ std::to_string(get_line_num()) + ".");
+				ok = false;
+			}
+		}
+	} catch (const parse::ParseException& e) {
+		errors.push_back(SCP_string("Parse error: ") + e.what());
+		ok = false;
+	}
+
+	// New qtFRED-recorded warnings are advisory, not blocking.
+	for (size_t i = warnBaseline; i < Mission_parse_warnings.size(); ++i)
+		warnings.push_back(Mission_parse_warnings[i]);
+	Mission_parse_warnings.resize(warnBaseline);
+
+	// Per-event sexp validation.
+	for (size_t i = 0; i < Mission_events.size(); ++i) {
+		const int formula = Mission_events[i].formula;
+		const SCP_string evName = !Mission_events[i].name.empty()
+			? Mission_events[i].name : SCP_string("<event ") + std::to_string(i + 1) + ">";
+		if (formula < 0) {
+			errors.push_back("Event '" + evName + "' has no valid formula.");
+			ok = false;
+			continue;
+		}
+		int bad_node = -1;
+		const int z = check_sexp_syntax(formula, OPR_NULL, 1, &bad_node);
+		if (z) {
+			SCP_string sexp_buf;
+			convert_sexp_to_string(sexp_buf, formula, SEXP_ERROR_CHECK_MODE);
+			SCP_string bad_node_str;
+			stuff_sexp_text_string(bad_node_str, bad_node, SEXP_ERROR_CHECK_MODE);
+			if (!bad_node_str.empty())
+				bad_node_str.pop_back();
+			errors.push_back("Error in event '" + evName + "': " + sexp_error_message(z)
+				+ " (bad node: " + bad_node_str + ")");
+			ok = false;
+		}
+	}
+
+	// Take ownership of the parsed events out of the temp global before we
+	// swap it back, so the formulas survive for either commit or cleanup.
+	parsedEvents = std::move(Mission_events);
+	parsedAnnotations = std::move(Event_annotations);
+
+	// Restore the live globals and parse state.
+	std::swap(Mission_events, tempEvents);
+	std::swap(Event_annotations, tempAnn);
+	Parse_text = savedParseText;
+	unpause_parse();
+	Cmdline_noparseerrors = savedNoParseErrors;
+
+	if (!ok || dryRun) {
+		for (const auto& e : parsedEvents)
+			fso::fred::state::freeSexpFormula(e.formula);
+		return ok;
+	}
+
+	// ---- Commit: rebuild working events/tree from the parsed data ----
+
+	// Sig matching: keep mission-wide references working. Pass 1 matches by
+	// name; pass 2 matches leftovers by identical formula text (a rename).
+	SCP_vector<int> newSig(parsedEvents.size(), -1);
+	SCP_vector<bool> oldUsed(m_events.size(), false);
+
+	auto formulaText = [](int treeFormula, SexpTreeModel& tm) -> SCP_string {
+		const int sexp = tm.save_tree(treeFormula);
+		SCP_string out;
+		convert_sexp_to_string(out, sexp, SEXP_SAVE_MODE);
+		fso::fred::state::freeSexpFormula(sexp);
+		return out;
+	};
+
+	for (size_t i = 0; i < parsedEvents.size(); ++i) {
+		for (size_t j = 0; j < m_events.size(); ++j) {
+			if (!oldUsed[j] && m_sig[j] >= 0 && parsedEvents[i].name == m_events[j].name) {
+				newSig[i] = m_sig[j];
+				oldUsed[j] = true;
+				break;
+			}
+		}
+	}
+	// Precompute old formula text only for unmatched-by-name candidates.
+	for (size_t i = 0; i < parsedEvents.size(); ++i) {
+		if (newSig[i] >= 0)
+			continue;
+		SCP_string parsedText;
+		convert_sexp_to_string(parsedText, parsedEvents[i].formula, SEXP_SAVE_MODE);
+		for (size_t j = 0; j < m_events.size(); ++j) {
+			if (oldUsed[j] || m_sig[j] < 0)
+				continue;
+			if (formulaText(m_events[j].formula, m_tree_model) == parsedText) {
+				newSig[i] = m_sig[j];
+				oldUsed[j] = true;
+				break;
+			}
+		}
+	}
+
+	// Rebuild the tree model + working events from the parsed formulas.
+	m_events.clear();
+	m_sig.clear();
+	m_tree_model.clear_tree_data();
+
+	for (size_t i = 0; i < parsedEvents.size(); ++i) {
+		mission_event e = parsedEvents[i];
+		e.formula = m_tree_model.load_sub_tree(parsedEvents[i].formula, false, "do-nothing");
+		if (e.repeat_count <= 0)
+			e.repeat_count = 1;
+		if (e.name.empty())
+			e.name = "<Unnamed>";
+		m_events.push_back(std::move(e));
+		m_sig.push_back(newSig[i]);
+		fso::fred::state::freeSexpFormula(parsedEvents[i].formula);
+	}
+	m_tree_model.post_load();
+	m_cur_event = -1;
+
+	rebuildTreeWidget();
+
+	// Annotations: parsedAnnotations carry dialog-order event indices + node
+	// paths, so resolve with an identity index map (same as restore).
+	m_annotation_model.clear();
+	SCP_vector<int> identity;
+	identity.reserve(m_events.size());
+	for (int i = 0; i < static_cast<int>(m_events.size()); ++i)
+		identity.push_back(i);
+
+	for (const auto& src : parsedAnnotations) {
+		const int key = SexpAnnotationModel::resolveFromPath(src.path, m_tree_model.tree_nodes, m_events, identity);
+		if (key == -1)
+			continue;
+		auto& ea = m_annotation_model.ensureByKey(key);
+		ea.comment = src.comment;
+		ea.r = src.r;
+		ea.g = src.g;
+		ea.b = src.b;
+		const bool hasColor = (src.r != 255) || (src.g != 255) || (src.b != 255);
+		Q_EMIT annotationApplied(key, ea.comment, src.r, src.g, src.b, hasColor);
+	}
+
+	setCurrentlySelectedEvent(-1);
+	set_modified();
+	return true;
 }
 
 } // namespace fso::fred::dialogs
