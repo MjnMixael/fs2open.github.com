@@ -144,6 +144,9 @@ class EventGraphView final : public QGraphicsView {
 	void rebuildSettingsMenu();
 	void positionOverlay();
 	void updateChromeVisibility();
+	// Drag mode + pan cursor derived from the current mode. Called on construct
+	// and on every mode change, so the default view is a one-line change.
+	void applyModeViewport();
 	void applyTheme(bool dark);
 	void populateSelector();
 	void populateKindFilter();
