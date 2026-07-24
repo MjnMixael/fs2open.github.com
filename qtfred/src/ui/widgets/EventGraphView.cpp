@@ -163,6 +163,21 @@ class CardItem : public QGraphicsItem {
 
 	QString titleText() const { return m_title; }
 
+	// Case-insensitive substring match against the card's visible text, for the
+	// graph search box. An empty query matches everything.
+	bool matchesQuery(const QString& q) const
+	{
+		if (q.isEmpty())
+			return true;
+		if (m_title.contains(q, Qt::CaseInsensitive) || m_cornerText.contains(q, Qt::CaseInsensitive)
+			|| m_chip.contains(q, Qt::CaseInsensitive) || m_subtitle.contains(q, Qt::CaseInsensitive))
+			return true;
+		for (const QString& l : m_lines)
+			if (l.contains(q, Qt::CaseInsensitive))
+				return true;
+		return false;
+	}
+
 	// Distinct highlight for a swimlanes filter item (independent of selection).
 	void setFocusHighlight(bool on) { m_focusHighlight = on; update(); }
 
@@ -725,12 +740,15 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 
 	setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
 	setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
-	setDragMode(QGraphicsView::ScrollHandDrag);
+	// Basic drags cards individually (NoDrag + manual pan); the others pan on drag.
+	setDragMode(m_mode == Mode::Basic ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
 	setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
 	setBackgroundBrush(m_style.bgColor);
 	setFrameShape(QFrame::NoFrame);
 	setAlignment(Qt::AlignCenter);
 	setFocusPolicy(Qt::StrongFocus); // receive Esc to clear the swimlanes filter
+	if (m_mode == Mode::Basic)
+		viewport()->setCursor(Qt::OpenHandCursor); // manual-pan affordance
 
 	buildOverlay();
 
@@ -911,7 +929,7 @@ void EventGraphView::rebuildSettingsMenu()
 	// --- Mode-specific ---
 	if (m_mode == Mode::Radial) {
 		m_settingsMenu->addSection(tr("Radial"));
-		addSlider(tr("Ring spacing"), 120, 420, static_cast<int>(s_ringSpacing), [this](int v, QLabel* value) {
+		addSlider(tr("Ring spacing"), 120, 600, static_cast<int>(s_ringSpacing), [this](int v, QLabel* value) {
 			s_ringSpacing = v;
 			value->setText(QString::number(v));
 			rebuildRadial();
@@ -1192,34 +1210,89 @@ void EventGraphView::showEmptyMessage(const QString& text)
 		m_minimap->regenerate(); // content changed → re-render the cached overview
 }
 
-// Reference-line on-select visibility and focus-fade dimming, driven by the
-// current selection. Runs after each radial/basic rebuild and on every real
-// selection change. Swimlanes has its own cross-filter focus, so it's skipped.
-void EventGraphView::applyEmphasis()
+void EventGraphView::setSearchText(const QString& text)
 {
-	if (m_mode == Mode::Swimlanes)
+	if (m_searchText == text)
+		return;
+	m_searchText = text;
+	m_matchIndex = -1; // restart next/prev navigation for the new query
+	applyEmphasis();
+}
+
+// Step through the matching cards in reading order (top-to-bottom, then
+// left-to-right), panning and zooming to each and selecting it.
+void EventGraphView::focusNextMatch(bool forward)
+{
+	if (m_searchText.isEmpty())
 		return;
 
-	QSet<QGraphicsItem*> selected;
-	for (QGraphicsItem* it : m_scene->selectedItems())
-		if (dynamic_cast<graphdetail::CardItem*>(it))
-			selected.insert(it);
-	const bool hasSel = !selected.isEmpty();
-
-	// Collect the edges and the neighbor set (cards sharing an edge with a
-	// selected card).
-	QVector<graphdetail::RefEdgeItem*> edges;
-	QSet<QGraphicsItem*> active = selected;
+	QVector<graphdetail::CardItem*> matches;
 	for (QGraphicsItem* it : m_scene->items()) {
-		auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it);
-		if (!e)
-			continue;
-		edges.push_back(e);
-		if (hasSel) {
-			if (e->endA() && selected.contains(e->endA()) && e->endB())
-				active.insert(e->endB());
-			if (e->endB() && selected.contains(e->endB()) && e->endA())
-				active.insert(e->endA());
+		auto* c = dynamic_cast<graphdetail::CardItem*>(it);
+		if (c && c->matchesQuery(m_searchText))
+			matches.push_back(c);
+	}
+	if (matches.isEmpty())
+		return;
+	std::sort(matches.begin(), matches.end(), [](graphdetail::CardItem* a, graphdetail::CardItem* b) {
+		const QPointF pa = a->pos(), pb = b->pos();
+		if (!qFuzzyCompare(pa.y(), pb.y()))
+			return pa.y() < pb.y();
+		return pa.x() < pb.x();
+	});
+
+	const int n = matches.size();
+	if (m_matchIndex < 0)
+		m_matchIndex = forward ? 0 : n - 1;
+	else
+		m_matchIndex = ((m_matchIndex + (forward ? 1 : -1)) % n + n) % n;
+	graphdetail::CardItem* cur = matches[m_matchIndex];
+
+	// Pan + zoom so the match sits centered with a little surrounding context.
+	fitInView(cur->sceneBoundingRect().adjusted(-260, -180, 260, 180), Qt::KeepAspectRatio);
+	m_currentScale = transform().m11();
+
+	// Select it: an orange border marks the current match and syncs the event out.
+	m_scene->clearSelection();
+	cur->setSelected(true);
+	if (m_minimap)
+		m_minimap->update();
+}
+
+// Node emphasis: search highlight (all modes) plus reference-line on-select
+// visibility and focus-fade dimming (radial/basic, which have node edges;
+// swimlanes has its own cross-filter focus). Runs after each rebuild and on
+// every real selection change.
+void EventGraphView::applyEmphasis()
+{
+	const bool searchActive = !m_searchText.isEmpty();
+	auto matches = [this](QGraphicsItem* it) {
+		auto* c = dynamic_cast<graphdetail::CardItem*>(it);
+		return c && c->matchesQuery(m_searchText);
+	};
+
+	// Selection emphasis only applies where there are node edges to reason about.
+	const bool selMode = (m_mode != Mode::Swimlanes);
+	QSet<QGraphicsItem*> selected, active;
+	QVector<graphdetail::RefEdgeItem*> edges;
+	bool hasSel = false;
+	if (selMode) {
+		for (QGraphicsItem* it : m_scene->selectedItems())
+			if (dynamic_cast<graphdetail::CardItem*>(it))
+				selected.insert(it);
+		hasSel = !selected.isEmpty();
+		active = selected;
+		for (QGraphicsItem* it : m_scene->items()) {
+			auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it);
+			if (!e)
+				continue;
+			edges.push_back(e);
+			if (hasSel) {
+				if (e->endA() && selected.contains(e->endA()) && e->endB())
+					active.insert(e->endB());
+				if (e->endB() && selected.contains(e->endB()) && e->endA())
+					active.insert(e->endA());
+			}
 		}
 	}
 
@@ -1231,14 +1304,24 @@ void EventGraphView::applyEmphasis()
 										 (e->endB() && selected.contains(e->endB())));
 		const bool visible = (s_refMode != RefLineMode::OnSelect) || incident;
 		e->setVisible(visible);
-		if (visible)
-			e->setOpacity(fade && !incident ? dim : 1.0);
+		if (!visible)
+			continue;
+		// Dim edges the focus or search excludes (search keeps an edge lit if
+		// either endpoint matches).
+		bool edgeDim = fade && !incident;
+		if (searchActive && !matches(e->endA()) && !matches(e->endB()))
+			edgeDim = true;
+		e->setOpacity(edgeDim ? dim : 1.0);
 	}
 
 	for (QGraphicsItem* it : m_scene->items()) {
-		if (!dynamic_cast<graphdetail::CardItem*>(it))
+		auto* c = dynamic_cast<graphdetail::CardItem*>(it);
+		if (!c)
 			continue;
-		it->setOpacity(fade && !active.contains(it) ? dim : 1.0);
+		bool cardDim = fade && !active.contains(it);
+		if (searchActive && !c->matchesQuery(m_searchText))
+			cardDim = true;
+		c->setOpacity(cardDim ? dim : 1.0);
 	}
 }
 
@@ -1653,6 +1736,7 @@ void EventGraphView::rebuildSwimlanes()
 	}
 
 	m_suppressSelectionSignal = false;
+	applyEmphasis(); // re-apply any active search highlight
 	if (m_minimap)
 		m_minimap->regenerate();
 }

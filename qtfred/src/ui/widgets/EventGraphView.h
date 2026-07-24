@@ -96,6 +96,14 @@ class EventGraphView final : public QGraphicsView {
 	// already resolved from saved annotations by the dialog.
 	void setBasicGraph(BasicGraph graph) { m_basicGraph = std::move(graph); }
 
+	// Highlight nodes whose text matches the query (dimming the rest), across all
+	// modes. Empty query clears the highlight. Driven by the shared search box.
+	void setSearchText(const QString& text);
+	// Step to the next/previous matching node (reading order) and pan+zoom to it.
+	void focusNextMatch(bool forward);
+	// True while a non-empty search is active (for enabling the next/prev arrows).
+	bool hasSearch() const { return !m_searchText.isEmpty(); }
+
 	// Repopulate the selector (preserving the current object where possible) and
 	// rebuild the current view's scene from the current data.
 	void reload();
@@ -165,6 +173,8 @@ class EventGraphView final : public QGraphicsView {
 	QVector<QString> m_eventNames;
 	QVector<GraphObject> m_objects;
 	BasicGraph m_basicGraph;
+	QString m_searchText; // graph search highlight query
+	int m_matchIndex = -1; // current match for next/prev navigation
 
 	// Basic view drag tracking: the card grabbed on press and its starting scene
 	// position, so a real move (not a click) emits nodeMoved on release.
@@ -176,7 +186,7 @@ class EventGraphView final : public QGraphicsView {
 	QPoint m_panLastPos;
 
 	EventGraphStyle m_style;
-	Mode m_mode = Mode::Radial;
+	Mode m_mode = Mode::Basic;
 
 	// Top-left overlay controls.
 	QWidget*      m_overlay = nullptr;
