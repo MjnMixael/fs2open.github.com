@@ -370,6 +370,8 @@ void MissionEventsDialog::initViewToggle()
 	connect(ui->eventSearchEdit, &QLineEdit::returnPressed, this, [this] {
 		if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
 			findInAdvancedText(/*forward=*/true, /*incremental=*/false);
+		else if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+			ui->eventGraph->focusNextMatch(/*forward=*/true);
 	});
 
 	// Ctrl+F focuses the search box for whichever view is active.
@@ -470,8 +472,11 @@ void MissionEventsDialog::setCurrentEventView(int index)
 	// Rebuild the relationship graph when the graph view becomes current, but
 	// only if the events changed since we last built it — otherwise leave the
 	// widget untouched so its zoom/scroll/selection carry over.
-	if (index == GraphViewIndex && _graphDirty)
-		refreshGraphView();
+	if (index == GraphViewIndex) {
+		ui->eventGraph->setSearchText(QString()); // start with no highlight
+		if (_graphDirty)
+			refreshGraphView();
+	}
 
 	s_lastEventViewIndex = index;
 	applyViewChrome(index);
@@ -655,18 +660,24 @@ void MissionEventsDialog::applyViewChrome(int index)
 {
 	const bool treeView = (index == TreeViewIndex);
 	const bool advancedView = (index == AdvancedViewIndex);
+	const bool graphView = (index == GraphViewIndex);
 
-	// The search box filters in tree view and finds-in-text in advanced view;
-	// its placeholder follows suit. Disabled in the graph view (neither).
-	ui->eventSearchEdit->setEnabled(treeView || advancedView);
-	ui->eventSearchEdit->setPlaceholderText(advancedView ? tr("Find text...") : tr("Filter by name..."));
+	// The search box filters in tree view, finds-in-text in advanced view, and
+	// highlights matching nodes in the graph view; its placeholder follows suit.
+	ui->eventSearchEdit->setEnabled(treeView || advancedView || graphView);
+	ui->eventSearchEdit->setPlaceholderText(advancedView ? tr("Find text...")
+		: graphView         ? tr("Highlight nodes...")
+							  : tr("Filter by name..."));
 
-	// The find arrows only apply to the advanced text; hide them elsewhere
-	// (they, like the validation panel, are advanced-view-only chrome).
-	ui->btnFindPrev->setVisible(advancedView);
-	ui->btnFindNext->setVisible(advancedView);
-	ui->btnFindPrev->setEnabled(advancedView);
-	ui->btnFindNext->setEnabled(advancedView);
+	// The find arrows step through advanced-text matches or, in the graph view,
+	// through the highlighted nodes; hidden in the tree view. In the graph they're
+	// only live while there is a query to step through.
+	const bool findArrows = advancedView || graphView;
+	ui->btnFindPrev->setVisible(findArrows);
+	ui->btnFindNext->setVisible(findArrows);
+	const bool arrowsEnabled = advancedView || (graphView && !ui->eventSearchEdit->text().isEmpty());
+	ui->btnFindPrev->setEnabled(arrowsEnabled);
+	ui->btnFindNext->setEnabled(arrowsEnabled);
 
 	// The whole event-controls column acts on the tree selection/order —
 	// disable it wholesale (labels included) outside the tree view.
@@ -1217,6 +1228,15 @@ void MissionEventsDialog::on_eventSearchEdit_textChanged(const QString& /*text*/
 		findInAdvancedText(/*forward=*/true, /*incremental=*/true);
 		return;
 	}
+	// In the graph view it highlights matching nodes (dims the rest); the arrows
+	// step through those matches.
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+		const QString q = ui->eventSearchEdit->text();
+		ui->eventGraph->setSearchText(q);
+		ui->btnFindPrev->setEnabled(!q.isEmpty());
+		ui->btnFindNext->setEnabled(!q.isEmpty());
+		return;
+	}
 
 	applyEventFilter();
 
@@ -1269,11 +1289,19 @@ void MissionEventsDialog::findInAdvancedText(bool forward, bool incremental)
 
 void MissionEventsDialog::on_btnFindNext_clicked()
 {
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+		ui->eventGraph->focusNextMatch(/*forward=*/true);
+		return;
+	}
 	findInAdvancedText(/*forward=*/true, /*incremental=*/false);
 }
 
 void MissionEventsDialog::on_btnFindPrev_clicked()
 {
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+		ui->eventGraph->focusNextMatch(/*forward=*/false);
+		return;
+	}
 	findInAdvancedText(/*forward=*/false, /*incremental=*/true);
 }
 
