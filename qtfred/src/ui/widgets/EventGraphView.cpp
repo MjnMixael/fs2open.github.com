@@ -740,15 +740,12 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 
 	setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
 	setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
-	// Basic drags cards individually (NoDrag + manual pan); the others pan on drag.
-	setDragMode(m_mode == Mode::Basic ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
 	setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
 	setBackgroundBrush(m_style.bgColor);
 	setFrameShape(QFrame::NoFrame);
 	setAlignment(Qt::AlignCenter);
 	setFocusPolicy(Qt::StrongFocus); // receive Esc to clear the swimlanes filter
-	if (m_mode == Mode::Basic)
-		viewport()->setCursor(Qt::OpenHandCursor); // manual-pan affordance
+	applyModeViewport();
 
 	buildOverlay();
 
@@ -1084,18 +1081,24 @@ void EventGraphView::reload()
 	rebuildCurrent();
 }
 
+// Basic drags cards individually, so the built-in ScrollHandDrag (which owns the
+// left drag) can't run there; empty-canvas panning is manual, hinted with the
+// open-hand cursor. The other modes pan on drag via ScrollHandDrag (which sets
+// its own cursor, so switching away from Basic restores the pan hand).
+void EventGraphView::applyModeViewport()
+{
+	setDragMode(m_mode == Mode::Basic ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
+	if (m_mode == Mode::Basic)
+		viewport()->setCursor(Qt::OpenHandCursor);
+}
+
 void EventGraphView::setMode(Mode mode)
 {
 	if (mode == m_mode)
 		return;
 	m_mode = mode;
-	// Basic uses individually draggable cards, so the built-in ScrollHandDrag
-	// (which owns the left drag) can't run; empty-canvas panning is handled
-	// manually. Hint it with the open-hand cursor over the viewport.
-	setDragMode(mode == Mode::Basic ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
-	if (mode == Mode::Basic)
-		viewport()->setCursor(Qt::OpenHandCursor);
 	m_panning = false;
+	applyModeViewport();
 	populateSelectorForMode();
 	positionOverlay();
 	m_hasFramed = false; // re-fit for the new mode
