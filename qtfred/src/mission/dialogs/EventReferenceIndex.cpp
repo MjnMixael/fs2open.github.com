@@ -170,6 +170,14 @@ bool EventReferenceIndex::leafObject(const SexpTreeModel& tree, int node, RefObj
 		return !name.empty();
 	}
 
+	if (n.type & (SEXPT_CONTAINER_NAME | SEXPT_CONTAINER_DATA)) {
+		// A SEXP container reference (name or data access); the node text is the
+		// container's name.
+		kind = RefObjectKind::Container;
+		name = n.text;
+		return !name.empty();
+	}
+
 	if (SEXPT_TYPE(n.type) == SEXPT_STRING) {
 		const int opf = tree.query_node_argument_type(node);
 		kind = classify(opf, n.text);
@@ -317,7 +325,7 @@ int EventReferenceIndex::buildOpSubtree(const SexpTreeModel& tree, int node, int
 
 	SCP_vector<SCP_string> inlineArgs;
 	SCP_vector<int> childOps;
-	SCP_vector<int> objectRefs;
+	SCP_vector<BasicObjRef> objectRefs;
 
 	for (int c = tree.tree_nodes[node].child; c != -1; c = tree.tree_nodes[c].next) {
 		if (SEXPT_TYPE(tree.tree_nodes[c].type) == SEXPT_OPERATOR) {
@@ -345,8 +353,12 @@ int EventReferenceIndex::buildOpSubtree(const SexpTreeModel& tree, int node, int
 				objIdx = it->second;
 			}
 			g.objects[objIdx].refTreeNodes.push_back(c);
-			if (std::find(objectRefs.begin(), objectRefs.end(), objIdx) == objectRefs.end())
-				objectRefs.push_back(objIdx);
+			// Keep every reference (not deduped): combined rendering dedups by
+			// objectIndex, duplicate rendering needs one node per leaf.
+			BasicObjRef ref;
+			ref.objectIndex = objIdx;
+			ref.leafTreeNode = c;
+			objectRefs.push_back(ref);
 		} else {
 			inlineArgs.push_back(nodeToText(tree, c));
 		}
@@ -396,6 +408,7 @@ const char* EventReferenceIndex::kindLabel(RefObjectKind kind)
 	case RefObjectKind::CoordinatePoint: return "coordinate point";
 	case RefObjectKind::Team:            return "team";
 	case RefObjectKind::Variable:        return "variable";
+	case RefObjectKind::Container:       return "container";
 	default:                             return "?";
 	}
 }

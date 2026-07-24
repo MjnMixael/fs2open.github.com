@@ -534,6 +534,15 @@ void MissionEventsDialog::refreshGraphView()
 			op.posX = x;
 			op.posY = y;
 		}
+		// Per-reference positions (used when the view duplicates object nodes).
+		for (auto& r : op.objectRefs) {
+			float rx = 0.0f, ry = 0.0f;
+			if (_model->getNodeGraphPos(r.leafTreeNode, rx, ry)) {
+				r.hasPos = true;
+				r.posX = rx;
+				r.posY = ry;
+			}
+		}
 	}
 	for (auto& ob : bg.objects) {
 		float x = 0.0f, y = 0.0f;
