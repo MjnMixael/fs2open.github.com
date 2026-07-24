@@ -11,6 +11,7 @@
 #include <QVector>
 #include <QString>
 #include <QColor>
+#include <QHash>
 #include <QSet>
 
 class QGraphicsScene;
@@ -63,6 +64,7 @@ struct EventGraphStyle {
 	QColor variable{138, 106, 42};
 	QColor container{38, 145, 130};  // teal, distinct from the variable brown
 	QColor eventAccent{90, 90, 90};
+	QColor chainColor{70, 150, 100}; // event-chain connection line (green, distinct from ref edges)
 
 	// Tier ring guide (dashed circles).
 	QColor ringColor{170, 165, 152};
@@ -80,6 +82,23 @@ struct GraphObject {
 	QString       name;
 };
 
+// Per-event display flags (presence only) shown as icons on the event card, plus
+// the annotation key for the event's own comment/color. Fed by the dialog.
+struct GraphEventMeta {
+	bool chained = false;   // chain_delay >= 0 (chained to the previous event)
+	bool directive = false; // objective_text non-empty
+	bool repeats = false;   // repeat_count != 1 or using a trigger count
+	bool logging = false;   // any mission_log_flags set
+	int  annotationKey = -1; // rootKey(formula) for this event's annotation
+};
+
+// A node's comment/color annotation, resolved by the dialog and looked up by the
+// annotation key (tree_nodes index for nodes, rootKey for events).
+struct GraphAnnotation {
+	QString comment;
+	QColor  color; // invalid QColor when the node has no color set
+};
+
 class EventGraphView final : public QGraphicsView {
 	Q_OBJECT
   public:
@@ -92,6 +111,10 @@ class EventGraphView final : public QGraphicsView {
 	void setReferenceIndex(const EventReferenceIndex* index) { m_index = index; }
 	void setEventNames(QVector<QString> names) { m_eventNames = std::move(names); }
 	void setObjects(QVector<GraphObject> objects) { m_objects = std::move(objects); }
+	// Per-event status flags (indexed by event) and the node comment/color
+	// snapshot (keyed by annotation key). Both fed on every refresh.
+	void setEventMeta(QVector<GraphEventMeta> meta) { m_eventMeta = std::move(meta); }
+	void setAnnotations(QHash<int, GraphAnnotation> annotations) { m_annotations = std::move(annotations); }
 	// The whole-mission dataflow graph for the Basic view, with node positions
 	// already resolved from saved annotations by the dialog.
 	void setBasicGraph(BasicGraph graph) { m_basicGraph = std::move(graph); }
@@ -164,6 +187,9 @@ class EventGraphView final : public QGraphicsView {
 	void updateSceneRect();
 	// Selection-driven emphasis: reference-line on-select visibility + focus fade.
 	void applyEmphasis();
+	// Apply a node's comment/color annotation (by key), and event status icons.
+	void applyAnnotation(graphdetail::CardItem* card, int key);
+	void applyEventStatus(graphdetail::EventNodeItem* card, int eventIndex);
 	// Swimlanes cross-filter: focus an object row / event column (Ctrl adds).
 	void toggleSwimObjectFocus(const QString& objectKey, bool add);
 	void toggleSwimEventFocus(int eventIndex, bool add);
@@ -175,6 +201,8 @@ class EventGraphView final : public QGraphicsView {
 	const EventReferenceIndex* m_index = nullptr;
 	QVector<QString> m_eventNames;
 	QVector<GraphObject> m_objects;
+	QVector<GraphEventMeta> m_eventMeta;      // per-event status flags (event icons)
+	QHash<int, GraphAnnotation> m_annotations; // node comment/color by annotation key
 	BasicGraph m_basicGraph;
 	QString m_searchText; // graph search highlight query
 	int m_matchIndex = -1; // current match for next/prev navigation

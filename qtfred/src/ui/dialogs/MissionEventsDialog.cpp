@@ -569,6 +569,35 @@ void MissionEventsDialog::refreshGraphView()
 	}
 	ui->eventGraph->setBasicGraph(std::move(bg));
 
+	// Per-event status flags (shown as icons on event cards).
+	QVector<GraphEventMeta> meta;
+	meta.reserve(static_cast<int>(events.size()));
+	for (const auto& e : events) {
+		GraphEventMeta m;
+		m.chained = (e.chain_delay >= 0);
+		m.directive = !e.objective_text.empty();
+		m.repeats = (e.repeat_count != 1) || (e.flags & MEF_USING_TRIGGER_COUNT);
+		m.logging = (e.mission_log_flags != 0);
+		m.annotationKey = SexpAnnotationModel::rootKey(e.formula);
+		meta.push_back(m);
+	}
+	ui->eventGraph->setEventMeta(std::move(meta));
+
+	// Node comment/color snapshot, keyed by annotation key.
+	QHash<int, GraphAnnotation> annotations;
+	for (const event_annotation& ea : _model->nodeAnnotations()) {
+		if (ea.node_index == -1)
+			continue;
+		GraphAnnotation ga;
+		ga.comment = QString::fromStdString(ea.comment);
+		if (ea.r != 255 || ea.g != 255 || ea.b != 255)
+			ga.color = QColor(ea.r, ea.g, ea.b);
+		if (ga.comment.isEmpty() && !ga.color.isValid())
+			continue; // e.g. a position-only annotation
+		annotations.insert(ea.node_index, ga);
+	}
+	ui->eventGraph->setAnnotations(std::move(annotations));
+
 	ui->eventGraph->reload();
 
 	_graphDirty = false;

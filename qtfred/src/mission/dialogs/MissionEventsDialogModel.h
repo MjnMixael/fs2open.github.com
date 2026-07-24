@@ -135,6 +135,10 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setNodeGraphPos(int key, float x, float y);
 	bool getNodeGraphPos(int key, float& x, float& y) const;
 
+	// The current working annotations (comment/color/position), keyed internally
+	// by node_index. Read-only view for the graph to render comment + color.
+	const SCP_vector<event_annotation>& nodeAnnotations() const { return m_annotation_model.annotations(); }
+
 	// Message Management
 	void createMessage();
 	void insertMessage();
