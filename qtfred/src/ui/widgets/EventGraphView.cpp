@@ -121,6 +121,8 @@ QColor EventGraphStyle::colorFor(RefObjectKind kind) const
 
 namespace graphdetail {
 
+class RefEdgeItem; // defined below; cards keep back-pointers to their edges
+
 static constexpr qreal kNodeW = 224.0;
 static constexpr qreal kEventW = 158.0;
 static constexpr qreal kObjectW = 224.0;
@@ -147,6 +149,7 @@ class CardItem : public QGraphicsItem {
 		  m_cornerColor(cornerColor), m_expandable(expandable), m_collapsedMax(collapsedMax), m_style(style)
 	{
 		setFlag(ItemIsSelectable, true);
+		setFlag(ItemSendsGeometryChanges, true); // so moving the card can update its edges
 		// Show the normal pointer over cards instead of the pan hand.
 		setCursor(Qt::ArrowCursor);
 		setAcceptHoverEvents(true);
@@ -156,6 +159,14 @@ class CardItem : public QGraphicsItem {
 	{
 		const qreal h = contentHeight();
 		return QRectF(-m_width / 2, -h / 2, m_width, h);
+	}
+
+	// Register an edge attached to this card so it can be redrawn when the card
+	// moves (see itemChange).
+	void addEdge(RefEdgeItem* e)
+	{
+		if (e)
+			m_edges.push_back(e);
 	}
 
 	// Raise above every other card; called on any click.
@@ -303,6 +314,10 @@ class CardItem : public QGraphicsItem {
 	}
 
   protected:
+	// Redraw attached edges when the card is dragged to a new position. Defined
+	// out of line below, once RefEdgeItem is a complete type.
+	QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
+
 	bool hasToggle() const { return m_expandable && m_lines.size() > m_collapsedMax; }
 
 	int visibleLineCount() const
@@ -341,6 +356,7 @@ class CardItem : public QGraphicsItem {
 	bool    m_focusHighlight = false;
 	QRectF  m_toggleRect;
 	EventGraphStyle m_style;
+	QVector<RefEdgeItem*> m_edges; // edges attached to this card (for live redraw on move)
 };
 
 // The center object (ship/wing).
@@ -406,7 +422,34 @@ class RefEdgeItem final : public QGraphicsPathItem {
 		setPen(pen);
 		setZValue(-1.0);
 		setAcceptedMouseButtons(Qt::NoButton);
+		setPathBetween(a, b);
+	}
 
+	// The two card items this edge connects. Registers the edge on each card so a
+	// drag can redraw it (see CardItem::itemChange), and drives the emphasis pass.
+	void setEndpoints(CardItem* a, CardItem* b)
+	{
+		m_endA = a;
+		m_endB = b;
+		if (a)
+			a->addEdge(this);
+		if (b)
+			b->addEdge(this);
+	}
+	QGraphicsItem* endA() const { return m_endA; }
+	QGraphicsItem* endB() const { return m_endB; }
+
+	// Recompute the path from the endpoints' current positions (their scene
+	// origins are the card centers).
+	void updatePath()
+	{
+		if (m_endA && m_endB)
+			setPathBetween(m_endA->pos(), m_endB->pos());
+	}
+
+  private:
+	void setPathBetween(const QPointF& a, const QPointF& b)
+	{
 		QPainterPath path(a);
 		const QPointF mid = (a + b) / 2.0;
 		const QPointF off(-(b.y() - a.y()) * 0.10, (b.x() - a.x()) * 0.10); // gentle bow
@@ -414,15 +457,19 @@ class RefEdgeItem final : public QGraphicsPathItem {
 		setPath(path);
 	}
 
-	// The two card items this edge connects (for the selection-emphasis pass).
-	void setEndpoints(QGraphicsItem* a, QGraphicsItem* b) { m_endA = a; m_endB = b; }
-	QGraphicsItem* endA() const { return m_endA; }
-	QGraphicsItem* endB() const { return m_endB; }
-
-  private:
-	QGraphicsItem* m_endA = nullptr;
-	QGraphicsItem* m_endB = nullptr;
+	CardItem* m_endA = nullptr;
+	CardItem* m_endB = nullptr;
 };
+
+// Now that RefEdgeItem is complete, define the card's move handler.
+QVariant CardItem::itemChange(GraphicsItemChange change, const QVariant& value)
+{
+	if (change == ItemPositionHasChanged)
+		for (RefEdgeItem* e : m_edges)
+			if (e)
+				e->updatePath();
+	return QGraphicsItem::itemChange(change, value);
+}
 
 // Bottom-left overview of the whole graph with a current-viewport indicator.
 // The scene is rendered once into a cached pixmap (regenerate()) and only that
@@ -2018,8 +2065,8 @@ void EventGraphView::rebuildBasic()
 
 	// Edges, carrying their endpoint card items for the selection-emphasis pass.
 	if (s_refMode != RefLineMode::Off) {
-		auto addEdge = [&](const QPointF& a, const QPointF& b, const QColor& color, QGraphicsItem* ia,
-						   QGraphicsItem* ib) {
+		auto addEdge = [&](const QPointF& a, const QPointF& b, const QColor& color, graphdetail::CardItem* ia,
+						   graphdetail::CardItem* ib) {
 			auto* edge = new graphdetail::RefEdgeItem(a, b, color, m_style);
 			edge->setEndpoints(ia, ib);
 			m_scene->addItem(edge);
