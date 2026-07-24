@@ -28,6 +28,7 @@ class EventNodeItem;
 class SexpNodeItem;
 class RefEdgeItem;
 class MinimapWidget;
+class LegendWidget;
 } // namespace graphdetail
 
 // Theme-adaptive visual constants shared by the view and its items. Card fills
@@ -56,10 +57,11 @@ struct EventGraphStyle {
 	QColor eventBadge{150, 120, 70};
 
 	// Object-kind accent colors (chip on the center object card).
-	QColor entity{217, 131, 42};  // ship / wing / waypoint
-	QColor message{124, 74, 168};
-	QColor goal{179, 74, 124};
+	QColor entity{217, 131, 42};    // "objects": ship / wing / waypoint path / jump node / prop / coord point
+	QColor message{198, 54, 47};    // red
+	QColor dataColor{179, 74, 124}; // "data": any other OPF data kind (goal, team, event name, ...)
 	QColor variable{138, 106, 42};
+	QColor container{38, 145, 130};  // teal, distinct from the variable brown
 	QColor eventAccent{90, 90, 90};
 
 	// Tier ring guide (dashed circles).
@@ -131,8 +133,9 @@ class EventGraphView final : public QGraphicsView {
 	enum class Mode { Radial, Swimlanes, Basic };
 
 	void buildOverlay();
-	void buildSettingsMenu();
+	void rebuildSettingsMenu();
 	void positionOverlay();
+	void updateChromeVisibility();
 	void applyTheme(bool dark);
 	void populateSelector();
 	void populateKindFilter();
@@ -144,6 +147,12 @@ class EventGraphView final : public QGraphicsView {
 	void rebuildRadial();
 	void rebuildSwimlanes();
 	void rebuildBasic();
+	// Shrink the scene rect back to the current content (+margin). The default
+	// scene rect only grows, so without this a big swimlanes layout leaves radial
+	// / basic pinned to a corner and out of sync with the minimap.
+	void updateSceneRect();
+	// Selection-driven emphasis: reference-line on-select visibility + focus fade.
+	void applyEmphasis();
 	// Swimlanes cross-filter: focus an object row / event column (Ctrl adds).
 	void toggleSwimObjectFocus(const QString& objectKey, bool add);
 	void toggleSwimEventFocus(int eventIndex, bool add);
@@ -177,6 +186,8 @@ class EventGraphView final : public QGraphicsView {
 
 	// Bottom-left minimap.
 	graphdetail::MinimapWidget* m_minimap = nullptr;
+	// Top-right color-key legend.
+	graphdetail::LegendWidget* m_legend = nullptr;
 
 	qreal m_currentScale = 1.0;
 	const qreal kMinScale = 0.2;

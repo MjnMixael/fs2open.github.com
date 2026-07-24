@@ -33,6 +33,7 @@ enum class RefObjectKind {
 	CoordinatePoint,
 	Team,
 	Variable,
+	Container,
 };
 
 // Where a reference sits relative to its event's condition/action structure,
@@ -56,11 +57,24 @@ struct EventObjectRef {
 	RefRole       role = RefRole::Other;
 };
 
+// One operator->object reference. Carries both the shared object index (used
+// when the view combines objects into one node per name) and the specific
+// referencing leaf (used when the view duplicates a node per reference, where
+// the leaf is the position key). The hasPos/pos fields are filled by the dialog
+// for the duplicate case.
+struct BasicObjRef {
+	int   objectIndex = -1;  // index into BasicGraph::objects (kind/name source)
+	int   leafTreeNode = -1; // the referencing leaf's tree node (duplicate-mode position key)
+	bool  hasPos = false;
+	float posX = 0.0f;
+	float posY = 0.0f;
+};
+
 // Whole-mission operator dataflow graph, for the Basic graph view. Every sexp
 // operator is a node; literal (non-object) leaf args are inlined into the card;
-// object-naming leaf args become edges to shared object nodes. The position
-// fields are filled by the dialog from saved annotations (the builder itself is
-// stateless); they seed the view's layout when set.
+// object-naming leaf args reference shared object nodes. The position fields are
+// filled by the dialog from saved annotations (the builder itself is stateless);
+// they seed the view's layout when set.
 struct BasicOpNode {
 	int        treeNode = -1;   // tree_nodes[] index; also the annotation key for its position
 	int        eventIndex = -1;
@@ -69,7 +83,7 @@ struct BasicOpNode {
 	SCP_string expression;      // full sub-expression text
 	SCP_vector<SCP_string> inlineArgs; // literal args shown inside the card
 	SCP_vector<int> childOps;   // indices into BasicGraph::ops
-	SCP_vector<int> objectRefs; // indices into BasicGraph::objects
+	SCP_vector<BasicObjRef> objectRefs; // this operator's object references (not deduped)
 
 	int   posKey = -1;          // annotation key to persist this node's position under
 	bool  hasPos = false;

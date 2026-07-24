@@ -1,8 +1,10 @@
 #include "EventGraphView.h"
 #include "ui/Theme.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QButtonGroup>
+#include <QCheckBox>
 #include <QComboBox>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
@@ -16,6 +18,8 @@
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPaintEvent>
+#include <QPair>
+#include <QRadioButton>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -51,6 +55,16 @@ static qreal s_ringSpacing = 210.0;
 enum class BasicLayout { Custom = 0, Auto = 1, Compact = 2 };
 static BasicLayout s_basicLayout = BasicLayout::Custom;
 
+// Session-wide graph chrome settings (gear menu). Shared across modes except
+// where noted.
+enum class RefLineMode { Always = 0, OnSelect = 1, Off = 2 };
+static RefLineMode s_refMode = RefLineMode::Always; // relationship/flow edge visibility
+static bool s_focusFade = false;    // dim nodes/edges not connected to the selection
+static bool s_showLegend = false;   // color-key panel
+static bool s_showMinimap = true;   // bottom-left overview
+static int  s_basicDepth = 8;       // Basic: max operator nesting depth to render (8 ~= all)
+static bool s_basicCombineObjects = true; // Basic: one shared node per object vs. duplicate per reference
+
 // Stable identity key for a swimlanes object row (kind + case-insensitive name).
 static QString swimRowKey(RefObjectKind kind, const QString& name)
 {
@@ -85,19 +99,19 @@ EventGraphStyle EventGraphStyle::makeStyle(bool dark)
 QColor EventGraphStyle::colorFor(RefObjectKind kind) const
 {
 	switch (kind) {
+	// "objects": the spatial first-class types share the orange accent.
 	case RefObjectKind::Ship:
 	case RefObjectKind::Wing:
 	case RefObjectKind::Prop:
 	case RefObjectKind::Waypoint:
 	case RefObjectKind::JumpNode:
 	case RefObjectKind::CoordinatePoint:
-	case RefObjectKind::Team:
 		return entity;
-	case RefObjectKind::Message:  return message;
-	case RefObjectKind::Goal:     return goal;
-	case RefObjectKind::Variable: return variable;
-	case RefObjectKind::Event:    return eventAccent;
-	default:                      return eventAccent;
+	case RefObjectKind::Message:   return message;
+	case RefObjectKind::Variable:  return variable;
+	case RefObjectKind::Container: return container;
+	// Everything else (goal, team, event name, ...) is generic "data".
+	default:                       return dataColor;
 	}
 }
 
@@ -384,6 +398,15 @@ class RefEdgeItem final : public QGraphicsPathItem {
 		path.quadTo(mid + off, b);
 		setPath(path);
 	}
+
+	// The two card items this edge connects (for the selection-emphasis pass).
+	void setEndpoints(QGraphicsItem* a, QGraphicsItem* b) { m_endA = a; m_endB = b; }
+	QGraphicsItem* endA() const { return m_endA; }
+	QGraphicsItem* endB() const { return m_endB; }
+
+  private:
+	QGraphicsItem* m_endA = nullptr;
+	QGraphicsItem* m_endB = nullptr;
 };
 
 // Bottom-left overview of the whole graph with a current-viewport indicator.
@@ -522,6 +545,151 @@ class MinimapWidget final : public QWidget {
 	bool m_dragging = false;
 };
 
+// A small color-key panel (top-right) explaining the card/edge colors. Reads the
+// live style so it re-themes with the view.
+class LegendWidget final : public QWidget {
+  public:
+	LegendWidget(const EventGraphStyle* style, QWidget* parent) : QWidget(parent), m_style(style)
+	{
+		setCursor(Qt::ArrowCursor); // normal pointer, not the viewport's pan hand
+		relayout();
+	}
+
+	// The object kinds present in the current graph; the legend lists only the
+	// object rows that actually appear (the cond/action/event rows are always shown).
+	void setPresentKinds(const QSet<int>& kinds)
+	{
+		m_kinds = kinds;
+		relayout();
+		update();
+	}
+
+	// Size follows the visible row count; call after the kinds or theme change.
+	void relayout() { setFixedSize(150, kTop + static_cast<int>(rows().size()) * kRowH + 8); }
+
+  protected:
+	// Swallow mouse events so hovering/clicking the legend keeps the normal cursor
+	// and never starts a viewport pan. The legend is inert -- no click actions.
+	void mousePressEvent(QMouseEvent* e) override { e->accept(); }
+	void mouseMoveEvent(QMouseEvent* e) override { e->accept(); }
+	void mouseReleaseEvent(QMouseEvent* e) override { e->accept(); }
+
+	void paintEvent(QPaintEvent*) override
+	{
+		QPainter p(this);
+		p.setRenderHint(QPainter::Antialiasing, true);
+
+		const QRectF frame = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+		p.setPen(QPen(m_style->cardBorder, 1.0));
+		p.setBrush(m_style->bgColor);
+		p.drawRoundedRect(frame, 4.0, 4.0);
+
+		QFont title = p.font();
+		title.setBold(true);
+		title.setPointSizeF(std::max(6.0, title.pointSizeF() - 1.0));
+		p.setFont(title);
+		p.setPen(m_style->nodeText);
+		p.drawText(QRectF(10, 4, width() - 14, kTop - 4), Qt::AlignLeft | Qt::AlignVCenter, tr("Legend"));
+
+		QFont lf = p.font();
+		lf.setBold(false);
+		lf.setPointSizeF(std::max(6.0, lf.pointSizeF() - 1.0));
+		p.setFont(lf);
+		int y = kTop;
+		for (const auto& r : rows()) {
+			p.setBrush(r.first);
+			p.setPen(QPen(m_style->cardBorder, 1.0));
+			p.drawRoundedRect(QRectF(10, y + 3, 12, 12), 2.0, 2.0);
+			p.setPen(m_style->nodeSubText);
+			p.drawText(QRectF(30, y, width() - 34, kRowH), Qt::AlignLeft | Qt::AlignVCenter, r.second);
+			y += kRowH;
+		}
+	}
+
+  private:
+	QVector<QPair<QColor, QString>> rows() const
+	{
+		// Structural colors are always present; event first.
+		QVector<QPair<QColor, QString>> r{
+			{m_style->eventChip, tr("event")},
+			{m_style->condChip, tr("condition")},
+			{m_style->actionChip, tr("action")},
+		};
+		auto has = [this](RefObjectKind k) { return m_kinds.contains(static_cast<int>(k)); };
+		if (has(RefObjectKind::Ship) || has(RefObjectKind::Wing) || has(RefObjectKind::Prop)
+			|| has(RefObjectKind::Waypoint) || has(RefObjectKind::JumpNode)
+			|| has(RefObjectKind::CoordinatePoint))
+			r.append({m_style->entity, tr("objects")});
+		if (has(RefObjectKind::Message))
+			r.append({m_style->message, tr("message")});
+		if (has(RefObjectKind::Variable))
+			r.append({m_style->variable, tr("variable")});
+		if (has(RefObjectKind::Container))
+			r.append({m_style->container, tr("container")});
+		// "data" = any present kind that isn't one of the specific groups above.
+		if (hasDataKind())
+			r.append({m_style->dataColor, tr("data")});
+		return r;
+	}
+
+	// True if any present kind maps to the generic "data" color (goal, team,
+	// event name, and anything else not in the specific groups).
+	bool hasDataKind() const
+	{
+		for (int k : m_kinds) {
+			switch (static_cast<RefObjectKind>(k)) {
+			case RefObjectKind::Unknown:
+			case RefObjectKind::Ship:
+			case RefObjectKind::Wing:
+			case RefObjectKind::Prop:
+			case RefObjectKind::Waypoint:
+			case RefObjectKind::JumpNode:
+			case RefObjectKind::CoordinatePoint:
+			case RefObjectKind::Message:
+			case RefObjectKind::Variable:
+			case RefObjectKind::Container:
+				continue;
+			default:
+				return true;
+			}
+		}
+		return false;
+	}
+
+	static constexpr int kTop = 22;
+	static constexpr int kRowH = 18;
+	const EventGraphStyle* m_style;
+	QSet<int> m_kinds;
+};
+
+// Rounded background for the top-left control strip. Like the legend, it consumes
+// mouse events so the gaps between the controls don't start a viewport pan.
+class OverlayPanel final : public QWidget {
+  public:
+	OverlayPanel(const EventGraphStyle* style, QWidget* parent) : QWidget(parent), m_style(style)
+	{
+		setCursor(Qt::ArrowCursor);
+	}
+
+  protected:
+	void mousePressEvent(QMouseEvent* e) override { e->accept(); }
+	void mouseMoveEvent(QMouseEvent* e) override { e->accept(); }
+	void mouseReleaseEvent(QMouseEvent* e) override { e->accept(); }
+
+	void paintEvent(QPaintEvent*) override
+	{
+		QPainter p(this);
+		p.setRenderHint(QPainter::Antialiasing, true);
+		const QRectF frame = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
+		p.setPen(QPen(m_style->cardBorder, 1.0));
+		p.setBrush(m_style->bgColor);
+		p.drawRoundedRect(frame, 5.0, 5.0);
+	}
+
+  private:
+	const EventGraphStyle* m_style;
+};
+
 } // namespace graphdetail
 
 // ---------------------------------------------------------------------------
@@ -542,6 +710,7 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 	connect(m_scene, &QGraphicsScene::selectionChanged, this, [this] {
 		if (m_suppressSelectionSignal)
 			return; // programmatic (re)selection during a rebuild
+		applyEmphasis(); // update on-select edges / focus fade for the new selection
 		for (QGraphicsItem* it : m_scene->selectedItems()) {
 			if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(it)) {
 				Q_EMIT eventSelected(ev->eventIndex());
@@ -567,6 +736,8 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 
 	m_minimap = new graphdetail::MinimapWidget(this, m_scene, &m_style, viewport());
 	m_minimap->raise();
+	m_legend = new graphdetail::LegendWidget(&m_style, viewport());
+	m_legend->raise();
 	positionOverlay();
 
 	qApp->installEventFilter(this);
@@ -583,14 +754,23 @@ bool EventGraphView::eventFilter(QObject* watched, QEvent* event)
 
 void EventGraphView::buildOverlay()
 {
-	m_overlay = new QWidget(viewport());
-	m_overlay->setAttribute(Qt::WA_StyledBackground, true);
-	// Children of the pan-hand viewport inherit its cursor; force the normal
-	// pointer over the control strip.
-	m_overlay->setCursor(Qt::ArrowCursor);
+	// A rounded background panel that also swallows mouse events (so the gaps
+	// between controls never start a viewport pan) and shows the normal pointer.
+	m_overlay = new graphdetail::OverlayPanel(&m_style, viewport());
 	auto* lay = new QHBoxLayout(m_overlay);
-	lay->setContentsMargins(6, 6, 6, 6);
+	lay->setContentsMargins(8, 6, 8, 6);
 	lay->setSpacing(4);
+
+	// Settings gear (leading control) -- global + per-mode graph settings. The
+	// menu is rebuilt on each open so it reflects the current mode.
+	m_settingsMenu = new QMenu(this);
+	connect(m_settingsMenu, &QMenu::aboutToShow, this, &EventGraphView::rebuildSettingsMenu);
+	auto* gear = new QToolButton(m_overlay);
+	gear->setToolTip(tr("Graph settings"));
+	gear->setPopupMode(QToolButton::InstantPopup);
+	gear->setMenu(m_settingsMenu);
+	bindCustomIcon(gear, CustomIcon::Settings);
+	lay->addWidget(gear);
 
 	m_modeGroup = new QButtonGroup(this);
 	m_modeGroup->setExclusive(true);
@@ -606,9 +786,9 @@ void EventGraphView::buildOverlay()
 		m_modeGroup->addButton(btn, static_cast<int>(mode));
 		lay->addWidget(btn);
 	};
+	addModeButton(tr("Basic"), Mode::Basic, true, tr("Whole-mission dataflow graph (drag to arrange)"));
 	addModeButton(tr("Radial"), Mode::Radial, true, QString());
 	addModeButton(tr("Swimlanes"), Mode::Swimlanes, true, QString());
-	addModeButton(tr("Basic"), Mode::Basic, true, tr("Whole-mission dataflow graph (drag to arrange)"));
 
 	connect(m_modeGroup, &QButtonGroup::idClicked, this, [this](int id) { setMode(static_cast<Mode>(id)); });
 
@@ -640,49 +820,127 @@ void EventGraphView::buildOverlay()
 		}
 	});
 
-	// Settings gear — global + per-view graph settings.
-	buildSettingsMenu();
-	auto* gear = new QToolButton(m_overlay);
-	gear->setToolTip(tr("Graph settings"));
-	gear->setPopupMode(QToolButton::InstantPopup);
-	gear->setMenu(m_settingsMenu);
-	bindCustomIcon(gear, CustomIcon::Settings);
-	lay->addWidget(gear);
-
 	positionOverlay();
 }
 
-void EventGraphView::buildSettingsMenu()
+// Rebuilt each time the gear is opened so it shows only the settings that apply
+// to the current mode (plus the shared General section).
+void EventGraphView::rebuildSettingsMenu()
 {
-	m_settingsMenu = new QMenu(this);
-	m_settingsMenu->addSection(tr("Radial"));
+	m_settingsMenu->clear();
 
-	auto* panel = new QWidget(m_settingsMenu);
-	auto* col = new QVBoxLayout(panel);
-	col->setContentsMargins(10, 4, 10, 6);
-	col->addWidget(new QLabel(tr("Ring spacing"), panel));
+	// --- General (all modes): a checkbox panel, so toggling keeps the menu open ---
+	m_settingsMenu->addSection(tr("General"));
+	{
+		auto* panel = new QWidget(m_settingsMenu);
+		auto* col = new QVBoxLayout(panel);
+		col->setContentsMargins(12, 4, 12, 6);
+		col->setSpacing(4);
 
-	auto* row = new QHBoxLayout;
-	auto* slider = new QSlider(Qt::Horizontal, panel);
-	slider->setRange(120, 420);
-	slider->setValue(static_cast<int>(s_ringSpacing));
-	slider->setMinimumWidth(160);
-	auto* value = new QLabel(QString::number(static_cast<int>(s_ringSpacing)), panel);
-	value->setMinimumWidth(28);
-	row->addWidget(slider);
-	row->addWidget(value);
-	col->addLayout(row);
+		auto addCheck = [&](const QString& label, bool checked, std::function<void(bool)> onToggle) {
+			auto* cb = new QCheckBox(label, panel);
+			cb->setChecked(checked);
+			connect(cb, &QCheckBox::toggled, this, [onToggle](bool on) { onToggle(on); });
+			col->addWidget(cb);
+		};
 
-	connect(slider, &QSlider::valueChanged, this, [this, value](int v) {
-		s_ringSpacing = v;
-		value->setText(QString::number(v));
-		if (m_mode == Mode::Radial)
+		// Reference-line visibility: always / only for the selected node / off.
+		col->addWidget(new QLabel(tr("Reference lines"), panel));
+		auto* refGroup = new QButtonGroup(panel);
+		auto addRadio = [&](const QString& label, RefLineMode mode) {
+			auto* rb = new QRadioButton(label, panel);
+			rb->setChecked(s_refMode == mode);
+			refGroup->addButton(rb);
+			col->addWidget(rb);
+			connect(rb, &QRadioButton::toggled, this, [this, mode](bool on) {
+				if (on) {
+					s_refMode = mode;
+					rebuildCurrent();
+				}
+			});
+		};
+		addRadio(tr("Always"), RefLineMode::Always);
+		addRadio(tr("On selection"), RefLineMode::OnSelect);
+		addRadio(tr("Off"), RefLineMode::Off);
+
+		addCheck(tr("Focus: fade non-connected"), s_focusFade, [this](bool on) {
+			s_focusFade = on;
+			applyEmphasis();
+		});
+		addCheck(tr("Legend"), s_showLegend, [this](bool on) {
+			s_showLegend = on;
+			updateChromeVisibility();
+		});
+		addCheck(tr("Minimap"), s_showMinimap, [this](bool on) {
+			s_showMinimap = on;
+			updateChromeVisibility();
+		});
+
+		auto* wa = new QWidgetAction(m_settingsMenu);
+		wa->setDefaultWidget(panel);
+		m_settingsMenu->addAction(wa);
+	}
+
+	// --- Slider helper (label + value + range) as a QWidgetAction ---
+	auto addSlider = [this](const QString& title, int lo, int hi, int val,
+						 std::function<void(int, QLabel*)> onChange) {
+		auto* panel = new QWidget(m_settingsMenu);
+		auto* col = new QVBoxLayout(panel);
+		col->setContentsMargins(10, 4, 10, 6);
+		col->addWidget(new QLabel(title, panel));
+
+		auto* row = new QHBoxLayout;
+		auto* slider = new QSlider(Qt::Horizontal, panel);
+		slider->setRange(lo, hi);
+		slider->setValue(val);
+		slider->setMinimumWidth(160);
+		auto* value = new QLabel(QString::number(val), panel);
+		value->setMinimumWidth(28);
+		row->addWidget(slider);
+		row->addWidget(value);
+		col->addLayout(row);
+
+		connect(slider, &QSlider::valueChanged, this,
+			[value, onChange](int v) { onChange(v, value); });
+
+		auto* wa = new QWidgetAction(m_settingsMenu);
+		wa->setDefaultWidget(panel);
+		m_settingsMenu->addAction(wa);
+	};
+
+	// --- Mode-specific ---
+	if (m_mode == Mode::Radial) {
+		m_settingsMenu->addSection(tr("Radial"));
+		addSlider(tr("Ring spacing"), 120, 420, static_cast<int>(s_ringSpacing), [this](int v, QLabel* value) {
+			s_ringSpacing = v;
+			value->setText(QString::number(v));
 			rebuildRadial();
-	});
-
-	auto* wa = new QWidgetAction(m_settingsMenu);
-	wa->setDefaultWidget(panel);
-	m_settingsMenu->addAction(wa);
+		});
+	} else if (m_mode == Mode::Basic) {
+		m_settingsMenu->addSection(tr("Basic"));
+		{
+			auto* panel = new QWidget(m_settingsMenu);
+			auto* col = new QVBoxLayout(panel);
+			col->setContentsMargins(12, 4, 12, 6);
+			auto* combine = new QCheckBox(tr("Combine shared objects"), panel);
+			combine->setChecked(s_basicCombineObjects);
+			combine->setToolTip(tr("On: one shared node per object.\nOff: duplicate a node beside each operator that uses it."));
+			connect(combine, &QCheckBox::toggled, this, [this](bool on) {
+				s_basicCombineObjects = on;
+				m_hasFramed = false; // topology changed; re-fit
+				rebuildBasic();
+			});
+			col->addWidget(combine);
+			auto* wa = new QWidgetAction(m_settingsMenu);
+			wa->setDefaultWidget(panel);
+			m_settingsMenu->addAction(wa);
+		}
+		addSlider(tr("Sexp depth"), 0, 8, s_basicDepth, [this](int v, QLabel* value) {
+			s_basicDepth = v;
+			value->setText(v >= 8 ? tr("all") : QString::number(v));
+			rebuildBasic();
+		});
+	}
 }
 
 // Keep the overlay hugging the top-left corner, sized to its (variable-width)
@@ -699,8 +957,20 @@ void EventGraphView::positionOverlay()
 	if (m_minimap) {
 		m_minimap->move(8, viewport()->height() - m_minimap->height() - 8);
 		m_minimap->raise();
-		m_minimap->show();
 	}
+	if (m_legend) {
+		m_legend->move(viewport()->width() - m_legend->width() - 8, 8);
+		m_legend->raise();
+	}
+	updateChromeVisibility();
+}
+
+void EventGraphView::updateChromeVisibility()
+{
+	if (m_minimap)
+		m_minimap->setVisible(s_showMinimap);
+	if (m_legend)
+		m_legend->setVisible(s_showLegend);
 }
 
 int EventGraphView::selectedObjectRow() const
@@ -784,7 +1054,15 @@ void EventGraphView::populateSelectorForMode()
 void EventGraphView::reload()
 {
 	populateSelectorForMode();
-	positionOverlay(); // the combo width changes with the labels
+	// The legend lists only the object kinds that actually occur in the events.
+	if (m_legend) {
+		QSet<int> kinds;
+		if (m_index)
+			for (const EventObjectRef& r : m_index->allReferences())
+				kinds.insert(static_cast<int>(r.kind));
+		m_legend->setPresentKinds(kinds);
+	}
+	positionOverlay(); // the combo width changes with the labels; legend size may change too
 	rebuildCurrent();
 }
 
@@ -891,14 +1169,77 @@ void EventGraphView::rebuildCurrent()
 		rebuildRadial();
 }
 
+// The default scene rect grows to the union of everything ever shown and never
+// shrinks, so a large swimlanes layout would leave a later radial/basic scene
+// stuck against a corner (and mismatched with the minimap). Pin it to the
+// current content with a margin of panning slack.
+void EventGraphView::updateSceneRect()
+{
+	if (!m_scene)
+		return;
+	const QRectF b = m_scene->itemsBoundingRect();
+	m_scene->setSceneRect(b.isEmpty() ? QRectF() : b.adjusted(-400, -400, 400, 400));
+}
+
 void EventGraphView::showEmptyMessage(const QString& text)
 {
 	auto* label = m_scene->addSimpleText(text);
 	label->setBrush(m_style.nodeSubText);
 	label->setPos(-label->boundingRect().width() / 2, 60.0);
+	updateSceneRect();
 	zoomToFitAll();
 	if (m_minimap)
 		m_minimap->regenerate(); // content changed → re-render the cached overview
+}
+
+// Reference-line on-select visibility and focus-fade dimming, driven by the
+// current selection. Runs after each radial/basic rebuild and on every real
+// selection change. Swimlanes has its own cross-filter focus, so it's skipped.
+void EventGraphView::applyEmphasis()
+{
+	if (m_mode == Mode::Swimlanes)
+		return;
+
+	QSet<QGraphicsItem*> selected;
+	for (QGraphicsItem* it : m_scene->selectedItems())
+		if (dynamic_cast<graphdetail::CardItem*>(it))
+			selected.insert(it);
+	const bool hasSel = !selected.isEmpty();
+
+	// Collect the edges and the neighbor set (cards sharing an edge with a
+	// selected card).
+	QVector<graphdetail::RefEdgeItem*> edges;
+	QSet<QGraphicsItem*> active = selected;
+	for (QGraphicsItem* it : m_scene->items()) {
+		auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it);
+		if (!e)
+			continue;
+		edges.push_back(e);
+		if (hasSel) {
+			if (e->endA() && selected.contains(e->endA()) && e->endB())
+				active.insert(e->endB());
+			if (e->endB() && selected.contains(e->endB()) && e->endA())
+				active.insert(e->endA());
+		}
+	}
+
+	const bool fade = s_focusFade && hasSel;
+	const qreal dim = 0.2;
+
+	for (graphdetail::RefEdgeItem* e : edges) {
+		const bool incident = hasSel && ((e->endA() && selected.contains(e->endA())) ||
+										 (e->endB() && selected.contains(e->endB())));
+		const bool visible = (s_refMode != RefLineMode::OnSelect) || incident;
+		e->setVisible(visible);
+		if (visible)
+			e->setOpacity(fade && !incident ? dim : 1.0);
+	}
+
+	for (QGraphicsItem* it : m_scene->items()) {
+		if (!dynamic_cast<graphdetail::CardItem*>(it))
+			continue;
+		it->setOpacity(fade && !active.contains(it) ? dim : 1.0);
+	}
 }
 
 void EventGraphView::rebuildRadial()
@@ -978,7 +1319,8 @@ void EventGraphView::rebuildRadial()
 
 	// Place a group of node cards on a ring, spread within their event's wedge.
 	auto placeRing = [&](const QVector<const EventObjectRef*>& group, qreal centerAngle, qreal radius,
-						 const QPointF& from, const QColor& edgeColor, bool isCond) {
+						 const QPointF& from, graphdetail::EventNodeItem* fromItem, const QColor& edgeColor,
+						 bool isCond) {
 		const int m = group.size();
 		for (int j = 0; j < m; ++j) {
 			const EventObjectRef* s = group[j];
@@ -1001,7 +1343,11 @@ void EventGraphView::rebuildRadial()
 				&& QString::fromStdString(s->operatorText) == selOp)
 				card->setSelected(true);
 			m_scene->addItem(card);
-			m_scene->addItem(new graphdetail::RefEdgeItem(from, pos, edgeColor, m_style));
+			if (s_refMode != RefLineMode::Off) {
+				auto* edge = new graphdetail::RefEdgeItem(from, pos, edgeColor, m_style);
+				edge->setEndpoints(fromItem, card);
+				m_scene->addItem(edge);
+			}
 		}
 	};
 
@@ -1018,11 +1364,15 @@ void EventGraphView::rebuildRadial()
 		if (selKind == 1 && ev == selEvent)
 			evCard->setSelected(true);
 		m_scene->addItem(evCard);
-		m_scene->addItem(new graphdetail::RefEdgeItem(center->pos(), evPos, m_style.entity, m_style));
+		if (s_refMode != RefLineMode::Off) {
+			auto* edge = new graphdetail::RefEdgeItem(center->pos(), evPos, m_style.entity, m_style);
+			edge->setEndpoints(center, evCard);
+			m_scene->addItem(edge);
+		}
 
 		const Bucket& b = buckets[ev];
-		placeRing(b.conds, angle, rCond, evPos, m_style.condChip, /*isCond=*/true);
-		placeRing(b.actions, angle, rAction, evPos, m_style.actionChip, /*isCond=*/false);
+		placeRing(b.conds, angle, rCond, evPos, evCard, m_style.condChip, /*isCond=*/true);
+		placeRing(b.actions, angle, rAction, evPos, evCard, m_style.actionChip, /*isCond=*/false);
 	}
 
 	// Dashed tier guide rings.
@@ -1034,6 +1384,7 @@ void EventGraphView::rebuildRadial()
 
 	// If we're still on the same object, resume the prior zoom/center; otherwise
 	// frame the whole graph.
+	updateSceneRect();
 	const QString curKey = QStringLiteral("%1|%2").arg(static_cast<int>(obj.kind)).arg(obj.name);
 	if (m_hasFramed && curKey == m_framedKey) {
 		setTransform(savedTransform);
@@ -1046,6 +1397,7 @@ void EventGraphView::rebuildRadial()
 	}
 
 	m_suppressSelectionSignal = false;
+	applyEmphasis();
 	if (m_minimap)
 		m_minimap->regenerate(); // content changed → re-render the cached overview
 }
@@ -1185,7 +1537,8 @@ void EventGraphView::rebuildSwimlanes()
 	for (int p = 0; p < keepCols.size(); ++p) colPos.insert(keepCols[p], p);
 
 	// Create the node cards per kept cell and measure their stacked height so each
-	// row can grow to fit. No event badge in swimlanes -- the column identifies it.
+	// row can grow to fit. Cards carry the event-name badge (top-right), same as
+	// the other views.
 	const qreal leftGutter = 244.0, topGutter = 66.0, colW = 252.0, cardGap = 10.0, rowPad = 16.0, minRowH = 60.0;
 	QHash<qint64, QVector<graphdetail::SexpNodeItem*>> cellCards;
 	QHash<qint64, qreal> cellHeight;
@@ -1198,8 +1551,10 @@ void EventGraphView::rebuildSwimlanes()
 		QVector<graphdetail::SexpNodeItem*> cards;
 		qreal h = 0.0;
 		for (const Site& s : it.value()) {
+			const QString evName = (s.eventIndex >= 0 && s.eventIndex < m_eventNames.size())
+				? m_eventNames[s.eventIndex] : QString();
 			auto* card = new graphdetail::SexpNodeItem(s.treeNode, s.eventIndex, s.isCond, s.opName, s.args,
-				QString(), s.expr, m_style);
+				evName, s.expr, m_style);
 			cards.push_back(card);
 			h += card->boundingRect().height();
 		}
@@ -1249,10 +1604,12 @@ void EventGraphView::rebuildSwimlanes()
 	}
 
 	// Vertical connector per column: header down to the lowest card.
-	for (auto it = colBottom.constBegin(); it != colBottom.constEnd(); ++it) {
-		auto* line = m_scene->addLine(colXc(it.key()), topGutter / 2.0, colXc(it.key()), it.value(),
-			QPen(m_style.entity, 1.6, Qt::DashLine));
-		line->setZValue(-1.0);
+	if (s_refMode != RefLineMode::Off) {
+		for (auto it = colBottom.constBegin(); it != colBottom.constEnd(); ++it) {
+			auto* line = m_scene->addLine(colXc(it.key()), topGutter / 2.0, colXc(it.key()), it.value(),
+				QPen(m_style.entity, 1.6, Qt::DashLine));
+			line->setZValue(-1.0);
+		}
 	}
 
 	// Column headers (events).
@@ -1283,6 +1640,7 @@ void EventGraphView::rebuildSwimlanes()
 		m_scene->addItem(hdr);
 	}
 
+	updateSceneRect();
 	const QString curKey = QStringLiteral("swim");
 	if (m_hasFramed && curKey == m_framedKey) {
 		setTransform(savedTransform);
@@ -1341,9 +1699,36 @@ void EventGraphView::rebuildBasic()
 	// Custom honors saved positions; Auto/Compact are pure computed layouts.
 	const bool useSaved = (s_basicLayout == BasicLayout::Custom);
 	const bool compact = (s_basicLayout == BasicLayout::Compact);
+	// Combine: one shared node per object (right-hand column). Duplicate: a node
+	// per reference, laid out as a leaf child beside its operator.
+	const bool combine = s_basicCombineObjects;
 	const qreal colStep = graphdetail::kNodeW + (compact ? 44.0 : 96.0);
 	const qreal rowStep = compact ? 104.0 : 132.0;
 	const qreal eventGap = compact ? 0.6 : 1.0; // extra slots between events
+
+	// Duplicate-mode object placements: one per (operator, reference).
+	struct DupPlacement {
+		int op = -1, objectIndex = -1, leafTreeNode = -1, depth = 0;
+		double slot = 0.0;
+		bool placed = false, hasPos = false;
+		float posX = 0.0f, posY = 0.0f;
+	};
+	QVector<DupPlacement> dups;
+	QVector<QVector<int>> opDupIdx(nOps);
+	if (!combine) {
+		for (int oi = 0; oi < nOps; ++oi)
+			for (const BasicObjRef& r : g.ops[oi].objectRefs) {
+				DupPlacement d;
+				d.op = oi;
+				d.objectIndex = r.objectIndex;
+				d.leafTreeNode = r.leafTreeNode;
+				d.hasPos = r.hasPos;
+				d.posX = r.posX;
+				d.posY = r.posY;
+				opDupIdx[oi].push_back(static_cast<int>(dups.size()));
+				dups.push_back(d);
+			}
+	}
 
 	QVector<double> opSlot(nOps, 0.0);
 	QVector<int>    opDepth(nOps, 0);
@@ -1356,23 +1741,42 @@ void EventGraphView::rebuildBasic()
 		maxDepth = std::max(maxDepth, depth);
 		opPlaced[oi] = true;
 		const BasicOpNode& op = g.ops[oi];
-		if (op.childOps.empty()) {
+		const bool expandObjs = !combine && !op.objectRefs.empty();
+		// Sexp-depth collapse: at the limit, render this node but not its subtree.
+		if ((op.childOps.empty() && !expandObjs) || depth >= s_basicDepth) {
 			const double s = slotCursor;
 			slotCursor += 1.0;
 			opSlot[oi] = s;
 			return s;
 		}
-		double sum = 0.0;
-		int cnt = 0;
+		QVector<double> kidSlots;
 		for (int c : op.childOps) {
 			if (c < 0 || c >= nOps || opPlaced[c])
 				continue; // guard against a malformed/shared child
-			sum += assign(c, depth + 1);
-			++cnt;
+			kidSlots.push_back(assign(c, depth + 1));
 		}
-		const double s = (cnt > 0) ? sum / cnt : slotCursor;
-		if (cnt == 0)
+		if (expandObjs) {
+			// Duplicate object nodes are leaf children in the column to the right.
+			for (int di : opDupIdx[oi]) {
+				const double s = slotCursor;
+				slotCursor += 1.0;
+				dups[di].slot = s;
+				dups[di].depth = depth + 1;
+				dups[di].placed = true;
+				maxDepth = std::max(maxDepth, depth + 1);
+				kidSlots.push_back(s);
+			}
+		}
+		double s;
+		if (kidSlots.isEmpty()) {
+			s = slotCursor;
 			slotCursor += 1.0;
+		} else {
+			double sum = 0.0;
+			for (double k : kidSlots)
+				sum += k;
+			s = sum / kidSlots.size();
+		}
 		opSlot[oi] = s;
 		return s;
 	};
@@ -1384,53 +1788,63 @@ void EventGraphView::rebuildBasic()
 		assign(root, 0);
 		slotCursor += eventGap; // vertical gap before the next event
 	}
-	// Any ops not reached from an event root (shouldn't happen) get trailing slots.
-	for (int oi = 0; oi < nOps; ++oi)
-		if (!opPlaced[oi])
-			assign(oi, 0);
+	// opPlaced now marks the rendered ops; anything left is collapsed by the depth
+	// limit (or unreachable) and is skipped below.
 
 	auto opSeed = [&](int oi) { return QPointF(opDepth[oi] * colStep, opSlot[oi] * rowStep); };
 
-	// Object column sits to the right of the widest operator tree.
+	// Combine mode places shared objects in a column to the right of the tree.
 	const qreal objColX = (maxDepth + 1) * colStep + 40.0;
-
-	// Seed each object near the average Y of the operators referencing it.
-	QVector<double> objSeedY(nObj, 0.0);
-	QVector<int>    objRefCount(nObj, 0);
-	for (int oi = 0; oi < nOps; ++oi) {
-		const QPointF p = opSeed(oi);
-		for (int obj : g.ops[oi].objectRefs) {
-			if (obj < 0 || obj >= nObj)
-				continue;
-			objSeedY[obj] += p.y();
-			objRefCount[obj] += 1;
+	QVector<bool> objVisible(nObj, false);
+	QVector<QPointF> objPos(nObj);
+	if (combine) {
+		// Seed each shared object near the average Y of its referencing operators.
+		QVector<double> objSeedY(nObj, 0.0);
+		QVector<int>    objRefCount(nObj, 0);
+		for (int oi = 0; oi < nOps; ++oi) {
+			if (!opPlaced[oi])
+				continue; // a collapsed op contributes no object references
+			const QPointF p = opSeed(oi);
+			for (const BasicObjRef& r : g.ops[oi].objectRefs) {
+				if (r.objectIndex < 0 || r.objectIndex >= nObj)
+					continue;
+				objSeedY[r.objectIndex] += p.y();
+				objRefCount[r.objectIndex] += 1;
+			}
+		}
+		QVector<int> objOrder;
+		for (int o = 0; o < nObj; ++o) {
+			if (objRefCount[o] <= 0)
+				continue; // shown only if a rendered operator still references it
+			objVisible[o] = true;
+			objSeedY[o] = objSeedY[o] / objRefCount[o];
+			objOrder.push_back(o);
+		}
+		std::sort(objOrder.begin(), objOrder.end(), [&](int a, int b) { return objSeedY[a] < objSeedY[b]; });
+		// Stack them with a minimum vertical gap; saved positions override.
+		const qreal minObjGap = 78.0;
+		double lastY = -1e9;
+		for (int o : objOrder) {
+			const double y = std::max(objSeedY[o], lastY + minObjGap);
+			lastY = y;
+			objPos[o] = (useSaved && g.objects[o].hasPos) ? QPointF(g.objects[o].posX, g.objects[o].posY)
+														  : QPointF(objColX, y);
 		}
 	}
-	QVector<int> objOrder;
-	objOrder.reserve(nObj);
-	for (int o = 0; o < nObj; ++o) {
-		objSeedY[o] = (objRefCount[o] > 0) ? objSeedY[o] / objRefCount[o] : 0.0;
-		objOrder.push_back(o);
-	}
-	std::sort(objOrder.begin(), objOrder.end(), [&](int a, int b) { return objSeedY[a] < objSeedY[b]; });
 
-	// Enforce a minimum vertical gap so stacked objects don't overlap.
-	QVector<QPointF> objPos(nObj);
-	const qreal minObjGap = 78.0;
-	double lastY = -1e9;
-	for (int o : objOrder) {
-		const double y = std::max(objSeedY[o], lastY + minObjGap);
-		lastY = y;
-		objPos[o] = QPointF(objColX, y);
-	}
-
-	// Saved positions override the seed (Custom layout only).
+	// Operator positions (saved override in Custom).
 	QVector<QPointF> opPos(nOps);
 	for (int oi = 0; oi < nOps; ++oi)
 		opPos[oi] = (useSaved && g.ops[oi].hasPos) ? QPointF(g.ops[oi].posX, g.ops[oi].posY) : opSeed(oi);
-	for (int o = 0; o < nObj; ++o)
-		if (useSaved && g.objects[o].hasPos)
-			objPos[o] = QPointF(g.objects[o].posX, g.objects[o].posY);
+
+	// Duplicate-mode object positions (leaf children beside their operator).
+	QVector<QPointF> dupPos(dups.size());
+	for (int di = 0; di < dups.size(); ++di) {
+		if (!dups[di].placed)
+			continue;
+		const QPointF seed(dups[di].depth * colStep, dups[di].slot * rowStep);
+		dupPos[di] = (useSaved && dups[di].hasPos) ? QPointF(dups[di].posX, dups[di].posY) : seed;
+	}
 
 	// Event nodes anchor each event to the left of its root operator.
 	QVector<QPointF> eventPos(nEvents);
@@ -1447,50 +1861,57 @@ void EventGraphView::rebuildBasic()
 		}
 	}
 
-	// --- Items. Edges first so they sit behind the cards. ---
-	for (int i = 0; i < nEvents; ++i) {
-		const int root = g.events[i].rootOp;
-		if (root >= 0 && root < nOps)
-			m_scene->addItem(new graphdetail::RefEdgeItem(eventPos[i], opPos[root], m_style.entity, m_style));
-	}
-	for (int oi = 0; oi < nOps; ++oi) {
-		for (int c : g.ops[oi].childOps)
-			if (c >= 0 && c < nOps)
-				m_scene->addItem(new graphdetail::RefEdgeItem(opPos[oi], opPos[c], m_style.ringColor, m_style));
-		for (int obj : g.ops[oi].objectRefs)
-			if (obj >= 0 && obj < nObj)
-				m_scene->addItem(new graphdetail::RefEdgeItem(opPos[oi], objPos[obj],
-					m_style.colorFor(g.objects[obj].kind), m_style));
-	}
+	// --- Cards first (so edges can reference the created card items); edges sit
+	// behind them via their negative Z regardless of insertion order. ---
+	QVector<graphdetail::ObjectNodeItem*> objItem(nObj, nullptr);       // combine mode
+	QVector<graphdetail::ObjectNodeItem*> dupItem(dups.size(), nullptr); // duplicate mode
+	QVector<graphdetail::SexpNodeItem*> opItem(nOps, nullptr);
+	QVector<graphdetail::EventNodeItem*> evItem(nEvents, nullptr);
 
-	// Shared object cards.
-	for (int o = 0; o < nObj; ++o) {
-		const BasicObjNode& ob = g.objects[o];
+	auto makeObjectCard = [&](const BasicObjNode& ob, const QPointF& pos, int posKey) {
 		auto* card = new graphdetail::ObjectNodeItem(QString::fromLatin1(EventReferenceIndex::kindLabel(ob.kind)),
 			m_style.colorFor(ob.kind), QString::fromStdString(ob.name), QString(), m_style);
-		card->setPos(objPos[o]);
+		card->setPos(pos);
 		card->setZValue(1.5);
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
-		card->setData(0, ob.posKey);
+		card->setData(0, posKey);
 		m_scene->addItem(card);
+		return card;
+	};
+
+	// Object cards: one shared node per object (combine), or one per reference
+	// keyed on its own leaf (duplicate).
+	if (combine) {
+		for (int o = 0; o < nObj; ++o)
+			if (objVisible[o])
+				objItem[o] = makeObjectCard(g.objects[o], objPos[o], g.objects[o].posKey);
+	} else {
+		for (int di = 0; di < dups.size(); ++di)
+			if (dups[di].placed)
+				dupItem[di] = makeObjectCard(g.objects[dups[di].objectIndex], dupPos[di], dups[di].leafTreeNode);
 	}
 
 	// Operator cards.
 	for (int oi = 0; oi < nOps; ++oi) {
+		if (!opPlaced[oi])
+			continue; // collapsed by the depth limit
 		const BasicOpNode& op = g.ops[oi];
 		QVector<QString> argList;
 		argList.reserve(static_cast<int>(op.inlineArgs.size()));
 		for (const auto& a : op.inlineArgs)
 			argList.push_back(QString::fromStdString(a));
+		const QString evName = (op.eventIndex >= 0 && op.eventIndex < m_eventNames.size())
+			? m_eventNames[op.eventIndex] : QString();
 		auto* card = new graphdetail::SexpNodeItem(op.treeNode, op.eventIndex, op.isCond,
-			QString::fromStdString(op.opText), argList, QString(), QString::fromStdString(op.expression), m_style);
+			QString::fromStdString(op.opText), argList, evName, QString::fromStdString(op.expression), m_style);
 		card->setPos(opPos[oi]);
 		card->setZValue(2.0);
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, op.posKey);
 		m_scene->addItem(card);
+		opItem[oi] = card;
 	}
 
 	// Event cards (the trigger node for each event), like the other two modes.
@@ -1505,9 +1926,56 @@ void EventGraphView::rebuildBasic()
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, en.posKey);
 		m_scene->addItem(card);
+		evItem[i] = card;
+	}
+
+	// Edges, carrying their endpoint card items for the selection-emphasis pass.
+	if (s_refMode != RefLineMode::Off) {
+		auto addEdge = [&](const QPointF& a, const QPointF& b, const QColor& color, QGraphicsItem* ia,
+						   QGraphicsItem* ib) {
+			auto* edge = new graphdetail::RefEdgeItem(a, b, color, m_style);
+			edge->setEndpoints(ia, ib);
+			m_scene->addItem(edge);
+		};
+		for (int i = 0; i < nEvents; ++i) {
+			const int root = g.events[i].rootOp;
+			if (root >= 0 && root < nOps && opPlaced[root])
+				addEdge(eventPos[i], opPos[root], m_style.entity, evItem[i], opItem[root]);
+		}
+		for (int oi = 0; oi < nOps; ++oi) {
+			if (!opPlaced[oi])
+				continue;
+			for (int c : g.ops[oi].childOps)
+				if (c >= 0 && c < nOps && opPlaced[c])
+					addEdge(opPos[oi], opPos[c], m_style.ringColor, opItem[oi], opItem[c]);
+			// Combine: one edge per distinct object this op references.
+			if (combine) {
+				QSet<int> seen;
+				for (const BasicObjRef& r : g.ops[oi].objectRefs) {
+					if (r.objectIndex < 0 || r.objectIndex >= nObj || !objVisible[r.objectIndex])
+						continue;
+					if (seen.contains(r.objectIndex))
+						continue;
+					seen.insert(r.objectIndex);
+					addEdge(opPos[oi], objPos[r.objectIndex], m_style.colorFor(g.objects[r.objectIndex].kind),
+						opItem[oi], objItem[r.objectIndex]);
+				}
+			}
+		}
+		// Duplicate: one edge per placement, operator to its local object node.
+		if (!combine) {
+			for (int di = 0; di < dups.size(); ++di) {
+				if (!dups[di].placed)
+					continue;
+				const int oi = dups[di].op;
+				addEdge(opPos[oi], dupPos[di], m_style.colorFor(g.objects[dups[di].objectIndex].kind), opItem[oi],
+					dupItem[di]);
+			}
+		}
 	}
 
 	// Frame the graph, or resume the prior zoom/center if we're staying in Basic.
+	updateSceneRect();
 	const QString curKey = QStringLiteral("basic");
 	if (m_hasFramed && curKey == m_framedKey) {
 		setTransform(savedTransform);
@@ -1520,6 +1988,7 @@ void EventGraphView::rebuildBasic()
 	}
 
 	m_suppressSelectionSignal = false;
+	applyEmphasis();
 	if (m_minimap)
 		m_minimap->regenerate();
 }
@@ -1774,6 +2243,10 @@ void EventGraphView::applyTheme(bool dark)
 {
 	m_style = EventGraphStyle::makeStyle(dark);
 	setBackgroundBrush(m_style.bgColor);
+	if (m_legend)
+		m_legend->update();
+	if (m_overlay)
+		m_overlay->update();
 	reload();
 }
 
