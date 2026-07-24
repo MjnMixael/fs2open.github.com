@@ -485,6 +485,13 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::eventSelected, this, &MissionEventsDialog::selectEventInTree);
 	connect(ui->eventGraph, &EventGraphView::eventActivated, this, &MissionEventsDialog::jumpToEventInTree);
 	connect(ui->eventGraph, &EventGraphView::nodeActivated, this, &MissionEventsDialog::jumpToNodeInTree);
+	// Basic view: persist a dragged node's position on its annotation, as one
+	// undo step (the same before/after snapshot pattern as note/color edits).
+	connect(ui->eventGraph, &EventGraphView::nodeMoved, this, [this](int key, double x, double y) {
+		const QByteArray before = _model->captureEventWorkingState();
+		_model->setNodeGraphPos(key, static_cast<float>(x), static_cast<float>(y));
+		pushEventStateSnapshot(before, tr("Move Graph Node"));
+	});
 	// Data is (re)loaded when the graph view is first shown (refreshGraphView),
 	// mirroring how the advanced view loads its text on entry.
 }
@@ -506,6 +513,48 @@ void MissionEventsDialog::refreshGraphView()
 
 	ui->eventGraph->setEventNames(std::move(names));
 	ui->eventGraph->setObjects(buildGraphObjects());
+
+	// Basic view: build the whole-mission dataflow graph and resolve each node's
+	// saved position from the annotations (operator nodes key on their own tree
+	// node; shared object nodes key on a representative reference, falling back to
+	// any surviving reference if that one was deleted).
+	BasicGraph bg = _refIndex.buildBasicGraph(ui->eventTree->_model, events);
+	for (auto& en : bg.events) {
+		float x = 0.0f, y = 0.0f;
+		if (_model->getNodeGraphPos(en.posKey, x, y)) {
+			en.hasPos = true;
+			en.posX = x;
+			en.posY = y;
+		}
+	}
+	for (auto& op : bg.ops) {
+		float x = 0.0f, y = 0.0f;
+		if (_model->getNodeGraphPos(op.posKey, x, y)) {
+			op.hasPos = true;
+			op.posX = x;
+			op.posY = y;
+		}
+	}
+	for (auto& ob : bg.objects) {
+		float x = 0.0f, y = 0.0f;
+		if (_model->getNodeGraphPos(ob.posKey, x, y)) {
+			ob.hasPos = true;
+			ob.posX = x;
+			ob.posY = y;
+		} else {
+			for (int rn : ob.refTreeNodes) {
+				if (_model->getNodeGraphPos(rn, x, y)) {
+					ob.hasPos = true;
+					ob.posX = x;
+					ob.posY = y;
+					ob.posKey = rn;
+					break;
+				}
+			}
+		}
+	}
+	ui->eventGraph->setBasicGraph(std::move(bg));
+
 	ui->eventGraph->reload();
 
 	_graphDirty = false;

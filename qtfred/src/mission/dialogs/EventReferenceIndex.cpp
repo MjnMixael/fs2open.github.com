@@ -1,5 +1,6 @@
 #include "EventReferenceIndex.h"
 
+#include "missioneditor/sexp_annotation_model.h"
 #include "missioneditor/sexp_tree_model.h"
 
 #include <mission/missiongoals.h>
@@ -54,20 +55,7 @@ void EventReferenceIndex::walkNode(const SexpTreeModel& tree, int node, int even
 		RefObjectKind kind = RefObjectKind::Unknown;
 		SCP_string name;
 
-		if (n.type & SEXPT_VARIABLE) {
-			// A variable reference regardless of the slot it fills; the object
-			// is the variable itself. Text is stored as "varname(value)".
-			char var_name[TOKEN_LENGTH];
-			get_variable_name_from_sexp_tree_node_text(n.text, var_name);
-			kind = RefObjectKind::Variable;
-			name = var_name;
-		} else if (nodeType == SEXPT_STRING) {
-			const int opf = tree.query_node_argument_type(node);
-			kind = classify(opf, n.text);
-			name = n.text;
-		}
-
-		if (kind != RefObjectKind::Unknown && !name.empty()) {
+		if (leafObject(tree, node, kind, name)) {
 			EventObjectRef ref;
 			ref.name = name;
 			ref.kind = kind;
@@ -162,6 +150,34 @@ RefObjectKind EventReferenceIndex::classify(int opf, const char* token)
 	default:
 		return RefObjectKind::Unknown;
 	}
+}
+
+// Classify a leaf (non-operator) node as an object reference. Returns true only
+// when the node names a first-class object we surface; false for literals.
+bool EventReferenceIndex::leafObject(const SexpTreeModel& tree, int node, RefObjectKind& kind, SCP_string& name)
+{
+	const sexp_tree_item& n = tree.tree_nodes[node];
+	if (SEXPT_TYPE(n.type) == SEXPT_OPERATOR)
+		return false;
+
+	if (n.type & SEXPT_VARIABLE) {
+		// A variable reference regardless of the slot it fills; the object is the
+		// variable itself. Text is stored as "varname(value)".
+		char var_name[TOKEN_LENGTH];
+		get_variable_name_from_sexp_tree_node_text(n.text, var_name);
+		kind = RefObjectKind::Variable;
+		name = var_name;
+		return !name.empty();
+	}
+
+	if (SEXPT_TYPE(n.type) == SEXPT_STRING) {
+		const int opf = tree.query_node_argument_type(node);
+		kind = classify(opf, n.text);
+		name = n.text;
+		return kind != RefObjectKind::Unknown && !name.empty();
+	}
+
+	return false;
 }
 
 // Serialize a tree_nodes subtree back to readable sexp text, e.g.
@@ -274,6 +290,96 @@ SCP_vector<EventObjectRef> EventReferenceIndex::referenceSites(RefObjectKind kin
 		sites.push_back(r);
 	}
 	return sites;
+}
+
+// Recurse an operator subtree into the BasicGraph. `node` is assumed to be an
+// operator. Operator children become their own nodes (linked by childOps);
+// object-naming leaves become shared object nodes (linked by objectRefs);
+// everything else (numbers, plain strings) is inlined into the card.
+int EventReferenceIndex::buildOpSubtree(const SexpTreeModel& tree, int node, int eventIndex, BasicGraph& g,
+	std::unordered_map<int, int>& nodeToOp, std::unordered_map<SCP_string, int>& objKey) const
+{
+	const int opIndex = static_cast<int>(g.ops.size());
+	g.ops.emplace_back();
+	nodeToOp[node] = opIndex;
+
+	// Fill the fixed fields now; the vector fields are accumulated into locals
+	// first because recursion can reallocate g.ops out from under a reference.
+	{
+		BasicOpNode& op = g.ops[opIndex];
+		op.treeNode = node;
+		op.posKey = node;
+		op.eventIndex = eventIndex;
+		op.isCond = (classifyRole(tree, node) == RefRole::Condition);
+		op.opText = tree.tree_nodes[node].text;
+		op.expression = nodeToText(tree, node);
+	}
+
+	SCP_vector<SCP_string> inlineArgs;
+	SCP_vector<int> childOps;
+	SCP_vector<int> objectRefs;
+
+	for (int c = tree.tree_nodes[node].child; c != -1; c = tree.tree_nodes[c].next) {
+		if (SEXPT_TYPE(tree.tree_nodes[c].type) == SEXPT_OPERATOR) {
+			const int childIdx = buildOpSubtree(tree, c, eventIndex, g, nodeToOp, objKey);
+			if (childIdx >= 0)
+				childOps.push_back(childIdx);
+			continue;
+		}
+
+		RefObjectKind kind = RefObjectKind::Unknown;
+		SCP_string name;
+		if (leafObject(tree, c, kind, name)) {
+			const SCP_string key = makeKey(kind, name);
+			auto it = objKey.find(key);
+			int objIdx;
+			if (it == objKey.end()) {
+				objIdx = static_cast<int>(g.objects.size());
+				g.objects.emplace_back();
+				g.objects[objIdx].kind = kind;
+				g.objects[objIdx].name = name;
+				g.objects[objIdx].repTreeNode = c;
+				g.objects[objIdx].posKey = c;
+				objKey.emplace(key, objIdx);
+			} else {
+				objIdx = it->second;
+			}
+			g.objects[objIdx].refTreeNodes.push_back(c);
+			if (std::find(objectRefs.begin(), objectRefs.end(), objIdx) == objectRefs.end())
+				objectRefs.push_back(objIdx);
+		} else {
+			inlineArgs.push_back(nodeToText(tree, c));
+		}
+	}
+
+	BasicOpNode& op = g.ops[opIndex];
+	op.inlineArgs = std::move(inlineArgs);
+	op.childOps = std::move(childOps);
+	op.objectRefs = std::move(objectRefs);
+	return opIndex;
+}
+
+BasicGraph EventReferenceIndex::buildBasicGraph(const SexpTreeModel& tree, const SCP_vector<mission_event>& events) const
+{
+	BasicGraph g;
+	std::unordered_map<int, int> nodeToOp;
+	std::unordered_map<SCP_string, int> objKey;
+
+	g.events.reserve(events.size());
+	for (int i = 0; i < static_cast<int>(events.size()); ++i) {
+		BasicEventNode en;
+		en.eventIndex = i;
+		const int root = events[i].formula; // tree_nodes[] index
+		if (root >= 0)
+			en.posKey = SexpAnnotationModel::rootKey(root);
+		if (root >= 0 && root < static_cast<int>(tree.tree_nodes.size()) &&
+		    tree.tree_nodes[root].type != SEXPT_UNUSED &&
+		    SEXPT_TYPE(tree.tree_nodes[root].type) == SEXPT_OPERATOR) {
+			en.rootOp = buildOpSubtree(tree, root, i, g, nodeToOp, objKey);
+		}
+		g.events.push_back(en);
+	}
+	return g;
 }
 
 const char* EventReferenceIndex::kindLabel(RefObjectKind kind)

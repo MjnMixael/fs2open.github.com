@@ -20,6 +20,7 @@
 #include <QPainterPath>
 #include <QPixmap>
 #include <QResizeEvent>
+#include <QScrollBar>
 #include <QTextOption>
 #include <QShowEvent>
 #include <QSignalBlocker>
@@ -34,6 +35,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <utility>
 
 namespace fso::fred {
@@ -41,6 +43,13 @@ namespace fso::fred {
 // Distance between adjacent radial rings; a graph setting that persists for the
 // session (across object and view changes), adjustable via the settings gear.
 static qreal s_ringSpacing = 210.0;
+
+// Basic-view node arrangement, remembered for the session like s_ringSpacing.
+// Custom honors saved per-node positions; Auto/Compact are computed layouts that
+// ignore them (non-destructive — saved positions stay in the file, just unused
+// while a computed preset is active). A manual drag switches back to Custom.
+enum class BasicLayout { Custom = 0, Auto = 1, Compact = 2 };
+static BasicLayout s_basicLayout = BasicLayout::Custom;
 
 // Stable identity key for a swimlanes object row (kind + case-insensitive name).
 static QString swimRowKey(RefObjectKind kind, const QString& name)
@@ -599,7 +608,7 @@ void EventGraphView::buildOverlay()
 	};
 	addModeButton(tr("Radial"), Mode::Radial, true, QString());
 	addModeButton(tr("Swimlanes"), Mode::Swimlanes, true, QString());
-	addModeButton(tr("Basic"), Mode::Basic, false, tr("Coming soon"));
+	addModeButton(tr("Basic"), Mode::Basic, true, tr("Whole-mission dataflow graph (drag to arrange)"));
 
 	connect(m_modeGroup, &QButtonGroup::idClicked, this, [this](int id) { setMode(static_cast<Mode>(id)); });
 
@@ -621,6 +630,13 @@ void EventGraphView::buildOverlay()
 			clearSwimFocus(); // a focused object may be filtered out by the kind change
 			m_hasFramed = false;
 			rebuildSwimlanes();
+		} else if (m_mode == Mode::Basic) {
+			bool ok = false;
+			const int v = m_objectCombo->currentData().toInt(&ok);
+			if (ok)
+				s_basicLayout = static_cast<BasicLayout>(v);
+			m_hasFramed = false; // re-fit to the new arrangement
+			rebuildBasic();
 		}
 	});
 
@@ -741,12 +757,33 @@ void EventGraphView::populateSelector()
 		m_objectCombo->setCurrentIndex(target);
 }
 
+// The combo drives the object (radial) or the kind filter (swimlanes); the Basic
+// view is whole-mission, so the combo is a disabled placeholder there.
+void EventGraphView::populateSelectorForMode()
+{
+	if (m_mode == Mode::Swimlanes) {
+		populateKindFilter();
+		m_objectCombo->setToolTip(tr("Filter by object kind"));
+	} else if (m_mode == Mode::Radial) {
+		populateSelector();
+		m_objectCombo->setToolTip(tr("Object to inspect"));
+	} else {
+		// Basic: the combo picks the node arrangement.
+		QSignalBlocker blocker(m_objectCombo);
+		m_objectCombo->clear();
+		m_objectCombo->addItem(tr("Custom"), static_cast<int>(BasicLayout::Custom));
+		m_objectCombo->addItem(tr("Auto layout"), static_cast<int>(BasicLayout::Auto));
+		m_objectCombo->addItem(tr("Compact"), static_cast<int>(BasicLayout::Compact));
+		const int row = m_objectCombo->findData(static_cast<int>(s_basicLayout));
+		m_objectCombo->setCurrentIndex(row >= 0 ? row : 0);
+		m_objectCombo->setToolTip(tr("Node layout"));
+	}
+	m_objectCombo->setEnabled(true);
+}
+
 void EventGraphView::reload()
 {
-	if (m_mode == Mode::Swimlanes)
-		populateKindFilter();
-	else
-		populateSelector();
+	populateSelectorForMode();
 	positionOverlay(); // the combo width changes with the labels
 	rebuildCurrent();
 }
@@ -756,11 +793,14 @@ void EventGraphView::setMode(Mode mode)
 	if (mode == m_mode)
 		return;
 	m_mode = mode;
-	// The combo drives the object (radial) or the kind filter (swimlanes).
-	if (mode == Mode::Swimlanes)
-		populateKindFilter();
-	else
-		populateSelector();
+	// Basic uses individually draggable cards, so the built-in ScrollHandDrag
+	// (which owns the left drag) can't run; empty-canvas panning is handled
+	// manually. Hint it with the open-hand cursor over the viewport.
+	setDragMode(mode == Mode::Basic ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
+	if (mode == Mode::Basic)
+		viewport()->setCursor(Qt::OpenHandCursor);
+	m_panning = false;
+	populateSelectorForMode();
 	positionOverlay();
 	m_hasFramed = false; // re-fit for the new mode
 	rebuildCurrent();
@@ -845,6 +885,8 @@ void EventGraphView::rebuildCurrent()
 {
 	if (m_mode == Mode::Swimlanes)
 		rebuildSwimlanes();
+	else if (m_mode == Mode::Basic)
+		rebuildBasic();
 	else
 		rebuildRadial();
 }
@@ -1257,6 +1299,231 @@ void EventGraphView::rebuildSwimlanes()
 		m_minimap->regenerate();
 }
 
+void EventGraphView::setBasicLayoutToCustom()
+{
+	if (s_basicLayout == BasicLayout::Custom)
+		return;
+	s_basicLayout = BasicLayout::Custom;
+	// Reflect it in the dropdown without triggering a rebuild (the dragged card is
+	// already where the user dropped it).
+	if (m_objectCombo) {
+		QSignalBlocker blocker(m_objectCombo);
+		const int row = m_objectCombo->findData(static_cast<int>(BasicLayout::Custom));
+		if (row >= 0)
+			m_objectCombo->setCurrentIndex(row);
+	}
+}
+
+void EventGraphView::rebuildBasic()
+{
+	// Viewport continuity (same pattern as the other modes).
+	const QTransform savedTransform = transform();
+	const QPointF savedCenter = mapToScene(viewport()->rect().center());
+
+	m_dragItem = nullptr;
+	m_suppressSelectionSignal = true;
+	m_scene->clear();
+
+	const BasicGraph& g = m_basicGraph;
+	if (g.ops.empty()) {
+		m_suppressSelectionSignal = false;
+		showEmptyMessage(tr("No events to display."));
+		return;
+	}
+
+	const int nOps = static_cast<int>(g.ops.size());
+	const int nObj = static_cast<int>(g.objects.size());
+	const int nEvents = static_cast<int>(g.events.size());
+
+	// --- Deterministic seed layout: events stack vertically, each event's
+	// operator tree expands horizontally to the right by depth. Each leaf op
+	// takes one vertical slot; a parent centers on its children's slots. ---
+	// Custom honors saved positions; Auto/Compact are pure computed layouts.
+	const bool useSaved = (s_basicLayout == BasicLayout::Custom);
+	const bool compact = (s_basicLayout == BasicLayout::Compact);
+	const qreal colStep = graphdetail::kNodeW + (compact ? 44.0 : 96.0);
+	const qreal rowStep = compact ? 104.0 : 132.0;
+	const qreal eventGap = compact ? 0.6 : 1.0; // extra slots between events
+
+	QVector<double> opSlot(nOps, 0.0);
+	QVector<int>    opDepth(nOps, 0);
+	QVector<bool>   opPlaced(nOps, false);
+	double slotCursor = 0.0;
+	int maxDepth = 0;
+
+	std::function<double(int, int)> assign = [&](int oi, int depth) -> double {
+		opDepth[oi] = depth;
+		maxDepth = std::max(maxDepth, depth);
+		opPlaced[oi] = true;
+		const BasicOpNode& op = g.ops[oi];
+		if (op.childOps.empty()) {
+			const double s = slotCursor;
+			slotCursor += 1.0;
+			opSlot[oi] = s;
+			return s;
+		}
+		double sum = 0.0;
+		int cnt = 0;
+		for (int c : op.childOps) {
+			if (c < 0 || c >= nOps || opPlaced[c])
+				continue; // guard against a malformed/shared child
+			sum += assign(c, depth + 1);
+			++cnt;
+		}
+		const double s = (cnt > 0) ? sum / cnt : slotCursor;
+		if (cnt == 0)
+			slotCursor += 1.0;
+		opSlot[oi] = s;
+		return s;
+	};
+
+	for (int i = 0; i < nEvents; ++i) {
+		const int root = g.events[i].rootOp;
+		if (root < 0 || root >= nOps || opPlaced[root])
+			continue;
+		assign(root, 0);
+		slotCursor += eventGap; // vertical gap before the next event
+	}
+	// Any ops not reached from an event root (shouldn't happen) get trailing slots.
+	for (int oi = 0; oi < nOps; ++oi)
+		if (!opPlaced[oi])
+			assign(oi, 0);
+
+	auto opSeed = [&](int oi) { return QPointF(opDepth[oi] * colStep, opSlot[oi] * rowStep); };
+
+	// Object column sits to the right of the widest operator tree.
+	const qreal objColX = (maxDepth + 1) * colStep + 40.0;
+
+	// Seed each object near the average Y of the operators referencing it.
+	QVector<double> objSeedY(nObj, 0.0);
+	QVector<int>    objRefCount(nObj, 0);
+	for (int oi = 0; oi < nOps; ++oi) {
+		const QPointF p = opSeed(oi);
+		for (int obj : g.ops[oi].objectRefs) {
+			if (obj < 0 || obj >= nObj)
+				continue;
+			objSeedY[obj] += p.y();
+			objRefCount[obj] += 1;
+		}
+	}
+	QVector<int> objOrder;
+	objOrder.reserve(nObj);
+	for (int o = 0; o < nObj; ++o) {
+		objSeedY[o] = (objRefCount[o] > 0) ? objSeedY[o] / objRefCount[o] : 0.0;
+		objOrder.push_back(o);
+	}
+	std::sort(objOrder.begin(), objOrder.end(), [&](int a, int b) { return objSeedY[a] < objSeedY[b]; });
+
+	// Enforce a minimum vertical gap so stacked objects don't overlap.
+	QVector<QPointF> objPos(nObj);
+	const qreal minObjGap = 78.0;
+	double lastY = -1e9;
+	for (int o : objOrder) {
+		const double y = std::max(objSeedY[o], lastY + minObjGap);
+		lastY = y;
+		objPos[o] = QPointF(objColX, y);
+	}
+
+	// Saved positions override the seed (Custom layout only).
+	QVector<QPointF> opPos(nOps);
+	for (int oi = 0; oi < nOps; ++oi)
+		opPos[oi] = (useSaved && g.ops[oi].hasPos) ? QPointF(g.ops[oi].posX, g.ops[oi].posY) : opSeed(oi);
+	for (int o = 0; o < nObj; ++o)
+		if (useSaved && g.objects[o].hasPos)
+			objPos[o] = QPointF(g.objects[o].posX, g.objects[o].posY);
+
+	// Event nodes anchor each event to the left of its root operator.
+	QVector<QPointF> eventPos(nEvents);
+	double degenerateY = 0.0;
+	for (int i = 0; i < nEvents; ++i) {
+		const BasicEventNode& en = g.events[i];
+		if (useSaved && en.hasPos) {
+			eventPos[i] = QPointF(en.posX, en.posY);
+		} else if (en.rootOp >= 0 && en.rootOp < nOps) {
+			eventPos[i] = QPointF(opPos[en.rootOp].x() - colStep, opPos[en.rootOp].y());
+		} else {
+			eventPos[i] = QPointF(-colStep, degenerateY); // event with no operator root (rare)
+			degenerateY += rowStep;
+		}
+	}
+
+	// --- Items. Edges first so they sit behind the cards. ---
+	for (int i = 0; i < nEvents; ++i) {
+		const int root = g.events[i].rootOp;
+		if (root >= 0 && root < nOps)
+			m_scene->addItem(new graphdetail::RefEdgeItem(eventPos[i], opPos[root], m_style.entity, m_style));
+	}
+	for (int oi = 0; oi < nOps; ++oi) {
+		for (int c : g.ops[oi].childOps)
+			if (c >= 0 && c < nOps)
+				m_scene->addItem(new graphdetail::RefEdgeItem(opPos[oi], opPos[c], m_style.ringColor, m_style));
+		for (int obj : g.ops[oi].objectRefs)
+			if (obj >= 0 && obj < nObj)
+				m_scene->addItem(new graphdetail::RefEdgeItem(opPos[oi], objPos[obj],
+					m_style.colorFor(g.objects[obj].kind), m_style));
+	}
+
+	// Shared object cards.
+	for (int o = 0; o < nObj; ++o) {
+		const BasicObjNode& ob = g.objects[o];
+		auto* card = new graphdetail::ObjectNodeItem(QString::fromLatin1(EventReferenceIndex::kindLabel(ob.kind)),
+			m_style.colorFor(ob.kind), QString::fromStdString(ob.name), QString(), m_style);
+		card->setPos(objPos[o]);
+		card->setZValue(1.5);
+		card->setFlag(QGraphicsItem::ItemIsMovable, true);
+		card->setCursor(Qt::SizeAllCursor);
+		card->setData(0, ob.posKey);
+		m_scene->addItem(card);
+	}
+
+	// Operator cards.
+	for (int oi = 0; oi < nOps; ++oi) {
+		const BasicOpNode& op = g.ops[oi];
+		QVector<QString> argList;
+		argList.reserve(static_cast<int>(op.inlineArgs.size()));
+		for (const auto& a : op.inlineArgs)
+			argList.push_back(QString::fromStdString(a));
+		auto* card = new graphdetail::SexpNodeItem(op.treeNode, op.eventIndex, op.isCond,
+			QString::fromStdString(op.opText), argList, QString(), QString::fromStdString(op.expression), m_style);
+		card->setPos(opPos[oi]);
+		card->setZValue(2.0);
+		card->setFlag(QGraphicsItem::ItemIsMovable, true);
+		card->setCursor(Qt::SizeAllCursor);
+		card->setData(0, op.posKey);
+		m_scene->addItem(card);
+	}
+
+	// Event cards (the trigger node for each event), like the other two modes.
+	for (int i = 0; i < nEvents; ++i) {
+		const BasicEventNode& en = g.events[i];
+		const QString name = (en.eventIndex < m_eventNames.size()) ? m_eventNames[en.eventIndex]
+																   : tr("<event %1>").arg(en.eventIndex);
+		auto* card = new graphdetail::EventNodeItem(en.eventIndex, name, m_style);
+		card->setPos(eventPos[i]);
+		card->setZValue(2.0);
+		card->setFlag(QGraphicsItem::ItemIsMovable, true);
+		card->setCursor(Qt::SizeAllCursor);
+		card->setData(0, en.posKey);
+		m_scene->addItem(card);
+	}
+
+	// Frame the graph, or resume the prior zoom/center if we're staying in Basic.
+	const QString curKey = QStringLiteral("basic");
+	if (m_hasFramed && curKey == m_framedKey) {
+		setTransform(savedTransform);
+		centerOn(savedCenter);
+		m_currentScale = transform().m11();
+	} else {
+		zoomToFitAll();
+		m_framedKey = curKey;
+		m_hasFramed = true;
+	}
+
+	m_suppressSelectionSignal = false;
+	if (m_minimap)
+		m_minimap->regenerate();
+}
+
 void EventGraphView::zoomStep(bool zoomIn)
 {
 	const qreal step = zoomIn ? 1.10 : (1.0 / 1.10);
@@ -1355,6 +1622,7 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 		}
 	}
 
+	m_dragItem = nullptr;
 	for (QGraphicsItem* it : m_scene->items(sp)) {
 		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
 			card->bringToFront(); // clicked card jumps above overlaps
@@ -1362,14 +1630,68 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 				e->accept();
 				return;
 			}
+			// Basic: remember the grabbed card so a real move persists on release.
+			if (m_mode == Mode::Basic && e->button() == Qt::LeftButton
+				&& (card->flags() & QGraphicsItem::ItemIsMovable)) {
+				m_dragItem = card;
+				m_dragStartPos = card->pos();
+			}
 			break;
 		}
 	}
+
+	// Basic: a left press on empty canvas (no card grabbed) pans the view, since
+	// NoDrag disables the built-in ScrollHandDrag.
+	if (m_mode == Mode::Basic && e->button() == Qt::LeftButton && !m_dragItem) {
+		m_panning = true;
+		m_panLastPos = e->pos();
+		viewport()->setCursor(Qt::ClosedHandCursor);
+		e->accept();
+		return;
+	}
+
 	QGraphicsView::mousePressEvent(e);
+}
+
+void EventGraphView::mouseMoveEvent(QMouseEvent* e)
+{
+	if (m_panning) {
+		const QPoint delta = e->pos() - m_panLastPos;
+		m_panLastPos = e->pos();
+		horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
+		verticalScrollBar()->setValue(verticalScrollBar()->value() - delta.y());
+		e->accept();
+		return;
+	}
+	QGraphicsView::mouseMoveEvent(e);
 }
 
 void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 {
+	// Basic: end a manual empty-canvas pan.
+	if (m_panning && e->button() == Qt::LeftButton) {
+		m_panning = false;
+		viewport()->setCursor(Qt::OpenHandCursor);
+		e->accept();
+		return;
+	}
+
+	// Basic: if a card was dragged (not just clicked), persist its new position.
+	if (m_mode == Mode::Basic && m_dragItem && e->button() == Qt::LeftButton) {
+		graphdetail::CardItem* item = m_dragItem;
+		m_dragItem = nullptr;
+		QGraphicsView::mouseReleaseEvent(e); // let the item finish its move first
+		const QPointF now = item->pos();
+		if ((now - m_dragStartPos).manhattanLength() > 2) {
+			bool ok = false;
+			const int key = item->data(0).toInt(&ok);
+			if (ok)
+				Q_EMIT nodeMoved(key, now.x(), now.y());
+			setBasicLayoutToCustom(); // a manual move puts us in the Custom arrangement
+		}
+		return;
+	}
+
 	// A click (not a pan-drag) on empty canvas clears the swimlanes filter.
 	const bool emptyClick = m_pressOnEmpty && e->button() == Qt::LeftButton
 		&& (e->pos() - m_pressPos).manhattanLength() < 6
@@ -1411,6 +1733,18 @@ void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
 			Q_EMIT nodeActivated(node->treeNode());
 			e->accept();
 			return;
+		}
+		// Basic: a shared object card jumps to its first reference in the tree.
+		// (Its data(0) is that reference's leaf tree node; unset/non-int in the
+		// other modes, where object cards don't jump.)
+		if (auto* obj = qgraphicsitem_cast<graphdetail::ObjectNodeItem*>(it)) {
+			bool ok = false;
+			const int treeNode = obj->data(0).toInt(&ok);
+			if (ok && treeNode >= 0) {
+				Q_EMIT nodeActivated(treeNode);
+				e->accept();
+				return;
+			}
 		}
 	}
 	QGraphicsView::mouseDoubleClickEvent(e);

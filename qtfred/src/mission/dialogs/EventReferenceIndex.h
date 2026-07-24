@@ -56,6 +56,57 @@ struct EventObjectRef {
 	RefRole       role = RefRole::Other;
 };
 
+// Whole-mission operator dataflow graph, for the Basic graph view. Every sexp
+// operator is a node; literal (non-object) leaf args are inlined into the card;
+// object-naming leaf args become edges to shared object nodes. The position
+// fields are filled by the dialog from saved annotations (the builder itself is
+// stateless); they seed the view's layout when set.
+struct BasicOpNode {
+	int        treeNode = -1;   // tree_nodes[] index; also the annotation key for its position
+	int        eventIndex = -1;
+	bool       isCond = false;  // condition vs action subtree (card color)
+	SCP_string opText;          // operator name
+	SCP_string expression;      // full sub-expression text
+	SCP_vector<SCP_string> inlineArgs; // literal args shown inside the card
+	SCP_vector<int> childOps;   // indices into BasicGraph::ops
+	SCP_vector<int> objectRefs; // indices into BasicGraph::objects
+
+	int   posKey = -1;          // annotation key to persist this node's position under
+	bool  hasPos = false;
+	float posX = 0.0f;
+	float posY = 0.0f;
+};
+
+struct BasicObjNode {
+	RefObjectKind kind = RefObjectKind::Unknown;
+	SCP_string    name;
+	int           repTreeNode = -1;    // representative reference leaf (the position key)
+	SCP_vector<int> refTreeNodes;      // all reference leaves (position read fallback)
+
+	int   posKey = -1;
+	bool  hasPos = false;
+	float posX = 0.0f;
+	float posY = 0.0f;
+};
+
+// One node per event (the trigger card, like the event nodes in the radial /
+// swimlanes modes). Its root operator hangs off it to the right.
+struct BasicEventNode {
+	int   eventIndex = -1;
+	int   rootOp = -1;   // index into BasicGraph::ops, or -1 if the event has no operator root
+	int   posKey = -1;   // rootKey(formula) annotation key for this event node's position
+
+	bool  hasPos = false;
+	float posX = 0.0f;
+	float posY = 0.0f;
+};
+
+struct BasicGraph {
+	SCP_vector<BasicOpNode>    ops;
+	SCP_vector<BasicObjNode>   objects;
+	SCP_vector<BasicEventNode> events; // one per event, in event order
+};
+
 class EventReferenceIndex {
   public:
 	// Rebuild the whole index from the working events. `events[i].formula` is a
@@ -78,6 +129,10 @@ class EventReferenceIndex {
 
 	const SCP_vector<EventObjectRef>& allReferences() const { return m_refs; }
 
+	// Build the whole-mission operator dataflow graph (Basic view). Stateless
+	// with respect to the index; walks the same working tree as rebuild().
+	BasicGraph buildBasicGraph(const SexpTreeModel& tree, const SCP_vector<mission_event>& events) const;
+
 	static const char* kindLabel(RefObjectKind kind);
 
   private:
@@ -85,8 +140,14 @@ class EventReferenceIndex {
 	static RefObjectKind classify(int opf, const char* token);
 	static RefRole classifyRole(const SexpTreeModel& tree, int operatorNode);
 	static SCP_string nodeToText(const SexpTreeModel& tree, int node);
+	// Classify a leaf node as an object reference; returns false for operators,
+	// literals, and anything not naming a first-class object.
+	static bool leafObject(const SexpTreeModel& tree, int node, RefObjectKind& kind, SCP_string& name);
 
 	void walkNode(const SexpTreeModel& tree, int node, int eventIndex);
+	// Recursively add an operator subtree to a BasicGraph; returns its ops[] index.
+	int buildOpSubtree(const SexpTreeModel& tree, int node, int eventIndex, BasicGraph& g,
+		std::unordered_map<int, int>& nodeToOp, std::unordered_map<SCP_string, int>& objKey) const;
 
 	SCP_vector<EventObjectRef> m_refs;
 	// key -> indices into m_refs
