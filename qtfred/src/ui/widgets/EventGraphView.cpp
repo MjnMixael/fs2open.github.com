@@ -1,5 +1,7 @@
 #include "EventGraphView.h"
 #include "ui/Theme.h"
+#include "ui/widgets/sexp_tree_view.h" // convertNodeImageToIcon for the event icons
+#include "missioneditor/sexp_tree_model.h" // NodeImage
 
 #include <QAction>
 #include <QApplication>
@@ -13,12 +15,14 @@
 #include <QFontMetricsF>
 #include <QHash>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
 #include <QMouseEvent>
 #include <QPaintEvent>
 #include <QPair>
+#include <QPolygonF>
 #include <QRadioButton>
 #include <QPainter>
 #include <QPainterPath>
@@ -136,6 +140,51 @@ constexpr qreal padX = 12.0, padTop = 7.0, padBottom = 8.0;
 constexpr qreal chipH = 14.0, titleH = 20.0, lineH = 15.0, subH = 14.0, toggleH = 15.0;
 } // namespace metric
 
+// The event card's main icon reuses the tree's tinted dot/chain assets: blue dot
+// (event), red dot (directive), chain, red chain (chain + directive).
+inline NodeImage eventMainImage(bool chained, bool directive)
+{
+	if (chained)
+		return directive ? NodeImage::CHAIN_DIRECTIVE : NodeImage::CHAIN;
+	return directive ? NodeImage::ROOT_DIRECTIVE : NodeImage::ROOT;
+}
+
+inline void drawEventMainIcon(QPainter* p, bool chained, bool directive, const QRectF& box)
+{
+	const QIcon icon = sexp_tree_view::convertNodeImageToIcon(eventMainImage(chained, directive));
+	p->drawPixmap(box.toRect(), icon.pixmap(box.size().toSize()));
+}
+
+// Small hand-drawn glyphs for the "extra" event flags (no tree asset for these).
+enum class StatusGlyph { Repeat, Log };
+inline void drawStatusGlyph(QPainter* p, StatusGlyph g, const QRectF& box, const QColor& col)
+{
+	if (g == StatusGlyph::Repeat) { // circular arrow
+		const QRectF ar = box.adjusted(2.0, 2.0, -2.0, -2.0);
+		p->setPen(QPen(col, 1.3));
+		p->setBrush(Qt::NoBrush);
+		p->drawArc(ar, 30 * 16, 280 * 16);
+		const QPointF c = ar.center();
+		const double a0 = 30.0 * M_PI / 180.0;
+		const QPointF tip(c.x() + (ar.width() / 2.0) * std::cos(a0), c.y() - (ar.height() / 2.0) * std::sin(a0));
+		QPolygonF head;
+		head << tip << (tip + QPointF(-3.0, -1.5)) << (tip + QPointF(0.5, 3.0));
+		p->setPen(Qt::NoPen);
+		p->setBrush(col);
+		p->drawPolygon(head);
+	} else { // logging: a lined document
+		const QRectF doc = box.adjusted(2.0, 1.0, -2.0, -1.0);
+		p->setPen(QPen(col, 1.1));
+		p->setBrush(Qt::NoBrush);
+		p->drawRoundedRect(doc, 1.5, 1.5);
+		p->setPen(QPen(col, 0.8));
+		for (int i = 1; i <= 3; ++i) {
+			const qreal ly = doc.top() + doc.height() * i / 4.0;
+			p->drawLine(QPointF(doc.left() + 2.0, ly), QPointF(doc.right() - 2.0, ly));
+		}
+	}
+}
+
 // A card: a role/kind chip (top-left), an optional event-name badge (top-right),
 // a bold title, an optional bulleted body (the operator's arguments), an
 // optional subtitle, and — when the body is long — an expand/collapse toggle.
@@ -192,6 +241,19 @@ class CardItem : public QGraphicsItem {
 	// Distinct highlight for a swimlanes filter item (independent of selection).
 	void setFocusHighlight(bool on) { m_focusHighlight = on; update(); }
 
+	// A node's comment/color annotation: color draws a thin edge stripe, a comment
+	// shows a small badge and is folded into the tooltip.
+	void setAnnotation(const QColor& color, const QString& comment)
+	{
+		m_annColor = color;
+		m_hasComment = !comment.isEmpty();
+		if (m_hasComment) {
+			const QString existing = toolTip();
+			setToolTip(existing.isEmpty() ? comment : comment + QStringLiteral("\n\n") + existing);
+		}
+		update();
+	}
+
 	// If the click landed on the expand/collapse toggle, flip it. Returns true
 	// if it consumed the click.
 	bool handleToggleClick(const QPointF& scenePos)
@@ -225,6 +287,13 @@ class CardItem : public QGraphicsItem {
 		p->setPen(QPen(borderColor, borderW));
 		p->setBrush(m_fill);
 		p->drawRoundedRect(r, m_style.nodeRadius, m_style.nodeRadius);
+
+		// Annotation color: a thin stripe down the card's left edge.
+		if (m_annColor.isValid()) {
+			p->setPen(Qt::NoPen);
+			p->setBrush(m_annColor);
+			p->drawRoundedRect(QRectF(r.left() + 2.0, r.top() + 4.0, 4.5, r.height() - 8.0), 2.0, 2.0);
+		}
 
 		const QRectF inner = r.adjusted(metric::padX, metric::padTop, -10.0, -metric::padBottom);
 		qreal y = inner.top();
@@ -311,6 +380,19 @@ class CardItem : public QGraphicsItem {
 			p->drawText(QRectF(inner.left(), y, inner.width(), metric::subH),
 				Qt::AlignLeft | Qt::AlignVCenter, sub);
 		}
+
+		// Comment badge (small note glyph, bottom-right); the text is in the tooltip.
+		if (m_hasComment) {
+			const QRectF note(r.right() - 15.0, r.bottom() - 13.0, 9.0, 8.0);
+			p->setPen(QPen(m_style.nodeSubText, 1.0));
+			p->setBrush(m_style.eventFill);
+			p->drawRoundedRect(note, 1.5, 1.5);
+			p->setPen(QPen(m_style.nodeSubText, 0.8));
+			p->drawLine(QPointF(note.left() + 2.0, note.center().y() - 1.5),
+				QPointF(note.right() - 2.0, note.center().y() - 1.5));
+			p->drawLine(QPointF(note.left() + 2.0, note.center().y() + 1.5),
+				QPointF(note.right() - 2.0, note.center().y() + 1.5));
+		}
 	}
 
   protected:
@@ -354,6 +436,8 @@ class CardItem : public QGraphicsItem {
 	int     m_collapsedMax;
 	bool    m_expanded = false;
 	bool    m_focusHighlight = false;
+	QColor  m_annColor;            // annotation color (invalid = none)
+	bool    m_hasComment = false;  // annotation comment present
 	QRectF  m_toggleRect;
 	EventGraphStyle m_style;
 	QVector<RefEdgeItem*> m_edges; // edges attached to this card (for live redraw on move)
@@ -371,7 +455,8 @@ class ObjectNodeItem final : public CardItem {
 	int type() const override { return Type; }
 };
 
-// A referencing event (tier 1) — deliberately compact: just the chip + name.
+// A referencing event (tier 1): chip + name, plus a row of presence-only status
+// icons (chained / directive / repeats / logging) in the top-right.
 class EventNodeItem final : public CardItem {
   public:
 	enum { Type = UserType + 2 };
@@ -384,8 +469,53 @@ class EventNodeItem final : public CardItem {
 	int type() const override { return Type; }
 	int eventIndex() const { return m_eventIndex; }
 
+	void setStatusIcons(bool chained, bool directive, bool repeats, bool logging)
+	{
+		m_chained = chained;
+		m_directive = directive;
+		m_repeats = repeats;
+		m_logging = logging;
+		update();
+	}
+
+	void paint(QPainter* p, const QStyleOptionGraphicsItem* o, QWidget* w) override
+	{
+		CardItem::paint(p, o, w);
+		drawStatusIcons(p);
+	}
+
   private:
-	int m_eventIndex;
+	// Main tree icon (event / directive / chain, tinted) plus small repeat/log
+	// glyphs, right-aligned in the chip row.
+	void drawStatusIcons(QPainter* p) const
+	{
+		const QRectF r = boundingRect();
+		const qreal sz = 13.0, gap = 3.0;
+		const qreal top = r.top() + 4.0;
+		const int count = 1 + (m_repeats ? 1 : 0) + (m_logging ? 1 : 0); // main icon is always shown
+		const qreal totalW = count * sz + (count - 1) * gap;
+		qreal x = r.right() - 8.0 - totalW;
+
+		p->save();
+		p->setRenderHint(QPainter::Antialiasing, true);
+		p->setRenderHint(QPainter::SmoothPixmapTransform, true);
+		drawEventMainIcon(p, m_chained, m_directive, QRectF(x, top, sz, sz));
+		x += sz + gap;
+		const QColor col = m_style.nodeSubText;
+		if (m_repeats) {
+			drawStatusGlyph(p, StatusGlyph::Repeat, QRectF(x, top, sz, sz), col);
+			x += sz + gap;
+		}
+		if (m_logging)
+			drawStatusGlyph(p, StatusGlyph::Log, QRectF(x, top, sz, sz), col);
+		p->restore();
+	}
+
+	int  m_eventIndex;
+	bool m_chained = false;
+	bool m_directive = false;
+	bool m_repeats = false;
+	bool m_logging = false;
 };
 
 // A condition/action operator node (tier 2/3). Title = operator name; body =
@@ -416,14 +546,22 @@ class SexpNodeItem final : public CardItem {
 
 class RefEdgeItem final : public QGraphicsPathItem {
   public:
-	RefEdgeItem(const QPointF& a, const QPointF& b, QColor color, const EventGraphStyle& style)
+	RefEdgeItem(const QPointF& a, const QPointF& b, QColor color, const EventGraphStyle& style, bool chain = false)
+		: m_isChain(chain)
 	{
-		QPen pen(color, style.edgeWidth, Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
+		// Chain (event-order) lines are solid and a touch heavier; reference/flow
+		// edges are the lighter dashed default.
+		QPen pen(color, chain ? style.edgeWidth + 0.7 : style.edgeWidth,
+			chain ? Qt::SolidLine : Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
 		setPen(pen);
-		setZValue(-1.0);
+		setZValue(chain ? -0.5 : -1.0);
 		setAcceptedMouseButtons(Qt::NoButton);
 		setPathBetween(a, b);
 	}
+
+	// True for event-chain lines, which the emphasis pass leaves always visible
+	// (they are structure, not object references).
+	bool isChain() const { return m_isChain; }
 
 	// The two card items this edge connects. Registers the edge on each card so a
 	// drag can redraw it (see CardItem::itemChange), and drives the emphasis pass.
@@ -459,6 +597,7 @@ class RefEdgeItem final : public QGraphicsPathItem {
 
 	CardItem* m_endA = nullptr;
 	CardItem* m_endB = nullptr;
+	bool m_isChain = false;
 };
 
 // Now that RefEdgeItem is complete, define the card's move handler.
@@ -626,8 +765,12 @@ class LegendWidget final : public QWidget {
 		update();
 	}
 
-	// Size follows the visible row count; call after the kinds or theme change.
-	void relayout() { setFixedSize(150, kTop + static_cast<int>(rows().size()) * kRowH + 8); }
+	// Size follows the taller of the two columns (colors vs. icons).
+	void relayout()
+	{
+		const int n = std::max(static_cast<int>(rows().size()), iconRows());
+		setFixedSize(kColW * 2, kTop + n * kRowH + 8);
+	}
 
   protected:
 	// Swallow mouse events so hovering/clicking the legend keeps the normal cursor
@@ -640,6 +783,7 @@ class LegendWidget final : public QWidget {
 	{
 		QPainter p(this);
 		p.setRenderHint(QPainter::Antialiasing, true);
+		p.setRenderHint(QPainter::SmoothPixmapTransform, true);
 
 		const QRectF frame = QRectF(rect()).adjusted(0.5, 0.5, -0.5, -0.5);
 		p.setPen(QPen(m_style->cardBorder, 1.0));
@@ -657,18 +801,54 @@ class LegendWidget final : public QWidget {
 		lf.setBold(false);
 		lf.setPointSizeF(std::max(6.0, lf.pointSizeF() - 1.0));
 		p.setFont(lf);
+
+		// Left column: color key.
 		int y = kTop;
 		for (const auto& r : rows()) {
 			p.setBrush(r.first);
 			p.setPen(QPen(m_style->cardBorder, 1.0));
 			p.drawRoundedRect(QRectF(10, y + 3, 12, 12), 2.0, 2.0);
 			p.setPen(m_style->nodeSubText);
-			p.drawText(QRectF(30, y, width() - 34, kRowH), Qt::AlignLeft | Qt::AlignVCenter, r.second);
+			p.drawText(QRectF(28, y, kColW - 32, kRowH), Qt::AlignLeft | Qt::AlignVCenter, r.second);
+			y += kRowH;
+		}
+
+		// Right column: event-icon key.
+		y = kTop;
+		const qreal ix = kColW + 6.0;
+		for (int i = 0; i < iconRows(); ++i) {
+			drawIcon(&p, i, QRectF(ix, y + 2.0, 13.0, 13.0));
+			p.setPen(m_style->nodeSubText);
+			p.drawText(QRectF(ix + 18.0, y, kColW - 24.0, kRowH), Qt::AlignLeft | Qt::AlignVCenter, iconLabel(i));
 			y += kRowH;
 		}
 	}
 
   private:
+	int iconRows() const { return 5; }
+
+	QString iconLabel(int i) const
+	{
+		switch (i) {
+		case 0: return tr("event");
+		case 1: return tr("directive");
+		case 2: return tr("chained");
+		case 3: return tr("repeats");
+		default: return tr("logged");
+		}
+	}
+
+	void drawIcon(QPainter* p, int i, const QRectF& box) const
+	{
+		switch (i) {
+		case 0: drawEventMainIcon(p, false, false, box); break; // event (blue dot)
+		case 1: drawEventMainIcon(p, false, true, box); break;  // directive (red dot)
+		case 2: drawEventMainIcon(p, true, false, box); break;  // chained (chain)
+		case 3: drawStatusGlyph(p, StatusGlyph::Repeat, box, m_style->nodeSubText); break;
+		default: drawStatusGlyph(p, StatusGlyph::Log, box, m_style->nodeSubText); break;
+		}
+	}
+
 	QVector<QPair<QColor, QString>> rows() const
 	{
 		// Structural colors are always present; event first.
@@ -720,6 +900,7 @@ class LegendWidget final : public QWidget {
 
 	static constexpr int kTop = 22;
 	static constexpr int kRowH = 18;
+	static constexpr int kColW = 132; // per-column width (colors | icons)
 	const EventGraphStyle* m_style;
 	QSet<int> m_kinds;
 };
@@ -1337,7 +1518,7 @@ void EventGraphView::applyEmphasis()
 			if (!e)
 				continue;
 			edges.push_back(e);
-			if (hasSel) {
+			if (hasSel && !e->isChain()) {
 				if (e->endA() && selected.contains(e->endA()) && e->endB())
 					active.insert(e->endB());
 				if (e->endB() && selected.contains(e->endB()) && e->endA())
@@ -1350,6 +1531,12 @@ void EventGraphView::applyEmphasis()
 	const qreal dim = 0.2;
 
 	for (graphdetail::RefEdgeItem* e : edges) {
+		// Chain lines are structure, not object references: always visible, never dimmed.
+		if (e->isChain()) {
+			e->setVisible(true);
+			e->setOpacity(1.0);
+			continue;
+		}
 		const bool incident = hasSel && ((e->endA() && selected.contains(e->endA())) ||
 										 (e->endB() && selected.contains(e->endB())));
 		const bool visible = (s_refMode != RefLineMode::OnSelect) || incident;
@@ -1373,6 +1560,26 @@ void EventGraphView::applyEmphasis()
 			cardDim = true;
 		c->setOpacity(cardDim ? dim : 1.0);
 	}
+}
+
+// Apply a node's comment/color annotation (looked up by key) to a card.
+void EventGraphView::applyAnnotation(graphdetail::CardItem* card, int key)
+{
+	if (!card)
+		return;
+	const auto it = m_annotations.constFind(key);
+	if (it != m_annotations.constEnd())
+		card->setAnnotation(it->color, it->comment);
+}
+
+// Apply the event status icons (and the event's own annotation) to an event card.
+void EventGraphView::applyEventStatus(graphdetail::EventNodeItem* card, int eventIndex)
+{
+	if (!card || eventIndex < 0 || eventIndex >= m_eventMeta.size())
+		return;
+	const GraphEventMeta& m = m_eventMeta[eventIndex];
+	card->setStatusIcons(m.chained, m.directive, m.repeats, m.logging);
+	applyAnnotation(card, m.annotationKey);
 }
 
 void EventGraphView::rebuildRadial()
@@ -1475,6 +1682,7 @@ void EventGraphView::rebuildRadial()
 			if (selKind == 2 && s->eventIndex == selEvent && isCond == selCond
 				&& QString::fromStdString(s->operatorText) == selOp)
 				card->setSelected(true);
+			applyAnnotation(card, s->operatorNode);
 			m_scene->addItem(card);
 			if (s_refMode != RefLineMode::Off) {
 				auto* edge = new graphdetail::RefEdgeItem(from, pos, edgeColor, m_style);
@@ -1496,6 +1704,7 @@ void EventGraphView::rebuildRadial()
 		evCard->setZValue(1.0);
 		if (selKind == 1 && ev == selEvent)
 			evCard->setSelected(true);
+		applyEventStatus(evCard, ev);
 		m_scene->addItem(evCard);
 		if (s_refMode != RefLineMode::Off) {
 			auto* edge = new graphdetail::RefEdgeItem(center->pos(), evPos, m_style.entity, m_style);
@@ -1688,6 +1897,7 @@ void EventGraphView::rebuildSwimlanes()
 				? m_eventNames[s.eventIndex] : QString();
 			auto* card = new graphdetail::SexpNodeItem(s.treeNode, s.eventIndex, s.isCond, s.opName, s.args,
 				evName, s.expr, m_style);
+			applyAnnotation(card, s.treeNode);
 			cards.push_back(card);
 			h += card->boundingRect().height();
 		}
@@ -1746,6 +1956,7 @@ void EventGraphView::rebuildSwimlanes()
 	}
 
 	// Column headers (events).
+	QHash<int, graphdetail::EventNodeItem*> evHdr;
 	for (int p = 0; p < keepCols.size(); ++p) {
 		const int ev = cols[keepCols[p]];
 		const QString name = (ev >= 0 && ev < m_eventNames.size()) ? m_eventNames[ev] : tr("<event %1>").arg(ev);
@@ -1756,7 +1967,24 @@ void EventGraphView::rebuildSwimlanes()
 			hdr->setFocusHighlight(true); // filter item (red)
 		else if (ev == selEvent)
 			hdr->setSelected(true); // tree-synced selection (orange)
+		applyEventStatus(hdr, ev);
 		m_scene->addItem(hdr);
+		evHdr.insert(ev, hdr);
+	}
+
+	// Chain lines between consecutive event columns (a chained event points back to
+	// the previous event); only drawn when both events are visible columns.
+	for (auto it = evHdr.constBegin(); it != evHdr.constEnd(); ++it) {
+		const int ev = it.key();
+		if (ev <= 0 || ev >= m_eventMeta.size() || !m_eventMeta[ev].chained)
+			continue;
+		const auto prev = evHdr.constFind(ev - 1);
+		if (prev == evHdr.constEnd())
+			continue;
+		auto* edge = new graphdetail::RefEdgeItem(prev.value()->pos(), it.value()->pos(), m_style.chainColor,
+			m_style, /*chain=*/true);
+		edge->setEndpoints(prev.value(), it.value());
+		m_scene->addItem(edge);
 	}
 
 	// Row headers (objects); carry their key for the cross-filter click handler.
@@ -2010,6 +2238,7 @@ void EventGraphView::rebuildBasic()
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, posKey);
+		applyAnnotation(card, posKey);
 		m_scene->addItem(card);
 		return card;
 	};
@@ -2044,6 +2273,7 @@ void EventGraphView::rebuildBasic()
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, op.posKey);
+		applyAnnotation(card, op.posKey);
 		m_scene->addItem(card);
 		opItem[oi] = card;
 	}
@@ -2059,8 +2289,22 @@ void EventGraphView::rebuildBasic()
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, en.posKey);
+		applyEventStatus(card, en.eventIndex);
 		m_scene->addItem(card);
 		evItem[i] = card;
+	}
+
+	// Chain lines: a chained event points back to the previous event's node.
+	for (int i = 1; i < nEvents; ++i) {
+		const int ev = g.events[i].eventIndex;
+		if (ev < 0 || ev >= m_eventMeta.size() || !m_eventMeta[ev].chained)
+			continue;
+		if (!evItem[i] || !evItem[i - 1])
+			continue;
+		auto* edge = new graphdetail::RefEdgeItem(eventPos[i - 1], eventPos[i], m_style.chainColor, m_style,
+			/*chain=*/true);
+		edge->setEndpoints(evItem[i - 1], evItem[i]);
+		m_scene->addItem(edge);
 	}
 
 	// Edges, carrying their endpoint card items for the selection-emphasis pass.
