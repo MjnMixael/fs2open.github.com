@@ -128,6 +128,13 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setNodeAnnotation(int key, const SCP_string& note);
 	void setNodeBgColor(int key, int r, int g, int b, bool has_color);
 
+	// Graph-view node positions, stored on the same per-node annotation as the
+	// comment/color. setNodeGraphPos does not emit annotationApplied (positions
+	// don't affect the tree rendering). getNodeGraphPos returns false if the node
+	// has no saved position.
+	void setNodeGraphPos(int key, float x, float y);
+	bool getNodeGraphPos(int key, float& x, float& y) const;
+
 	// Message Management
 	void createMessage();
 	void insertMessage();

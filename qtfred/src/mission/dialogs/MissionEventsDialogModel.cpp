@@ -1031,6 +1031,27 @@ void MissionEventsDialogModel::setNodeBgColor(int key, int r, int g, int b, bool
 	set_modified();
 }
 
+// See setNodeAnnotation for the meaning of 'key'. No annotationApplied is emitted
+// here -- positions only feed the Basic graph view, not the tree rendering.
+void MissionEventsDialogModel::setNodeGraphPos(int key, float x, float y)
+{
+	auto& ea = m_annotation_model.ensureByKey(key);
+	ea.pos_x = x;
+	ea.pos_y = y;
+	ea.has_pos = true;
+	set_modified();
+}
+
+bool MissionEventsDialogModel::getNodeGraphPos(int key, float& x, float& y) const
+{
+	const event_annotation* ea = m_annotation_model.getByKey(key);
+	if (ea == nullptr || !ea->has_pos)
+		return false;
+	x = ea->pos_x;
+	y = ea->pos_y;
+	return true;
+}
+
 void MissionEventsDialogModel::createMessage()
 {
 	MMessage msg;
@@ -1802,6 +1823,9 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 		ea.r = src.r;
 		ea.g = src.g;
 		ea.b = src.b;
+		ea.has_pos = src.has_pos;
+		ea.pos_x = src.pos_x;
+		ea.pos_y = src.pos_y;
 		const bool hasColor = (src.r != 255) || (src.g != 255) || (src.b != 255);
 		Q_EMIT annotationApplied(key, ea.comment, src.r, src.g, src.b, hasColor);
 	}

@@ -90,6 +90,9 @@ class EventGraphView final : public QGraphicsView {
 	void setReferenceIndex(const EventReferenceIndex* index) { m_index = index; }
 	void setEventNames(QVector<QString> names) { m_eventNames = std::move(names); }
 	void setObjects(QVector<GraphObject> objects) { m_objects = std::move(objects); }
+	// The whole-mission dataflow graph for the Basic view, with node positions
+	// already resolved from saved annotations by the dialog.
+	void setBasicGraph(BasicGraph graph) { m_basicGraph = std::move(graph); }
 
 	// Repopulate the selector (preserving the current object where possible) and
 	// rebuild the current view's scene from the current data.
@@ -108,11 +111,15 @@ class EventGraphView final : public QGraphicsView {
 	void eventActivated(int eventIndex);
 	// Double-click a condition/action node card → jump to that specific tree node.
 	void nodeActivated(int treeNode);
+	// Basic view: a node card was dragged to a new position. `key` is the
+	// annotation key to persist the position under; (x, y) is the scene position.
+	void nodeMoved(int key, double x, double y);
 
   protected:
 	void wheelEvent(QWheelEvent* e) override;
 	void drawBackground(QPainter* painter, const QRectF& rect) override;
 	void mousePressEvent(QMouseEvent* e) override;
+	void mouseMoveEvent(QMouseEvent* e) override;
 	void mouseReleaseEvent(QMouseEvent* e) override;
 	void mouseDoubleClickEvent(QMouseEvent* e) override;
 	void keyPressEvent(QKeyEvent* e) override;
@@ -129,10 +136,14 @@ class EventGraphView final : public QGraphicsView {
 	void applyTheme(bool dark);
 	void populateSelector();
 	void populateKindFilter();
+	void populateSelectorForMode();
+	// Basic: a manual node drag flips the layout dropdown to Custom.
+	void setBasicLayoutToCustom();
 	void setMode(Mode mode);
 	void rebuildCurrent();
 	void rebuildRadial();
 	void rebuildSwimlanes();
+	void rebuildBasic();
 	// Swimlanes cross-filter: focus an object row / event column (Ctrl adds).
 	void toggleSwimObjectFocus(const QString& objectKey, bool add);
 	void toggleSwimEventFocus(int eventIndex, bool add);
@@ -144,6 +155,16 @@ class EventGraphView final : public QGraphicsView {
 	const EventReferenceIndex* m_index = nullptr;
 	QVector<QString> m_eventNames;
 	QVector<GraphObject> m_objects;
+	BasicGraph m_basicGraph;
+
+	// Basic view drag tracking: the card grabbed on press and its starting scene
+	// position, so a real move (not a click) emits nodeMoved on release.
+	graphdetail::CardItem* m_dragItem = nullptr;
+	QPointF m_dragStartPos;
+	// Basic view uses NoDrag (so cards drag individually), so panning on empty
+	// canvas is handled manually.
+	bool   m_panning = false;
+	QPoint m_panLastPos;
 
 	EventGraphStyle m_style;
 	Mode m_mode = Mode::Radial;

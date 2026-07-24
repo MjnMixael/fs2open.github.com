@@ -2137,6 +2137,17 @@ int Fred_mission_save::save_events()
 						fout(" %d", *it);
 					}
 				}
+
+				if (ea.has_pos) {
+					fso_comment_push(";;FSO 26.1.0;;");
+					if (optional_string_fred("+Position:", "$Formula:"))
+						parse_comments();
+					else
+						fout_version("\n+Position:");
+
+					fout(" %f, %f", ea.pos_x, ea.pos_y);
+					fso_comment_pop();
+				}
 			}
 
 			if (at_least_one) {

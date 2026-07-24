@@ -6194,7 +6194,7 @@ void parse_event(mission *pm)
 	if (optional_string("$Annotations Start")) {
 		// annotations are only used in FRED
 		if (Fred_running) {
-			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:")) {
+			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:") || check_for_string("+Position:")) {
 				event_annotation ea;
 				ea.path.push_back((int)(event - &Mission_events[0]));
 
@@ -6220,6 +6220,13 @@ void parse_event(mission *pm)
 						}
 						ea.path.push_back(num);
 					}
+				}
+
+				if (optional_string("+Position:")) {
+					stuff_float(&ea.pos_x);
+					check_first_non_grayspace_char(Mp, ',', &Mp);
+					stuff_float(&ea.pos_y);
+					ea.has_pos = true;
 				}
 
 				Event_annotations.push_back(std::move(ea));
