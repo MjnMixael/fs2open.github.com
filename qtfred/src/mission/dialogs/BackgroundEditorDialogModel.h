@@ -94,6 +94,35 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	float getSunScale() const; // uses scale_x for both x and y
 	void setSunScale(float v);
 
+	// --- Viewport mouse-editing support ---------------------------------
+	// These operate on the active background and are used by EditorViewport
+	// to draw draggable handles, pick a background element under the cursor,
+	// and translate a drag into new PBH angles.
+
+	// counts of elements in the active background
+	static int getSunCount();
+	static int getBitmapCount();
+
+	// world-space unit direction that an element points at, derived from its
+	// stored PBH angles. Returns false if the index is out of range.
+	static bool getSunDirection(int index, vec3d& dir);
+	static bool getBitmapDirection(int index, vec3d& dir);
+
+	// names by index (for viewport handle labels)
+	static SCP_string getSunNameAt(int index);
+	static SCP_string getBitmapNameAt(int index);
+
+	// select an element from the viewport (updates the selection and syncs
+	// the dialog UI via modelDataChanged); index -1 clears.
+	void selectSunFromViewport(int index);
+	void selectBitmapFromViewport(int index);
+
+	// point an element at a new world direction (preserving its bank), or
+	// nudge a bitmap's bank; both refresh the preview and sync the dialog.
+	void setSunDirectionFromViewport(int index, const vec3d& dir);
+	void setBitmapDirectionFromViewport(int index, const vec3d& dir);
+	void nudgeBitmapBankFromViewport(int index, float deltaDeg);
+
 	// nebula group
 	static SCP_vector<SCP_string> getLightningNames();
 	static SCP_vector<SCP_string> getNebulaPatternNames();

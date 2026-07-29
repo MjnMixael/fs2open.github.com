@@ -105,6 +105,10 @@ private slots:
 protected:
 	void changeEvent(QEvent* e) override;
 	void closeEvent(QCloseEvent* e) override;
+	// Register/unregister the model with the viewport so background handles are
+	// drawn (and clickable) exactly while this dialog is visible.
+	void showEvent(QShowEvent* e) override;
+	void hideEvent(QHideEvent* e) override;
 
 private: // NOLINT(readability-redundant-access-specifiers)
     std::unique_ptr<Ui::BackgroundEditor> ui;

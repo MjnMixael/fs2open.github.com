@@ -65,6 +65,9 @@ class FredRenderer: public QObject {
 	void render_one_model_htl(object* objp, int cur_object_index);
 	void render_models(int cur_object_index);
 	void render_volumetric_overlay();
+	// Draw draggable handles for the active background's suns/bitmaps while the
+	// Background editor dialog is open (2D overlay, must run inside the frame).
+	void draw_background_handles();
 	void freeVolumetricModel();
 	void render_frame(int cur_object_index,
 		subsys_to_render& Render_subsys,
