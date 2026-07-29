@@ -1012,6 +1012,7 @@ namespace FieldId {
     constexpr int Brief_SnapIconImage   = 640000;
     constexpr int Brief_SnapIconShip    = 650000;
     constexpr int Brief_SnapIconTeam    = 660000;
+    constexpr int Brief_SnapIconNudge   = 670000;
 }
 
 // ---------------------------------------------------------------------------

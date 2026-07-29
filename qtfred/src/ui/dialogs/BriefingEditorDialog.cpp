@@ -25,6 +25,7 @@
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QMessageBox>
 #include <QVBoxLayout>
 
 namespace fso::fred::dialogs {
@@ -204,6 +205,29 @@ void BriefingEditorDialog::setupMapWidget()
 	connect(_mapWidget, &fso::fred::BriefingMapWidget::iconDragFinished, this, [this](int) { onIconDragFinished(); });
 	connect(_mapWidget, &fso::fred::BriefingMapWidget::cameraChanged, this, [this](vec3d, matrix) { onMapCameraChanged(); });
 
+	// Ctrl+click on the map creates a new icon at the cursor.
+	connect(_mapWidget, &fso::fred::BriefingMapWidget::iconCreateRequested, this, [this](vec3d worldPos) {
+		const QByteArray before = _model->captureWorkingState();
+		_model->makeIcon("New Icon", 0, 0, 0);
+		_model->setLineSelection({_model->getCurrentIconIndex()});
+		_model->setIconPosition(worldPos);
+		pushWorkingStateSnapshot(before, tr("Make Icon"));
+		updateUi();
+	});
+
+	// Delete key removes the selected icon(s), after a confirmation prompt.
+	connect(_mapWidget, &fso::fred::BriefingMapWidget::deleteSelectedIconsRequested, this,
+		&BriefingEditorDialog::deleteSelectedIconsWithConfirm);
+
+	// Arrow keys nudge the selected icon(s).  Merged under one id so a burst of
+	// keypresses collapses into a single undo step rather than one per press.
+	connect(_mapWidget, &fso::fred::BriefingMapWidget::nudgeIconsRequested, this, [this](vec3d worldDelta) {
+		const QByteArray before = _model->captureWorkingState();
+		_model->nudgeSelectedIcons(worldDelta);
+		pushWorkingStateSnapshot(before, tr("Nudge Icons"), iconSnapshotMergeId(FieldId::Brief_SnapIconNudge));
+		updateUi();
+	});
+
 	// Set the initial stage
 	if (_model->getTotalStages() > 0) {
 		_mapWidget->setStage(_model->getCurrentStage());
@@ -217,6 +241,9 @@ void BriefingEditorDialog::initializeUi()
 
 	util::SignalBlockers blockers(this);
 	ui->drawLinesCheckBox->setTristate(true);
+	// The four icon-flag checkboxes are tristate so PartiallyChecked can display a divergent multi-
+	// selection. Their stateChanged() slots convert a user click that lands on the partial state into a
+	// definite checked/unchecked, so a click never rests on partial (see on_*CheckBox_stateChanged).
 	ui->highlightCheckBox->setTristate(true);
 	ui->flipIconCheckBox->setTristate(true);
 	ui->useWingIconCheckBox->setTristate(true);
@@ -303,36 +330,63 @@ void BriefingEditorDialog::updateUi()
 	const bool stage_exists = _model->getTotalStages() > 0 && _model->getCurrentStage() >= 0;
 	const auto& lineSelection = _model->getLineSelection();
 	const bool icon_selected = stage_exists && !lineSelection.empty();
+	const bool single_icon = stage_exists && lineSelection.size() == 1;
 	const bool enoughForLines = stage_exists && lineSelection.size() >= 2;
+
+	// Sets a checkbox to the given tri-state for display. PartiallyChecked shows a divergent multi-
+	// selection; the checkbox's stateChanged() slot keeps a user click from resting on that state.
+	const auto setFlagCheckBox = [](QCheckBox* box, TriStateBool state) {
+		switch (state) {
+		case TriStateBool::TRUE_:
+			box->setCheckState(Qt::Checked);
+			break;
+		case TriStateBool::UNKNOWN_:
+			box->setCheckState(Qt::PartiallyChecked);
+			break;
+		case TriStateBool::FALSE_:
+		default:
+			box->setCheckState(Qt::Unchecked);
+			break;
+		}
+	};
+
 	if (icon_selected) {
-		ui->iconIdSpinBox->setValue(_model->getIconId());
+		// The ID applies to a single icon (ids are unique within a stage), so it is only shown/editable
+		// for a single selection; otherwise blank it with a dash.
+		if (single_icon) {
+			ui->iconIdSpinBox->setSpecialValueText(QString());
+			ui->iconIdSpinBox->setValue(_model->getIconId());
+		} else {
+			ui->iconIdSpinBox->setSpecialValueText("-");
+			ui->iconIdSpinBox->setValue(ui->iconIdSpinBox->minimum());
+		}
+
+		// The remaining fields blank themselves on divergence: the model returns an empty string / -1 /
+		// negative scale when the selection disagrees, which clears the widget.
 		ui->iconLabelLineEdit->setText(QString::fromStdString(_model->getIconLabel()));
 		ui->iconCloseupLabelLineEdit->setText(QString::fromStdString(_model->getIconCloseupLabel()));
 		ui->iconImageComboBox->setCurrentIndex(_model->getIconTypeIndex());
 		ui->iconShipTypeComboBox->setCurrentIndex(_model->getIconShipTypeIndex());
 		ui->iconTeamComboBox->setCurrentIndex(_model->getIconTeamIndex());
-		ui->scaleDoubleSpinBox->setValue(_model->getIconScaleFactor());
-		const auto toQtCheckState = [](TriStateBool state) {
-			switch (state) {
-			case TriStateBool::TRUE_:
-				return Qt::Checked;
-			case TriStateBool::UNKNOWN_:
-				return Qt::PartiallyChecked;
-			case TriStateBool::FALSE_:
-			default:
-				return Qt::Unchecked;
-			}
-		};
-		ui->highlightCheckBox->setCheckState(toQtCheckState(_model->getIconHighlightedState()));
-		ui->flipIconCheckBox->setCheckState(toQtCheckState(_model->getIconFlippedState()));
-		ui->useWingIconCheckBox->setCheckState(toQtCheckState(_model->getIconUseWingState()));
-		ui->useCargoIconCheckBox->setCheckState(toQtCheckState(_model->getIconUseCargoState()));
-	}
-	if (!icon_selected) {
-		ui->highlightCheckBox->setCheckState(Qt::Unchecked);
-		ui->flipIconCheckBox->setCheckState(Qt::Unchecked);
-		ui->useWingIconCheckBox->setCheckState(Qt::Unchecked);
-		ui->useCargoIconCheckBox->setCheckState(Qt::Unchecked);
+
+		const float scale = _model->getIconScaleFactor();
+		if (scale < 0.0f) {
+			ui->scaleDoubleSpinBox->setSpecialValueText("-");
+			ui->scaleDoubleSpinBox->setValue(ui->scaleDoubleSpinBox->minimum());
+		} else {
+			ui->scaleDoubleSpinBox->setSpecialValueText(QString());
+			ui->scaleDoubleSpinBox->setValue(scale);
+		}
+
+		setFlagCheckBox(ui->highlightCheckBox, _model->getIconHighlightedState());
+		setFlagCheckBox(ui->flipIconCheckBox, _model->getIconFlippedState());
+		setFlagCheckBox(ui->useWingIconCheckBox, _model->getIconUseWingState());
+		setFlagCheckBox(ui->useCargoIconCheckBox, _model->getIconUseCargoState());
+	} else {
+		setFlagCheckBox(ui->highlightCheckBox, TriStateBool::FALSE_);
+		setFlagCheckBox(ui->flipIconCheckBox, TriStateBool::FALSE_);
+		setFlagCheckBox(ui->useWingIconCheckBox, TriStateBool::FALSE_);
+		setFlagCheckBox(ui->useCargoIconCheckBox, TriStateBool::FALSE_);
 	}
 
 	switch (_model->getDrawLinesState()) {
@@ -378,6 +432,10 @@ void BriefingEditorDialog::enableDisableControls()
 	ui->makeIconButton->setEnabled(stage_exists);
 	ui->makeIconFromShipButton->setEnabled(stage_exists);
 
+	// Change Locally is an editing-mode toggle (whether icon edits propagate forward), not a per-icon
+	// property, so it is available whenever a stage exists rather than gated on an icon being selected.
+	ui->changeLocallyCheckBox->setEnabled(stage_exists);
+
 	ui->teamComboBox->setEnabled(_model->getMissionIsMultiTeam());
 	ui->copyToOtherTeamsButton->setEnabled(_model->getMissionIsMultiTeam());
 
@@ -390,8 +448,9 @@ void BriefingEditorDialog::enableDisableControls()
 	const bool icon_selected = stage_exists && !_model->getLineSelection().empty();
 	const bool single_icon_selected = stage_exists && _model->getLineSelection().size() == 1;
 	ui->currentIconInfoGroupBox->setEnabled(icon_selected);
+	ui->iconIdSpinBox->setEnabled(single_icon_selected); // ids are unique per stage, so single-icon only
 	ui->iconCoordinatesButton->setEnabled(single_icon_selected);
-	ui->deleteIconButton->setEnabled(single_icon_selected);
+	ui->deleteIconButton->setEnabled(icon_selected); // deletes the whole selection
 	ui->propagateIconButton->setEnabled(single_icon_selected);
 
 }
@@ -850,34 +909,50 @@ void BriefingEditorDialog::on_changeLocallyCheckBox_toggled(bool checked)
 	_mapWidget->notifyIconVisualsChanged();
 }
 
-void BriefingEditorDialog::on_flipIconCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_flipIconCheckBox_stateChanged(int state)
 {
+	if (state == Qt::PartiallyChecked) {
+		ui->flipIconCheckBox->setCheckState(Qt::Checked); // re-enters with Checked and applies
+		return;
+	}
 	const QByteArray before = _model->captureWorkingState();
-	_model->setIconFlipped(checked);
+	_model->setIconFlipped(state == Qt::Checked);
 	_mapWidget->notifyIconVisualsChanged();
 	pushWorkingStateSnapshot(before, tr("Toggle Icon Flip"));
 }
 
-void BriefingEditorDialog::on_highlightCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_highlightCheckBox_stateChanged(int state)
 {
+	if (state == Qt::PartiallyChecked) {
+		ui->highlightCheckBox->setCheckState(Qt::Checked); // re-enters with Checked and applies
+		return;
+	}
 	const QByteArray before = _model->captureWorkingState();
-	_model->setIconHighlighted(checked);
+	_model->setIconHighlighted(state == Qt::Checked);
 	_mapWidget->notifyIconVisualsChanged();
 	pushWorkingStateSnapshot(before, tr("Toggle Icon Highlight"));
 }
 
-void BriefingEditorDialog::on_useWingIconCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_useWingIconCheckBox_stateChanged(int state)
 {
+	if (state == Qt::PartiallyChecked) {
+		ui->useWingIconCheckBox->setCheckState(Qt::Checked); // re-enters with Checked and applies
+		return;
+	}
 	const QByteArray before = _model->captureWorkingState();
-	_model->setIconUseWing(checked);
+	_model->setIconUseWing(state == Qt::Checked);
 	_mapWidget->notifyIconVisualsChanged();
 	pushWorkingStateSnapshot(before, tr("Toggle Wing Icon"));
 }
 
-void BriefingEditorDialog::on_useCargoIconCheckBox_toggled(bool checked)
+void BriefingEditorDialog::on_useCargoIconCheckBox_stateChanged(int state)
 {
+	if (state == Qt::PartiallyChecked) {
+		ui->useCargoIconCheckBox->setCheckState(Qt::Checked); // re-enters with Checked and applies
+		return;
+	}
 	const QByteArray before = _model->captureWorkingState();
-	_model->setIconUseCargo(checked);
+	_model->setIconUseCargo(state == Qt::Checked);
 	_mapWidget->notifyIconVisualsChanged();
 	pushWorkingStateSnapshot(before, tr("Toggle Cargo Icon"));
 }
@@ -922,10 +997,25 @@ void BriefingEditorDialog::on_iconCoordinatesButton_clicked()
 
 void BriefingEditorDialog::on_deleteIconButton_clicked()
 {
+	deleteSelectedIconsWithConfirm();
+}
+
+void BriefingEditorDialog::deleteSelectedIconsWithConfirm()
+{
+	const auto selection = _model->getLineSelection();
+	if (selection.empty()) {
+		return;
+	}
+	const int count = static_cast<int>(selection.size());
+	const QString message = (count == 1) ? tr("Delete the selected icon?")
+										  : tr("Delete the %1 selected icons?").arg(count);
+	if (QMessageBox::question(this, tr("Delete Icons"), message) != QMessageBox::Yes) {
+		return;
+	}
+	// Capture after the prompt so a declined confirmation pushes nothing.
 	const QByteArray before = _model->captureWorkingState();
-	_model->deleteCurrentIcon();
-	_model->setLineSelection({_model->getCurrentIconIndex()});
-	pushWorkingStateSnapshot(before, tr("Delete Icon"));
+	_model->deleteSelectedIcons(); // clears the selection and current icon itself
+	pushWorkingStateSnapshot(before, count == 1 ? tr("Delete Icon") : tr("Delete Icons"));
 	updateUi();
 }
 
