@@ -62,6 +62,7 @@ class PropEditorDialogModel : public AbstractDialogModel {
 
  private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeData();
+	void scheduleInitializeData();
 	void showErrorDialogNoCancel(const SCP_string& message);
 	void selectPropFromObjectList(object* start, bool forward);
 	void selectFirstPropInMission();
@@ -78,6 +79,7 @@ class PropEditorDialogModel : public AbstractDialogModel {
 	int _despawnFormula = -1;
 	int _spawnDelay = 0;
 	int _despawnDelay = 0;
+	bool _initPending = false;
 };
 
 }

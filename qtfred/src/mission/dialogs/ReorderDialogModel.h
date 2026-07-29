@@ -16,6 +16,7 @@ public:
 		Props,
 		WaypointLists,
 		JumpNodes,
+		CoordinatePoints,
 	};
 
 	ReorderDialogModel(QObject* parent, EditorViewport* viewport);
@@ -40,7 +41,8 @@ public:
 private: // NOLINT(readability-redundant-access-specifiers)
 	// The occupied storage indices for the given type, in display order.  For
 	// ships/wings/props/jump nodes these are the live Ships[]/Wings[]/Props[]/
-	// Jump_nodes[] slots; for waypoint lists they are simply 0..N-1.
+	// Jump_nodes[] slots; for waypoint lists and coordinate points, whose storage
+	// has no empty entries, they are simply 0..N-1.
 	static SCP_vector<int> getSlots(Type type);
 };
 

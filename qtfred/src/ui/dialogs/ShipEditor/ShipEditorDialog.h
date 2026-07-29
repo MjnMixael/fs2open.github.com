@@ -33,10 +33,11 @@ class ShipEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	bool getIfMultipleShips() const;
 
   protected:
-	void closeEvent(QCloseEvent*) override;
+	// Kept on the OFP side: focusing this dialog makes the main mission stack the
+	// active undo stack. The close/hide/show overrides upstream dropped in #7644
+	// were pass-throughs, except showEvent's re-init, which initializeUi() now covers.
 	void changeEvent(QEvent*) override;
-	void hideEvent(QHideEvent*) override;
-	void showEvent(QShowEvent*) override;
+
   private slots:
 
 	void on_textureReplacementButton_clicked();
@@ -105,13 +106,8 @@ class ShipEditorDialog : public QDialog, public SexpTreeEditorInterface {
 
 	bool _cues_hidden = false;
 
-	void update();
-
-	void updateUi(bool overwrite = false);
-	void updateColumnOne(bool overwrite = false);
-	void updateColumnTwo(bool ovewrite = false);
-	void updateArrival(bool overwrite = false);
-	void updateDeparture(bool overwrite = false);
+	void initializeUi();
+	void updateUi();
 	void enableDisable();
 
 	// column one

@@ -1,6 +1,7 @@
 // methods and members common to any mission editor FSO may have
 #include "common.h"
 #include "ai/ai.h"
+#include "coordinate_points/coordinate_point.h"
 #include "globalincs/linklist.h"
 #include "mission/missionparse.h"
 #include "iff_defs/iff_defs.h"
@@ -11,6 +12,8 @@
 #include "ship/ship.h"
 
 #include <algorithm>
+#include <functional>
+#include <iterator>
 
 // to keep track of data
 char Voice_abbrev_briefing[NAME_LENGTH];
@@ -451,9 +454,12 @@ void rotate_wing_slots(const SCP_vector<int>& slots, int from_pos, int to_pos, c
 // entries in their original relative positions.  Each callsite supplies a
 // type matcher and a key function; the i-th matching slot (in original list
 // order) receives the i-th smallest matching node by key.
+// `key` is a std::function rather than a plain function pointer because coordinate
+// points have no index stored on the object -- their sort key comes from a lookup
+// table built by the caller.
 static void resort_obj_used_list_subset(
 	bool (*matches_type)(int),
-	int (*key)(const object*))
+	const std::function<int(const object*)>& key)
 {
 	SCP_vector<object*> all;
 	SCP_vector<object*> matched;
@@ -495,6 +501,28 @@ void resort_props_in_obj_used_list()
 	resort_obj_used_list_subset(
 		[](int t) { return t == OBJ_PROP; },
 		[](const object* o) { return o->instance; });
+}
+
+void resort_coordinate_points_in_obj_used_list()
+{
+	// A coordinate point's object carries no index back to Coordinate_points (it is
+	// created with instance -1 and the link is one-way), so key each object by its
+	// position in the list -- the same order the mission file is written in.
+	SCP_unordered_map<int, int> positions;
+	int pos = 0;
+	for (const auto& cp : Coordinate_points)
+	{
+		if (cp.objnum >= 0)
+			positions[cp.objnum] = pos;
+		++pos;
+	}
+
+	resort_obj_used_list_subset(
+		[](int t) { return t == OBJ_COORDINATE_POINT; },
+		[&positions](const object* o) {
+			const auto it = positions.find(OBJ_INDEX(o));
+			return it != positions.end() ? it->second : 0;
+		});
 }
 
 void rotate_prop_slots(const SCP_vector<int>& slots, int from_pos, int to_pos)
@@ -583,4 +611,28 @@ void rotate_jump_nodes(const SCP_vector<int>& slots, int from_pos, int to_pos)
 	for (int j = from_pos; j != to_pos; j += step)
 		Jump_nodes[slots[j]] = std::move(Jump_nodes[slots[j + step]]);
 	Jump_nodes[slots[to_pos]] = std::move(moving);
+}
+
+void rotate_coordinate_points(int from_pos, int to_pos)
+{
+	Assertion(Fred_running, "rotate_coordinate_points is FRED-only: it reorders the mission's coordinate point list only");
+	if (from_pos == to_pos)
+		return;
+
+	int count = static_cast<int>(Coordinate_points.size());
+	Assertion(from_pos >= 0 && from_pos < count, "rotate_coordinate_points: 'from' position %d out of range", from_pos);
+	Assertion(to_pos >= 0 && to_pos < count, "rotate_coordinate_points: 'to' position %d out of range", to_pos);
+
+	// splice() inserts before the destination iterator, so moving an element down
+	// the list has to target the entry one past to_pos: after the element is
+	// unlinked, everything between shifts up by one and it lands exactly on to_pos.
+	auto from_it = std::next(Coordinate_points.begin(), from_pos);
+	auto to_it = std::next(Coordinate_points.begin(), (from_pos < to_pos) ? to_pos + 1 : to_pos);
+
+	// No object fixups needed -- see the header comment.
+	Coordinate_points.splice(to_it, Coordinate_points, from_it);
+
+	// Keep obj_used_list coordinate-point order in sync with the list order, so
+	// the Scene Browser reflects the new order too.
+	resort_coordinate_points_in_obj_used_list();
 }

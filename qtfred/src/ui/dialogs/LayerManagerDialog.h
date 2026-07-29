@@ -6,6 +6,7 @@
 #include <functional>
 
 #include "mission/dialogs/LayerManagerDialogModel.h"
+#include <ui/FredView.h>
 
 class QCheckBox;
 class QListWidgetItem;
@@ -20,8 +21,15 @@ class LayerManagerDialog final : public QDialog {
 	Q_OBJECT
 
 public:
-	explicit LayerManagerDialog(EditorViewport* viewport, QWidget* parent = nullptr);
+	// Takes FredView rather than a plain QWidget parent so layer edits can reach the
+	// main undo stack, matching the other dialogs that push to it.
+	LayerManagerDialog(FredView* parent, EditorViewport* viewport);
 	~LayerManagerDialog() override;
+
+protected:
+	// Layer add/delete/rename push to the main stack, so focusing this window makes
+	// that the undo group's active stack.
+	void changeEvent(QEvent* e) override;
 
 private slots:
 	void on_addLayerButton_clicked();
@@ -45,6 +53,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	// is only pushed if op() succeeded. Returns what op() returned.
 	bool runStructureOp(const QString& text, const std::function<bool()>& op);
 
+	FredView*       _fredView = nullptr;
 	EditorViewport* _viewport = nullptr;
 	bool _refreshing = false;
 	QVector<QCheckBox*> _iffChecks;

@@ -24,6 +24,11 @@ public:
 	ReorderDialog(FredView* parent, EditorViewport* viewport);
 	~ReorderDialog() override;
 
+protected:
+	// Moves push to the main stack, so focusing this window makes that the undo
+	// group's active stack (drives the main window's Edit menu and scope indicator).
+	void changeEvent(QEvent* e) override;
+
 private: // NOLINT(readability-redundant-access-specifiers)
 	struct Tab {
 		ReorderDialogModel::Type type;

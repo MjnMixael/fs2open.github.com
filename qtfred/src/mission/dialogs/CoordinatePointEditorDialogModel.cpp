@@ -1,5 +1,7 @@
 #include "mission/dialogs/CoordinatePointEditorDialogModel.h"
 
+#include <QTimer>
+
 #include <coordinate_points/coordinate_shapes.h>
 #include <globalincs/globals.h>
 #include <globalincs/linklist.h>
@@ -633,22 +635,39 @@ void CoordinatePointEditorDialogModel::selectPreviousPoint()
 	}
 }
 
+void CoordinatePointEditorDialogModel::scheduleInitializeData()
+{
+	// Bulk selection changes fire one signal per object, so coalesce
+	// the burst into a single refresh once the event loop settles.
+	//
+	// The _suppressRefresh check stays here rather than in the timer callback: it
+	// guards against a setter's own missionChanged re-entering initializeData() and
+	// clobbering the edit in flight, and by the time the timer fires the setter has
+	// returned and cleared the flag. Testing it at schedule time keeps the existing
+	// "drop the self-inflicted refresh" behavior intact.
+	if (_suppressRefresh || _initPending) {
+		return;
+	}
+	_initPending = true;
+	QTimer::singleShot(0, this, [this] {
+		_initPending = false;
+		initializeData();
+	});
+}
+
 void CoordinatePointEditorDialogModel::onSelectedObjectChanged(int)
 {
-	if (_suppressRefresh) return;
-	initializeData();
+	scheduleInitializeData();
 }
 
 void CoordinatePointEditorDialogModel::onSelectedObjectMarkingChanged(int, bool)
 {
-	if (_suppressRefresh) return;
-	initializeData();
+	scheduleInitializeData();
 }
 
 void CoordinatePointEditorDialogModel::onMissionChanged()
 {
-	if (_suppressRefresh) return;
-	initializeData();
+	scheduleInitializeData();
 }
 
 } // namespace fso::fred::dialogs

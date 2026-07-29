@@ -121,6 +121,10 @@ void resort_ships_in_obj_used_list();
 // depend on this to show props in their reordered Props[] order.
 void resort_props_in_obj_used_list();
 
+// Reorders the OBJ_COORDINATE_POINT entries in obj_used_list to match the order of
+// Coordinate_points, leaving all other object types in place.
+void resort_coordinate_points_in_obj_used_list();
+
 // Props and waypoint paths live in SCP_vectors rather than the fixed
 // Ships[]/Wings[] arrays, and their only index-based back-reference is the
 // owning object's instance (everything else refers to them by name).  So unlike
@@ -147,3 +151,11 @@ void rotate_waypoint_lists(int from_pos, int to_pos);
 // objnum/name, and the Scene Browser and mission save both iterate Jump_nodes
 // directly so permuting the occupants among their slots is all that is needed.
 void rotate_jump_nodes(const SCP_vector<int>& slots, int from_pos, int to_pos);
+
+// Move the coordinate point at index from_pos to to_pos within Coordinate_points,
+// shifting the points in between by one and preserving their relative order.
+// Coordinate_points is a list with no empty entries, so positions are plain
+// indices.  Nothing else needs re-pointing: a coordinate point's object is created
+// with instance -1 and the link is one-way (mission_coordinate_point::objnum), so
+// unlike waypoints there is no index encoded in the object to rebuild.
+void rotate_coordinate_points(int from_pos, int to_pos);

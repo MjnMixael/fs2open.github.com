@@ -38,18 +38,18 @@ PropEditorDialog::PropEditorDialog(FredView* parent, EditorViewport* viewport)
 	updateUi();
 	updateCues();
 
+	// Everything refreshes off the model's own signal, which initializeData() emits once
+	// it has re-read mission data. Driving updateCues() straight off the editor's
+	// selection/missionChanged signals instead would race the model: since #7644 the
+	// model's refresh is deferred through a timer, so the cue trees would be reloaded
+	// from the stale cached formula indices. For a cue undo that is not merely stale --
+	// SexpCueEditCommand frees the old sexp chain before emitting missionChanged, so
+	// load_tree() would walk freed nodes.
 	connect(_model.get(), &PropEditorDialogModel::modelDataChanged, this, [this]() {
 		initializeUi();
 		updateUi();
+		updateCues();
 	});
-
-	// Reload the cue trees and delay spinboxes on selection change and on any mission edit.
-	// The missionChanged hookup mirrors the ship/wing editors: it is what makes undo/redo of a
-	// cue or delay edit visually refresh the controls. updateCues() is signal-blocked, so the
-	// reload never re-enters the edit handlers.
-	connect(viewport->editor, &Editor::currentObjectChanged, this, [this](int) { updateCues(); });
-	connect(viewport->editor, &Editor::objectMarkingChanged, this, [this](int, bool) { updateCues(); });
-	connect(viewport->editor, &Editor::missionChanged, this, [this]() { updateCues(); });
 
 	connect(ui->spawnCueTree, &sexp_tree_view::modified, this, &PropEditorDialog::on_spawnCueTree_modified);
 	connect(ui->spawnCueTree, &sexp_tree_view::helpChanged, this, &PropEditorDialog::on_spawnCueTree_helpChanged);
@@ -115,6 +115,7 @@ PropEditorDialog::PropEditorDialog(FredView* parent, EditorViewport* viewport)
 	Editor* editor = viewport->editor;
 	util::installSelectMenu(
 		this,
+		viewport,
 		[]() {
 			std::vector<util::SelectMenuEntry> entries;
 			for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {

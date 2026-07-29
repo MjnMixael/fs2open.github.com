@@ -1,6 +1,7 @@
 #include "mission/dialogs/ReorderDialogModel.h"
 
 #include "missioneditor/common.h"
+#include "coordinate_points/coordinate_point.h"
 #include "jumpnode/jumpnode.h"
 #include "object/waypoint.h"
 #include "prop/prop.h"
@@ -56,6 +57,10 @@ SCP_vector<int> ReorderDialogModel::getSlots(Type type)
 			if (Jump_nodes[i].GetSCPObjectNumber() >= 0)
 				slotList.push_back(i);
 		break;
+	case Type::CoordinatePoints:
+		for (int i = 0; i < static_cast<int>(Coordinate_points.size()); ++i)
+			slotList.push_back(i);
+		break;
 	}
 	return slotList;
 }
@@ -63,8 +68,18 @@ SCP_vector<int> ReorderDialogModel::getSlots(Type type)
 SCP_vector<SCP_string> ReorderDialogModel::getItemNames(Type type)
 {
 	SCP_vector<SCP_string> names;
+
+	// Coordinate_points is a list, so walk it once instead of seeking to each index.
+	if (type == Type::CoordinatePoints) {
+		for (const auto& cp : Coordinate_points)
+			names.push_back(cp.name);
+		return names;
+	}
+
 	for (int slot : getSlots(type)) {
 		switch (type) {
+		case Type::CoordinatePoints:
+			break; // handled above
 		case Type::Ships:
 			names.emplace_back(Ships[slot].ship_name);
 			break;
@@ -121,6 +136,9 @@ void ReorderDialogModel::applyMove(EditorViewport* viewport, Type type, int from
 		break;
 	case Type::JumpNodes:
 		rotate_jump_nodes(slotList, from_pos, to_pos);
+		break;
+	case Type::CoordinatePoints:
+		rotate_coordinate_points(from_pos, to_pos);
 		break;
 	}
 }

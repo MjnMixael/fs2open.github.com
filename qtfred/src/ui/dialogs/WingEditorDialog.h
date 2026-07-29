@@ -73,8 +73,11 @@ class WingEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	void on_departureTree_miniHelpChanged(const QString& help);
 
   protected:
-	void closeEvent(QCloseEvent* e) override;
+	// Kept on the OFP side: focusing this dialog makes the main mission stack the
+	// active undo stack. The closeEvent override upstream dropped in #7644 was a
+	// pass-through.
 	void changeEvent(QEvent* e) override;
+
 
   private: // NOLINT(readability-redundant-access-specifiers)
 	std::unique_ptr<Ui::WingEditorDialog> ui;
@@ -84,6 +87,7 @@ class WingEditorDialog : public QDialog, public SexpTreeEditorInterface {
 
 	bool _cues_hidden = false;
 
+	void initializeUi();
 	void updateUi();
 	void enableOrDisableControls();
 
@@ -98,7 +102,6 @@ class WingEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	void refreshDepartureLocationCombo();
 	void refreshArrivalTargetCombo();
 	void refreshDepartureTargetCombo();
-	void refreshAllDynamicCombos();
 
 	void updateLogoPreview();
 };

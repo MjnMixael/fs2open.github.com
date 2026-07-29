@@ -8,9 +8,11 @@
 #include <coordinate_points/coordinate_point.h>
 #include <coordinate_points/coordinate_shapes.h>
 #include <globalincs/globals.h>
+#include <globalincs/linklist.h>
 #include <mission/missionparse.h>
 #include <mission/util.h>
 #include <object/object.h>
+#include <ui/util/menu.h>
 
 namespace fso::fred::dialogs {
 
@@ -147,6 +149,34 @@ CoordinatePointEditorDialog::CoordinatePointEditorDialog(FredView* parent, Edito
 		initializeUi();
 		updateUi();
 	});
+
+	// "Select Coordinate Point" menu: jump the editor to any coordinate point in the
+	// mission. Walking obj_used_list rather than Coordinate_points matches the other
+	// object editors and yields the objnum directly; the two are kept in the same
+	// order by resort_coordinate_points_in_obj_used_list().
+	Editor* editor = viewport->editor;
+	util::installSelectMenu(
+		this,
+		viewport,
+		[]() {
+			std::vector<util::SelectMenuEntry> entries;
+			for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
+				if (ptr->type != OBJ_COORDINATE_POINT) {
+					continue;
+				}
+				const auto* cp = find_coordinate_point_by_objnum(OBJ_INDEX(ptr));
+				if (cp != nullptr) {
+					entries.push_back({QString::fromStdString(cp->name), OBJ_INDEX(ptr)});
+				}
+			}
+			return entries;
+		},
+		[this, editor]() { return _model->hasMultipleSelection() ? -1 : editor->currentObject; },
+		[editor](int objnum) {
+			editor->unmark_all();
+			editor->selectObject(objnum);
+		},
+		tr("&Select Coordinate Point"));
 
 	resize(QDialog::sizeHint());
 }

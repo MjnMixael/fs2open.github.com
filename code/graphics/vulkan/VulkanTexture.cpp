@@ -12,7 +12,7 @@
 #include "ddsutils/ddsutils.h"
 #include "ddsutils/bcdec.h"
 #include "globalincs/systemvars.h"
-
+#include "ktxutils/ktxutils.h"
 
 namespace graphics::vulkan {
 
@@ -36,10 +36,38 @@ struct TextureUploadLayout {
 size_t mipLevelSize(const TextureUploadLayout& l, uint32_t mipW, uint32_t mipH)
 {
 	if (l.isCompressed) {
+		// Works for DDS and KTX
 		return dds_compressed_mip_size(static_cast<int>(mipW), static_cast<int>(mipH),
 			static_cast<int>(l.blockSize));
 	}
 	return static_cast<size_t>(mipW) * mipH * l.dstBytesPerPixel;
+}
+
+// Get compressed block size for DDS and KTX textures
+size_t get_compressed_block_size(int compType)
+{
+	switch (compType) {
+	// DDS
+	case DDS_DXT1:
+	case DDS_CUBEMAP_DXT1:
+	case DDS_DXT3:
+	case DDS_CUBEMAP_DXT3:
+	case DDS_DXT5:
+	case DDS_CUBEMAP_DXT5:
+	case DDS_BC7:
+		return dds_block_size(compType);
+	// KTX
+	case KTX_ETC2_RGB:
+	case KTX_ETC2_SRGB:
+	case KTX_ETC2_RGB_A1:
+	case KTX_ETC2_SRGB_A1:
+	case KTX_ETC2_RGBA_EAC:
+	case KTX_ETC2_SRGBA_EAC:
+		return ktx_etc_block_size(ktx_map_ktx_format_to_gl_internal(compType));
+
+	default:
+		return 0;
+	}
 }
 
 // Total bytes occupied by one layer (all mip levels). Matches the staging
@@ -217,6 +245,48 @@ bool VulkanTextureManager::init(vk::Device device, vk::PhysicalDevice physicalDe
 	                           m_fallback3DView, ImageViewType::Volume3D, 1, false, vk::ImageType::e3D)) {
 		return false;
 	}
+
+	// Check BCx and ETC2 Support
+	auto features = m_physicalDevice.getFeatures();
+	bool supportsETC2 = features.textureCompressionETC2;
+	bool supportsBC = features.textureCompressionBC;
+
+	if (!supportsETC2) {
+		std::array<vk::Format, 6> etcFormats = {vk::Format::eEtc2R8G8B8UnormBlock,
+			vk::Format::eEtc2R8G8B8SrgbBlock,
+			vk::Format::eEtc2R8G8B8A1UnormBlock,
+			vk::Format::eEtc2R8G8B8A1SrgbBlock,
+			vk::Format::eEtc2R8G8B8A8UnormBlock,
+			vk::Format::eEtc2R8G8B8A8SrgbBlock};
+
+		for (auto fmt : etcFormats) {
+			auto props = m_physicalDevice.getFormatProperties(fmt);
+			if (props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImage) {
+				supportsETC2 = true;
+				break;
+			}
+		}
+	}
+
+	if (!supportsBC) {
+		std::array<vk::Format, 4> bcFormats = {
+			vk::Format::eBc1RgbaUnormBlock, // DXT1
+			vk::Format::eBc2UnormBlock,     // DXT3
+			vk::Format::eBc3UnormBlock,     // DXT5
+			vk::Format::eBc7UnormBlock      // BC7
+		};
+
+		for (auto fmt : bcFormats) {
+			auto props = m_physicalDevice.getFormatProperties(fmt);
+			if (props.optimalTilingFeatures & vk::FormatFeatureFlagBits::eSampledImage) {
+				supportsBC = true;
+				break;
+			}
+		}
+	}
+
+	mprintf(("VulkanTextureManager: ETC2 Texture Support = %s\n", supportsETC2 ? "YES" : "NO"));
+	mprintf(("VulkanTextureManager: BCn Texture Support = %s\n", supportsBC ? "YES" : "NO"));
 
 	m_initialized = true;
 	return true;
@@ -520,8 +590,9 @@ bool VulkanTextureManager::uploadAnimationFrames(int handle, bitmap* bm, int com
 	auto height = static_cast<uint32_t>(bm->h);
 	auto arrayLayerCount = static_cast<uint32_t>(numFrames);
 
-	bool isCompressed = (compType == DDS_DXT1 || compType == DDS_DXT3 ||
-	                     compType == DDS_DXT5 || compType == DDS_BC7);
+	bool isCompressed = (compType == DDS_DXT1 || compType == DDS_DXT3 || compType == DDS_DXT5 || compType == DDS_BC7 ||
+						 compType == KTX_ETC2_RGB || compType == KTX_ETC2_SRGB || compType == KTX_ETC2_RGBA_EAC ||
+						 compType == KTX_ETC2_SRGBA_EAC || compType == KTX_ETC2_RGB_A1 || compType == KTX_ETC2_SRGB_A1);
 
 	// Determine format
 	vk::Format format;
@@ -548,7 +619,7 @@ bool VulkanTextureManager::uploadAnimationFrames(int handle, bitmap* bm, int com
 	layout.height = height;
 	layout.mipLevels = mipLevels;
 	layout.isCompressed = isCompressed;
-	layout.blockSize = isCompressed ? dds_block_size(compType) : 0;
+	layout.blockSize = isCompressed ? get_compressed_block_size(compType) : 0;
 	layout.dstBytesPerPixel = (bm->bpp == 24) ? 4 : (bm->bpp / 8);
 
 	size_t layerDataSize = layerByteSize(layout);
@@ -733,7 +804,10 @@ bool VulkanTextureManager::uploadCubemap(int handle, bitmap* bm, int compType)
 	else if (compType == DDS_CUBEMAP_DXT5) baseCompType = DDS_DXT5;
 
 	bool isCompressed = (baseCompType == DDS_DXT1 || baseCompType == DDS_DXT3 ||
-	                     baseCompType == DDS_DXT5 || baseCompType == DDS_BC7);
+	                     baseCompType == DDS_DXT5 || baseCompType == DDS_BC7 ||
+	                     baseCompType == KTX_ETC2_RGB || baseCompType == KTX_ETC2_SRGB ||
+	                     baseCompType == KTX_ETC2_RGBA_EAC || baseCompType == KTX_ETC2_SRGBA_EAC ||
+	                     baseCompType == KTX_ETC2_RGB_A1 || baseCompType == KTX_ETC2_SRGB_A1);
 
 	vk::Format format;
 	if (isCompressed) {
@@ -750,7 +824,7 @@ bool VulkanTextureManager::uploadCubemap(int handle, bitmap* bm, int compType)
 	size_t blockSize = 0;
 
 	if (isCompressed) {
-		blockSize = dds_block_size(baseCompType);
+		blockSize = get_compressed_block_size(baseCompType);
 		mipLevels = static_cast<uint32_t>(bm_get_num_mipmaps(handle));
 		mipLevels = std::max<uint32_t>(mipLevels, 1);
 	}
@@ -1063,8 +1137,9 @@ bool VulkanTextureManager::uploadTexture2D(int handle, bitmap* bm, int compType)
 	auto height = static_cast<uint32_t>(bm->h);
 	uint32_t mipLevels = 1;
 	bool autoGenerateMips = false;
-	bool isCompressed = (compType == DDS_DXT1 || compType == DDS_DXT3 ||
-	                     compType == DDS_DXT5 || compType == DDS_BC7);
+	bool isCompressed = (compType == DDS_DXT1 || compType == DDS_DXT3 || compType == DDS_DXT5 || compType == DDS_BC7 ||
+	                     compType == KTX_ETC2_RGB || compType == KTX_ETC2_SRGB || compType == KTX_ETC2_RGBA_EAC ||
+	                     compType == KTX_ETC2_SRGBA_EAC || compType == KTX_ETC2_RGB_A1 || compType == KTX_ETC2_SRGB_A1);
 
 	if (m_uploadFmtLogCount < 30) {
 		nprintf(("vulkan", "VulkanTextureManager::bm_data: handle=%d w=%d h=%d bpp=%d true_bpp=%d flags=0x%x compType=%d\n",
@@ -1085,7 +1160,7 @@ bool VulkanTextureManager::uploadTexture2D(int handle, bitmap* bm, int compType)
 			return false;
 		}
 
-		blockSize = dds_block_size(compType);
+		blockSize = get_compressed_block_size(compType);
 
 		// Get pre-baked mipmap count from DDS file
 		mipLevels = static_cast<uint32_t>(bm_get_num_mipmaps(handle));
@@ -1424,11 +1499,40 @@ int VulkanTextureManager::bm_make_render_target(int handle, int* width, int* hei
 		subpass.pDepthStencilAttachment = &depthAttachmentRef;
 	}
 
+	// These targets are sampled as textures between passes, and some are re-rendered
+	// every frame while simultaneously being displayed (e.g. the SCPUI load bar, redrawn
+	// each frame and shown by the UI). With no explicit dependencies the render pass only
+	// gets the implicit TOP_OF_PIPE->BOTTOM_OF_PIPE dependency, which orders the layout
+	// transitions but creates no memory dependency between the color writes here and the
+	// fragment-shader sample in a later pass. That leaves a read-after-write (and, on
+	// re-render, write-after-read) hazard that manifests as flickering/garbage. Add
+	// both-direction external dependencies against the shader-read use to close it.
+	std::array<vk::SubpassDependency, 2> dependencies{};
+	// Pass start: a prior fragment-shader sample of this target must complete before we
+	// overwrite the color attachment (write-after-read; also covers loadOp=eLoad reads).
+	dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[0].dstSubpass = 0;
+	dependencies[0].srcStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+	dependencies[0].srcAccessMask = vk::AccessFlagBits::eShaderRead;
+	dependencies[0].dstStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[0].dstAccessMask =
+		vk::AccessFlagBits::eColorAttachmentWrite | vk::AccessFlagBits::eColorAttachmentRead;
+	// Pass end: the color writes must be available and visible before the next
+	// fragment-shader sample of this target (read-after-write).
+	dependencies[1].srcSubpass = 0;
+	dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
+	dependencies[1].srcStageMask = vk::PipelineStageFlagBits::eColorAttachmentOutput;
+	dependencies[1].srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
+	dependencies[1].dstStageMask = vk::PipelineStageFlagBits::eFragmentShader;
+	dependencies[1].dstAccessMask = vk::AccessFlagBits::eShaderRead;
+
 	vk::RenderPassCreateInfo renderPassInfo;
 	renderPassInfo.attachmentCount = hasDepth ? 2u : 1u;
 	renderPassInfo.pAttachments = attachments.data();
 	renderPassInfo.subpassCount = 1;
 	renderPassInfo.pSubpasses = &subpass;
+	renderPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+	renderPassInfo.pDependencies = dependencies.data();
 
 	try {
 		ts->renderPass = m_device.createRenderPass(renderPassInfo);
@@ -1463,6 +1567,8 @@ int VulkanTextureManager::bm_make_render_target(int handle, int* width, int* hei
 		loadPassInfo.pAttachments = loadAttachments.data();
 		loadPassInfo.subpassCount = 1;
 		loadPassInfo.pSubpasses = &subpass;
+		loadPassInfo.dependencyCount = static_cast<uint32_t>(dependencies.size());
+		loadPassInfo.pDependencies = dependencies.data();
 
 		try {
 			ts->renderPassLoad = m_device.createRenderPass(loadPassInfo);
@@ -2081,6 +2187,20 @@ vk::Format VulkanTextureManager::bppToVkFormat(int bpp, bool compressed, int com
 			return vk::Format::eBc3UnormBlock;
 		case DDS_BC7:
 			return vk::Format::eBc7UnormBlock;
+		// KTX compression types
+		case KTX_ETC2_RGB:
+			return vk::Format::eEtc2R8G8B8UnormBlock;
+		case KTX_ETC2_SRGB:
+			return vk::Format::eEtc2R8G8B8SrgbBlock;
+		case KTX_ETC2_RGB_A1:
+			return vk::Format::eEtc2R8G8B8A1UnormBlock;
+		case KTX_ETC2_SRGB_A1:
+			return vk::Format::eEtc2R8G8B8A1SrgbBlock;
+		case KTX_ETC2_RGBA_EAC:
+			return vk::Format::eEtc2R8G8B8A8UnormBlock;
+		case KTX_ETC2_SRGBA_EAC:
+			return vk::Format::eEtc2R8G8B8A8SrgbBlock;
+
 		default:
 			return vk::Format::eUndefined;
 		}

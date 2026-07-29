@@ -30,7 +30,7 @@ enum class OtherKind {
 	CoordinatePoint,
 };
 
-enum class SexpDataMenuStyle {
+enum class DataMenuStyle {
 	Auto = 0,
 	Columns = 1,
 	Searchable = 2,
@@ -242,7 +242,7 @@ class EditorViewport {
 
 	ThemeMode Theme_mode = ThemeMode::System;
 
-	SexpDataMenuStyle Sexp_data_menu_style = SexpDataMenuStyle::Auto;
+	DataMenuStyle Data_menu_style = DataMenuStyle::Auto;
 
 	void saveSettings() const;
 

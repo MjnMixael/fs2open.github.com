@@ -1,6 +1,5 @@
 #include "WingEditorDialog.h"
 #include <ui/util/DialogUndo.h>
-#include <QCloseEvent>
 #include "General/CheckBoxListDialog.h"
 #include "General/ImagePickerDialog.h"
 #include "ShipEditor/ShipGoalsDialog.h"
@@ -173,7 +172,7 @@ WingEditorDialog::WingEditorDialog(FredView* parent, EditorViewport* viewport)
 	// Whenever the model reports changes, refresh the UI
 	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &WingEditorDialog::updateUi);
 	connect(_model.get(), &WingEditorDialogModel::wingChanged, this, [this] {
-		refreshAllDynamicCombos();
+		initializeUi();
 		updateUi();
 	});
 
@@ -186,6 +185,7 @@ WingEditorDialog::WingEditorDialog(FredView* parent, EditorViewport* viewport)
 	Editor* editor = viewport->editor;
 	util::installSelectMenu(
 		this,
+		viewport,
 		[]() {
 			std::vector<util::SelectMenuEntry> entries;
 			for (int i = 0; i < MAX_WINGS; i++) {
@@ -199,7 +199,7 @@ WingEditorDialog::WingEditorDialog(FredView* parent, EditorViewport* viewport)
 		[editor](int wing) { editor->mark_wing(wing); },
 		tr("&Select Wing"));
 
-	refreshAllDynamicCombos();
+	initializeUi();
 	updateUi();
 
 	// Resize the dialog to the minimum size
@@ -208,17 +208,13 @@ WingEditorDialog::WingEditorDialog(FredView* parent, EditorViewport* viewport)
 
 WingEditorDialog::~WingEditorDialog() = default;
 
-void WingEditorDialog::closeEvent(QCloseEvent* e)
-{
-	QDialog::closeEvent(e);
-}
-
 void WingEditorDialog::changeEvent(QEvent* e)
 {
 	if (e->type() == QEvent::ActivationChange && isActiveWindow())
 		_fredView->undoGroup()->setActiveStack(_fredView->mainUndoStack());
 	QDialog::changeEvent(e);
 }
+
 
 void WingEditorDialog::updateUi()
 {
@@ -502,7 +498,7 @@ void WingEditorDialog::refreshDepartureTargetCombo()
 	}
 }
 
-void WingEditorDialog::refreshAllDynamicCombos()
+void WingEditorDialog::initializeUi()
 {
 	refreshLeaderCombo();
 	refreshHotkeyCombo();

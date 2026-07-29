@@ -63,8 +63,8 @@ public:
 	ThemeMode getThemeMode() const;
 	void setThemeMode(ThemeMode value);
 
-	SexpDataMenuStyle getSexpDataMenuStyle() const;
-	void setSexpDataMenuStyle(SexpDataMenuStyle value);
+	DataMenuStyle getDataMenuStyle() const;
+	void setDataMenuStyle(DataMenuStyle value);
 
 	int  getToolbarIconSize() const;
 	void setToolbarIconSize(int size);
@@ -112,7 +112,7 @@ private:
 	bool _showSexpHelpWingEditor;
 	bool _showSexpHelpPropEditor;
 	ThemeMode _themeMode;
-	SexpDataMenuStyle _sexpDataMenuStyle;
+	DataMenuStyle _dataMenuStyle;
 	int  _toolbarIconSize;
 	int  _outlineLod;
 

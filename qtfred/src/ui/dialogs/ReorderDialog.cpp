@@ -1,6 +1,7 @@
 #include "ui/dialogs/ReorderDialog.h"
 #include "mission/commands/FredCommands.h"
 #include "ui/Theme.h"
+#include "ui/util/DialogUndo.h"
 #include "ui_ReorderDialog.h"
 
 #include <QListWidget>
@@ -19,6 +20,7 @@ ReorderDialog::ReorderDialog(FredView* parent, EditorViewport* viewport) :
 	_model(new ReorderDialogModel(this, viewport))
 {
 	ui->setupUi(this);
+	util::installMainStackUndoShortcuts(this, _fredView->mainUndoStack());
 
 	using Type = ReorderDialogModel::Type;
 	_tabs = {
@@ -27,6 +29,7 @@ ReorderDialog::ReorderDialog(FredView* parent, EditorViewport* viewport) :
 		{Type::Props, ui->propList, ui->propMoveTopBtn, ui->propMoveUpBtn, ui->propMoveDownBtn, ui->propMoveBottomBtn},
 		{Type::WaypointLists, ui->waypointList, ui->waypointMoveTopBtn, ui->waypointMoveUpBtn, ui->waypointMoveDownBtn, ui->waypointMoveBottomBtn},
 		{Type::JumpNodes, ui->jumpNodeList, ui->jumpNodeMoveTopBtn, ui->jumpNodeMoveUpBtn, ui->jumpNodeMoveDownBtn, ui->jumpNodeMoveBottomBtn},
+		{Type::CoordinatePoints, ui->coordinatePointList, ui->coordinatePointMoveTopBtn, ui->coordinatePointMoveUpBtn, ui->coordinatePointMoveDownBtn, ui->coordinatePointMoveBottomBtn},
 	};
 
 	for (const auto& tab : _tabs) {
@@ -44,6 +47,13 @@ ReorderDialog::ReorderDialog(FredView* parent, EditorViewport* viewport) :
 }
 
 ReorderDialog::~ReorderDialog() = default;
+
+void ReorderDialog::changeEvent(QEvent* e)
+{
+	if (e->type() == QEvent::ActivationChange && isActiveWindow())
+		_fredView->undoGroup()->setActiveStack(_fredView->mainUndoStack());
+	QDialog::changeEvent(e);
+}
 
 void ReorderDialog::setupTab(const Tab& tab)
 {

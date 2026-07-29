@@ -8,16 +8,19 @@
 #include <QUndoStack>
 
 #include "mission/commands/FredCommands.h"
+#include "ui/util/DialogUndo.h"
 
 namespace fso::fred::dialogs {
 
-LayerManagerDialog::LayerManagerDialog(EditorViewport* viewport, QWidget* parent)
+LayerManagerDialog::LayerManagerDialog(FredView* parent, EditorViewport* viewport)
 	: QDialog(parent)
+	, _fredView(parent)
 	, _viewport(viewport)
 	, ui(new Ui::LayerManagerDialog())
 	, _model(new LayerManagerDialogModel(this, viewport))
 {
 	ui->setupUi(this);
+	util::installMainStackUndoShortcuts(this, _fredView->mainUndoStack());
 
 	initializeUi();
 	updateUi();
@@ -31,6 +34,13 @@ LayerManagerDialog::LayerManagerDialog(EditorViewport* viewport, QWidget* parent
 
 LayerManagerDialog::~LayerManagerDialog() = default;
 
+void LayerManagerDialog::changeEvent(QEvent* e)
+{
+	if (e->type() == QEvent::ActivationChange && isActiveWindow())
+		_fredView->undoGroup()->setActiveStack(_fredView->mainUndoStack());
+	QDialog::changeEvent(e);
+}
+
 bool LayerManagerDialog::runStructureOp(const QString& text, const std::function<bool()>& op)
 {
 	auto* cmd = new LayerStructureCommand(_viewport, _viewport->editor, text);
@@ -39,7 +49,7 @@ bool LayerManagerDialog::runStructureOp(const QString& text, const std::function
 		return false;
 	}
 	cmd->captureAfter();
-	_viewport->editor->undoStack()->push(cmd);
+	_fredView->mainUndoStack()->push(cmd);
 	return true;
 }
 

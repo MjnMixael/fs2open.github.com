@@ -113,6 +113,7 @@ private slots:
 
 private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeData();
+	void scheduleInitializeData();
 	void showErrorDialogNoCancel(const SCP_string& message);
 	bool validateName(const SCP_string& name);
 	void selectCoordinatePointByObjnum(int objnum);
@@ -150,6 +151,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 
 	bool _bypass_errors = false;
 	bool _suppressRefresh = false;
+	bool _initPending = false;
 };
 
 } // namespace fso::fred::dialogs

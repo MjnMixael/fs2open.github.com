@@ -58,6 +58,7 @@ private slots:
 
 private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeData();
+	void scheduleInitializeData();
 	void showErrorDialogNoCancel(const SCP_string& message);
 	bool validateName(const SCP_string& name);
 	void selectNodeFromObjectList(object* start, bool forward);
@@ -74,6 +75,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	bool _hiddenMixed = false;
 
 	bool _bypass_errors = false;
+	bool _initPending = false;
 };
 
 } // namespace fso::fred::dialogs
