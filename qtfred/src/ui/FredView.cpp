@@ -39,6 +39,7 @@
 #include <ui/dialogs/CoordinatePointEditorDialog.h>
 #include <ui/dialogs/WaypointEditorDialog.h>
 #include <object/object.h>
+#include <ui/dialogs/ReorderDialog.h>
 #include <object/waypoint.h>
 #include <ui/dialogs/WaypointPathGeneratorDialog.h>
 #include <ui/dialogs/JumpNodeEditorDialog.h>
@@ -2378,8 +2379,11 @@ void FredView::populateMoveToLayerMenu(int targetObject, QMenu* targetMenu) {
 		_viewport->getLayerVisibility(layerName, &visible);
 
 		auto* layerAction = new QAction(QString::fromStdString(layerName), dest);
-		layerAction->setCheckable(true);
-		layerAction->setChecked(_viewport->getObjectLayerName(targetObject) == layerName);
+		if (_viewport->getObjectLayerName(targetObject) == layerName) {
+			auto font = layerAction->font();
+			font.setBold(true);
+			layerAction->setFont(font);
+		}
 		layerAction->setEnabled(visible);
 
 		connect(layerAction, &QAction::triggered, this, [this, layerName, targetObject]() {
@@ -2839,6 +2843,10 @@ void FredView::on_actionCoordinate_Points_triggered(bool) {
 	auto editorDialog = new dialogs::CoordinatePointEditorDialog(this, _viewport);
 	editorDialog->setAttribute(Qt::WA_DeleteOnClose);
 	editorDialog->show();
+}
+
+void FredView::on_actionReorder_Objects_triggered(bool) {
+	showSingleInstanceDialog<dialogs::ReorderDialog>(this, _viewport);
 }
 void FredView::on_actionJump_Nodes_triggered(bool)
 {

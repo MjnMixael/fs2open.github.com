@@ -7,6 +7,7 @@
 #include <jumpnode/jumpnode.h>
 #include <mission/util.h>
 #include <object/object.h>
+#include <ui/util/menu.h>
 
 namespace fso::fred::dialogs {
 
@@ -52,6 +53,25 @@ JumpNodeEditorDialog::JumpNodeEditorDialog(FredView* parent, EditorViewport* vie
 		updateUi();
 	});
 
+	// "Select Jump Node" menu: jump the editor to any jump node in the mission.
+	Editor* editor = viewport->editor;
+	util::installSelectMenu(
+		this,
+		[]() {
+			std::vector<util::SelectMenuEntry> entries;
+			for (const auto& jn : Jump_nodes) {
+				entries.push_back({QString::fromUtf8(jn.GetName()), jn.GetSCPObjectNumber()});
+			}
+			return entries;
+		},
+		[this, editor]() { return _model->hasMultipleSelection() ? -1 : editor->currentObject; },
+		[editor](int objnum) {
+			editor->unmark_all();
+			editor->selectObject(objnum);
+		},
+		tr("&Select Jump Node"));
+
+	// Resize the dialog to the minimum size
 	resize(QDialog::sizeHint());
 }
 

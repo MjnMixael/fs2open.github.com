@@ -25,6 +25,7 @@ PreferencesDialogModel::PreferencesDialogModel(QObject* parent, EditorViewport* 
 	, _showSexpHelpWingEditor(viewport->Show_sexp_help_wing_editor)
 	, _showSexpHelpPropEditor(viewport->Show_sexp_help_prop_editor)
 	, _themeMode(viewport->Theme_mode)
+	, _sexpDataMenuStyle(viewport->Sexp_data_menu_style)
 	, _toolbarIconSize(viewport->toolbar_icon_size)
 	, _outlineLod(viewport->view.Outline_lod)
 	, _invertOrbitX(viewport->camera.getInvertOrbitX())
@@ -68,6 +69,7 @@ bool PreferencesDialogModel::apply() {
 	_viewport->Show_sexp_help_wing_editor       = _showSexpHelpWingEditor;
 	_viewport->Show_sexp_help_prop_editor       = _showSexpHelpPropEditor;
 	_viewport->Theme_mode                       = _themeMode;
+	_viewport->Sexp_data_menu_style             = _sexpDataMenuStyle;
 	_viewport->toolbar_icon_size                = _toolbarIconSize;
 	_viewport->view.Outline_lod                 = _outlineLod;
 	_viewport->camera.setInvertOrbitX(_invertOrbitX);
@@ -177,6 +179,9 @@ void PreferencesDialogModel::setShowSexpHelpPropEditor(bool value) { modify(_sho
 
 ThemeMode PreferencesDialogModel::getThemeMode() const { return _themeMode; }
 void PreferencesDialogModel::setThemeMode(ThemeMode value) { modify(_themeMode, value); }
+
+SexpDataMenuStyle PreferencesDialogModel::getSexpDataMenuStyle() const { return _sexpDataMenuStyle; }
+void PreferencesDialogModel::setSexpDataMenuStyle(SexpDataMenuStyle value) { modify(_sexpDataMenuStyle, value); }
 
 int  PreferencesDialogModel::getToolbarIconSize() const { return _toolbarIconSize; }
 void PreferencesDialogModel::setToolbarIconSize(int size) { modify(_toolbarIconSize, size); }

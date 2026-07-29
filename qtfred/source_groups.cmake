@@ -116,8 +116,10 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/PropEditorDialogModel.h
 	src/mission/dialogs/PropTextureReplacementDialogModel.cpp
 	src/mission/dialogs/PropTextureReplacementDialogModel.h
-	src/mission/dialogs/ReinforcementsEditorDialogModel.cpp	
+	src/mission/dialogs/ReinforcementsEditorDialogModel.cpp
 	src/mission/dialogs/ReinforcementsEditorDialogModel.h
+	src/mission/dialogs/ReorderDialogModel.cpp
+	src/mission/dialogs/ReorderDialogModel.h
 	src/mission/dialogs/RelativeCoordinatesDialogModel.cpp
 	src/mission/dialogs/RelativeCoordinatesDialogModel.h
 	src/mission/dialogs/ShieldSystemDialogModel.cpp
@@ -239,6 +241,8 @@ add_file_folder("Source/UI/Dialogs"
 	src/ui/dialogs/PropTextureReplacementDialog.h
 	src/ui/dialogs/ReinforcementsEditorDialog.cpp
 	src/ui/dialogs/ReinforcementsEditorDialog.h
+	src/ui/dialogs/ReorderDialog.cpp
+	src/ui/dialogs/ReorderDialog.h
 	src/ui/dialogs/RelativeCoordinatesDialog.cpp
 	src/ui/dialogs/RelativeCoordinatesDialog.h
 	src/ui/dialogs/SaveAsTemplateDialog.cpp
@@ -365,6 +369,8 @@ add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/PersonaColorComboBox.h
 	src/ui/widgets/renderwidget.cpp
 	src/ui/widgets/renderwidget.h
+	src/ui/widgets/sexp_data_menu.cpp
+	src/ui/widgets/sexp_data_menu.h
 	src/ui/widgets/sexp_tree_view.cpp
 	src/ui/widgets/sexp_tree_view.h
 	src/ui/widgets/ShipFlagCheckbox.h
@@ -406,6 +412,7 @@ add_file_folder("UI"
 	ui/PropEditorDialog.ui
 	ui/PropTextureReplacementDialog.ui
 	ui/ReinforcementsDialog.ui
+	ui/ReorderDialog.ui
 	ui/RelativeCoordinatesDialog.ui
 	ui/ShieldSystemDialog.ui
 	ui/SoundEnvironmentDialog.ui

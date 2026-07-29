@@ -251,6 +251,7 @@
      <string>Tools</string>
     </property>
     <addaction name="actionWaypointPathGenerator"/>
+    <addaction name="actionReorder_Objects"/>
     <addaction name="actionVoice_Acting_Manager"/>
     <addaction name="actionSet_Global_Ship_Flags"/>
     <addaction name="actionCalculate_Relative_Coordinates"/>
@@ -1061,6 +1062,11 @@
   <action name="actionCoordinate_Points">
    <property name="text">
     <string>Coor&amp;dinate Points</string>
+   </property>
+  </action>
+  <action name="actionReorder_Objects">
+   <property name="text">
+    <string>&amp;Reorder Objects</string>
    </property>
   </action>
   <action name="actionMission_Events">

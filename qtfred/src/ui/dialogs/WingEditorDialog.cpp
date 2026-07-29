@@ -12,8 +12,10 @@
 #include <mission/commands/FredCommands.h>
 #include <missioneditor/common.h>
 #include <object/object.h>
+#include <ship/ship.h>
 #include <ui/util/SignalBlockers.h>
 #include <ui/util/ImageRenderer.h>
+#include <ui/util/menu.h>
 #include <QMessageBox>
 
 namespace fso::fred::dialogs {
@@ -179,6 +181,23 @@ WingEditorDialog::WingEditorDialog(FredView* parent, EditorViewport* viewport)
 	// miniHelpChanged) are auto-connected by setupUi's connectSlotsByName;
 	// connecting them here again would run each handler twice per signal (and
 	// push duplicate undo commands).
+
+	// "Select Wing" menu: jump the editor to any wing in the mission.
+	Editor* editor = viewport->editor;
+	util::installSelectMenu(
+		this,
+		[]() {
+			std::vector<util::SelectMenuEntry> entries;
+			for (int i = 0; i < MAX_WINGS; i++) {
+				if (Wings[i].wave_count) {
+					entries.push_back({QString::fromUtf8(Wings[i].name), i});
+				}
+			}
+			return entries;
+		},
+		[editor]() { return editor->cur_wing; },
+		[editor](int wing) { editor->mark_wing(wing); },
+		tr("&Select Wing"));
 
 	refreshAllDynamicCombos();
 	updateUi();

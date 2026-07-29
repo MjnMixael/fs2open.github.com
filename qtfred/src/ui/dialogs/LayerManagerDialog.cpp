@@ -5,11 +5,15 @@
 #include <QInputDialog>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QUndoStack>
+
+#include "mission/commands/FredCommands.h"
 
 namespace fso::fred::dialogs {
 
 LayerManagerDialog::LayerManagerDialog(EditorViewport* viewport, QWidget* parent)
 	: QDialog(parent)
+	, _viewport(viewport)
 	, ui(new Ui::LayerManagerDialog())
 	, _model(new LayerManagerDialogModel(this, viewport))
 {
@@ -19,9 +23,25 @@ LayerManagerDialog::LayerManagerDialog(EditorViewport* viewport, QWidget* parent
 	updateUi();
 
 	connect(_model.get(), &LayerManagerDialogModel::modelChanged, this, &LayerManagerDialog::updateUi);
+
+	// Undo/redo rewrites the layer structure behind our back, so refresh on any
+	// mission change rather than only on our own model's signal.
+	connect(_viewport->editor, &Editor::missionChanged, this, &LayerManagerDialog::updateUi);
 }
 
 LayerManagerDialog::~LayerManagerDialog() = default;
+
+bool LayerManagerDialog::runStructureOp(const QString& text, const std::function<bool()>& op)
+{
+	auto* cmd = new LayerStructureCommand(_viewport, _viewport->editor, text);
+	if (!op()) {
+		delete cmd;
+		return false;
+	}
+	cmd->captureAfter();
+	_viewport->editor->undoStack()->push(cmd);
+	return true;
+}
 
 void LayerManagerDialog::initializeUi() {
 	// Populate IFF team checkboxes dynamically; insert before the spacer at the end of iffLayout
@@ -79,8 +99,10 @@ void LayerManagerDialog::updateUi() {
 
 	_refreshing = false;
 
-	// Update delete button based on selection
-	ui->deleteLayerButton->setEnabled(ui->layerList->currentRow() > 0);
+	// Update rename/delete buttons based on selection (row 0 is the default layer)
+	const bool nonDefaultSelected = ui->layerList->currentRow() > 0;
+	ui->renameLayerButton->setEnabled(nonDefaultSelected);
+	ui->deleteLayerButton->setEnabled(nonDefaultSelected);
 }
 
 void LayerManagerDialog::on_addLayerButton_clicked() {
@@ -94,7 +116,7 @@ void LayerManagerDialog::on_addLayerButton_clicked() {
 	}
 
 	SCP_string error;
-	if (!_model->addLayer(name.toUtf8().constData(), &error)) {
+	if (!runStructureOp(tr("Add Layer"), [&] { return _model->addLayer(name.toUtf8().constData(), &error); })) {
 		QMessageBox::warning(this, tr("Layer Error"), QString::fromStdString(error));
 		return;
 	}
@@ -102,6 +124,44 @@ void LayerManagerDialog::on_addLayerButton_clicked() {
 	// Select the newly added layer
 	for (int i = 0; i < ui->layerList->count(); ++i) {
 		if (ui->layerList->item(i)->text() == name) {
+			ui->layerList->setCurrentRow(i);
+			break;
+		}
+	}
+}
+
+void LayerManagerDialog::on_renameLayerButton_clicked() {
+	auto* item = ui->layerList->currentItem();
+	if (item == nullptr) {
+		return;
+	}
+
+	const QString oldName = item->text();
+	if (_model->isDefaultLayer(oldName.toUtf8().constData())) {
+		QMessageBox::warning(this, tr("Layer Error"), tr("The default layer cannot be renamed."));
+		return;
+	}
+
+	bool ok = false;
+	auto newName = QInputDialog::getText(this, tr("Rename Layer"), tr("Layer name:"), QLineEdit::Normal, oldName, &ok).trimmed();
+	if (!ok || newName == oldName) {
+		if (ok && newName.isEmpty()) {
+			QMessageBox::warning(this, tr("Layer Error"), tr("Layer name cannot be empty."));
+		}
+		return;
+	}
+
+	SCP_string error;
+	if (!runStructureOp(tr("Rename Layer"), [&] {
+		    return _model->renameLayer(oldName.toUtf8().constData(), newName.toUtf8().constData(), &error);
+	    })) {
+		QMessageBox::warning(this, tr("Layer Error"), QString::fromStdString(error));
+		return;
+	}
+
+	// Keep the renamed layer selected
+	for (int i = 0; i < ui->layerList->count(); ++i) {
+		if (ui->layerList->item(i)->text() == newName) {
 			ui->layerList->setCurrentRow(i);
 			break;
 		}
@@ -121,12 +181,13 @@ void LayerManagerDialog::on_deleteLayerButton_clicked() {
 	}
 
 	SCP_string error;
-	if (!_model->deleteLayer(layerName, &error)) {
+	if (!runStructureOp(tr("Delete Layer"), [&] { return _model->deleteLayer(layerName, &error); })) {
 		QMessageBox::warning(this, tr("Layer Error"), QString::fromStdString(error));
 	}
 }
 
 void LayerManagerDialog::on_layerList_currentRowChanged(int row) {
+	ui->renameLayerButton->setEnabled(row > 0);
 	ui->deleteLayerButton->setEnabled(row > 0);
 }
 
