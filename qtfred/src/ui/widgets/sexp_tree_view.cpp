@@ -1139,6 +1139,20 @@ void sexp_tree_view::showContextMenuForItem(QTreeWidgetItem* h, const QPoint& gl
 	_useSearchAnchor = false;
 }
 
+// Open the editor for an item on behalf of another view (e.g. a graph card's
+// inline arg bullet). Same visible-dialog / anchored-popup routing as the menu.
+void sexp_tree_view::editNodeExternally(QTreeWidgetItem* h, const QPoint& globalPos)
+{
+	if (h == nullptr)
+		return;
+	_popupEditData = true;
+	_useSearchAnchor = true;
+	_searchAnchor = globalPos;
+	openNodeEditor(h);
+	_popupEditData = false;
+	_useSearchAnchor = false;
+}
+
 // Builds the complete right-click context menu for the given tree item.
 //
 // First calls _model.compute_context_menu_state() to get all enabled/disabled states, then

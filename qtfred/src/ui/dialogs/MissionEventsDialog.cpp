@@ -500,6 +500,8 @@ void MissionEventsDialog::initGraphView()
 	// Right-click a node → comment/color annotation menu (same undo path as the
 	// tree's note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodeContextMenuRequested, this, &MissionEventsDialog::showGraphNodeMenu);
+	// Double-click an inline literal-arg bullet -> open its editor (number: quick-search; string: dialog).
+	connect(ui->eventGraph, &EventGraphView::nodeEditRequested, this, &MissionEventsDialog::editGraphNode);
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodeMoved, this, [this](int key, double x, double y) {
@@ -656,6 +658,16 @@ void MissionEventsDialog::showGraphNodeMenu(int key, const QPoint& globalPos)
 	ui->eventTree->showContextMenuForItem(h, globalPos,
 		[this, key]() { ui->eventGraph->expandNode(key); },
 		ui->eventGraph->nodeExpandable(key));
+}
+
+// Double-clicking an inline literal-arg bullet: open that arg node's editor
+// directly (the tree routes numeric slots to the quick-search, strings to the
+// text dialog). The commit refreshes the graph via the modification handlers.
+void MissionEventsDialog::editGraphNode(int treeNode, const QPoint& globalPos)
+{
+	QTreeWidgetItem* h = treeItemForAnnotationKey(treeNode); // treeNode >= 0 -> tree item
+	if (h)
+		ui->eventTree->editNodeExternally(h, globalPos);
 }
 
 // Redraw the relationship graph if it's the current view. Called after tree

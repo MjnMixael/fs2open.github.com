@@ -70,6 +70,13 @@ struct BasicObjRef {
 	float posY = 0.0f;
 };
 
+// One literal (number/string) arg inlined as a bullet on the operator card. The
+// tree node lets the view target that specific arg for editing.
+struct BasicInlineArg {
+	SCP_string text;
+	int        treeNode = -1;
+};
+
 // Whole-mission operator dataflow graph, for the Basic graph view. Every sexp
 // operator is a node; literal (non-object) leaf args are inlined into the card;
 // object-naming leaf args reference shared object nodes. The position fields are
@@ -81,7 +88,7 @@ struct BasicOpNode {
 	bool       isCond = false;  // condition vs action subtree (card color)
 	SCP_string opText;          // operator name
 	SCP_string expression;      // full sub-expression text
-	SCP_vector<SCP_string> inlineArgs; // literal args shown inside the card
+	SCP_vector<BasicInlineArg> inlineArgs; // literal args shown inside the card
 	SCP_vector<int> childOps;   // indices into BasicGraph::ops
 	SCP_vector<BasicObjRef> objectRefs; // this operator's object references (not deduped)
 
