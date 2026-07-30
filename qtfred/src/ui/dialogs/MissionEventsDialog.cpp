@@ -603,6 +603,18 @@ void MissionEventsDialog::refreshGraphView()
 	}
 	ui->eventGraph->setAnnotations(std::move(annotations));
 
+	// Corner order markers: each sexp node's 1-based position among its siblings.
+	QHash<int, int> siblingOrders;
+	const auto& nodes = ui->eventTree->_model.tree_nodes;
+	for (int p = 0; p < static_cast<int>(nodes.size()); ++p) {
+		if (nodes[p].type == SEXPT_UNUSED) // skip free slots (stale child/next links)
+			continue;
+		int order = 1;
+		for (int c = nodes[p].child; c != -1; c = nodes[c].next)
+			siblingOrders.insert(c, order++);
+	}
+	ui->eventGraph->setSiblingOrders(std::move(siblingOrders));
+
 	ui->eventGraph->reload();
 
 	_graphDirty = false;
