@@ -117,6 +117,9 @@ class EventGraphView final : public QGraphicsView {
 	// snapshot (keyed by annotation key). Both fed on every refresh.
 	void setEventMeta(QVector<GraphEventMeta> meta) { m_eventMeta = std::move(meta); }
 	void setAnnotations(QHash<int, GraphAnnotation> annotations) { m_annotations = std::move(annotations); }
+	// 1-based order of each sexp node among its siblings (tree_nodes index -> order),
+	// shown as a corner marker on the card. Fed on every refresh.
+	void setSiblingOrders(QHash<int, int> orders) { m_siblingOrders = std::move(orders); }
 	// Lightweight refresh of one event card's status icons + chain lines after a
 	// property edit, without a full rebuild.
 	void updateEventCard(int eventIndex, GraphEventMeta meta);
@@ -259,6 +262,7 @@ class EventGraphView final : public QGraphicsView {
 	QVector<GraphObject> m_objects;
 	QVector<GraphEventMeta> m_eventMeta;      // per-event status flags (event icons)
 	QHash<int, GraphAnnotation> m_annotations; // node comment/color by annotation key
+	QHash<int, int> m_siblingOrders;           // tree node -> 1-based sibling order (corner marker)
 	BasicGraph m_basicGraph;
 	QString m_searchText; // graph search highlight query
 	int m_matchIndex = -1; // current match for next/prev navigation

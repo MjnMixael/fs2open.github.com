@@ -230,6 +230,11 @@ class CardItem : public QGraphicsItem {
 	void setAnnotationKey(int key) { m_annKey = key; }
 	int annotationKey() const { return m_annKey; }
 
+	// Top-left corner marker: a 1-based order among sibling sexp nodes (0 = none),
+	// or an asterisk when the card aggregates several nodes (aggregate wins).
+	void setOrder(int order) { m_order = order; update(); }
+	void setAggregate(bool aggregate) { m_aggregate = aggregate; update(); }
+
 	// Case-insensitive substring match against the card's visible text, for the
 	// graph search box. An empty query matches everything.
 	bool matchesQuery(const QString& q) const
@@ -336,12 +341,26 @@ class CardItem : public QGraphicsItem {
 			p->drawText(badge, Qt::AlignCenter, bt);
 		}
 
-		// Chip (role/kind) top-left.
+		// Top-left order marker: sibling order number (or "*" for an aggregate).
+		qreal chipX = inner.left();
+		if (m_aggregate || m_order > 0) {
+			const QString mark = m_aggregate ? QStringLiteral("*") : QString::number(m_order);
+			QFont mf = p->font();
+			mf.setBold(true);
+			mf.setPointSizeF(std::max(6.0, mf.pointSizeF() - 1.0));
+			p->setFont(mf);
+			p->setPen(m_style.nodeSubText);
+			const qreal markW = std::max(10.0, QFontMetricsF(mf).horizontalAdvance(mark) + 3.0);
+			p->drawText(QRectF(inner.left(), y, markW, metric::chipH), Qt::AlignLeft | Qt::AlignVCenter, mark);
+			chipX = inner.left() + markW + 3.0;
+		}
+
+		// Chip (role/kind) top-left (after the order marker, if any).
 		QFont chipFont = p->font();
 		chipFont.setPointSizeF(std::max(6.0, chipFont.pointSizeF() - 1.5));
 		p->setFont(chipFont);
 		p->setPen(m_chipColor);
-		p->drawText(QRectF(inner.left(), y, inner.width() * 0.45, metric::chipH),
+		p->drawText(QRectF(chipX, y, inner.left() + inner.width() * 0.45 - chipX, metric::chipH),
 			Qt::AlignLeft | Qt::AlignVCenter, m_chip.toUpper());
 		y += metric::chipH + 2.0;
 
@@ -458,6 +477,8 @@ class CardItem : public QGraphicsItem {
 	QColor  m_annColor;            // annotation color (invalid = none)
 	bool    m_hasComment = false;  // annotation comment present
 	int     m_annKey = -1;         // annotation key for the right-click menu (-1 = none)
+	int     m_order = 0;           // 1-based sibling order for the corner marker (0 = none)
+	bool    m_aggregate = false;   // card stands for many nodes -> corner shows "*"
 	QRectF  m_toggleRect;
 	EventGraphStyle m_style;
 	QVector<RefEdgeItem*> m_edges; // edges attached to this card (for live redraw on move)
@@ -603,6 +624,42 @@ class RefEdgeItem final : public QGraphicsPathItem {
 	{
 		if (m_endA && m_endB)
 			setPathBetween(m_endA->pos(), m_endB->pos());
+	}
+
+	// Chevrons overshoot the stroke slightly; pad the bounds so they aren't clipped.
+	QRectF boundingRect() const override { return QGraphicsPathItem::boundingRect().adjusted(-6, -6, 6, 6); }
+
+	void paint(QPainter* p, const QStyleOptionGraphicsItem* opt, QWidget* w) override
+	{
+		QGraphicsPathItem::paint(p, opt, w);
+		if (!m_isChain)
+			return;
+
+		// Subtle direction arrows along the chain line, in the line's color, pointing
+		// from the earlier event toward the later (chained) one.
+		const QPainterPath pth = path();
+		const qreal len = pth.length();
+		if (len < 26.0)
+			return;
+		p->save();
+		p->setRenderHint(QPainter::Antialiasing, true);
+		p->setPen(QPen(pen().color(), std::max(1.2, pen().widthF() - 0.6), Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin));
+		const qreal spacing = 36.0, sz = 4.0;
+		for (qreal d = spacing * 0.6; d < len - 4.0; d += spacing) {
+			const QPointF pt = pth.pointAtPercent(pth.percentAtLength(d));
+			const QPointF ahead = pth.pointAtPercent(pth.percentAtLength(std::min(len, d + 2.0)));
+			QPointF u = ahead - pt;
+			const qreal ul = qSqrt(u.x() * u.x() + u.y() * u.y());
+			if (ul < 0.01)
+				continue;
+			u /= ul;
+			const QPointF nrm(-u.y(), u.x());
+			const QPointF tip = pt + u * (sz * 0.6);
+			const QPointF back = pt - u * (sz * 0.6);
+			p->drawLine(tip, back + nrm * sz);
+			p->drawLine(tip, back - nrm * sz);
+		}
+		p->restore();
 	}
 
   private:
@@ -1730,6 +1787,7 @@ void EventGraphView::applyAnnotation(graphdetail::CardItem* card, int key)
 	if (!card)
 		return;
 	card->setAnnotationKey(key); // record even when unset, so the menu can add one
+	card->setOrder(m_siblingOrders.value(key, 0)); // corner order marker (0 = no parent)
 	const auto it = m_annotations.constFind(key);
 	if (it != m_annotations.constEnd())
 		card->setAnnotation(it->color, it->comment);
@@ -1743,6 +1801,7 @@ void EventGraphView::applyEventStatus(graphdetail::EventNodeItem* card, int even
 	const GraphEventMeta& m = m_eventMeta[eventIndex];
 	card->setStatusIcons(m.chained, m.directive, m.repeats, m.logging);
 	applyAnnotation(card, m.annotationKey);
+	card->setOrder(eventIndex + 1); // events are top-level siblings; show their order
 }
 
 bool EventGraphView::isEventNodeSelected() const
@@ -2480,8 +2539,9 @@ void EventGraphView::rebuildBasic()
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, posKey);
-		applyAnnotation(card, posKey); // sets display + annotationKey from posKey
+		applyAnnotation(card, posKey); // sets display + annotationKey + order from posKey
 		card->setAnnotationKey(menuKey); // override the menu target
+		card->setAggregate(menuKey == -1); // combined multi-ref: show "*" instead of an order
 		m_scene->addItem(card);
 		return card;
 	};
