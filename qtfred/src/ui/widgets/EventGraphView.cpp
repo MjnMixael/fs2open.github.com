@@ -203,6 +203,10 @@ class CardItem : public QGraphicsItem {
 	{
 		setFlag(ItemIsSelectable, true);
 		setFlag(ItemSendsGeometryChanges, true); // so moving the card can update its edges
+		// Card paint is heavy (fonts, elided text, icons); cache it to a pixmap so
+		// panning/zooming reuses it. update() (selection, annotation, order, status)
+		// invalidates the cache, so it stays correct.
+		setCacheMode(DeviceCoordinateCache);
 		// Show the normal pointer over cards instead of the pan hand.
 		setCursor(Qt::ArrowCursor);
 		setAcceptHoverEvents(true);
@@ -802,6 +806,8 @@ class MinimapWidget final : public QWidget {
 	// changes (rebuild) or the theme changes.
 	void regenerate()
 	{
+		if (!s_showMinimap)
+			return; // hidden: skip the expensive full-scene render until it's shown again
 		QRectF src = m_scene->itemsBoundingRect();
 		if (src.isEmpty()) {
 			m_cache = QPixmap();
@@ -1146,6 +1152,7 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 	setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
 	setViewportUpdateMode(QGraphicsView::BoundingRectViewportUpdate);
 	setTransformationAnchor(QGraphicsView::AnchorUnderMouse);
+	setCacheMode(QGraphicsView::CacheBackground); // grid is static; don't redraw it every frame
 	setBackgroundBrush(m_style.bgColor);
 	setFrameShape(QFrame::NoFrame);
 	setAlignment(Qt::AlignCenter);
@@ -1433,8 +1440,11 @@ void EventGraphView::positionOverlay()
 
 void EventGraphView::updateChromeVisibility()
 {
-	if (m_minimap)
+	if (m_minimap) {
 		m_minimap->setVisible(s_showMinimap);
+		if (s_showMinimap)
+			m_minimap->regenerate(); // regenerates were skipped while hidden; refresh now
+	}
 	if (m_legend)
 		m_legend->setVisible(s_showLegend);
 }
@@ -3198,6 +3208,7 @@ void EventGraphView::applyTheme(bool dark)
 {
 	m_style = EventGraphStyle::makeStyle(dark);
 	setBackgroundBrush(m_style.bgColor);
+	resetCachedContent(); // re-render the cached grid with the new colors
 	if (m_legend)
 		m_legend->update();
 	if (m_overlay)
