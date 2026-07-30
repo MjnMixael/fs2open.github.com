@@ -261,6 +261,9 @@ class EventGraphView final : public QGraphicsView {
 	// scene rect only grows, so without this a big swimlanes layout leaves radial
 	// / basic pinned to a corner and out of sync with the minimap.
 	void updateSceneRect();
+	// Rebuild the cached card/edge lists from the scene (once per rebuild), so the
+	// per-selection emphasis pass doesn't scan every scene item.
+	void refreshItemCaches();
 	// Selection-driven emphasis: reference-line on-select visibility + focus fade.
 	void applyEmphasis();
 	// Apply a node's comment/color annotation (by key), and event status icons.
@@ -316,6 +319,16 @@ class EventGraphView final : public QGraphicsView {
 	// Event card by event index (for lightweight per-card refresh + chain lines);
 	// rebuilt each rebuild (pointers die with the cleared scene).
 	QHash<int, graphdetail::EventNodeItem*> m_eventCards;
+	// Cached scene contents (refreshed once per rebuild) so applyEmphasis doesn't
+	// scan m_scene->items() on every selection.
+	QVector<graphdetail::CardItem*> m_cards;
+	QVector<graphdetail::RefEdgeItem*> m_edges;
+	// True while some card/edge is dimmed or hidden, so the emphasis pass can skip
+	// the whole scene when nothing needs it (and no leftover state to reset).
+	bool m_emphasisApplied = false;
+	// The scene changed since the caches were built; applyEmphasis refreshes them
+	// (once) before use.
+	bool m_itemCachesDirty = true;
 
 	qreal m_currentScale = 1.0;
 	const qreal kMinScale = 0.2;
