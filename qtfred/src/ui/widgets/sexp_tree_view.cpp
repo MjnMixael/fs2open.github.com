@@ -1128,11 +1128,15 @@ void sexp_tree_view::showContextMenuForItem(QTreeWidgetItem* h, const QPoint& gl
 		return;
 
 	// The tree is hidden behind the calling view, so route any data edit through a
-	// visible dialog instead of the invisible inline editor.
+	// visible dialog instead of the invisible inline editor, and anchor the operator
+	// quick-search popup at the menu position rather than the hidden item's rect.
 	_popupEditData = true;
+	_useSearchAnchor = true;
+	_searchAnchor = globalPos;
 	auto menu = buildContextMenu(h, expandOverride, expandEnabled);
 	menu->exec(globalPos);
 	_popupEditData = false;
+	_useSearchAnchor = false;
 }
 
 // Builds the complete right-click context menu for the given tree item.
@@ -1678,9 +1682,15 @@ void sexp_tree_view::startOperatorQuickSearch(QTreeWidgetItem* item, const QStri
 	int rowH = fm.height() + 6;
 	int h = (std::min(10, std::max(4, _opList->count())) * rowH) + _opEdit->sizeHint().height() + 12;
 
-	// Place below the item
-	QRect itemRect = visualItemRect(item);
-	QPoint topLeft = viewport()->mapToGlobal(itemRect.topLeft());
+	// Place below the item - or at the caller's anchor when the tree is hidden
+	// (driven from another view), since the item's rect would be off-screen.
+	QPoint topLeft;
+	if (_useSearchAnchor) {
+		topLeft = _searchAnchor;
+	} else {
+		QRect itemRect = visualItemRect(item);
+		topLeft = viewport()->mapToGlobal(itemRect.topLeft());
+	}
 	_opPopup->setGeometry(QRect(topLeft.x(), topLeft.y(), std::max(w, 260), h));
 	_opPopup->show();
 	_opEdit->setFocus();
@@ -1766,6 +1776,7 @@ void sexp_tree_view::endOperatorQuickSearch(bool confirm)
 					type |= SEXPT_MODIFIER;
 
 				_actions.replace_data(typed.toUtf8().constData(), type);
+				Q_EMIT modified(); // so undo captures it and dependent views refresh
 				setFocus(Qt::OtherFocusReason);
 				return; // done
 			}
