@@ -355,6 +355,10 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! is hidden, so inline editing would be invisible. When set, beginItemEdit() uses
 	//! a modal dialog instead. Set only for the duration of showContextMenuForItem().
 	bool _popupEditData = false;
+	//! When set (alongside _popupEditData), the operator quick-search popup opens at
+	//! _searchAnchor instead of the hidden tree item's rect.
+	bool _useSearchAnchor = false;
+	QPoint _searchAnchor;
 
 	int& root_item = _model.root_item;   //!< Alias for _model.root_item
 	int& item_index = _model.item_index; //!< Alias for _model.item_index (currently selected node)
