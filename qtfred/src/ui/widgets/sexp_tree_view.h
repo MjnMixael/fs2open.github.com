@@ -96,7 +96,8 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! Thin wrapper that converts NodeImage to QIcon and calls insertWithIcon().
 	QTreeWidgetItem* insert(const QString& lpszItem, NodeImage image = NodeImage::ROOT, QTreeWidgetItem* hParent = nullptr, QTreeWidgetItem* hInsertAfter = nullptr);
 
-	//! Returns the QTreeWidgetItem* handle for a given tree_nodes[] index.
+	//! Returns the QTreeWidgetItem* handle for a given tree_nodes[] index, or null
+	//! if the index is out of range or refers to a freed (SEXPT_UNUSED) slot.
 	QTreeWidgetItem* handle(int node) const;
 
 	//! Build and exec the standard right-click context menu for a given item, at a

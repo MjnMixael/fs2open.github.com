@@ -134,7 +134,7 @@ RefObjectKind EventReferenceIndex::classify(int opf, const char* token)
 	case OPF_IFF:
 		return RefObjectKind::Team;
 
-	// Ambiguous families — could name any of several object kinds.
+	// Ambiguous families -- could name any of several object kinds.
 	case OPF_SHIP_POINT:
 	case OPF_POINT:
 	case OPF_SHIP_WING:

@@ -472,7 +472,7 @@ void MissionEventsDialog::setCurrentEventView(int index)
 		loadAdvancedText();
 
 	// Rebuild the relationship graph when the graph view becomes current, but
-	// only if the events changed since we last built it — otherwise leave the
+	// only if the events changed since we last built it -- otherwise leave the
 	// widget untouched so its zoom/scroll/selection carry over.
 	if (index == GraphViewIndex) {
 		ui->eventGraph->setSearchText(QString()); // start with no highlight
@@ -497,7 +497,7 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::graphSelectionChanged, this, &MissionEventsDialog::updateEventUi);
 	// The New/Insert/Delete buttons depend on the graph sub-mode (New is Basic-only).
 	connect(ui->eventGraph, &EventGraphView::modeChanged, this, &MissionEventsDialog::updateEventCreateButtons);
-	// Right-click a node → comment/color annotation menu (same undo path as the
+	// Right-click a node -> comment/color annotation menu (same undo path as the
 	// tree's note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodeContextMenuRequested, this, &MissionEventsDialog::showGraphNodeMenu);
 	// Double-click an inline literal-arg bullet -> open its editor (number: quick-search; string: dialog).
@@ -895,7 +895,11 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			// subtreeAdded/annotationApplied/rootSelected signals.
 			_model->restoreEventWorkingState(blob);
 			ui->eventTree->restoreExpansionState(expanded);
-			applyEventFilter();
+			// Only the tree view treats eventSearchEdit as a row filter; in graph/advanced
+			// it holds a highlight/find term, and the tree is hidden and re-filtered on the
+			// way back, so don't hide rows by the wrong term here.
+			if (ui->eventViewStack->currentIndex() == TreeViewIndex)
+				applyEventFilter();
 			m_last_message_node = -1;
 			updateEventUi();
 			// If the advanced view is showing, the working events just changed

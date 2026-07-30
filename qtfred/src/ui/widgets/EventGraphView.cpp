@@ -58,7 +58,7 @@ static qreal s_ringSpacing = 210.0;
 
 // Basic-view node arrangement, remembered for the session like s_ringSpacing.
 // Custom honors saved per-node positions; Auto/Compact are computed layouts that
-// ignore them (non-destructive — saved positions stay in the file, just unused
+// ignore them (non-destructive -- saved positions stay in the file, just unused
 // while a computed preset is active). A manual drag switches back to Custom.
 enum class BasicLayout { Custom = 0, Auto = 1, Compact = 2 };
 static BasicLayout s_basicLayout = BasicLayout::Custom;
@@ -191,7 +191,7 @@ inline void drawStatusGlyph(QPainter* p, StatusGlyph g, const QRectF& box, const
 
 // A card: a role/kind chip (top-left), an optional event-name badge (top-right),
 // a bold title, an optional bulleted body (the operator's arguments), an
-// optional subtitle, and — when the body is long — an expand/collapse toggle.
+// optional subtitle, and -- when the body is long -- an expand/collapse toggle.
 class CardItem : public QGraphicsItem {
   public:
 	CardItem(qreal width, QColor fill, QColor chipColor, QString chip, QString title, QVector<QString> lines,
@@ -1820,7 +1820,7 @@ void EventGraphView::showEmptyMessage(const QString& text)
 	updateSceneRect();
 	zoomToFitAll();
 	if (m_minimap)
-		m_minimap->regenerate(); // content changed → re-render the cached overview
+		m_minimap->regenerate(); // content changed -> re-render the cached overview
 }
 
 void EventGraphView::setSearchText(const QString& text)
@@ -2020,6 +2020,8 @@ void EventGraphView::updateEventCard(int eventIndex, GraphEventMeta meta)
 	if (it != m_eventCards.constEnd())
 		it.value()->setStatusIcons(meta.chained, meta.directive, meta.repeats, meta.logging);
 	refreshChainLines();
+	if (m_minimap)
+		m_minimap->regenerate(); // icons/chain changed -- refresh the overview
 }
 
 // Remove and redraw the event-chain lines from the current event cards + meta.
@@ -2215,7 +2217,7 @@ void EventGraphView::rebuildRadial()
 	m_suppressSelectionSignal = false;
 	applyEmphasis();
 	if (m_minimap)
-		m_minimap->regenerate(); // content changed → re-render the cached overview
+		m_minimap->regenerate(); // content changed -> re-render the cached overview
 }
 
 void EventGraphView::rebuildSwimlanes()
@@ -2733,7 +2735,8 @@ void EventGraphView::rebuildBasic()
 	} else {
 		for (int di = 0; di < dups.size(); ++di)
 			// opPlaced[op] is now false for collapsed events, so their dup cards drop.
-			if (dups[di].placed && dups[di].op >= 0 && dups[di].op < nOps && opPlaced[dups[di].op])
+			if (dups[di].placed && dups[di].op >= 0 && dups[di].op < nOps && opPlaced[dups[di].op] &&
+				dups[di].objectIndex >= 0 && dups[di].objectIndex < nObj)
 				dupItem[di] = makeObjectCard(
 					g.objects[dups[di].objectIndex], dupPos[di], dups[di].leafTreeNode, dups[di].leafTreeNode);
 	}
@@ -2769,7 +2772,7 @@ void EventGraphView::rebuildBasic()
 	// Event cards (the trigger node for each event), like the other two modes.
 	for (int i = 0; i < nEvents; ++i) {
 		const BasicEventNode& en = g.events[i];
-		const QString name = (en.eventIndex < m_eventNames.size()) ? m_eventNames[en.eventIndex]
+		const QString name = (en.eventIndex >= 0 && en.eventIndex < m_eventNames.size()) ? m_eventNames[en.eventIndex]
 																   : tr("<event %1>").arg(en.eventIndex);
 		auto* card = new graphdetail::EventNodeItem(en.eventIndex, name, m_style);
 		card->setPos(eventPos[i]);
@@ -2826,7 +2829,8 @@ void EventGraphView::rebuildBasic()
 			for (int di = 0; di < dups.size(); ++di) {
 				const int oi = dups[di].op;
 				// Skip collapsed (unrendered) ops/dups so no edge dangles to a null card.
-				if (!dups[di].placed || oi < 0 || oi >= nOps || !opItem[oi] || !dupItem[di])
+				if (!dups[di].placed || oi < 0 || oi >= nOps || !opItem[oi] || !dupItem[di] ||
+					dups[di].objectIndex < 0 || dups[di].objectIndex >= nObj)
 					continue;
 				addEdge(opPos[oi], dupPos[di], m_style.colorFor(g.objects[dups[di].objectIndex].kind), opItem[oi],
 					dupItem[di]);
@@ -3144,11 +3148,13 @@ void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
 
 void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
 {
-	// A right-drag that panned the view should not also open the menu.
-	if (m_panMoved) {
-		m_panMoved = false;
+	// A right-drag that panned the view should not also open the menu. Only a
+	// mouse-triggered menu can follow a pan; a keyboard menu (Menu key / Shift+F10)
+	// must never be swallowed by a stale pan flag, so clear it either way.
+	const bool pannedIntoMenu = m_panMoved;
+	m_panMoved = false;
+	if (pannedIntoMenu && e->reason() == QContextMenuEvent::Mouse)
 		return;
-	}
 
 	// Right-click a card: an editable card opens the tree's context menu (via the
 	// dialog). An aggregate card stands for many nodes, so there's nothing to edit
