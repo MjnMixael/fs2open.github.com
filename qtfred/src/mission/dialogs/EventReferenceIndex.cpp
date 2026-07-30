@@ -323,7 +323,7 @@ int EventReferenceIndex::buildOpSubtree(const SexpTreeModel& tree, int node, int
 		op.expression = nodeToText(tree, node);
 	}
 
-	SCP_vector<SCP_string> inlineArgs;
+	SCP_vector<BasicInlineArg> inlineArgs;
 	SCP_vector<int> childOps;
 	SCP_vector<BasicObjRef> objectRefs;
 
@@ -360,7 +360,7 @@ int EventReferenceIndex::buildOpSubtree(const SexpTreeModel& tree, int node, int
 			ref.leafTreeNode = c;
 			objectRefs.push_back(ref);
 		} else {
-			inlineArgs.push_back(nodeToText(tree, c));
+			inlineArgs.push_back({nodeToText(tree, c), c});
 		}
 	}
 

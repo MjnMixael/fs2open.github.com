@@ -108,6 +108,11 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	void showContextMenuForItem(QTreeWidgetItem* h, const QPoint& globalPos,
 		const std::function<void()>& expandOverride = {}, bool expandEnabled = true);
 
+	//! Open the node editor for a given item from another view: a numeric/operator
+	//! slot gets the operator quick-search, other data the text dialog. Any popup is
+	//! anchored at globalPos since the tree is hidden behind the caller.
+	void editNodeExternally(QTreeWidgetItem* h, const QPoint& globalPos);
+
 	//! Looks up the sexp type (SEXPT_OPERATOR, SEXPT_STRING, etc.) for the node matching handle h.
 	//! Performs a linear scan of tree_nodes[].
 	int get_type(QTreeWidgetItem* h) const;

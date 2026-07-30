@@ -11,6 +11,7 @@
 #include <QContextMenuEvent>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
+#include <QGraphicsSceneHoverEvent>
 #include <QGraphicsSimpleTextItem>
 #include <QGraphicsPathItem>
 #include <QFontMetricsF>
@@ -235,6 +236,19 @@ class CardItem : public QGraphicsItem {
 	void setOrder(int order) { m_order = order; update(); }
 	void setAggregate(bool aggregate) { m_aggregate = aggregate; update(); }
 
+	// Inline literal-arg bullets: the tree node behind each body line, so a click on
+	// a bullet can target that specific arg for editing. bulletNodeAt maps a scene
+	// position to the arg node under it (-1 if not on a bullet, or no node known).
+	void setArgNodes(QVector<int> nodes) { m_argNodes = std::move(nodes); }
+	int bulletNodeAt(const QPointF& scenePos) const
+	{
+		const QPointF lp = mapFromScene(scenePos);
+		for (int i = 0; i < m_bulletRects.size(); ++i)
+			if (m_bulletRects[i].contains(lp))
+				return (i < m_argNodes.size()) ? m_argNodes[i] : -1;
+		return -1;
+	}
+
 	// Case-insensitive substring match against the card's visible text, for the
 	// graph search box. An empty query matches everything.
 	bool matchesQuery(const QString& q) const
@@ -384,11 +398,15 @@ class CardItem : public QGraphicsItem {
 		p->setPen(m_style.nodeSubText);
 		QFontMetricsF lfm(lineFont);
 		const int shown = visibleLineCount();
+		m_bulletRects.clear();
 		for (int i = 0; i < shown; ++i) {
+			const QRectF lineRect(inner.left(), y, inner.width(), metric::lineH);
 			const QString line = QString(QChar(0x2022)) + QLatin1Char(' ') + m_lines[i]; // bullet
 			const QString el = lfm.elidedText(line, Qt::ElideRight, inner.width());
-			p->drawText(QRectF(inner.left(), y, inner.width(), metric::lineH),
-				Qt::AlignLeft | Qt::AlignVCenter, el);
+			// Hit rect spans only the actual arg text, so the empty area past it still
+			// behaves as draggable card (cursor + click).
+			m_bulletRects.push_back(QRectF(inner.left(), y, lfm.horizontalAdvance(el), metric::lineH));
+			p->drawText(lineRect, Qt::AlignLeft | Qt::AlignVCenter, el);
 			y += metric::lineH;
 		}
 
@@ -438,6 +456,15 @@ class CardItem : public QGraphicsItem {
 	// out of line below, once RefEdgeItem is a complete type.
 	QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
+	// Over an inline arg bullet, show the normal pointer (it's a click/edit target)
+	// instead of the move cursor the rest of a draggable card uses.
+	void hoverMoveEvent(QGraphicsSceneHoverEvent* e) override
+	{
+		if (flags() & ItemIsMovable)
+			setCursor(bulletNodeAt(e->scenePos()) >= 0 ? Qt::ArrowCursor : Qt::SizeAllCursor);
+		QGraphicsItem::hoverMoveEvent(e);
+	}
+
 	bool hasToggle() const { return m_expandable && m_lines.size() > m_collapsedMax; }
 
 	int visibleLineCount() const
@@ -479,6 +506,8 @@ class CardItem : public QGraphicsItem {
 	int     m_annKey = -1;         // annotation key for the right-click menu (-1 = none)
 	int     m_order = 0;           // 1-based sibling order for the corner marker (0 = none)
 	bool    m_aggregate = false;   // card stands for many nodes -> corner shows "*"
+	QVector<int> m_argNodes;       // tree node per body line (inline literal args)
+	QVector<QRectF> m_bulletRects; // per-line hit rects, filled in paint()
 	QRectF  m_toggleRect;
 	EventGraphStyle m_style;
 	QVector<RefEdgeItem*> m_edges; // edges attached to this card (for live redraw on move)
@@ -2570,9 +2599,13 @@ void EventGraphView::rebuildBasic()
 			continue; // collapsed by the depth limit
 		const BasicOpNode& op = g.ops[oi];
 		QVector<QString> argList;
+		QVector<int> argNodes;
 		argList.reserve(static_cast<int>(op.inlineArgs.size()));
-		for (const auto& a : op.inlineArgs)
-			argList.push_back(QString::fromStdString(a));
+		argNodes.reserve(static_cast<int>(op.inlineArgs.size()));
+		for (const auto& a : op.inlineArgs) {
+			argList.push_back(QString::fromStdString(a.text));
+			argNodes.push_back(a.treeNode);
+		}
 		const QString evName = (op.eventIndex >= 0 && op.eventIndex < m_eventNames.size())
 			? m_eventNames[op.eventIndex] : QString();
 		auto* card = new graphdetail::SexpNodeItem(op.treeNode, op.eventIndex, op.isCond,
@@ -2583,6 +2616,7 @@ void EventGraphView::rebuildBasic()
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, op.posKey);
 		applyAnnotation(card, op.posKey);
+		card->setArgNodes(std::move(argNodes)); // enable per-bullet editing (Basic)
 		m_scene->addItem(card);
 		opItem[oi] = card;
 	}
@@ -2777,6 +2811,16 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 				e->accept();
 				return;
 			}
+			// A left-press on an inline arg bullet is a click/edit target: select the
+			// card but never start a drag or pan from it.
+			if (e->button() == Qt::LeftButton && card->bulletNodeAt(sp) >= 0) {
+				if (!card->isSelected()) {
+					m_scene->clearSelection();
+					card->setSelected(true);
+				}
+				e->accept();
+				return;
+			}
 			// Basic: remember the grabbed card so a real move persists on release.
 			if (m_mode == Mode::Basic && e->button() == Qt::LeftButton
 				&& (card->flags() & QGraphicsItem::ItemIsMovable)) {
@@ -2877,7 +2921,13 @@ void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
 			return;
 		}
 		if (auto* node = qgraphicsitem_cast<graphdetail::SexpNodeItem*>(it)) {
-			Q_EMIT nodeActivated(node->treeNode());
+			// Double-click an inline literal-arg bullet to edit that arg; elsewhere on
+			// the card, jump to it in the tree as before.
+			const int bulletNode = node->bulletNodeAt(sp);
+			if (bulletNode >= 0)
+				Q_EMIT nodeEditRequested(bulletNode, e->globalPos());
+			else
+				Q_EMIT nodeActivated(node->treeNode());
 			e->accept();
 			return;
 		}
@@ -2911,8 +2961,12 @@ void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
 				card->setSelected(true);
 			}
 			card->bringToFront();
-			if (card->annotationKey() != -1) {
-				Q_EMIT nodeContextMenuRequested(card->annotationKey(), e->globalPos());
+			// A right-click on an inline literal-arg bullet targets that specific arg
+			// node; otherwise the card's own node.
+			const int bulletNode = card->bulletNodeAt(mapToScene(e->pos()));
+			const int key = (bulletNode >= 0) ? bulletNode : card->annotationKey();
+			if (key != -1) {
+				Q_EMIT nodeContextMenuRequested(key, e->globalPos());
 			} else {
 				QMenu menu(this);
 				QAction* note =

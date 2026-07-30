@@ -177,6 +177,9 @@ class EventGraphView final : public QGraphicsView {
 	// at that node. Aggregate cards (radial center, swimlanes rows, combined
 	// objects) carry no key and don't emit this.
 	void nodeContextMenuRequested(int key, const QPoint& globalPos);
+	// Double-click on an inline literal-arg bullet: open the editor for that arg node
+	// (a number opens the quick-search; a string, the text dialog).
+	void nodeEditRequested(int treeNode, const QPoint& globalPos);
 
   protected:
 	void wheelEvent(QWheelEvent* e) override;
