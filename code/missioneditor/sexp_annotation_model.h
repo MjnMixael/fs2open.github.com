@@ -14,6 +14,7 @@ struct event_annotation {
 	float pos_x = 0.0f;  // saved graph-view position; 0,0 is a valid coord, so has_pos gates persistence
 	float pos_y = 0.0f;
 	bool has_pos = false;
+	bool collapsed = false; // graph-view: event subtree collapsed to just its event node
 };
 extern SCP_vector<event_annotation> Event_annotations;
 
