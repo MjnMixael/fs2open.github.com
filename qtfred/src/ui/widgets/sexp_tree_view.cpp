@@ -984,6 +984,11 @@ QTreeWidgetItem* sexp_tree_view::insertWithIcon(const QString& lpszItem, const Q
 
 // Returns the QTreeWidgetItem* handle for a given tree_nodes[] index.
 QTreeWidgetItem* sexp_tree_view::handle(int node) const {
+	// Guard against a stale/out-of-range index (e.g. a graph card carrying a key
+	// for a since-freed node): return null rather than reading tree_nodes[] OOB or
+	// handing back a dangling handle.
+	if (node < 0 || node >= static_cast<int>(tree_nodes.size()) || tree_nodes[node].type == SEXPT_UNUSED)
+		return nullptr;
 	return tree_item_handle(tree_nodes[node]);
 }
 

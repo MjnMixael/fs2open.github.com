@@ -1,6 +1,6 @@
 #pragma once
 
-// Events editor graph view — a relationship visualizer over the working sexps.
+// Events editor graph view -- a relationship visualizer over the working sexps.
 // Milestone 1 renders the "Radial" mode: pick a ship/wing and see every event
 // that references it. Modeled on CampaignMissionGraph (the existing QGraphicsView
 // node editor). Read-only for now; no graph editing.
@@ -160,12 +160,12 @@ class EventGraphView final : public QGraphicsView {
 	void zoomStep(bool zoomIn);
 
   signals:
-	// Single-click (select) an event or node card → sync-select that event
+	// Single-click (select) an event or node card -> sync-select that event
 	// elsewhere (e.g. the tree view) without switching views.
 	void eventSelected(int eventIndex);
-	// Double-click an event card → request a jump to that event in the tree view.
+	// Double-click an event card -> request a jump to that event in the tree view.
 	void eventActivated(int eventIndex);
-	// Double-click a condition/action node card → jump to that specific tree node.
+	// Double-click a condition/action node card -> jump to that specific tree node.
 	void nodeActivated(int treeNode);
 	// Basic view: one or more cards were dragged. Each entry is (annotation key,
 	// new scene position). A group drag reports the whole selection so it persists

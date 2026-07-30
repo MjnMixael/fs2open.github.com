@@ -6194,7 +6194,7 @@ void parse_event(mission *pm)
 	if (optional_string("$Annotations Start")) {
 		// annotations are only used in FRED
 		if (Fred_running) {
-			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:") || check_for_string("+Position:")) {
+			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:") || check_for_string("+Position:") || check_for_string("+Collapsed:")) {
 				event_annotation ea;
 				ea.path.push_back((int)(event - &Mission_events[0]));
 
