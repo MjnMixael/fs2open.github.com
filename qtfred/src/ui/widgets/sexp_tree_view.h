@@ -16,6 +16,8 @@
 #include <QShortcut>
 #include <QKeySequence>
 
+#include <functional>
+
 namespace fso::fred {
 
 class FredView;
@@ -96,6 +98,15 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 
 	//! Returns the QTreeWidgetItem* handle for a given tree_nodes[] index.
 	QTreeWidgetItem* handle(int node) const;
+
+	//! Build and exec the standard right-click context menu for a given item, at a
+	//! global screen position. Lets another view (e.g. the events graph) reuse the
+	//! tree's editing menu on a node while the tree is populated but not visible.
+	//! Accepts any item the tree owns, including labeled roots (not in tree_nodes).
+	//! When expandOverride is set, the "Expand All" item runs it (relabeled "Expand
+	//! Card") and is enabled per expandEnabled, so a graph card can expand instead.
+	void showContextMenuForItem(QTreeWidgetItem* h, const QPoint& globalPos,
+		const std::function<void()>& expandOverride = {}, bool expandEnabled = true);
 
 	//! Looks up the sexp type (SEXPT_OPERATOR, SEXPT_STRING, etc.) for the node matching handle h.
 	//! Performs a linear scan of tree_nodes[].
@@ -332,13 +343,18 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! to determine all enabled/disabled states, then constructs menus for Delete, Edit, Cut/Copy/Paste,
 	//! Add/Replace/Insert Operator (categorized submenus), Add/Replace Data, Variables, and Containers.
 	//! Operator actions connect to _actions.add_or_replace_operator(). Data actions connect to local handlers.
-	std::unique_ptr<QMenu> buildContextMenu(QTreeWidgetItem* h);
+	std::unique_ptr<QMenu> buildContextMenu(QTreeWidgetItem* h,
+		const std::function<void()>& expandOverride = {}, bool expandEnabled = true);
 
 	int& flag = _model.flag;                                    //!< Alias for _model.flag
 	SCP_vector<sexp_tree_item>& tree_nodes = _model.tree_nodes; //!< Alias for _model.tree_nodes
 	int& total_nodes = _model.total_nodes;                      //!< Alias for _model.total_nodes
 
 	bool _currently_editing = false; //!< True while the user is inline-editing a tree node's text
+	//! While a context menu is driven from another view (the events graph), the tree
+	//! is hidden, so inline editing would be invisible. When set, beginItemEdit() uses
+	//! a modal dialog instead. Set only for the duration of showContextMenuForItem().
+	bool _popupEditData = false;
 
 	int& root_item = _model.root_item;   //!< Alias for _model.root_item
 	int& item_index = _model.item_index; //!< Alias for _model.item_index (currently selected node)

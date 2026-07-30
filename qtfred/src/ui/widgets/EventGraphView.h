@@ -123,6 +123,10 @@ class EventGraphView final : public QGraphicsView {
 	// True when a currently-selected node is an event card (gates the property
 	// controls in the dialog).
 	bool isEventNodeSelected() const;
+	// The card with this annotation key has collapsed bullets to reveal (gates the
+	// graph's "Expand Card" menu item); expandNode reveals them.
+	bool nodeExpandable(int key) const;
+	void expandNode(int key);
 	// True when the Basic sub-mode is active (gates "New Event" in the dialog).
 	bool isBasicMode() const { return m_mode == Mode::Basic; }
 	// Pan/zoom to an event's card and select it (used after creating a new event).
@@ -165,6 +169,11 @@ class EventGraphView final : public QGraphicsView {
 	// The Basic/Radial/Swimlanes sub-mode changed (the dialog re-evaluates which
 	// event-management buttons apply).
 	void modeChanged();
+	// Right-click on an editable card (event / operator node / single-ref object).
+	// `key` is the node's annotation key; the dialog opens the tree's context menu
+	// at that node. Aggregate cards (radial center, swimlanes rows, combined
+	// objects) carry no key and don't emit this.
+	void nodeContextMenuRequested(int key, const QPoint& globalPos);
 
   protected:
 	void wheelEvent(QWheelEvent* e) override;
@@ -173,6 +182,7 @@ class EventGraphView final : public QGraphicsView {
 	void mouseMoveEvent(QMouseEvent* e) override;
 	void mouseReleaseEvent(QMouseEvent* e) override;
 	void mouseDoubleClickEvent(QMouseEvent* e) override;
+	void contextMenuEvent(QContextMenuEvent* e) override;
 	void keyPressEvent(QKeyEvent* e) override;
 	void resizeEvent(QResizeEvent* e) override;
 	void showEvent(QShowEvent* e) override;
