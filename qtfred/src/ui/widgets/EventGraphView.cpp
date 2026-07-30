@@ -957,13 +957,17 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 		for (QGraphicsItem* it : m_scene->selectedItems()) {
 			if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(it)) {
 				Q_EMIT eventSelected(ev->eventIndex());
-				return;
+				break;
 			}
 			if (auto* node = qgraphicsitem_cast<graphdetail::SexpNodeItem*>(it)) {
 				Q_EMIT eventSelected(node->eventIndex()); // sync-select the containing event
-				return;
+				break;
 			}
 		}
+		// The event-property controls are only meaningful for an event card, so
+		// tell the dialog to re-evaluate on every selection change (this fires for
+		// object / empty selections too, which emit no eventSelected).
+		Q_EMIT graphSelectionChanged();
 	});
 
 	setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
@@ -1324,13 +1328,151 @@ void EventGraphView::setMode(Mode mode)
 {
 	if (mode == m_mode)
 		return;
+
+	// Each mode keeps its own view: remember the current mode's zoom/center,
+	// selection, and object/filter settings before switching, then restore the
+	// target mode's remembered state below.
+	saveModeMemory();
+	m_scene->clearSelection(); // the rebuild shouldn't re-guess from the old scene
+
 	m_mode = mode;
 	m_panning = false;
 	applyModeViewport();
+
+	const GraphModeMemory& mem = m_modeMemory[static_cast<int>(mode)];
+
+	// Restore this mode's filters before the rebuild so it reproduces the same
+	// content the mode last showed.
+	if (mem.valid && mode == Mode::Swimlanes) {
+		m_swimKind = mem.swimKind;
+		m_focusObjects = mem.focusObjects;
+		m_focusEvents = mem.focusEvents;
+	}
 	populateSelectorForMode();
+	const bool selectorRestored = mem.valid && restoreSelectorSelection(mode, mem);
+
 	positionOverlay();
-	m_hasFramed = false; // re-fit for the new mode
+
+	m_hasFramed = false; // rebuild fits the whole graph; we override below if remembered
 	rebuildCurrent();
+
+	// Resume the remembered viewport + selection for this mode. Radial only if the
+	// remembered object still exists (otherwise keep the fresh fit-all).
+	const bool restoreView = mem.valid && (mode != Mode::Radial || selectorRestored);
+	if (restoreView) {
+		setTransform(mem.transform);
+		centerOn(mem.center);
+		m_currentScale = transform().m11();
+		m_hasFramed = true;
+		switch (mode) {
+		case Mode::Radial:
+			m_framedKey = mem.radialObjectKey;
+			break;
+		case Mode::Swimlanes:
+			m_framedKey = QStringLiteral("swim");
+			break;
+		case Mode::Basic:
+			m_framedKey = QStringLiteral("basic");
+			break;
+		}
+		applySavedSelection(mem);
+	}
+
+	Q_EMIT modeChanged();
+}
+
+// Snapshot the mode we're leaving so returning to it resumes where we left off.
+void EventGraphView::saveModeMemory()
+{
+	GraphModeMemory& mem = m_modeMemory[static_cast<int>(m_mode)];
+	mem.valid = true;
+	mem.transform = transform();
+	mem.center = mapToScene(viewport()->rect().center());
+
+	mem.selKind = 0;
+	mem.selEvent = -1;
+	mem.selOp.clear();
+	mem.selCond = false;
+	for (QGraphicsItem* gi : m_scene->selectedItems()) {
+		if (auto* nd = qgraphicsitem_cast<graphdetail::SexpNodeItem*>(gi)) {
+			mem.selKind = 2;
+			mem.selEvent = nd->eventIndex();
+			mem.selOp = nd->titleText();
+			mem.selCond = nd->isCond();
+			break;
+		}
+		if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(gi)) {
+			mem.selKind = 1;
+			mem.selEvent = ev->eventIndex();
+			break;
+		}
+	}
+
+	if (m_mode == Mode::Radial) {
+		const int row = selectedObjectRow();
+		mem.radialObjectKey = (row >= 0)
+			? QStringLiteral("%1|%2").arg(static_cast<int>(m_objects[row].kind)).arg(m_objects[row].name)
+			: QString();
+	} else if (m_mode == Mode::Swimlanes) {
+		mem.swimKind = m_swimKind;
+		mem.focusObjects = m_focusObjects;
+		mem.focusEvents = m_focusEvents;
+	}
+}
+
+// Point the selector at the mode's remembered subject (blocked so it doesn't
+// trigger its own rebuild). Returns false for Radial when the object is gone.
+bool EventGraphView::restoreSelectorSelection(Mode mode, const GraphModeMemory& mem)
+{
+	if (!m_objectCombo)
+		return false;
+	QSignalBlocker blocker(m_objectCombo);
+	if (mode == Mode::Radial) {
+		if (mem.radialObjectKey.isEmpty())
+			return false;
+		for (int i = 0; i < m_objectCombo->count(); ++i) {
+			bool ok = false;
+			const int idx = m_objectCombo->itemData(i).toInt(&ok);
+			if (!ok || idx < 0 || idx >= m_objects.size())
+				continue;
+			const QString key =
+				QStringLiteral("%1|%2").arg(static_cast<int>(m_objects[idx].kind)).arg(m_objects[idx].name);
+			if (key == mem.radialObjectKey) {
+				m_objectCombo->setCurrentIndex(i);
+				return true;
+			}
+		}
+		return false;
+	}
+	if (mode == Mode::Swimlanes) {
+		const int row = m_objectCombo->findData(static_cast<int>(mem.swimKind));
+		m_objectCombo->setCurrentIndex(row >= 0 ? row : 0);
+		return true;
+	}
+	return false; // Basic: the combo is the layout dropdown, nothing to restore
+}
+
+// Re-select the mode's remembered card on the freshly rebuilt scene.
+void EventGraphView::applySavedSelection(const GraphModeMemory& mem)
+{
+	if (mem.selKind == 0)
+		return;
+	for (QGraphicsItem* gi : m_scene->items()) {
+		if (mem.selKind == 1) {
+			auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(gi);
+			if (ev && ev->eventIndex() == mem.selEvent) {
+				ev->setSelected(true);
+				return;
+			}
+		} else if (mem.selKind == 2) {
+			auto* nd = qgraphicsitem_cast<graphdetail::SexpNodeItem*>(gi);
+			if (nd && nd->eventIndex() == mem.selEvent && nd->isCond() == mem.selCond
+				&& nd->titleText() == mem.selOp) {
+				nd->setSelected(true);
+				return;
+			}
+		}
+	}
 }
 
 // Swimlanes: fill the combo with "All object types" + each kind that is
@@ -1582,6 +1724,73 @@ void EventGraphView::applyEventStatus(graphdetail::EventNodeItem* card, int even
 	applyAnnotation(card, m.annotationKey);
 }
 
+bool EventGraphView::isEventNodeSelected() const
+{
+	for (QGraphicsItem* it : m_scene->selectedItems())
+		if (qgraphicsitem_cast<graphdetail::EventNodeItem*>(it))
+			return true;
+	return false;
+}
+
+// Pan/zoom to an event's card and select it (e.g. right after creating it).
+void EventGraphView::focusEvent(int eventIndex)
+{
+	const auto it = m_eventCards.constFind(eventIndex);
+	if (it == m_eventCards.constEnd())
+		return;
+	graphdetail::EventNodeItem* card = it.value();
+	fitInView(card->sceneBoundingRect().adjusted(-260, -180, 260, 180), Qt::KeepAspectRatio);
+	m_currentScale = transform().m11();
+	m_scene->clearSelection();
+	card->setSelected(true);
+	if (m_minimap)
+		m_minimap->update();
+}
+
+// Lightweight refresh after an event-property edit: update the one card's icons
+// (its annotation is unchanged) and redraw the chain lines (chained may have
+// toggled). No full rebuild, so positions and the rest of the scene are kept.
+void EventGraphView::updateEventCard(int eventIndex, GraphEventMeta meta)
+{
+	if (eventIndex >= 0 && eventIndex < m_eventMeta.size())
+		m_eventMeta[eventIndex] = meta;
+	const auto it = m_eventCards.constFind(eventIndex);
+	if (it != m_eventCards.constEnd())
+		it.value()->setStatusIcons(meta.chained, meta.directive, meta.repeats, meta.logging);
+	refreshChainLines();
+}
+
+// Remove and redraw the event-chain lines from the current event cards + meta.
+// Skipped in radial (it doesn't show every event, so a chain target is often
+// absent). A chained event links back to the previous event.
+void EventGraphView::refreshChainLines()
+{
+	if (m_mode == Mode::Radial)
+		return;
+
+	QVector<QGraphicsItem*> stale;
+	for (QGraphicsItem* it : m_scene->items())
+		if (auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it); e && e->isChain())
+			stale.push_back(it);
+	for (QGraphicsItem* it : stale) {
+		m_scene->removeItem(it);
+		delete it;
+	}
+
+	for (int ev = 1; ev < m_eventMeta.size(); ++ev) {
+		if (!m_eventMeta[ev].chained)
+			continue;
+		const auto a = m_eventCards.constFind(ev - 1);
+		const auto b = m_eventCards.constFind(ev);
+		if (a == m_eventCards.constEnd() || b == m_eventCards.constEnd())
+			continue;
+		auto* edge = new graphdetail::RefEdgeItem(a.value()->pos(), b.value()->pos(), m_style.chainColor, m_style,
+			/*chain=*/true);
+		edge->setEndpoints(a.value(), b.value());
+		m_scene->addItem(edge);
+	}
+}
+
 void EventGraphView::rebuildRadial()
 {
 	// Capture the current viewport and selection so a rebuild (after an edit,
@@ -1606,6 +1815,7 @@ void EventGraphView::rebuildRadial()
 
 	m_suppressSelectionSignal = true; // programmatic selection below shouldn't echo out
 	m_scene->clear();
+	m_eventCards.clear(); // pointers just died with the scene
 
 	const int row = selectedObjectRow();
 	if (row < 0 || !m_index) {
@@ -1706,6 +1916,7 @@ void EventGraphView::rebuildRadial()
 			evCard->setSelected(true);
 		applyEventStatus(evCard, ev);
 		m_scene->addItem(evCard);
+		m_eventCards.insert(ev, evCard);
 		if (s_refMode != RefLineMode::Off) {
 			auto* edge = new graphdetail::RefEdgeItem(center->pos(), evPos, m_style.entity, m_style);
 			edge->setEndpoints(center, evCard);
@@ -1757,6 +1968,7 @@ void EventGraphView::rebuildSwimlanes()
 
 	m_suppressSelectionSignal = true;
 	m_scene->clear();
+	m_eventCards.clear(); // pointers just died with the scene
 
 	if (!m_index) {
 		m_suppressSelectionSignal = false;
@@ -1956,7 +2168,6 @@ void EventGraphView::rebuildSwimlanes()
 	}
 
 	// Column headers (events).
-	QHash<int, graphdetail::EventNodeItem*> evHdr;
 	for (int p = 0; p < keepCols.size(); ++p) {
 		const int ev = cols[keepCols[p]];
 		const QString name = (ev >= 0 && ev < m_eventNames.size()) ? m_eventNames[ev] : tr("<event %1>").arg(ev);
@@ -1969,23 +2180,11 @@ void EventGraphView::rebuildSwimlanes()
 			hdr->setSelected(true); // tree-synced selection (orange)
 		applyEventStatus(hdr, ev);
 		m_scene->addItem(hdr);
-		evHdr.insert(ev, hdr);
+		m_eventCards.insert(ev, hdr);
 	}
 
-	// Chain lines between consecutive event columns (a chained event points back to
-	// the previous event); only drawn when both events are visible columns.
-	for (auto it = evHdr.constBegin(); it != evHdr.constEnd(); ++it) {
-		const int ev = it.key();
-		if (ev <= 0 || ev >= m_eventMeta.size() || !m_eventMeta[ev].chained)
-			continue;
-		const auto prev = evHdr.constFind(ev - 1);
-		if (prev == evHdr.constEnd())
-			continue;
-		auto* edge = new graphdetail::RefEdgeItem(prev.value()->pos(), it.value()->pos(), m_style.chainColor,
-			m_style, /*chain=*/true);
-		edge->setEndpoints(prev.value(), it.value());
-		m_scene->addItem(edge);
-	}
+	// Chain lines between consecutive event columns (only where both are present).
+	refreshChainLines();
 
 	// Row headers (objects); carry their key for the cross-filter click handler.
 	for (int p = 0; p < keepRows.size(); ++p) {
@@ -2043,6 +2242,7 @@ void EventGraphView::rebuildBasic()
 	m_dragItem = nullptr;
 	m_suppressSelectionSignal = true;
 	m_scene->clear();
+	m_eventCards.clear(); // pointers just died with the scene
 
 	const BasicGraph& g = m_basicGraph;
 	if (g.ops.empty()) {
@@ -2292,20 +2492,11 @@ void EventGraphView::rebuildBasic()
 		applyEventStatus(card, en.eventIndex);
 		m_scene->addItem(card);
 		evItem[i] = card;
+		m_eventCards.insert(en.eventIndex, card);
 	}
 
 	// Chain lines: a chained event points back to the previous event's node.
-	for (int i = 1; i < nEvents; ++i) {
-		const int ev = g.events[i].eventIndex;
-		if (ev < 0 || ev >= m_eventMeta.size() || !m_eventMeta[ev].chained)
-			continue;
-		if (!evItem[i] || !evItem[i - 1])
-			continue;
-		auto* edge = new graphdetail::RefEdgeItem(eventPos[i - 1], eventPos[i], m_style.chainColor, m_style,
-			/*chain=*/true);
-		edge->setEndpoints(evItem[i - 1], evItem[i]);
-		m_scene->addItem(edge);
-	}
+	refreshChainLines();
 
 	// Edges, carrying their endpoint card items for the selection-emphasis pass.
 	if (s_refMode != RefLineMode::Off) {

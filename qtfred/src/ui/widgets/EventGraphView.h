@@ -13,6 +13,8 @@
 #include <QColor>
 #include <QHash>
 #include <QSet>
+#include <QTransform>
+#include <QPointF>
 
 class QGraphicsScene;
 class QComboBox;
@@ -115,6 +117,16 @@ class EventGraphView final : public QGraphicsView {
 	// snapshot (keyed by annotation key). Both fed on every refresh.
 	void setEventMeta(QVector<GraphEventMeta> meta) { m_eventMeta = std::move(meta); }
 	void setAnnotations(QHash<int, GraphAnnotation> annotations) { m_annotations = std::move(annotations); }
+	// Lightweight refresh of one event card's status icons + chain lines after a
+	// property edit, without a full rebuild.
+	void updateEventCard(int eventIndex, GraphEventMeta meta);
+	// True when a currently-selected node is an event card (gates the property
+	// controls in the dialog).
+	bool isEventNodeSelected() const;
+	// True when the Basic sub-mode is active (gates "New Event" in the dialog).
+	bool isBasicMode() const { return m_mode == Mode::Basic; }
+	// Pan/zoom to an event's card and select it (used after creating a new event).
+	void focusEvent(int eventIndex);
 	// The whole-mission dataflow graph for the Basic view, with node positions
 	// already resolved from saved annotations by the dialog.
 	void setBasicGraph(BasicGraph graph) { m_basicGraph = std::move(graph); }
@@ -147,6 +159,12 @@ class EventGraphView final : public QGraphicsView {
 	// Basic view: a node card was dragged to a new position. `key` is the
 	// annotation key to persist the position under; (x, y) is the scene position.
 	void nodeMoved(int key, double x, double y);
+	// Any node selection change (including to an object or empty). The dialog uses
+	// it to re-evaluate whether the event-property controls should be live.
+	void graphSelectionChanged();
+	// The Basic/Radial/Swimlanes sub-mode changed (the dialog re-evaluates which
+	// event-management buttons apply).
+	void modeChanged();
 
   protected:
 	void wheelEvent(QWheelEvent* e) override;
@@ -162,6 +180,31 @@ class EventGraphView final : public QGraphicsView {
 
   private:
 	enum class Mode { Radial, Swimlanes, Basic };
+
+	// Remembered view state per graph mode, so switching Basic/Radial/Swimlanes
+	// and back restores that mode's zoom/center, selection, and object/filter
+	// settings instead of resetting. Indexed by static_cast<int>(Mode).
+	struct GraphModeMemory {
+		bool valid = false;
+		QTransform transform;
+		QPointF center;
+		// Selection identity (re-applied to the fresh scene after a rebuild).
+		int selKind = 0; // 0 none, 1 event, 2 node
+		int selEvent = -1;
+		QString selOp; // node title (kind 2)
+		bool selCond = false;
+		// Per-mode subject/filters.
+		QString radialObjectKey; // Radial: "kind|name" of the selected object
+		RefObjectKind swimKind = RefObjectKind::Unknown; // Swimlanes kind filter
+		QSet<QString> focusObjects;                      // Swimlanes cross-filter
+		QSet<int> focusEvents;
+	};
+	GraphModeMemory m_modeMemory[3];
+	// Snapshot the current mode's state; restore a mode's remembered selector row
+	// (returns false when the saved subject is gone) and its saved selection.
+	void saveModeMemory();
+	bool restoreSelectorSelection(Mode mode, const GraphModeMemory& mem);
+	void applySavedSelection(const GraphModeMemory& mem);
 
 	void buildOverlay();
 	void rebuildSettingsMenu();
@@ -181,6 +224,9 @@ class EventGraphView final : public QGraphicsView {
 	void rebuildRadial();
 	void rebuildSwimlanes();
 	void rebuildBasic();
+	// Redraw the event-chain lines (Basic + Swimlanes) from the current event
+	// cards + meta; used on rebuild and after a chain toggle.
+	void refreshChainLines();
 	// Shrink the scene rect back to the current content (+margin). The default
 	// scene rect only grows, so without this a big swimlanes layout leaves radial
 	// / basic pinned to a corner and out of sync with the minimap.
@@ -229,6 +275,9 @@ class EventGraphView final : public QGraphicsView {
 	graphdetail::MinimapWidget* m_minimap = nullptr;
 	// Top-right color-key legend.
 	graphdetail::LegendWidget* m_legend = nullptr;
+	// Event card by event index (for lightweight per-card refresh + chain lines);
+	// rebuilt each rebuild (pointers die with the cleared scene).
+	QHash<int, graphdetail::EventNodeItem*> m_eventCards;
 
 	qreal m_currentScale = 1.0;
 	const qreal kMinScale = 0.2;

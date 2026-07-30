@@ -490,6 +490,11 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::eventSelected, this, &MissionEventsDialog::selectEventInTree);
 	connect(ui->eventGraph, &EventGraphView::eventActivated, this, &MissionEventsDialog::jumpToEventInTree);
 	connect(ui->eventGraph, &EventGraphView::nodeActivated, this, &MissionEventsDialog::jumpToNodeInTree);
+	// Re-evaluate the event-property controls whenever the graph selection changes
+	// (they're live only while an event card is selected).
+	connect(ui->eventGraph, &EventGraphView::graphSelectionChanged, this, &MissionEventsDialog::updateEventUi);
+	// The New/Insert/Delete buttons depend on the graph sub-mode (New is Basic-only).
+	connect(ui->eventGraph, &EventGraphView::modeChanged, this, &MissionEventsDialog::updateEventCreateButtons);
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodeMoved, this, [this](int key, double x, double y) {
@@ -498,7 +503,8 @@ void MissionEventsDialog::initGraphView()
 		pushEventStateSnapshot(before, tr("Move Graph Node"));
 	});
 	// Data is (re)loaded when the graph view is first shown (refreshGraphView),
-	// mirroring how the advanced view loads its text on entry.
+	// mirroring how the advanced view loads its text on entry. Like the tree view,
+	// the graph is a working-copy view and does not react to external mission edits.
 }
 
 void MissionEventsDialog::rebuildReferenceIndex()
@@ -572,16 +578,10 @@ void MissionEventsDialog::refreshGraphView()
 	// Per-event status flags (shown as icons on event cards).
 	QVector<GraphEventMeta> meta;
 	meta.reserve(static_cast<int>(events.size()));
-	for (const auto& e : events) {
-		GraphEventMeta m;
-		m.chained = (e.chain_delay >= 0);
-		m.directive = !e.objective_text.empty();
-		m.repeats = (e.repeat_count != 1) || (e.flags & MEF_USING_TRIGGER_COUNT);
-		m.logging = (e.mission_log_flags != 0);
-		m.annotationKey = SexpAnnotationModel::rootKey(e.formula);
-		meta.push_back(m);
-	}
+	for (int i = 0; i < static_cast<int>(events.size()); ++i)
+		meta.push_back(buildEventMeta(i));
 	ui->eventGraph->setEventMeta(std::move(meta));
+	_graphEventCount = static_cast<int>(events.size());
 
 	// Node comment/color snapshot, keyed by annotation key.
 	QHash<int, GraphAnnotation> annotations;
@@ -708,9 +708,11 @@ void MissionEventsDialog::applyViewChrome(int index)
 	ui->btnFindPrev->setEnabled(arrowsEnabled);
 	ui->btnFindNext->setEnabled(arrowsEnabled);
 
-	// The whole event-controls column acts on the tree selection/order —
-	// disable it wholesale (labels included) outside the tree view.
-	ui->eventControlsContainer->setEnabled(treeView);
+	// The event-controls column acts on the selected event, which the graph view
+	// also tracks (an event-node selection sets m_cur_event just like the tree).
+	// So it's live in tree and graph; the reorder buttons stay tree-only via their
+	// own gate in updateEventMoveButtons.
+	ui->eventControlsContainer->setEnabled(treeView || graphView);
 
 	// The sexp help panels describe the selected tree node, so they're
 	// meaningless outside the tree view: clear them on the way out and
@@ -995,12 +997,16 @@ void MissionEventsDialog::updateEventUi() {
 	util::SignalBlockers blockers(this);
 
 	updateEventMoveButtons();
+	updateEventCreateButtons();
 
-	// Outside the tree view the per-event fields have no (visible) selection
-	// to act on, so take the same disabled path as "no event selected".
-	const bool treeViewActive = (ui->eventViewStack->currentIndex() == TreeViewIndex);
+	// The per-event fields act on the selected event. In the tree, selecting any
+	// node selects its event; in the graph, only an event card counts (selecting an
+	// operator / object / data node leaves the fields disabled, for clarity).
+	const int curView = ui->eventViewStack->currentIndex();
+	const bool controlsActive = (curView == TreeViewIndex)
+		|| (curView == GraphViewIndex && ui->eventGraph->isEventNodeSelected());
 
-	if (!_model->eventIsValid() || !treeViewActive) {
+	if (!_model->eventIsValid() || !controlsActive) {
 		ui->repeatCountBox->setValue(1);
 		ui->triggerCountBox->setValue(1);
 		ui->intervalTimeBox->setValue(1);
@@ -1023,6 +1029,7 @@ void MissionEventsDialog::updateEventUi() {
 		ui->editDirectiveText->setEnabled(false);
 		ui->editDirectiveKeypressText->setEnabled(false);
 		setEventLogEnabled(false);
+		syncGraphAfterEventUi();
 		return;
 	}
 
@@ -1074,6 +1081,42 @@ void MissionEventsDialog::updateEventUi() {
 	ui->checkLogLastRepeat->setChecked(_model->getLogLastRepeat());
 	ui->checkLogFirstTrigger->setChecked(_model->getLogFirstTrigger());
 	ui->checkLogLastTrigger->setChecked(_model->getLogLastTrigger());
+
+	syncGraphAfterEventUi();
+}
+
+// Reflect event-property edits onto the graph while it's the current view: a
+// lightweight per-card status/chain update when only a field changed, or a full
+// rebuild when the event count changed (event added/removed).
+void MissionEventsDialog::syncGraphAfterEventUi()
+{
+	if (ui->eventViewStack->currentIndex() != GraphViewIndex)
+		return;
+	const int count = static_cast<int>(_model->getEventList().size());
+	if (count != _graphEventCount) {
+		refreshGraphView(); // sets _graphEventCount
+		return;
+	}
+	if (_model->eventIsValid()) {
+		const int cur = _model->getCurrentlySelectedEvent();
+		ui->eventGraph->updateEventCard(cur, buildEventMeta(cur));
+	}
+}
+
+// Build the per-event status/annotation-key metadata for one event.
+GraphEventMeta MissionEventsDialog::buildEventMeta(int eventIndex) const
+{
+	GraphEventMeta m;
+	const auto& events = _model->getEventList();
+	if (eventIndex < 0 || eventIndex >= static_cast<int>(events.size()))
+		return m;
+	const mission_event& e = events[eventIndex];
+	m.chained = (e.chain_delay >= 0);
+	m.directive = !e.objective_text.empty();
+	m.repeats = (e.repeat_count != 1) || (e.flags & MEF_USING_TRIGGER_COUNT);
+	m.logging = (e.mission_log_flags != 0);
+	m.annotationKey = SexpAnnotationModel::rootKey(e.formula);
+	return m;
 }
 
 void MissionEventsDialog::updateEventMoveButtons()
@@ -1102,6 +1145,21 @@ void MissionEventsDialog::updateEventMoveButtons()
 	ui->eventUpBtn->setEnabled(canUp);
 	ui->eventDownBtn->setEnabled(canDown);
 	ui->eventMoveBottomBtn->setEnabled(canDown);
+}
+
+// New/Insert/Delete enablement per view. In the graph: New only in Basic (the new
+// node needs a spatial home), Insert never (it needs the tree order), Delete in
+// any mode once an event card is selected. The tree keeps them all live.
+void MissionEventsDialog::updateEventCreateButtons()
+{
+	const int view = ui->eventViewStack->currentIndex();
+	const bool tree = (view == TreeViewIndex);
+	const bool graph = (view == GraphViewIndex);
+	const bool basicGraph = graph && ui->eventGraph->isBasicMode();
+
+	ui->btnNewEvent->setEnabled(tree || basicGraph);
+	ui->btnInsertEvent->setEnabled(tree);
+	ui->btnDeleteEvent->setEnabled(tree || (graph && ui->eventGraph->isEventNodeSelected()));
 }
 
 void MissionEventsDialog::initHeadCombo() {
@@ -1415,7 +1473,10 @@ void MissionEventsDialog::on_btnNewEvent_clicked()
 	_model->createEvent();
 	_suppressTreeUndo = false;
 
-	updateEventUi();
+	updateEventUi(); // rebuilds the graph via syncGraphAfterEventUi (event count grew)
+	// In the graph, pan/zoom to the freshly-created event node and select it.
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+		ui->eventGraph->focusEvent(_model->getCurrentlySelectedEvent());
 	pushEventStateSnapshot(before, tr("Add Event"));
 }
 
@@ -1685,6 +1746,9 @@ void MissionEventsDialog::on_editDirectiveText_textChanged(const QString& text)
 	// The setter localizes the text, so read the stored value back.
 	const SCP_string after = _model->getEventDirectiveText();
 	updateEventBitmap();
+	// Refresh the graph card's directive icon without re-populating the fields
+	// (updateEventUi would reset this text edit's cursor mid-type).
+	syncGraphAfterEventUi();
 	if (before == after)
 		return;
 
@@ -1732,6 +1796,7 @@ void MissionEventsDialog::pushEventLogFlagCommand(int fieldConst, int mask, bool
 		return;
 
 	_model->setEventLogFlagAt(index, mask, checked);
+	updateEventUi(); // refresh dependent UI (and the graph's log icon) like the other field handlers
 
 	auto* cmd = new FieldEditCommand<bool>(
 	    fieldConst + index * FieldId::Event_FieldStride,
