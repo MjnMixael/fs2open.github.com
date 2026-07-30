@@ -28,7 +28,6 @@
 #include <QPair>
 #include <QPolygonF>
 #include <QRadioButton>
-#include <QRubberBand>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -222,6 +221,9 @@ class CardItem : public QGraphicsItem {
 		if (e)
 			m_edges.push_back(e);
 	}
+
+	// Drop a soon-to-be-deleted edge so a later move doesn't dereference it.
+	void removeEdge(RefEdgeItem* e) { m_edges.removeAll(e); }
 
 	// Raise above every other card; called on any click.
 	void bringToFront() { setZValue(s_cardTopZ += 1.0); }
@@ -464,8 +466,12 @@ class CardItem : public QGraphicsItem {
 	// draggable card otherwise uses.
 	void hoverMoveEvent(QGraphicsSceneHoverEvent* e) override
 	{
-		if (flags() & ItemIsMovable)
+		if (QApplication::keyboardModifiers() & Qt::ShiftModifier)
+			setCursor(Qt::OpenHandCursor); // Shift = pan mode, even over a card
+		else if (flags() & ItemIsMovable)
 			setCursor(wantsPointerAt(e->scenePos()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
+		else
+			setCursor(Qt::ArrowCursor);
 		QGraphicsItem::hoverMoveEvent(e);
 	}
 	virtual bool wantsPointerAt(const QPointF& scenePos) const { return bulletNodeAt(scenePos) >= 0; }
@@ -694,6 +700,19 @@ class RefEdgeItem final : public QGraphicsPathItem {
 	}
 	QGraphicsItem* endA() const { return m_endA; }
 	QGraphicsItem* endB() const { return m_endB; }
+
+	// Unregister from both endpoint cards before this edge is deleted, so their
+	// m_edges lists don't retain a dangling pointer (a later card move would
+	// dereference it). Safe only while the endpoint cards are still alive.
+	void detachEndpoints()
+	{
+		if (m_endA)
+			m_endA->removeEdge(this);
+		if (m_endB)
+			m_endB->removeEdge(this);
+		m_endA = nullptr;
+		m_endB = nullptr;
+	}
 
 	// Recompute the path from the endpoints' current positions (their scene
 	// origins are the card centers).
@@ -1144,7 +1163,15 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 	qApp->installEventFilter(this);
 }
 
-EventGraphView::~EventGraphView() = default;
+EventGraphView::~EventGraphView()
+{
+	// The scene (a child) is torn down after this body, deleting its cards. If one
+	// was selected, that fires selectionChanged -> graphSelectionChanged into the
+	// already-destructing parent dialog (a use-after-destroy assert). Sever the
+	// scene's connections to this view first so nothing echoes out during teardown.
+	if (m_scene)
+		disconnect(m_scene, nullptr, this, nullptr);
+}
 
 bool EventGraphView::eventFilter(QObject* watched, QEvent* event)
 {
@@ -1505,15 +1532,26 @@ void EventGraphView::reload()
 	rebuildCurrent();
 }
 
-// Basic drags cards individually, so the built-in ScrollHandDrag (which owns the
-// left drag) can't run there; empty-canvas panning is manual, hinted with the
-// open-hand cursor. The other modes pan on drag via ScrollHandDrag (which sets
-// its own cursor, so switching away from Basic restores the pan hand).
+// All modes use RubberBandDrag (left-drag on empty = box select) and pan manually
+// (middle / right / shift+left), matching the main viewport. The cursor is the
+// normal arrow unless panning (closed hand) or Shift is held (open hand).
 void EventGraphView::applyModeViewport()
 {
-	setDragMode(m_mode == Mode::Basic ? QGraphicsView::NoDrag : QGraphicsView::ScrollHandDrag);
-	if (m_mode == Mode::Basic)
+	// Left-drag on empty canvas rubber-band selects; cards drag/select normally.
+	// Panning is handled manually (middle / right / shift+left), matching the
+	// viewport. Left-drag on a movable card still moves it.
+	setDragMode(QGraphicsView::RubberBandDrag);
+	updatePanCursor();
+}
+
+void EventGraphView::updatePanCursor()
+{
+	if (m_panning && m_panMoved)
+		viewport()->setCursor(Qt::ClosedHandCursor);
+	else if (QApplication::keyboardModifiers() & Qt::ShiftModifier)
 		viewport()->setCursor(Qt::OpenHandCursor);
+	else
+		viewport()->unsetCursor();
 }
 
 void EventGraphView::setMode(Mode mode)
@@ -1982,13 +2020,14 @@ void EventGraphView::refreshChainLines()
 	if (m_mode == Mode::Radial)
 		return;
 
-	QVector<QGraphicsItem*> stale;
+	QVector<graphdetail::RefEdgeItem*> stale;
 	for (QGraphicsItem* it : m_scene->items())
 		if (auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it); e && e->isChain())
-			stale.push_back(it);
-	for (QGraphicsItem* it : stale) {
-		m_scene->removeItem(it);
-		delete it;
+			stale.push_back(e);
+	for (graphdetail::RefEdgeItem* e : stale) {
+		e->detachEndpoints(); // cards persist here; drop their dangling refs first
+		m_scene->removeItem(e);
+		delete e;
 	}
 
 	for (int ev = 1; ev < m_eventMeta.size(); ++ev) {
@@ -2825,7 +2864,20 @@ void EventGraphView::zoomToFitAll(qreal margin)
 	if (!rect.isEmpty()) {
 		fitInView(rect, Qt::KeepAspectRatio);
 		m_currentScale = transform().m11();
+		if (isVisible()) // a fit against a real, on-screen viewport is a good frame
+			m_framedWithSize = true;
 	}
+}
+
+// The graph may be built before the dialog is shown (opening straight onto the
+// graph view), when the viewport has no real size and the fit is bogus. Once the
+// view is actually on screen with real geometry, fit the content once so it's
+// visible; after that the user's zoom/pan is left alone.
+void EventGraphView::maybeInitialFrame()
+{
+	if (!m_framedWithSize && isVisible() && m_scene && !m_scene->items().isEmpty()
+		&& viewport()->width() > 1 && viewport()->height() > 1)
+		zoomToFitAll(); // sets m_framedWithSize (we're visible)
 }
 
 void EventGraphView::wheelEvent(QWheelEvent* e)
@@ -2869,9 +2921,22 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 {
 	const QPointF sp = mapToScene(e->pos());
 
-	// Swimlanes cross-filter: clicking a row header (object) or column header
-	// (event) drives the filter; Ctrl adds to the selection. Clicking empty
-	// canvas (a click, not a pan) clears the filter — handled on release.
+	// Pan (all modes): middle / right / shift+left drag. A right-click without a
+	// drag still opens the context menu (see contextMenuEvent). The closed-hand
+	// cursor appears once the drag actually moves.
+	if (e->button() == Qt::MiddleButton || e->button() == Qt::RightButton
+		|| (e->button() == Qt::LeftButton && (e->modifiers() & Qt::ShiftModifier))) {
+		m_panning = true;
+		m_panButton = e->button();
+		m_panMoved = false;
+		m_panLastPos = e->pos();
+		m_panPressPos = e->pos();
+		e->accept();
+		return;
+	}
+
+	// Swimlanes cross-filter: a plain left-click on a row/column header drives the
+	// filter; a click on empty canvas (handled on release) clears it.
 	m_pressOnEmpty = false;
 	if (m_mode == Mode::Swimlanes && e->button() == Qt::LeftButton) {
 		const bool ctrl = e->modifiers().testFlag(Qt::ControlModifier);
@@ -2902,26 +2967,24 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 		}
 	}
 
+	// Card-specific handling for a plain left-press (collapse box, arg bullet, and
+	// remembering a grabbed movable card so the move persists).
 	m_dragItem = nullptr;
 	for (QGraphicsItem* it : m_scene->items(sp)) {
 		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
 			card->bringToFront(); // clicked card jumps above overlaps
-			// A left-press on an event's collapse box toggles its subtree.
-			if (e->button() == Qt::LeftButton) {
-				if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(card);
-					ev && ev->collapseToggleAt(sp)) {
-					Q_EMIT eventCollapseToggled(ev->eventIndex());
-					e->accept();
-					return;
-				}
+			if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(card);
+				ev && ev->collapseToggleAt(sp)) {
+				Q_EMIT eventCollapseToggled(ev->eventIndex());
+				e->accept();
+				return;
 			}
 			if (card->handleToggleClick(sp)) {
 				e->accept();
 				return;
 			}
-			// A left-press on an inline arg bullet is a click/edit target: select the
-			// card but never start a drag or pan from it.
-			if (e->button() == Qt::LeftButton && card->bulletNodeAt(sp) >= 0) {
+			// An arg bullet is a click/edit target: select the card, never drag it.
+			if (card->bulletNodeAt(sp) >= 0) {
 				if (!card->isSelected()) {
 					m_scene->clearSelection();
 					card->setSelected(true);
@@ -2929,9 +2992,7 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 				e->accept();
 				return;
 			}
-			// Basic: remember the grabbed card so a real move persists on release.
-			if (m_mode == Mode::Basic && e->button() == Qt::LeftButton
-				&& (card->flags() & QGraphicsItem::ItemIsMovable)) {
+			if (m_mode == Mode::Basic && (card->flags() & QGraphicsItem::ItemIsMovable)) {
 				m_dragItem = card;
 				m_dragStartPos = card->pos();
 			}
@@ -2939,40 +3000,18 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 		}
 	}
 
-	// Basic: Ctrl/Shift + left drag on empty canvas rubber-band selects (plain drag
-	// still pans, below).
-	if (m_mode == Mode::Basic && e->button() == Qt::LeftButton && !m_dragItem
-		&& (e->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {
-		m_rubberOrigin = e->pos();
-		if (!m_rubberBand)
-			m_rubberBand = new QRubberBand(QRubberBand::Rectangle, viewport());
-		m_rubberBand->setGeometry(QRect(m_rubberOrigin, QSize()));
-		m_rubberBand->show();
-		e->accept();
-		return;
-	}
-
-	// Basic: a left press on empty canvas (no card grabbed) pans the view, since
-	// NoDrag disables the built-in ScrollHandDrag.
-	if (m_mode == Mode::Basic && e->button() == Qt::LeftButton && !m_dragItem) {
-		m_panning = true;
-		m_panLastPos = e->pos();
-		viewport()->setCursor(Qt::ClosedHandCursor);
-		e->accept();
-		return;
-	}
-
+	// Empty canvas rubber-band selects, a card selects/moves - all via QGraphicsView
+	// (RubberBandDrag mode).
 	QGraphicsView::mousePressEvent(e);
 }
 
 void EventGraphView::mouseMoveEvent(QMouseEvent* e)
 {
-	if (m_rubberBand && m_rubberBand->isVisible()) {
-		m_rubberBand->setGeometry(QRect(m_rubberOrigin, e->pos()).normalized());
-		e->accept();
-		return;
-	}
 	if (m_panning) {
+		if (!m_panMoved && (e->pos() - m_panPressPos).manhattanLength() > 3) {
+			m_panMoved = true;
+			viewport()->setCursor(Qt::ClosedHandCursor);
+		}
 		const QPoint delta = e->pos() - m_panLastPos;
 		m_panLastPos = e->pos();
 		horizontalScrollBar()->setValue(horizontalScrollBar()->value() - delta.x());
@@ -2981,26 +3020,18 @@ void EventGraphView::mouseMoveEvent(QMouseEvent* e)
 		return;
 	}
 	QGraphicsView::mouseMoveEvent(e);
+	// Hovering empty canvas: reflect the Shift pan-ready cursor (cards set their own).
+	if (e->buttons() == Qt::NoButton)
+		updatePanCursor();
 }
 
 void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 {
-	// Basic: finish a rubber-band select - add the enclosed cards to the selection.
-	if (m_rubberBand && m_rubberBand->isVisible() && e->button() == Qt::LeftButton) {
-		const QRect band = m_rubberBand->geometry();
-		m_rubberBand->hide();
-		const QRectF sceneRect = mapToScene(band).boundingRect();
-		for (QGraphicsItem* gi : m_scene->items(sceneRect, Qt::IntersectsItemBoundingRect))
-			if (dynamic_cast<graphdetail::CardItem*>(gi))
-				gi->setSelected(true);
-		e->accept();
-		return;
-	}
-
-	// Basic: end a manual empty-canvas pan.
-	if (m_panning && e->button() == Qt::LeftButton) {
+	// End a pan (middle / right / shift+left).
+	if (m_panning && e->button() == m_panButton) {
 		m_panning = false;
-		viewport()->setCursor(Qt::OpenHandCursor);
+		m_panButton = Qt::NoButton;
+		updatePanCursor();
 		e->accept();
 		return;
 	}
@@ -3043,7 +3074,7 @@ void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 		&& (!m_focusObjects.isEmpty() || !m_focusEvents.isEmpty());
 	m_pressOnEmpty = false;
 
-	QGraphicsView::mouseReleaseEvent(e); // let ScrollHandDrag settle its state first
+	QGraphicsView::mouseReleaseEvent(e); // finish selection / rubber-band first
 
 	if (emptyClick) {
 		clearSwimFocus();
@@ -3103,6 +3134,12 @@ void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
 
 void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
 {
+	// A right-drag that panned the view should not also open the menu.
+	if (m_panMoved) {
+		m_panMoved = false;
+		return;
+	}
+
 	// Right-click a card: an editable card opens the tree's context menu (via the
 	// dialog). An aggregate card stands for many nodes, so there's nothing to edit
 	// directly - show a short disabled note rather than ignoring the click.
@@ -3139,12 +3176,14 @@ void EventGraphView::resizeEvent(QResizeEvent* e)
 {
 	QGraphicsView::resizeEvent(e);
 	positionOverlay();
+	maybeInitialFrame();
 }
 
 void EventGraphView::showEvent(QShowEvent* e)
 {
 	QGraphicsView::showEvent(e);
 	positionOverlay();
+	maybeInitialFrame();
 }
 
 void EventGraphView::scrollContentsBy(int dx, int dy)

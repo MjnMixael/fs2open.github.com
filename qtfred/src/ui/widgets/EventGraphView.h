@@ -22,7 +22,6 @@ class QComboBox;
 class QButtonGroup;
 class QWidget;
 class QMenu;
-class QRubberBand;
 
 namespace fso::fred {
 
@@ -238,6 +237,12 @@ class EventGraphView final : public QGraphicsView {
 	// Drag mode + pan cursor derived from the current mode. Called on construct
 	// and on every mode change, so the default view is a one-line change.
 	void applyModeViewport();
+	// Set the viewport cursor: closed hand while panning, open hand while Shift is
+	// held (pan-ready), otherwise the normal arrow.
+	void updatePanCursor();
+	// One-time re-fit once the viewport has a real size (the graph may have been
+	// built while the dialog was still hidden, framing against a zero-size viewport).
+	void maybeInitialFrame();
 	void applyTheme(bool dark);
 	void populateSelector();
 	void populateKindFilter();
@@ -286,11 +291,14 @@ class EventGraphView final : public QGraphicsView {
 	QPointF m_dragStartPos;
 	// Basic view uses NoDrag (so cards drag individually), so panning on empty
 	// canvas is handled manually.
-	bool   m_panning = false;
-	QPoint m_panLastPos;
-	// Basic view: modifier + drag on empty canvas rubber-band selects cards.
-	QRubberBand* m_rubberBand = nullptr;
-	QPoint       m_rubberOrigin;
+	// Panning (all modes): middle / right / shift+left drag. m_panButton is the
+	// button that started it; m_panMoved gates the right-click menu (a right-drag
+	// that panned should not open the menu).
+	bool          m_panning = false;
+	bool          m_panMoved = false;
+	Qt::MouseButton m_panButton = Qt::NoButton;
+	QPoint        m_panLastPos;
+	QPoint        m_panPressPos;
 
 	EventGraphStyle m_style;
 	Mode m_mode = Mode::Basic;
@@ -317,6 +325,9 @@ class EventGraphView final : public QGraphicsView {
 	// same object is still shown, instead of re-fitting to the whole graph.
 	QString m_framedKey;
 	bool    m_hasFramed = false;
+	// True once the content has been fit against a real (sized) viewport. Guards the
+	// one-time re-fit when the graph was built before the dialog was shown.
+	bool    m_framedWithSize = false;
 	bool    m_suppressSelectionSignal = false;
 
 	// Swimlanes filters. m_swimKind == Unknown means "all kinds".
