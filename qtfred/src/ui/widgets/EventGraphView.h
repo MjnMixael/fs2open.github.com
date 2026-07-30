@@ -15,12 +15,14 @@
 #include <QSet>
 #include <QTransform>
 #include <QPointF>
+#include <QPair>
 
 class QGraphicsScene;
 class QComboBox;
 class QButtonGroup;
 class QWidget;
 class QMenu;
+class QRubberBand;
 
 namespace fso::fred {
 
@@ -166,9 +168,10 @@ class EventGraphView final : public QGraphicsView {
 	void eventActivated(int eventIndex);
 	// Double-click a condition/action node card → jump to that specific tree node.
 	void nodeActivated(int treeNode);
-	// Basic view: a node card was dragged to a new position. `key` is the
-	// annotation key to persist the position under; (x, y) is the scene position.
-	void nodeMoved(int key, double x, double y);
+	// Basic view: one or more cards were dragged. Each entry is (annotation key,
+	// new scene position). A group drag reports the whole selection so it persists
+	// as a single undo step.
+	void nodesMoved(const QVector<QPair<int, QPointF>>& moves);
 	// Any node selection change (including to an object or empty). The dialog uses
 	// it to re-evaluate whether the event-property controls should be live.
 	void graphSelectionChanged();
@@ -229,6 +232,7 @@ class EventGraphView final : public QGraphicsView {
 
 	void buildOverlay();
 	void rebuildSettingsMenu();
+	void exportImage(); // render the whole scene to a PNG the user picks
 	void positionOverlay();
 	void updateChromeVisibility();
 	// Drag mode + pan cursor derived from the current mode. Called on construct
@@ -277,13 +281,16 @@ class EventGraphView final : public QGraphicsView {
 	int m_matchIndex = -1; // current match for next/prev navigation
 
 	// Basic view drag tracking: the card grabbed on press and its starting scene
-	// position, so a real move (not a click) emits nodeMoved on release.
+	// position, so a real move (not a click) emits nodesMoved on release.
 	graphdetail::CardItem* m_dragItem = nullptr;
 	QPointF m_dragStartPos;
 	// Basic view uses NoDrag (so cards drag individually), so panning on empty
 	// canvas is handled manually.
 	bool   m_panning = false;
 	QPoint m_panLastPos;
+	// Basic view: modifier + drag on empty canvas rubber-band selects cards.
+	QRubberBand* m_rubberBand = nullptr;
+	QPoint       m_rubberOrigin;
 
 	EventGraphStyle m_style;
 	Mode m_mode = Mode::Basic;

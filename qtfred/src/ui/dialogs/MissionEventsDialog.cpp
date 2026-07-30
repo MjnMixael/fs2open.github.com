@@ -506,10 +506,13 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::eventCollapseToggled, this, &MissionEventsDialog::toggleEventCollapse);
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
-	connect(ui->eventGraph, &EventGraphView::nodeMoved, this, [this](int key, double x, double y) {
+	connect(ui->eventGraph, &EventGraphView::nodesMoved, this, [this](const QVector<QPair<int, QPointF>>& moves) {
+		if (moves.isEmpty())
+			return;
 		const QByteArray before = _model->captureEventWorkingState();
-		_model->setNodeGraphPos(key, static_cast<float>(x), static_cast<float>(y));
-		pushEventStateSnapshot(before, tr("Move Graph Node"));
+		for (const auto& m : moves)
+			_model->setNodeGraphPos(m.first, static_cast<float>(m.second.x()), static_cast<float>(m.second.y()));
+		pushEventStateSnapshot(before, moves.size() > 1 ? tr("Move Graph Nodes") : tr("Move Graph Node"));
 	});
 	// Data is (re)loaded when the graph view is first shown (refreshGraphView),
 	// mirroring how the advanced view loads its text on entry. Like the tree view,

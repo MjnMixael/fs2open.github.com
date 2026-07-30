@@ -9,6 +9,7 @@
 #include <QCheckBox>
 #include <QComboBox>
 #include <QContextMenuEvent>
+#include <QFileDialog>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsSceneHoverEvent>
@@ -18,6 +19,7 @@
 #include <QHash>
 #include <QHBoxLayout>
 #include <QIcon>
+#include <QImage>
 #include <QKeyEvent>
 #include <QLabel>
 #include <QMenu>
@@ -26,6 +28,7 @@
 #include <QPair>
 #include <QPolygonF>
 #include <QRadioButton>
+#include <QRubberBand>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPixmap>
@@ -1339,6 +1342,44 @@ void EventGraphView::rebuildSettingsMenu()
 			rebuildBasic();
 		});
 	}
+
+	// --- Export (all modes) ---
+	m_settingsMenu->addSeparator();
+	m_settingsMenu->addAction(tr("Export image..."), this, [this]() { exportImage(); });
+}
+
+// Render the whole graph scene to a PNG the user picks. Independent of the
+// current zoom/pan; overlays (minimap/legend) are widgets, not scene items, so
+// they aren't included.
+void EventGraphView::exportImage()
+{
+	if (!m_scene || m_scene->items().isEmpty())
+		return;
+
+	const QString path = QFileDialog::getSaveFileName(this, tr("Export Graph Image"),
+		QStringLiteral("events-graph.png"), tr("PNG Image (*.png)"));
+	if (path.isEmpty())
+		return;
+
+	QRectF rect = m_scene->itemsBoundingRect().adjusted(-24, -24, 24, 24);
+	if (rect.isEmpty())
+		return;
+
+	// 2x for crisp text, capped so a huge graph doesn't blow up memory.
+	qreal scale = 2.0;
+	const qreal longest = std::max(rect.width(), rect.height()) * scale;
+	const qreal maxDim = 8000.0;
+	if (longest > maxDim)
+		scale *= maxDim / longest;
+
+	QImage image(QSize(qCeil(rect.width() * scale), qCeil(rect.height() * scale)), QImage::Format_ARGB32);
+	image.fill(m_style.bgColor);
+	QPainter painter(&image);
+	painter.setRenderHint(QPainter::Antialiasing, true);
+	painter.setRenderHint(QPainter::TextAntialiasing, true);
+	m_scene->render(&painter, QRectF(image.rect()), rect);
+	painter.end();
+	image.save(path, "PNG");
 }
 
 // Keep the overlay hugging the top-left corner, sized to its (variable-width)
@@ -2898,6 +2939,19 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 		}
 	}
 
+	// Basic: Ctrl/Shift + left drag on empty canvas rubber-band selects (plain drag
+	// still pans, below).
+	if (m_mode == Mode::Basic && e->button() == Qt::LeftButton && !m_dragItem
+		&& (e->modifiers() & (Qt::ControlModifier | Qt::ShiftModifier))) {
+		m_rubberOrigin = e->pos();
+		if (!m_rubberBand)
+			m_rubberBand = new QRubberBand(QRubberBand::Rectangle, viewport());
+		m_rubberBand->setGeometry(QRect(m_rubberOrigin, QSize()));
+		m_rubberBand->show();
+		e->accept();
+		return;
+	}
+
 	// Basic: a left press on empty canvas (no card grabbed) pans the view, since
 	// NoDrag disables the built-in ScrollHandDrag.
 	if (m_mode == Mode::Basic && e->button() == Qt::LeftButton && !m_dragItem) {
@@ -2913,6 +2967,11 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 
 void EventGraphView::mouseMoveEvent(QMouseEvent* e)
 {
+	if (m_rubberBand && m_rubberBand->isVisible()) {
+		m_rubberBand->setGeometry(QRect(m_rubberOrigin, e->pos()).normalized());
+		e->accept();
+		return;
+	}
 	if (m_panning) {
 		const QPoint delta = e->pos() - m_panLastPos;
 		m_panLastPos = e->pos();
@@ -2926,6 +2985,18 @@ void EventGraphView::mouseMoveEvent(QMouseEvent* e)
 
 void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 {
+	// Basic: finish a rubber-band select - add the enclosed cards to the selection.
+	if (m_rubberBand && m_rubberBand->isVisible() && e->button() == Qt::LeftButton) {
+		const QRect band = m_rubberBand->geometry();
+		m_rubberBand->hide();
+		const QRectF sceneRect = mapToScene(band).boundingRect();
+		for (QGraphicsItem* gi : m_scene->items(sceneRect, Qt::IntersectsItemBoundingRect))
+			if (dynamic_cast<graphdetail::CardItem*>(gi))
+				gi->setSelected(true);
+		e->accept();
+		return;
+	}
+
 	// Basic: end a manual empty-canvas pan.
 	if (m_panning && e->button() == Qt::LeftButton) {
 		m_panning = false;
@@ -2941,10 +3012,26 @@ void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 		QGraphicsView::mouseReleaseEvent(e); // let the item finish its move first
 		const QPointF now = item->pos();
 		if ((now - m_dragStartPos).manhattanLength() > 2) {
-			bool ok = false;
-			const int key = item->data(0).toInt(&ok);
-			if (ok)
-				Q_EMIT nodeMoved(key, now.x(), now.y());
+			// Qt moves the whole selection with the grabbed card, so persist every
+			// selected card's new position - as one undo step for a group drag.
+			QVector<QPair<int, QPointF>> moves;
+			const auto sel = m_scene->selectedItems();
+			if (sel.size() > 1) {
+				for (QGraphicsItem* gi : sel)
+					if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi)) {
+						bool ok = false;
+						const int key = c->data(0).toInt(&ok);
+						if (ok)
+							moves.push_back({key, c->pos()});
+					}
+			} else {
+				bool ok = false;
+				const int key = item->data(0).toInt(&ok);
+				if (ok)
+					moves.push_back({key, now});
+			}
+			if (!moves.isEmpty())
+				Q_EMIT nodesMoved(moves);
 			setBasicLayoutToCustom(); // a manual move puts us in the Custom arrangement
 		}
 		return;
@@ -3021,13 +3108,14 @@ void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
 	// directly - show a short disabled note rather than ignoring the click.
 	for (QGraphicsItem* it : items(e->pos())) {
 		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
-			// Select the card first so its border shows while the menu is open
-			// (matches right-click-selects behavior in the tree).
-			if (!card->isSelected()) {
+			card->bringToFront();
+			// Only one node is editable at a time, so a right-click reduces any
+			// multi-selection to just the clicked card (its border shows while the
+			// menu is open), then shows that card's menu.
+			if (m_scene->selectedItems().size() != 1 || !card->isSelected()) {
 				m_scene->clearSelection();
 				card->setSelected(true);
 			}
-			card->bringToFront();
 			// A right-click on an inline literal-arg bullet targets that specific arg
 			// node; otherwise the card's own node.
 			const int bulletNode = card->bulletNodeAt(mapToScene(e->pos()));
