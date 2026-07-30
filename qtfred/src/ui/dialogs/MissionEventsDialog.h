@@ -7,6 +7,7 @@
 #include <QDialog>
 #include <QListWidget>
 #include <QUndoStack>
+#include <QPoint>
 
 #include "ui/widgets/sexp_tree_view.h"
 
@@ -153,6 +154,12 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void initGraphView();
 	void rebuildReferenceIndex();
 	void refreshGraphView();
+	void refreshGraphIfCurrent(); // refreshGraphView() only when the graph is shown
+	// Right-click a graph card: reuse the tree's context menu at that node. `key`
+	// is the card's annotation key; treeItemForAnnotationKey resolves it to the
+	// tree item (a tree_nodes[] node, or an event's labeled root) for the menu.
+	void showGraphNodeMenu(int key, const QPoint& globalPos);
+	QTreeWidgetItem* treeItemForAnnotationKey(int key) const;
 	void selectEventInTree(int eventIndex); // select the event's root, no view switch
 	void jumpToEventInTree(int eventIndex);  // switch to tree view, then select
 	void jumpToNodeInTree(int treeNode);     // switch to tree view, then hilite the node

@@ -314,6 +314,7 @@ void MissionEventsDialog::initEventWidgets() {
 			const QByteArray before = _model->captureEventWorkingState();
 			_model->setNodeAnnotation(key, text);
 			pushEventStateSnapshot(before, tr("Edit Node Note"));
+			refreshGraphIfCurrent();
 		}
 	});
 
@@ -323,6 +324,7 @@ void MissionEventsDialog::initEventWidgets() {
 			const QByteArray before = _model->captureEventWorkingState();
 			_model->setNodeBgColor(key, c.red(), c.green(), c.blue(), c.isValid());
 			pushEventStateSnapshot(before, tr("Change Node Color"));
+			refreshGraphIfCurrent();
 		}
 	});
 
@@ -495,6 +497,9 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::graphSelectionChanged, this, &MissionEventsDialog::updateEventUi);
 	// The New/Insert/Delete buttons depend on the graph sub-mode (New is Basic-only).
 	connect(ui->eventGraph, &EventGraphView::modeChanged, this, &MissionEventsDialog::updateEventCreateButtons);
+	// Right-click a node → comment/color annotation menu (same undo path as the
+	// tree's note/color edits).
+	connect(ui->eventGraph, &EventGraphView::nodeContextMenuRequested, this, &MissionEventsDialog::showGraphNodeMenu);
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodeMoved, this, [this](int key, double x, double y) {
@@ -601,6 +606,53 @@ void MissionEventsDialog::refreshGraphView()
 	ui->eventGraph->reload();
 
 	_graphDirty = false;
+}
+
+// Map a graph card's annotation key to the tree item to target. Regular nodes use
+// the key directly as a tree_nodes[] index; an event root's rootKey resolves
+// through its formula to the top-level (labeled) item, which is not in
+// tree_nodes[]. Null when it can't be resolved.
+QTreeWidgetItem* MissionEventsDialog::treeItemForAnnotationKey(int key) const
+{
+	if (key >= 0)
+		return ui->eventTree->handle(key);
+	if (!SexpAnnotationModel::isRootKey(key))
+		return nullptr;
+	const int formula = SexpAnnotationModel::formulaFromRootKey(key);
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* it = ui->eventTree->topLevelItem(i);
+		if (it && it->data(0, sexp_tree_view::FormulaDataRole).toInt() == formula)
+			return it;
+	}
+	return nullptr;
+}
+
+// Right-click a graph card: reuse the tree's own context menu at the matching
+// node (add/replace/insert/delete/data, comment/color, and for event roots the
+// name and event options), with irrelevant items disabled exactly as in the tree.
+// The tree stays populated behind the graph, so its handlers operate normally.
+void MissionEventsDialog::showGraphNodeMenu(int key, const QPoint& globalPos)
+{
+	QTreeWidgetItem* h = treeItemForAnnotationKey(key);
+	if (h == nullptr)
+		return;
+
+	// In the graph, "Expand All" is repurposed to expand the clicked card's bullets.
+	// The edit itself redraws the graph through the modification handlers (which is
+	// necessary anyway, since the inline "Edit Data" editor commits asynchronously
+	// after this returns).
+	ui->eventTree->showContextMenuForItem(h, globalPos,
+		[this, key]() { ui->eventGraph->expandNode(key); },
+		ui->eventGraph->nodeExpandable(key));
+}
+
+// Redraw the relationship graph if it's the current view. Called after tree
+// edits (structural, rename, annotation) so the cards reflect the change - even
+// when the edit commits asynchronously, past the context menu's exec().
+void MissionEventsDialog::refreshGraphIfCurrent()
+{
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+		refreshGraphView();
 }
 
 // Select an event's root item in the tree without changing the current view.
@@ -776,6 +828,7 @@ void MissionEventsDialog::onEventTreeModified()
 		return;
 
 	pushEventStateSnapshot(_workingStateCache, tr("Edit Event Formula"));
+	refreshGraphIfCurrent(); // e.g. an inline "Edit Data" value edit that commits now
 }
 
 void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const QString& label)
@@ -882,6 +935,7 @@ void MissionEventsDialog::rootNodeDeleted(int node) {
 	const QByteArray before = _model->captureEventWorkingState();
 	_model->deleteRootNode(node);
 	pushEventStateSnapshot(before, tr("Delete Event"));
+	refreshGraphIfCurrent();
 }
 
 void MissionEventsDialog::rootNodeRenamed(int node) {
@@ -921,11 +975,13 @@ void MissionEventsDialog::rootNodeRenamed(int node) {
 	cmd->addEntry(before, after, [this, index](const SCP_string& v) {
 		_model->setEventNameAt(index, v);
 		syncEventRootLabel(index);
+		refreshGraphIfCurrent(); // undo/redo of a rename should update the graph card
 	});
 	_dialogStack->push(cmd);
 
 	// The new name may change whether the event matches an active filter.
 	applyEventFilter();
+	refreshGraphIfCurrent(); // the inline name edit commits after the menu has closed
 }
 
 void MissionEventsDialog::syncEventRootLabel(int eventIndex)

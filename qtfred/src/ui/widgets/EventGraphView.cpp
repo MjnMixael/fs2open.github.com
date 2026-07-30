@@ -8,6 +8,7 @@
 #include <QButtonGroup>
 #include <QCheckBox>
 #include <QComboBox>
+#include <QContextMenuEvent>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsSimpleTextItem>
@@ -223,6 +224,12 @@ class CardItem : public QGraphicsItem {
 
 	QString titleText() const { return m_title; }
 
+	// The node's annotation key (tree_nodes index, or rootKey for event roots),
+	// -1 when the card has no single annotation target (aggregate object cards).
+	// Used to target the right-click comment/color menu.
+	void setAnnotationKey(int key) { m_annKey = key; }
+	int annotationKey() const { return m_annKey; }
+
 	// Case-insensitive substring match against the card's visible text, for the
 	// graph search box. An empty query matches everything.
 	bool matchesQuery(const QString& q) const
@@ -267,6 +274,18 @@ class CardItem : public QGraphicsItem {
 			return true;
 		}
 		return false;
+	}
+
+	// Card body expansion (only cards with more bullets than the collapsed limit
+	// can expand). Used by the graph's "Expand Card" context-menu action.
+	bool canExpand() const { return hasToggle() && !m_expanded; }
+	void setExpanded(bool on)
+	{
+		if (!hasToggle() || m_expanded == on)
+			return;
+		prepareGeometryChange();
+		m_expanded = on;
+		update();
 	}
 
 	void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override
@@ -438,6 +457,7 @@ class CardItem : public QGraphicsItem {
 	bool    m_focusHighlight = false;
 	QColor  m_annColor;            // annotation color (invalid = none)
 	bool    m_hasComment = false;  // annotation comment present
+	int     m_annKey = -1;         // annotation key for the right-click menu (-1 = none)
 	QRectF  m_toggleRect;
 	EventGraphStyle m_style;
 	QVector<RefEdgeItem*> m_edges; // edges attached to this card (for live redraw on move)
@@ -1709,6 +1729,7 @@ void EventGraphView::applyAnnotation(graphdetail::CardItem* card, int key)
 {
 	if (!card)
 		return;
+	card->setAnnotationKey(key); // record even when unset, so the menu can add one
 	const auto it = m_annotations.constFind(key);
 	if (it != m_annotations.constEnd())
 		card->setAnnotation(it->color, it->comment);
@@ -1730,6 +1751,25 @@ bool EventGraphView::isEventNodeSelected() const
 		if (qgraphicsitem_cast<graphdetail::EventNodeItem*>(it))
 			return true;
 	return false;
+}
+
+bool EventGraphView::nodeExpandable(int key) const
+{
+	if (key == -1)
+		return false;
+	for (QGraphicsItem* gi : m_scene->items())
+		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key)
+			return c->canExpand();
+	return false;
+}
+
+void EventGraphView::expandNode(int key)
+{
+	for (QGraphicsItem* gi : m_scene->items())
+		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key) {
+			c->setExpanded(true);
+			return;
+		}
 }
 
 // Pan/zoom to an event's card and select it (e.g. right after creating it).
@@ -2430,7 +2470,9 @@ void EventGraphView::rebuildBasic()
 	QVector<graphdetail::SexpNodeItem*> opItem(nOps, nullptr);
 	QVector<graphdetail::EventNodeItem*> evItem(nEvents, nullptr);
 
-	auto makeObjectCard = [&](const BasicObjNode& ob, const QPointF& pos, int posKey) {
+	// posKey drives drag-position persistence + annotation display; menuKey is the
+	// tree node the right-click menu targets (-1 = aggregate, no single node).
+	auto makeObjectCard = [&](const BasicObjNode& ob, const QPointF& pos, int posKey, int menuKey) {
 		auto* card = new graphdetail::ObjectNodeItem(QString::fromLatin1(EventReferenceIndex::kindLabel(ob.kind)),
 			m_style.colorFor(ob.kind), QString::fromStdString(ob.name), QString(), m_style);
 		card->setPos(pos);
@@ -2438,21 +2480,28 @@ void EventGraphView::rebuildBasic()
 		card->setFlag(QGraphicsItem::ItemIsMovable, true);
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, posKey);
-		applyAnnotation(card, posKey);
+		applyAnnotation(card, posKey); // sets display + annotationKey from posKey
+		card->setAnnotationKey(menuKey); // override the menu target
 		m_scene->addItem(card);
 		return card;
 	};
 
 	// Object cards: one shared node per object (combine), or one per reference
-	// keyed on its own leaf (duplicate).
+	// keyed on its own leaf (duplicate). A combined node that actually has a single
+	// reference is still directly editable (targets that one leaf); only true
+	// multi-reference cards are aggregates with no menu.
 	if (combine) {
 		for (int o = 0; o < nObj; ++o)
-			if (objVisible[o])
-				objItem[o] = makeObjectCard(g.objects[o], objPos[o], g.objects[o].posKey);
+			if (objVisible[o]) {
+				const BasicObjNode& ob = g.objects[o];
+				const int menuKey = (ob.refTreeNodes.size() == 1) ? ob.refTreeNodes[0] : -1;
+				objItem[o] = makeObjectCard(ob, objPos[o], ob.posKey, menuKey);
+			}
 	} else {
 		for (int di = 0; di < dups.size(); ++di)
 			if (dups[di].placed)
-				dupItem[di] = makeObjectCard(g.objects[dups[di].objectIndex], dupPos[di], dups[di].leafTreeNode);
+				dupItem[di] = makeObjectCard(
+					g.objects[dups[di].objectIndex], dupPos[di], dups[di].leafTreeNode, dups[di].leafTreeNode);
 	}
 
 	// Operator cards.
@@ -2786,6 +2835,35 @@ void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
 		}
 	}
 	QGraphicsView::mouseDoubleClickEvent(e);
+}
+
+void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
+{
+	// Right-click a card: an editable card opens the tree's context menu (via the
+	// dialog). An aggregate card stands for many nodes, so there's nothing to edit
+	// directly - show a short disabled note rather than ignoring the click.
+	for (QGraphicsItem* it : items(e->pos())) {
+		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
+			// Select the card first so its border shows while the menu is open
+			// (matches right-click-selects behavior in the tree).
+			if (!card->isSelected()) {
+				m_scene->clearSelection();
+				card->setSelected(true);
+			}
+			card->bringToFront();
+			if (card->annotationKey() != -1) {
+				Q_EMIT nodeContextMenuRequested(card->annotationKey(), e->globalPos());
+			} else {
+				QMenu menu(this);
+				QAction* note =
+					menu.addAction(tr("This card represents multiple nodes and cannot be edited directly"));
+				note->setEnabled(false);
+				menu.exec(e->globalPos());
+			}
+			e->accept();
+			return;
+		}
+	}
 }
 
 void EventGraphView::resizeEvent(QResizeEvent* e)

@@ -1117,6 +1117,24 @@ void sexp_tree_view::customMenuHandler(const QPoint& pos) {
 	menu->exec(mapToGlobal(pos));
 }
 
+// Same menu as customMenuHandler, but targeting an explicit item at an explicit
+// global position, so another view can drive the tree's editing menu. Safe while
+// the tree is hidden: buildContextMenu selects the item and sets item_index, and
+// the handlers operate on the (still populated) model.
+void sexp_tree_view::showContextMenuForItem(QTreeWidgetItem* h, const QPoint& globalPos,
+	const std::function<void()>& expandOverride, bool expandEnabled)
+{
+	if (h == nullptr)
+		return;
+
+	// The tree is hidden behind the calling view, so route any data edit through a
+	// visible dialog instead of the invisible inline editor.
+	_popupEditData = true;
+	auto menu = buildContextMenu(h, expandOverride, expandEnabled);
+	menu->exec(globalPos);
+	_popupEditData = false;
+}
+
 // Builds the complete right-click context menu for the given tree item.
 //
 // First calls _model.compute_context_menu_state() to get all enabled/disabled states, then
@@ -1137,7 +1155,8 @@ void sexp_tree_view::customMenuHandler(const QPoint& pos) {
 // Data actions connect to local handlers (addNumberDataHandler, addReplaceTypedDataHandler, etc.).
 // Per-operator enabled state comes from state.op_add_enabled[], state.op_replace_enabled[],
 // state.op_insert_enabled[] arrays computed by the model.
-std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h) {
+std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h,
+	const std::function<void()>& expandOverride, bool expandEnabled) {
 	int i, j, subcategory_id;
 
 	Assertion(static_cast<int>(op_menu.size()) < SEXP_TREE_MAX_OP_MENUS, "Operator menu too large!");
@@ -1162,7 +1181,13 @@ std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h) {
 	auto delete_act =
 		popup_menu->addAction(tr("&Delete Item"), QKeySequence::Delete, this, [this]() { deleteActionHandler(); });
 	auto edit_data_act = popup_menu->addAction(tr("&Edit Data"), this, [this]() { editDataActionHandler(); });
-	popup_menu->addAction(tr("Expand All"), this, [this]() { expand_branch(currentItem()); });
+	if (expandOverride) {
+		// Graph context: expand the clicked card's bullets instead of a tree branch.
+		auto* expand_act = popup_menu->addAction(tr("Expand Card"), this, expandOverride);
+		expand_act->setEnabled(expandEnabled);
+	} else {
+		popup_menu->addAction(tr("Expand All"), this, [this]() { expand_branch(currentItem()); });
+	}
 
 	popup_menu->addSection(tr("Annotations"));
 	auto edit_comment_act = popup_menu->addAction(tr("Edit Comment"), this, [this, h]() { editNoteForItem(h); });
@@ -1930,8 +1955,22 @@ void sexp_tree_view::replaceStringDataHandler() {
 // Sets the _currently_editing flag and calls Qt's editItem() to start inline text editing.
 // The flag ensures that handleItemChange() only processes intentional edits, not programmatic changes.
 void sexp_tree_view::beginItemEdit(QTreeWidgetItem* item) {
+	// When the menu is driven from another view (the tree is hidden), inline editing
+	// would be invisible - the user can't see what they type. Use a modal dialog and
+	// feed the result back through the same itemChanged -> handleItemChange path.
+	if (_popupEditData) {
+		const QString old = item->text(0);
+		bool ok = false;
+		const QString text =
+			QInputDialog::getText(this, tr("Edit Data"), tr("Value:"), QLineEdit::Normal, old, &ok);
+		if (!ok)
+			return;
+		_currently_editing = true;
+		item->setText(0, text); // fires itemChanged -> handleItemChange (no-op if unchanged)
+		return;
+	}
+
 	_currently_editing = true;
-	
 	editItem(item);
 }
 // Handles add/replace of a specific typed data item selected from the context menu.
