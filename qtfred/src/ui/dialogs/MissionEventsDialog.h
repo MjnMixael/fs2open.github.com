@@ -18,6 +18,10 @@
 class QButtonGroup;
 class QCheckBox;
 
+namespace fso::fred {
+struct GraphEventMeta; // defined in ui/widgets/EventGraphView.h (used by-value in the .cpp)
+}
+
 namespace fso::fred::dialogs {
 
 namespace Ui {
@@ -152,9 +156,12 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void selectEventInTree(int eventIndex); // select the event's root, no view switch
 	void jumpToEventInTree(int eventIndex);  // switch to tree view, then select
 	void jumpToNodeInTree(int treeNode);     // switch to tree view, then hilite the node
+	GraphEventMeta buildEventMeta(int eventIndex) const; // status/annotation-key for one event
+	void syncGraphAfterEventUi();            // reflect property edits on the graph card (or full rebuild)
 
 	EventReferenceIndex _refIndex;
 	bool _graphDirty = true; // graph needs a rebuild (events changed since last build)
+	int  _graphEventCount = -1; // event count at last graph build, to detect add/remove
 
 	// Advanced Edit view helpers.
 	void loadAdvancedText();
@@ -173,6 +180,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 
 	void updateEventUi();
 	void updateEventMoveButtons();
+	void updateEventCreateButtons(); // per-view/-mode New/Insert/Delete enablement
 	void setEventLogEnabled(bool enable);
 	void updateMessageUi();
 	void updateMessageMoveButtons();
