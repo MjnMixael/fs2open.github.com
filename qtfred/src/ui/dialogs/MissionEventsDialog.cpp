@@ -502,6 +502,8 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::nodeContextMenuRequested, this, &MissionEventsDialog::showGraphNodeMenu);
 	// Double-click an inline literal-arg bullet -> open its editor (number: quick-search; string: dialog).
 	connect(ui->eventGraph, &EventGraphView::nodeEditRequested, this, &MissionEventsDialog::editGraphNode);
+	// Collapse/expand an event's subtree (Basic view).
+	connect(ui->eventGraph, &EventGraphView::eventCollapseToggled, this, &MissionEventsDialog::toggleEventCollapse);
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodeMoved, this, [this](int key, double x, double y) {
@@ -617,6 +619,13 @@ void MissionEventsDialog::refreshGraphView()
 	}
 	ui->eventGraph->setSiblingOrders(std::move(siblingOrders));
 
+	// Collapsed events (Basic view), from the saved per-event collapse annotations.
+	QSet<int> collapsedEvents;
+	for (int i = 0; i < static_cast<int>(events.size()); ++i)
+		if (_model->getNodeCollapsed(SexpAnnotationModel::rootKey(events[i].formula)))
+			collapsedEvents.insert(i);
+	ui->eventGraph->setCollapsedEvents(std::move(collapsedEvents));
+
 	ui->eventGraph->reload();
 
 	_graphDirty = false;
@@ -668,6 +677,20 @@ void MissionEventsDialog::editGraphNode(int treeNode, const QPoint& globalPos)
 	QTreeWidgetItem* h = treeItemForAnnotationKey(treeNode); // treeNode >= 0 -> tree item
 	if (h)
 		ui->eventTree->editNodeExternally(h, globalPos);
+}
+
+// Toggle whether an event's subtree is collapsed in the Basic graph view. The
+// state lives on the event's annotation, so it persists with the mission.
+void MissionEventsDialog::toggleEventCollapse(int eventIndex)
+{
+	const auto& events = _model->getEventList();
+	if (eventIndex < 0 || eventIndex >= static_cast<int>(events.size()))
+		return;
+	const int key = SexpAnnotationModel::rootKey(events[eventIndex].formula);
+	const QByteArray before = _model->captureEventWorkingState();
+	_model->setNodeCollapsed(key, !_model->getNodeCollapsed(key));
+	pushEventStateSnapshot(before, tr("Toggle Event Collapse"));
+	refreshGraphView();
 }
 
 // Redraw the relationship graph if it's the current view. Called after tree

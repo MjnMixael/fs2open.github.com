@@ -120,6 +120,9 @@ class EventGraphView final : public QGraphicsView {
 	// 1-based order of each sexp node among its siblings (tree_nodes index -> order),
 	// shown as a corner marker on the card. Fed on every refresh.
 	void setSiblingOrders(QHash<int, int> orders) { m_siblingOrders = std::move(orders); }
+	// Events whose subtree is collapsed to just the event card (Basic view). Fed on
+	// every refresh from the saved collapse annotations.
+	void setCollapsedEvents(QSet<int> events) { m_collapsedEvents = std::move(events); }
 	// Lightweight refresh of one event card's status icons + chain lines after a
 	// property edit, without a full rebuild.
 	void updateEventCard(int eventIndex, GraphEventMeta meta);
@@ -180,6 +183,8 @@ class EventGraphView final : public QGraphicsView {
 	// Double-click on an inline literal-arg bullet: open the editor for that arg node
 	// (a number opens the quick-search; a string, the text dialog).
 	void nodeEditRequested(int treeNode, const QPoint& globalPos);
+	// The user clicked an event card's collapse box (Basic view).
+	void eventCollapseToggled(int eventIndex);
 
   protected:
 	void wheelEvent(QWheelEvent* e) override;
@@ -266,6 +271,7 @@ class EventGraphView final : public QGraphicsView {
 	QVector<GraphEventMeta> m_eventMeta;      // per-event status flags (event icons)
 	QHash<int, GraphAnnotation> m_annotations; // node comment/color by annotation key
 	QHash<int, int> m_siblingOrders;           // tree node -> 1-based sibling order (corner marker)
+	QSet<int> m_collapsedEvents;               // event indices collapsed in Basic view
 	BasicGraph m_basicGraph;
 	QString m_searchText; // graph search highlight query
 	int m_matchIndex = -1; // current match for next/prev navigation

@@ -135,6 +135,11 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setNodeGraphPos(int key, float x, float y);
 	bool getNodeGraphPos(int key, float& x, float& y) const;
 
+	// Graph-view collapse state (event subtree hidden), stored on the event's
+	// annotation like the position, and persisted the same way.
+	void setNodeCollapsed(int key, bool collapsed);
+	bool getNodeCollapsed(int key) const;
+
 	// The current working annotations (comment/color/position), keyed internally
 	// by node_index. Read-only view for the graph to render comment + color.
 	const SCP_vector<event_annotation>& nodeAnnotations() const { return m_annotation_model.annotations(); }

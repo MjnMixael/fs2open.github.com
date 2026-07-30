@@ -1052,6 +1052,19 @@ bool MissionEventsDialogModel::getNodeGraphPos(int key, float& x, float& y) cons
 	return true;
 }
 
+void MissionEventsDialogModel::setNodeCollapsed(int key, bool collapsed)
+{
+	auto& ea = m_annotation_model.ensureByKey(key);
+	ea.collapsed = collapsed;
+	set_modified();
+}
+
+bool MissionEventsDialogModel::getNodeCollapsed(int key) const
+{
+	const event_annotation* ea = m_annotation_model.getByKey(key);
+	return ea != nullptr && ea->collapsed;
+}
+
 void MissionEventsDialogModel::createMessage()
 {
 	MMessage msg;
@@ -1826,6 +1839,7 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 		ea.has_pos = src.has_pos;
 		ea.pos_x = src.pos_x;
 		ea.pos_y = src.pos_y;
+		ea.collapsed = src.collapsed;
 		const bool hasColor = (src.r != 255) || (src.g != 255) || (src.b != 255);
 		Q_EMIT annotationApplied(key, ea.comment, src.r, src.g, src.b, hasColor);
 	}

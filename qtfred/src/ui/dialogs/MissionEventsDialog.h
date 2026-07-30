@@ -160,6 +160,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	// tree item (a tree_nodes[] node, or an event's labeled root) for the menu.
 	void showGraphNodeMenu(int key, const QPoint& globalPos);
 	void editGraphNode(int treeNode, const QPoint& globalPos); // double-click a literal-arg bullet
+	void toggleEventCollapse(int eventIndex); // collapse/expand an event's subtree (Basic)
 	QTreeWidgetItem* treeItemForAnnotationKey(int key) const;
 	void selectEventInTree(int eventIndex); // select the event's root, no view switch
 	void jumpToEventInTree(int eventIndex);  // switch to tree view, then select

@@ -456,14 +456,16 @@ class CardItem : public QGraphicsItem {
 	// out of line below, once RefEdgeItem is a complete type.
 	QVariant itemChange(GraphicsItemChange change, const QVariant& value) override;
 
-	// Over an inline arg bullet, show the normal pointer (it's a click/edit target)
-	// instead of the move cursor the rest of a draggable card uses.
+	// Over an interactive spot (an arg bullet, or a subclass's control like the
+	// event collapse box), show the normal pointer instead of the move cursor a
+	// draggable card otherwise uses.
 	void hoverMoveEvent(QGraphicsSceneHoverEvent* e) override
 	{
 		if (flags() & ItemIsMovable)
-			setCursor(bulletNodeAt(e->scenePos()) >= 0 ? Qt::ArrowCursor : Qt::SizeAllCursor);
+			setCursor(wantsPointerAt(e->scenePos()) ? Qt::ArrowCursor : Qt::SizeAllCursor);
 		QGraphicsItem::hoverMoveEvent(e);
 	}
+	virtual bool wantsPointerAt(const QPointF& scenePos) const { return bulletNodeAt(scenePos) >= 0; }
 
 	bool hasToggle() const { return m_expandable && m_lines.size() > m_collapsedMax; }
 
@@ -548,10 +550,32 @@ class EventNodeItem final : public CardItem {
 		update();
 	}
 
+	// Show a collapse box (Basic view, events with a subtree) and its state.
+	void setCollapseState(bool show, bool collapsed)
+	{
+		m_showCollapse = show;
+		m_collapsed = collapsed;
+		update();
+	}
+	bool isCollapsed() const { return m_showCollapse && m_collapsed; }
+	bool collapseToggleAt(const QPointF& scenePos) const
+	{
+		return m_showCollapse && m_collapseRect.contains(mapFromScene(scenePos));
+	}
+
 	void paint(QPainter* p, const QStyleOptionGraphicsItem* o, QWidget* w) override
 	{
 		CardItem::paint(p, o, w);
 		drawStatusIcons(p);
+		if (m_showCollapse)
+			drawCollapseBox(p);
+	}
+
+  protected:
+	// Also treat the collapse box as a pointer target (not a drag handle).
+	bool wantsPointerAt(const QPointF& scenePos) const override
+	{
+		return collapseToggleAt(scenePos) || CardItem::wantsPointerAt(scenePos);
 	}
 
   private:
@@ -581,11 +605,32 @@ class EventNodeItem final : public CardItem {
 		p->restore();
 	}
 
+	// Small [-] / [+] box on the right edge: collapse or expand the event subtree.
+	void drawCollapseBox(QPainter* p)
+	{
+		const QRectF r = boundingRect();
+		const qreal s = 12.0;
+		m_collapseRect = QRectF(r.right() - s - 4.0, r.center().y() - s / 2.0, s, s);
+		p->save();
+		p->setRenderHint(QPainter::Antialiasing, true);
+		p->setPen(QPen(m_style.nodeSubText, 1.1));
+		p->setBrush(m_style.bgColor);
+		p->drawRoundedRect(m_collapseRect, 2.5, 2.5);
+		const QPointF c = m_collapseRect.center();
+		p->drawLine(QPointF(c.x() - 3.0, c.y()), QPointF(c.x() + 3.0, c.y())); // minus (always)
+		if (m_collapsed)
+			p->drawLine(QPointF(c.x(), c.y() - 3.0), QPointF(c.x(), c.y() + 3.0)); // + when collapsed
+		p->restore();
+	}
+
 	int  m_eventIndex;
 	bool m_chained = false;
 	bool m_directive = false;
 	bool m_repeats = false;
 	bool m_logging = false;
+	bool m_showCollapse = false;
+	bool m_collapsed = false;
+	QRectF m_collapseRect;
 };
 
 // A condition/action operator node (tier 2/3). Title = operator name; body =
@@ -2481,6 +2526,13 @@ void EventGraphView::rebuildBasic()
 	// opPlaced now marks the rendered ops; anything left is collapsed by the depth
 	// limit (or unreachable) and is skipped below.
 
+	// Collapsed events: their layout position is still computed (so the event card
+	// stays exactly where it would be when expanded), but the subtree is not
+	// rendered - unplace those ops so every render/visibility check below skips them.
+	for (int oi = 0; oi < nOps; ++oi)
+		if (opPlaced[oi] && m_collapsedEvents.contains(g.ops[oi].eventIndex))
+			opPlaced[oi] = false;
+
 	auto opSeed = [&](int oi) { return QPointF(opDepth[oi] * colStep, opSlot[oi] * rowStep); };
 
 	// Combine mode places shared objects in a column to the right of the tree.
@@ -2544,6 +2596,8 @@ void EventGraphView::rebuildBasic()
 		if (useSaved && en.hasPos) {
 			eventPos[i] = QPointF(en.posX, en.posY);
 		} else if (en.rootOp >= 0 && en.rootOp < nOps) {
+			// opPos is computed for every op (collapsed or not), so a collapsed event
+			// keeps the same position as when expanded.
 			eventPos[i] = QPointF(opPos[en.rootOp].x() - colStep, opPos[en.rootOp].y());
 		} else {
 			eventPos[i] = QPointF(-colStep, degenerateY); // event with no operator root (rare)
@@ -2588,7 +2642,8 @@ void EventGraphView::rebuildBasic()
 			}
 	} else {
 		for (int di = 0; di < dups.size(); ++di)
-			if (dups[di].placed)
+			// opPlaced[op] is now false for collapsed events, so their dup cards drop.
+			if (dups[di].placed && dups[di].op >= 0 && dups[di].op < nOps && opPlaced[dups[di].op])
 				dupItem[di] = makeObjectCard(
 					g.objects[dups[di].objectIndex], dupPos[di], dups[di].leafTreeNode, dups[di].leafTreeNode);
 	}
@@ -2633,6 +2688,8 @@ void EventGraphView::rebuildBasic()
 		card->setCursor(Qt::SizeAllCursor);
 		card->setData(0, en.posKey);
 		applyEventStatus(card, en.eventIndex);
+		// Collapse box on events that actually have a subtree to hide.
+		card->setCollapseState(en.rootOp >= 0, m_collapsedEvents.contains(en.eventIndex));
 		m_scene->addItem(card);
 		evItem[i] = card;
 		m_eventCards.insert(en.eventIndex, card);
@@ -2677,9 +2734,10 @@ void EventGraphView::rebuildBasic()
 		// Duplicate: one edge per placement, operator to its local object node.
 		if (!combine) {
 			for (int di = 0; di < dups.size(); ++di) {
-				if (!dups[di].placed)
-					continue;
 				const int oi = dups[di].op;
+				// Skip collapsed (unrendered) ops/dups so no edge dangles to a null card.
+				if (!dups[di].placed || oi < 0 || oi >= nOps || !opItem[oi] || !dupItem[di])
+					continue;
 				addEdge(opPos[oi], dupPos[di], m_style.colorFor(g.objects[dups[di].objectIndex].kind), opItem[oi],
 					dupItem[di]);
 			}
@@ -2807,6 +2865,15 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 	for (QGraphicsItem* it : m_scene->items(sp)) {
 		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
 			card->bringToFront(); // clicked card jumps above overlaps
+			// A left-press on an event's collapse box toggles its subtree.
+			if (e->button() == Qt::LeftButton) {
+				if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(card);
+					ev && ev->collapseToggleAt(sp)) {
+					Q_EMIT eventCollapseToggled(ev->eventIndex());
+					e->accept();
+					return;
+				}
+			}
 			if (card->handleToggleClick(sp)) {
 				e->accept();
 				return;

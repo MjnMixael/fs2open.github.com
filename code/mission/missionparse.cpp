@@ -6229,6 +6229,12 @@ void parse_event(mission *pm)
 					ea.has_pos = true;
 				}
 
+				if (optional_string("+Collapsed:")) {
+					int collapsed_val;
+					stuff_int(&collapsed_val);
+					ea.collapsed = (collapsed_val != 0);
+				}
+
 				Event_annotations.push_back(std::move(ea));
 			}
 			required_string("$Annotations End");
