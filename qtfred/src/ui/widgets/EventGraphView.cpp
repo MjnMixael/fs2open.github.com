@@ -674,6 +674,9 @@ class SexpNodeItem final : public CardItem {
 
 class RefEdgeItem final : public QGraphicsPathItem {
   public:
+	enum { Type = UserType + 4 };
+	int type() const override { return Type; } // so qgraphicsitem_cast beats dynamic_cast
+
 	RefEdgeItem(const QPointF& a, const QPointF& b, QColor color, const EventGraphStyle& style, bool chain = false)
 		: m_isChain(chain)
 	{
@@ -1113,6 +1116,24 @@ class OverlayPanel final : public QWidget {
 };
 
 } // namespace graphdetail
+
+namespace {
+// Fast CardItem* test by item type() (all three card kinds), avoiding dynamic_cast
+// in the hot selection/emphasis paths.
+inline graphdetail::CardItem* toCard(QGraphicsItem* it)
+{
+	if (!it)
+		return nullptr;
+	switch (it->type()) {
+	case graphdetail::ObjectNodeItem::Type:
+	case graphdetail::EventNodeItem::Type:
+	case graphdetail::SexpNodeItem::Type:
+		return static_cast<graphdetail::CardItem*>(it);
+	default:
+		return nullptr;
+	}
+}
+} // namespace
 
 // ---------------------------------------------------------------------------
 // View
@@ -1841,7 +1862,7 @@ void EventGraphView::focusNextMatch(bool forward)
 
 	QVector<graphdetail::CardItem*> matches;
 	for (QGraphicsItem* it : m_scene->items()) {
-		auto* c = dynamic_cast<graphdetail::CardItem*>(it);
+		auto* c = toCard(it);
 		if (c && c->matchesQuery(m_searchText))
 			matches.push_back(c);
 	}
@@ -1876,43 +1897,65 @@ void EventGraphView::focusNextMatch(bool forward)
 // visibility and focus-fade dimming (radial/basic, which have node edges;
 // swimlanes has its own cross-filter focus). Runs after each rebuild and on
 // every real selection change.
+void EventGraphView::refreshItemCaches()
+{
+	m_cards.clear();
+	m_edges.clear();
+	for (QGraphicsItem* it : m_scene->items()) {
+		if (auto* c = toCard(it))
+			m_cards.push_back(c);
+		else if (auto* e = qgraphicsitem_cast<graphdetail::RefEdgeItem*>(it))
+			m_edges.push_back(e);
+	}
+}
+
 void EventGraphView::applyEmphasis()
 {
-	const bool searchActive = !m_searchText.isEmpty();
-	auto matches = [this](QGraphicsItem* it) {
-		auto* c = dynamic_cast<graphdetail::CardItem*>(it);
-		return c && c->matchesQuery(m_searchText);
-	};
+	if (m_itemCachesDirty) {
+		refreshItemCaches();
+		m_itemCachesDirty = false;
+	}
 
-	// Selection emphasis only applies where there are node edges to reason about.
+	const bool searchActive = !m_searchText.isEmpty();
 	const bool selMode = (m_mode != Mode::Swimlanes);
-	QSet<QGraphicsItem*> selected, active;
-	QVector<graphdetail::RefEdgeItem*> edges;
-	bool hasSel = false;
+	const bool onSelect = selMode && (s_refMode == RefLineMode::OnSelect);
+
+	// Current selection (cheap: only the selected items, not the whole scene).
+	QSet<QGraphicsItem*> selected;
 	if (selMode) {
 		for (QGraphicsItem* it : m_scene->selectedItems())
-			if (dynamic_cast<graphdetail::CardItem*>(it))
+			if (toCard(it))
 				selected.insert(it);
-		hasSel = !selected.isEmpty();
-		active = selected;
-		for (QGraphicsItem* it : m_scene->items()) {
-			auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it);
-			if (!e)
+	}
+	const bool hasSel = !selected.isEmpty();
+	const bool fade = s_focusFade && hasSel;
+
+	// Nothing to dim/hide, and nothing dimmed from a previous pass: skip entirely.
+	const bool needEmphasis = fade || searchActive || onSelect;
+	if (!needEmphasis && !m_emphasisApplied)
+		return;
+	m_emphasisApplied = needEmphasis;
+
+	// Cards incident to the selection (only needed to keep the focus-fade set lit).
+	QSet<QGraphicsItem*> active = selected;
+	if (fade) {
+		for (graphdetail::RefEdgeItem* e : m_edges) {
+			if (e->isChain())
 				continue;
-			edges.push_back(e);
-			if (hasSel && !e->isChain()) {
-				if (e->endA() && selected.contains(e->endA()) && e->endB())
-					active.insert(e->endB());
-				if (e->endB() && selected.contains(e->endB()) && e->endA())
-					active.insert(e->endA());
-			}
+			if (e->endA() && selected.contains(e->endA()) && e->endB())
+				active.insert(e->endB());
+			if (e->endB() && selected.contains(e->endB()) && e->endA())
+				active.insert(e->endA());
 		}
 	}
 
-	const bool fade = s_focusFade && hasSel;
 	const qreal dim = 0.2;
+	auto matches = [this](QGraphicsItem* it) {
+		auto* c = toCard(it);
+		return c && c->matchesQuery(m_searchText);
+	};
 
-	for (graphdetail::RefEdgeItem* e : edges) {
+	for (graphdetail::RefEdgeItem* e : m_edges) {
 		// Chain lines are structure, not object references: always visible, never dimmed.
 		if (e->isChain()) {
 			e->setVisible(true);
@@ -1921,7 +1964,7 @@ void EventGraphView::applyEmphasis()
 		}
 		const bool incident = hasSel && ((e->endA() && selected.contains(e->endA())) ||
 										 (e->endB() && selected.contains(e->endB())));
-		const bool visible = (s_refMode != RefLineMode::OnSelect) || incident;
+		const bool visible = !onSelect || incident;
 		e->setVisible(visible);
 		if (!visible)
 			continue;
@@ -1933,11 +1976,8 @@ void EventGraphView::applyEmphasis()
 		e->setOpacity(edgeDim ? dim : 1.0);
 	}
 
-	for (QGraphicsItem* it : m_scene->items()) {
-		auto* c = dynamic_cast<graphdetail::CardItem*>(it);
-		if (!c)
-			continue;
-		bool cardDim = fade && !active.contains(it);
+	for (graphdetail::CardItem* c : m_cards) {
+		bool cardDim = fade && !active.contains(c);
 		if (searchActive && !c->matchesQuery(m_searchText))
 			cardDim = true;
 		c->setOpacity(cardDim ? dim : 1.0);
@@ -1980,7 +2020,7 @@ bool EventGraphView::nodeExpandable(int key) const
 	if (key == -1)
 		return false;
 	for (QGraphicsItem* gi : m_scene->items())
-		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key)
+		if (auto* c = toCard(gi); c && c->annotationKey() == key)
 			return c->canExpand();
 	return false;
 }
@@ -1988,7 +2028,7 @@ bool EventGraphView::nodeExpandable(int key) const
 void EventGraphView::expandNode(int key)
 {
 	for (QGraphicsItem* gi : m_scene->items())
-		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key) {
+		if (auto* c = toCard(gi); c && c->annotationKey() == key) {
 			c->setExpanded(true);
 			return;
 		}
@@ -2032,13 +2072,14 @@ void EventGraphView::refreshChainLines()
 
 	QVector<graphdetail::RefEdgeItem*> stale;
 	for (QGraphicsItem* it : m_scene->items())
-		if (auto* e = dynamic_cast<graphdetail::RefEdgeItem*>(it); e && e->isChain())
+		if (auto* e = qgraphicsitem_cast<graphdetail::RefEdgeItem*>(it); e && e->isChain())
 			stale.push_back(e);
 	for (graphdetail::RefEdgeItem* e : stale) {
 		e->detachEndpoints(); // cards persist here; drop their dangling refs first
 		m_scene->removeItem(e);
 		delete e;
 	}
+	m_itemCachesDirty = true; // edges changed; applyEmphasis will rebuild its caches
 
 	for (int ev = 1; ev < m_eventMeta.size(); ++ev) {
 		if (!m_eventMeta[ev].chained)
@@ -2078,6 +2119,7 @@ void EventGraphView::rebuildRadial()
 
 	m_suppressSelectionSignal = true; // programmatic selection below shouldn't echo out
 	m_scene->clear();
+	m_itemCachesDirty = true; // scene rebuilt: emphasis caches refresh on next use
 	m_eventCards.clear(); // pointers just died with the scene
 
 	const int row = selectedObjectRow();
@@ -2231,6 +2273,7 @@ void EventGraphView::rebuildSwimlanes()
 
 	m_suppressSelectionSignal = true;
 	m_scene->clear();
+	m_itemCachesDirty = true; // scene rebuilt: emphasis caches refresh on next use
 	m_eventCards.clear(); // pointers just died with the scene
 
 	if (!m_index) {
@@ -2505,6 +2548,7 @@ void EventGraphView::rebuildBasic()
 	m_dragItem = nullptr;
 	m_suppressSelectionSignal = true;
 	m_scene->clear();
+	m_itemCachesDirty = true; // scene rebuilt: emphasis caches refresh on next use
 	m_eventCards.clear(); // pointers just died with the scene
 
 	const BasicGraph& g = m_basicGraph;
@@ -2981,7 +3025,7 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 	// remembering a grabbed movable card so the move persists).
 	m_dragItem = nullptr;
 	for (QGraphicsItem* it : m_scene->items(sp)) {
-		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
+		if (auto* card = toCard(it)) {
 			card->bringToFront(); // clicked card jumps above overlaps
 			if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(card);
 				ev && ev->collapseToggleAt(sp)) {
@@ -3059,7 +3103,7 @@ void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 			const auto sel = m_scene->selectedItems();
 			if (sel.size() > 1) {
 				for (QGraphicsItem* gi : sel)
-					if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi)) {
+					if (auto* c = toCard(gi)) {
 						bool ok = false;
 						const int key = c->data(0).toInt(&ok);
 						if (ok)
@@ -3154,7 +3198,7 @@ void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
 	// dialog). An aggregate card stands for many nodes, so there's nothing to edit
 	// directly - show a short disabled note rather than ignoring the click.
 	for (QGraphicsItem* it : items(e->pos())) {
-		if (auto* card = dynamic_cast<graphdetail::CardItem*>(it)) {
+		if (auto* card = toCard(it)) {
 			card->bringToFront();
 			// Only one node is editable at a time, so a right-click reduces any
 			// multi-selection to just the clicked card (its border shows while the
