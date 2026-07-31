@@ -1132,7 +1132,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		}
 
 		bool sticky = (Sexp_nodes[i].value == SEXP_KNOWN_TRUE) || (Sexp_nodes[i].value == SEXP_KNOWN_FALSE) ||
-					  (Sexp_nodes[i].value == SEXP_NAN_FOREVER);
+					  (Sexp_nodes[i].value == SEXP_NAN_FOREVER) || (Sexp_nodes[i].value == SEXP_NUM_EVAL);
 
 		if (!sticky && Sexp_nodes[i].flags == SNF_DEFAULT_VALUE) {
 			continue;
@@ -1142,7 +1142,13 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.index = i;
 		state.value = Sexp_nodes[i].value;
 		state.flags = Sexp_nodes[i].flags;
-		data.sexp_nodes.push_back(state);
+
+		// For a rolled `rand` the text is the number it settled on, so it has to travel with it.
+		if (Sexp_nodes[i].value == SEXP_NUM_EVAL) {
+			state.text = Sexp_nodes[i].text;
+		}
+
+		data.sexp_nodes.push_back(std::move(state));
 	}
 
 	for (const auto& container : get_all_sexp_containers()) {
@@ -1811,8 +1817,14 @@ void apply_parse_objects(const checkpoint_data& data)
 		p_objp->initial_hull = state.initial_hull;
 		p_objp->initial_shields = state.initial_shields;
 		p_objp->arrival_distance = state.arrival_distance;
-		p_objp->arrival_delay = state.arrival_delay;
-		p_objp->departure_delay = state.departure_delay;
+
+		// Same dual encoding as the ship versions: once the arrival cue goes true the delay stops
+		// being "so many seconds" and becomes a real timestamp (missionparse.cpp:8723), so it has
+		// to be shifted into this run's clock like any other.  Miss this and a ship with a long
+		// armed delay -- a capital ship due in three minutes, say -- arrives the instant the
+		// mission resumes.
+		p_objp->arrival_delay = translate_stamp(state.arrival_delay);
+		p_objp->departure_delay = translate_stamp(state.departure_delay);
 		p_objp->escort_priority = state.escort_priority;
 		p_objp->respawn_priority = state.respawn_priority;
 		p_objp->alt_type_index = state.alt_type_index;
@@ -2063,6 +2075,10 @@ void apply_mission_logic(const checkpoint_data& data)
 
 		Sexp_nodes[state.index].value = state.value;
 		Sexp_nodes[state.index].flags = state.flags;
+
+		if (state.value == SEXP_NUM_EVAL && !state.text.empty()) {
+			strcpy_s(Sexp_nodes[state.index].text, state.text.c_str());
+		}
 	}
 
 	for (const auto& state : data.containers) {
