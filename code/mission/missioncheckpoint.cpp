@@ -11,6 +11,8 @@
 #include "debris/debris.h"
 #include "gamesequence/gamesequence.h"
 #include "globalincs/systemvars.h"
+#include "hud/hudescort.h"
+#include "hud/hudtarget.h"
 #include "model/model.h"
 #include "species_defs/species_defs.h"
 #include "io/timer.h"
@@ -364,6 +366,51 @@ int lookup_weapon_class(const SCP_string& name)
 		mprintf(("CHECKPOINT => Weapon class '%s' no longer exists.\n", name.c_str()));
 	}
 	return index;
+}
+
+// Anchors are an int that is either a ship registry index or a bitfield naming an IFF, so they go
+// out as text the same way the mission file stores them.
+SCP_string anchor_name(anchor_t anchor)
+{
+	int value = anchor.value();
+	if (value < 0) {
+		return SCP_string();
+	}
+
+	if (value & ANCHOR_SPECIAL_ARRIVAL) {
+		int iff = value & ~(ANCHOR_SPECIAL_ARRIVAL | ANCHOR_SPECIAL_ARRIVAL_PLAYER);
+		if (iff < 0 || iff >= static_cast<int>(Iff_info.size())) {
+			return SCP_string();
+		}
+
+		SCP_string out("<any ");
+		out += Iff_info[iff].iff_name;
+		if (value & ANCHOR_SPECIAL_ARRIVAL_PLAYER) {
+			out += " player";
+		}
+		out += ">";
+		return out;
+	}
+
+	auto entry = ship_registry_get(value);
+	return entry != nullptr ? SCP_string(entry->name) : SCP_string();
+}
+
+anchor_t lookup_anchor(const SCP_string& name)
+{
+	if (name.empty()) {
+		return anchor_t::invalid();
+	}
+
+	auto special = get_special_anchor(name.c_str());
+	if (special.isValid()) {
+		return special;
+	}
+
+	// At runtime an anchor is a ship registry index, not the parse-names index get_anchor() would
+	// hand back, so resolve it that way.
+	int index = ship_registry_get_index(name.c_str());
+	return index >= 0 ? anchor_t(index) : anchor_t::invalid();
 }
 
 int lookup_team(const SCP_string& name)
@@ -1122,6 +1169,13 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.ship_class = ship_class_name(p_objp->ship_class);
 		state.team = team_name(p_objp->team);
 
+		state.arrival_anchor = anchor_name(p_objp->arrival_anchor);
+		state.departure_anchor = anchor_name(p_objp->departure_anchor);
+		state.arrival_location = static_cast<int>(p_objp->arrival_location);
+		state.departure_location = static_cast<int>(p_objp->departure_location);
+		state.arrival_path_mask = p_objp->arrival_path_mask;
+		state.departure_path_mask = p_objp->departure_path_mask;
+
 		state.initial_hull = p_objp->initial_hull;
 		state.initial_shields = p_objp->initial_shields;
 		state.arrival_distance = p_objp->arrival_distance;
@@ -1136,6 +1190,29 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		collect_def_flags(p_objp->flags, Parse_object_flags, Num_parse_object_flags, state.flags);
 
 		data.parse_objects.push_back(std::move(state));
+	}
+
+	// Hotkey sets.  The mission-file assignments come back with ship::hotkey, but anything the
+	// player bound during the mission exists only here.
+	if (Player != nullptr) {
+		for (int set = 0; set < MAX_KEYED_TARGETS; set++) {
+			hotkey_state state;
+			state.set = set;
+
+			auto plist = &Player->keyed_targets[set];
+			for (auto hitem = GET_FIRST(plist); hitem != END_OF_LIST(plist); hitem = GET_NEXT(hitem)) {
+				if (hitem->objp == nullptr || hitem->objp->type != OBJ_SHIP) {
+					continue;
+				}
+
+				state.ship_names.emplace_back(Ships[hitem->objp->instance].ship_name);
+				state.how_added.push_back(hitem->how_added);
+			}
+
+			if (!state.ship_names.empty()) {
+				data.hotkeys.push_back(std::move(state));
+			}
+		}
 	}
 
 	// Hull debris only -- see the note on debris_state.
@@ -1711,6 +1788,22 @@ void apply_parse_objects(const checkpoint_data& data)
 			p_objp->team = team;
 		}
 
+		// An anchor that no longer resolves is left as the mission file had it rather than being
+		// blanked, which would break the arrival outright.
+		auto arrival_anchor = lookup_anchor(state.arrival_anchor);
+		if (arrival_anchor.isValid()) {
+			p_objp->arrival_anchor = arrival_anchor;
+		}
+		auto departure_anchor = lookup_anchor(state.departure_anchor);
+		if (departure_anchor.isValid()) {
+			p_objp->departure_anchor = departure_anchor;
+		}
+
+		p_objp->arrival_location = static_cast<ArrivalLocation>(state.arrival_location);
+		p_objp->departure_location = static_cast<DepartureLocation>(state.departure_location);
+		p_objp->arrival_path_mask = state.arrival_path_mask;
+		p_objp->departure_path_mask = state.departure_path_mask;
+
 		p_objp->initial_hull = state.initial_hull;
 		p_objp->initial_shields = state.initial_shields;
 		p_objp->arrival_distance = state.arrival_distance;
@@ -1723,6 +1816,56 @@ void apply_parse_objects(const checkpoint_data& data)
 		p_objp->cargo1 = state.cargo1;
 
 		apply_def_flags(state.flags, Parse_object_flags, Num_parse_object_flags, p_objp->flags);
+	}
+}
+
+// The two bits of HUD state that game_post_level_init() builds from the pristine mission, well
+// before the apply point, and which therefore have to be put back by hand.
+void apply_hud_state(const checkpoint_data& data)
+{
+	// The escort list needs nothing stored: hud_add_remove_ship_escort() keeps Ship_Flags::Escort
+	// in step with the list, and that flag is restored with the rest of the ship.  So rebuild the
+	// list from the flags -- clearing without clearing the flags, then re-adding each flagged
+	// ship, which the toggle treats as an add because the list is empty by then.
+	hud_escort_clear_all(false);
+
+	for (const auto& state : data.ships) {
+		if (state.disposition != ShipDisposition::Present) {
+			continue;
+		}
+
+		auto entry = ship_registry_get(state.name);
+		if (entry == nullptr || !entry->has_shipp() || !entry->has_objp()) {
+			continue;
+		}
+
+		if (Ships[entry->shipnum].flags[Ship::Ship_Flags::Escort]) {
+			hud_add_remove_ship_escort(entry->objnum, 1);
+		}
+	}
+
+	if (Player == nullptr) {
+		return;
+	}
+
+	for (int set = 0; set < MAX_KEYED_TARGETS; set++) {
+		hud_target_hotkey_clear(set);
+	}
+
+	for (const auto& state : data.hotkeys) {
+		if (state.set < 0 || state.set >= MAX_KEYED_TARGETS) {
+			continue;
+		}
+
+		for (size_t i = 0; i < state.ship_names.size(); i++) {
+			auto entry = ship_registry_get(state.ship_names[i]);
+			if (entry == nullptr || !entry->has_objp()) {
+				continue;
+			}
+
+			int how_added = (i < state.how_added.size()) ? state.how_added[i] : HOTKEY_USER_ADDED;
+			hud_target_hotkey_add_remove(state.set, &Objects[entry->objnum], how_added);
+		}
 	}
 }
 
@@ -2124,17 +2267,14 @@ void mission_checkpoint_apply()
 	// After the world, because a restored event's state describes ships that now exist.
 	apply_mission_logic(data);
 
+	// HUD state last: the escort list is rebuilt from the ship flags, so every ship has to be in
+	// its final state first.
+	apply_hud_state(data);
+
 	// Player_obj and friends still point at whatever the fresh load created.  If the player's
 	// ship had its class changed above, change_ship_type() has already fixed the ship and
 	// object up; the player pointers themselves are unchanged by that, so there is nothing
 	// further to do here.
-
-	// KNOWN GAP: the HUD escort list and the mission hotkey assignments are built in
-	// game_post_level_init() from the pristine mission, which is now well before this point, so
-	// a ship added to or removed from the escort list during the saved run will not be
-	// reflected.  hud_setup_escort_list() cannot simply be re-run here -- it deliberately
-	// early-returns once GM_IN_MISSION is set, which it is by the time we get here.  Restoring
-	// those properly belongs with the rest of the HUD state in milestone 2.
 
 	Game_restoring = 0;
 
