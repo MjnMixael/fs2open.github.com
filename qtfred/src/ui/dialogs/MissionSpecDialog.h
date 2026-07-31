@@ -51,6 +51,7 @@ private slots:
 	void on_highResScreen_textChanged(const QString& string);
 	void on_highResScreenButton_clicked();
 	void on_supportRearmOptionsButton_clicked();
+	void on_checkpointOptionsButton_clicked();
 
 	// Middle column
 	void on_toggleTrail_toggled(bool checked);
