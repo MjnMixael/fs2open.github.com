@@ -40,7 +40,10 @@ enum class Section {
 	CheckpointClock = 0x0018,
 	CheckpointShips = 0x0019,
 	CheckpointWings = 0x001A,
-	CheckpointScoring = 0x001B
+	CheckpointScoring = 0x001B,
+	CheckpointEvents = 0x001C,
+	CheckpointGoals = 0x001D,
+	CheckpointLog = 0x001E
 };
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop
