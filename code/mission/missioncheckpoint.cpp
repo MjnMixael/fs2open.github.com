@@ -22,6 +22,7 @@
 #include "mission/missioncampaign.h"
 #include "mission/missiongoals.h"
 #include "mission/missionlog.h"
+#include "mission/missionmessage.h"
 #include "mission/missionparse.h"
 #include "mod_table/mod_table.h"
 #include "object/object.h"
@@ -364,6 +365,67 @@ int lookup_weapon_class(const SCP_string& name)
 	int index = weapon_info_lookup(name.c_str());
 	if (index < 0) {
 		mprintf(("CHECKPOINT => Weapon class '%s' no longer exists.\n", name.c_str()));
+	}
+	return index;
+}
+
+// Cargo_names starts out as whatever the mission file declared, but set-cargo appends to it as the
+// mission runs, so a cargo index saved late in one run can point past the end of the list a fresh
+// parse produces.  Cargo therefore travels by name.  The packed CARGO_NO_DEPLETE bit is a property
+// of the assignment rather than of the name, so it is carried separately.
+SCP_string cargo_name(int cargo1)
+{
+	int index = cargo1 & CARGO_INDEX_MASK;
+	if (index < 0 || index >= Num_cargo) {
+		return SCP_string();
+	}
+	return Cargo_names[index];
+}
+
+// Resolves back to an index, re-adding the name the way sexp_set_cargo does if this run's mission
+// has not declared it.  Index 0 is "Nothing", which is what the parse guarantees is always there
+// and so is the safe fallback.
+int lookup_cargo(const SCP_string& name)
+{
+	if (name.empty()) {
+		return 0;
+	}
+
+	for (int i = 0; i < Num_cargo; i++) {
+		if (!stricmp(Cargo_names[i], name.c_str())) {
+			return i;
+		}
+	}
+
+	if (Num_cargo + 1 >= MAX_CARGO || name.length() >= NAME_LENGTH) {
+		mprintf(("CHECKPOINT => Cannot restore cargo '%s'; using none.\n", name.c_str()));
+		return 0;
+	}
+
+	int index = Num_cargo++;
+	strcpy(Cargo_names[index], name.c_str());
+	return index;
+}
+
+// Personas are numbered by the order messages.tbl and its tbms happen to be parsed in, so the
+// index means nothing once a mod changes.
+SCP_string persona_name(int persona_index)
+{
+	if (persona_index < 0 || persona_index >= static_cast<int>(Personas.size())) {
+		return SCP_string();
+	}
+	return Personas[persona_index].name;
+}
+
+int lookup_persona(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+
+	int index = message_persona_name_lookup(name.c_str());
+	if (index < 0) {
+		mprintf(("CHECKPOINT => Persona '%s' no longer exists.\n", name.c_str()));
 	}
 	return index;
 }
@@ -760,6 +822,8 @@ void store_subsystems(const ship* shipp, SCP_vector<subsystem_state>& out)
 		state.ordinal = ordinals[state.name]++;
 		state.sub_name = subsys->sub_name;
 		state.cargo_title = subsys->subsys_cargo_title;
+		state.cargo = cargo_name(subsys->subsys_cargo_name);
+		state.cargo_no_deplete = (subsys->subsys_cargo_name & CARGO_NO_DEPLETE) != 0;
 
 		collect_flags(subsys->flags, Subsys_flag_table, state.flags);
 		store_subsys_scalars(*subsys, state.floats, state.ints);
@@ -806,6 +870,12 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in)
 		}
 		if (!state.cargo_title.empty()) {
 			strcpy_s(subsys->subsys_cargo_title, state.cargo_title.c_str());
+		}
+		if (!state.cargo.empty()) {
+			subsys->subsys_cargo_name = lookup_cargo(state.cargo);
+			if (state.cargo_no_deplete) {
+				subsys->subsys_cargo_name |= CARGO_NO_DEPLETE;
+			}
 		}
 
 		// Never leave a subsystem above its (possibly changed) maximum.
@@ -990,8 +1060,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.team = team_name(shipp->team);
 		state.display_name = shipp->display_name;
 		state.cargo_title = shipp->cargo_title;
-		state.cargo1 = shipp->cargo1;
+		state.cargo = cargo_name(shipp->cargo1);
+		state.cargo_no_deplete = (shipp->cargo1 & CARGO_NO_DEPLETE) != 0;
 		state.countermeasure_class = weapon_class_name(shipp->current_cmeasure);
+		state.persona = persona_name(shipp->persona_index);
 
 		if (shipp->wingnum >= 0 && shipp->wingnum < MAX_WINGS) {
 			state.wing_name = Wings[shipp->wingnum].name;
@@ -1114,8 +1186,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.timestamp = entry.timestamp;
 		state.timer_padding = entry.timer_padding;
 		state.index = entry.index;
-		state.primary_team = entry.primary_team;
-		state.secondary_team = entry.secondary_team;
+		state.primary_team = team_name(entry.primary_team);
+		state.secondary_team = team_name(entry.secondary_team);
 		state.pname = entry.pname;
 		state.sname = entry.sname;
 		state.pname_display = entry.pname_display;
@@ -1195,7 +1267,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.respawn_priority = p_objp->respawn_priority;
 		state.alt_type_index = p_objp->alt_type_index;
 		state.callsign_index = p_objp->callsign_index;
-		state.cargo1 = p_objp->cargo1;
+		state.cargo = cargo_name(p_objp->cargo1);
+		state.cargo_no_deplete = (p_objp->cargo1 & CARGO_NO_DEPLETE) != 0;
 
 		collect_def_flags(p_objp->flags, Parse_object_flags, Num_parse_object_flags, state.flags);
 
@@ -1642,7 +1715,18 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 	if (!state.cargo_title.empty()) {
 		strcpy_s(shipp->cargo_title, state.cargo_title.c_str());
 	}
-	shipp->cargo1 = state.cargo1;
+	if (!state.cargo.empty()) {
+		int cargo = lookup_cargo(state.cargo);
+		if (state.cargo_no_deplete) {
+			cargo |= CARGO_NO_DEPLETE;
+		}
+		shipp->cargo1 = static_cast<char>(cargo);
+	}
+
+	int persona = lookup_persona(state.persona);
+	if (persona >= 0) {
+		shipp->persona_index = persona;
+	}
 
 	apply_flags(state.flags, Ship_flag_table, shipp->flags);
 	apply_flags(state.object_flags, Object_flag_table, objp->flags);
@@ -1829,7 +1913,13 @@ void apply_parse_objects(const checkpoint_data& data)
 		p_objp->respawn_priority = state.respawn_priority;
 		p_objp->alt_type_index = state.alt_type_index;
 		p_objp->callsign_index = state.callsign_index;
-		p_objp->cargo1 = state.cargo1;
+		if (!state.cargo.empty()) {
+			int cargo = lookup_cargo(state.cargo);
+			if (state.cargo_no_deplete) {
+				cargo |= CARGO_NO_DEPLETE;
+			}
+			p_objp->cargo1 = static_cast<char>(cargo);
+		}
 
 		apply_def_flags(state.flags, Parse_object_flags, Num_parse_object_flags, p_objp->flags);
 	}
@@ -2051,8 +2141,8 @@ void apply_mission_logic(const checkpoint_data& data)
 		entry.timestamp = state.timestamp;
 		entry.timer_padding = state.timer_padding;
 		entry.index = state.index;
-		entry.primary_team = state.primary_team;
-		entry.secondary_team = state.secondary_team;
+		entry.primary_team = lookup_team(state.primary_team);
+		entry.secondary_team = lookup_team(state.secondary_team);
 		strcpy_s(entry.pname, state.pname.c_str());
 		strcpy_s(entry.sname, state.sname.c_str());
 		entry.pname_display = state.pname_display;
