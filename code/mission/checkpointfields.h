@@ -170,12 +170,15 @@
 	F(tertiary_bank_ammo)                                                                      \
 	F(tertiary_bank_start_ammo)                                                                \
 	F(tertiary_bank_capacity)                                                                  \
-	F(tertiary_bank_rearm_time)                                                                \
 	F(remote_detonaters_active)
 
+// rearm_time is "timestamp which indicates when bank can get new projectile" (ship.h), not a
+// duration, despite the name.  The per-bank primary and secondary equivalents live in
+// checkpoint::weapon_bank and are shifted where they are applied.
 #define CKPT_WEAPONS_STAMPS(F)                                                                 \
 	F(next_tertiary_fire_stamp)                                                                \
-	F(detonate_weapon_time)
+	F(detonate_weapon_time)                                                                    \
+	F(tertiary_bank_rearm_time)
 
 // ------------------------------------------------------------------
 // wing -- see code/ship/ship.h
