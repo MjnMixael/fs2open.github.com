@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Checkpoint Options - QtFRED Help</title>
+    <link rel="stylesheet" type="text/css" href="../css/help.css"/>
+</head>
+<body>
+<nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; Mission &rsaquo;
+    <a href="MissionSpecsDialog.html">Mission Specs</a> &rsaquo; Checkpoints</nav>
+<h1>Checkpoint Options</h1>
+<p>Opens via <strong>Editors &rsaquo; Mission Specs &rsaquo; Checkpoints</strong>.</p>
+<p>Mission-wide settings for the in-engine checkpoint system. A checkpoint saves the state of a
+mission in progress &mdash; ship damage, subsystems, weapons, positions, wing waves, SEXP
+variables, score and mission time &mdash; so the player can resume from it later, including after
+quitting the game.</p>
+
+<p>Checkpoints are written by the <strong>store-checkpoint</strong> operator, so a mission that
+never calls it has none. These settings control what happens around that.</p>
+
+<h2>Availability</h2>
+<table>
+    <tr><th>Control</th><th>Description</th></tr>
+    <tr><td>Disallow checkpoints in campaign mode</td><td>Every checkpoint operator does nothing
+        while this mission is flown as part of a campaign, and no resume prompt appears.</td></tr>
+    <tr><td>Disallow checkpoints in simulator mode</td><td>The same, for when the mission is
+        flown outside a campaign &mdash; from the mission simulator, or launched directly.</td></tr>
+</table>
+<p>These are separate switches because the two contexts often want different behavior: a
+checkpoint is a courtesy during a long campaign mission, but it can undermine a mission being
+replayed for score. Checking both switches checkpoints off entirely for this mission.</p>
+
+<h2>Resuming</h2>
+<p>When a usable checkpoint exists, the engine asks the player whether to resume on the way into
+the mission &mdash; after the briefing and loadout, before the first frame, with no second loading
+screen. These settings control that prompt.</p>
+<table>
+    <tr><th>Control</th><th>Description</th></tr>
+    <tr><td>Do not offer to resume on mission entry</td><td>Suppresses the automatic prompt. The
+        checkpoint still exists and <strong>load-checkpoint</strong> still works; use this for
+        missions where a scripted mid-mission prompt is the intended flow.</td></tr>
+    <tr><td>Keep the player's briefing loadout when resuming</td><td>Leaves the player's ship
+        class and weapons as the briefing set them, rather than restoring the ones the checkpoint
+        recorded. Lets the player retry with a different fit.</td></tr>
+    <tr><td>Keep the player wing's briefing loadout when resuming</td><td>The same, for the rest
+        of the player's wing.</td></tr>
+</table>
+<p>The two loadout options apply only to the automatic prompt, which is why they are unavailable
+once it is suppressed. <strong>load-checkpoint</strong> and
+<strong>prompt-user-checkpoint-load</strong> take the same options as arguments of their own.</p>
+
+<h2>Lifetime</h2>
+<table>
+    <tr><th>Control</th><th>Description</th></tr>
+    <tr><td>Delete this mission's checkpoints once it is completed</td><td>Discards them when the
+        player finishes the mission successfully, so replaying it later starts clean instead of
+        offering a checkpoint from the previous run. A failed mission keeps its checkpoints,
+        since that is exactly when they are wanted.</td></tr>
+</table>
+<p>Without this, checkpoints persist until <strong>delete-checkpoint</strong> is called or a
+later <strong>store-checkpoint</strong> overwrites the slot.</p>
+
+<h2>Notes</h2>
+<ul>
+    <li>Checkpoints are stored per pilot, per campaign and per mission, so one pilot's checkpoints
+        never appear for another.</li>
+    <li>A checkpoint saved before the mission file was last edited is treated as absent, because
+        the mission's events and variables would no longer line up with it.</li>
+    <li>Checkpoints do nothing in multiplayer.</li>
+</ul>
+</body>
+</html>

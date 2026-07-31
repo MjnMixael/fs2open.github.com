@@ -24,6 +24,7 @@
 #include "localization/localize.h"
 #include "mission/missionbriefcommon.h"
 #include "mission/missioncampaign.h"
+#include "mission/missioncheckpoint.h"
 #include "mission/missiongoals.h"
 #include "mission/missiontraining.h"
 #include "missionui/chatbox.h"
@@ -1311,6 +1312,15 @@ void debrief_accept(int ok_to_post_start_game_event, bool API_Access)
 	}
 
 	Debrief_accepted = 1;
+
+	// The mission is over.  If it is flagged to clean up after itself and the player actually
+	// succeeded, its checkpoints have served their purpose and should not be offered to somebody
+	// replaying it later.  A failed mission keeps them, since that is exactly when they are
+	// wanted.
+	if (mission_goals_met()) {
+		mission_checkpoint_mission_complete();
+	}
+
 	// save mission stats
 	if (Game_mode & GM_MULTIPLAYER) {
 		// note that multi_debrief_accept_hit() will handle all mission_campaign_* calls on its own
