@@ -2922,6 +2922,18 @@ int stuff_int(int *i, bool optional)
 //	Advances past integer characters.
 int stuff_long(long *l, bool optional)
 {
+	// Kept for callers that only need 32 bits on Windows; the real work is 64-bit so that
+	// anything reading a flagset gets every flag rather than the low half of one.
+	long long wide = 0;
+	int retval = stuff_longlong(&wide, optional);
+
+	*l = static_cast<long>(wide);
+
+	return retval;
+}
+
+int stuff_longlong(long long *l, bool optional)
+{
 	char *str_start = Mp;
 
 	// since atol ignores white space anyway, might as well make it explicit
@@ -2940,7 +2952,7 @@ int stuff_long(long *l, bool optional)
 	else
 		span = strspn(Mp, "0123456789");
 
-	auto result = atol(Mp);
+	auto result = atoll(Mp);
 	bool success = false, comma = false;
 	int retval = 0;
 
@@ -2979,7 +2991,7 @@ int stuff_long(long *l, bool optional)
 	if (success)
 	{
 		retval = 2;
-		diag_printf("Stuffed long: %ld\n", *l);
+		diag_printf("Stuffed long: %lld\n", *l);
 	}
 	else if (optional)
 		retval = comma ? 1 : 0;

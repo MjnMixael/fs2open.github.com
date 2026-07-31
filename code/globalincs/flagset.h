@@ -201,9 +201,13 @@ class flagset {
 	bool any_set() const { return values.any(); }
 	bool none_set() const { return values.none(); }
 
-	void from_u64(std::uint64_t num) { values = (unsigned long) num; }
+	// Both of these have to be 64-bit the whole way through.  unsigned long is 32 bits on Windows,
+	// so going via it truncated every flag above bit 31 on read and made to_ulong() throw
+	// std::overflow_error on write -- and Mission_Flags has had more than 32 flags in it for a
+	// while now.
+	void from_u64(std::uint64_t num) { values = num; }
 
-	std::uint64_t to_u64() const { return (std::uint64_t) values.to_ulong(); }
+	std::uint64_t to_u64() const { return values.to_ullong(); }
 
 	size_t hash() const { return std::hash<std::bitset<SIZE>>()(values); }
 };

@@ -164,6 +164,7 @@ extern bool check_first_non_grayspace_char(const char *str, char ch_to_look_for,
 extern int stuff_float(float *f, bool optional = false);
 extern int stuff_int(int *i, bool optional = false);
 extern int stuff_long(long *l, bool optional = false);
+extern int stuff_longlong(long long *l, bool optional = false);
 extern void stuff_ubyte(ubyte *i);
 extern int stuff_int_optional(int *i);
 extern int stuff_float_optional(float *f);
@@ -247,11 +248,14 @@ void parse_string_flag_list_special(Flagset& dest, const special_flag_def_list_n
 
 template<class T>
 void stuff_flagset(T *dest) {
-    long l = 0;
-    stuff_long(&l);
+    // 64 bits, not long: a flagset with more than 32 flags in it -- Mission_Flags passed that
+    // mark some time ago -- would otherwise lose everything above bit 31 on Windows, where long
+    // is 32 bits.
+    long long l = 0;
+    stuff_longlong(&l);
 
 	if (l < 0) {
-		error_display(0, "Expected flagset value but got negative value %lu!\n", l);
+		error_display(0, "Expected flagset value but got negative value %lld!\n", l);
 		l = 0;
 	}
     dest->from_u64((std::uint64_t) l);
