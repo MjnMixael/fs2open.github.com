@@ -735,6 +735,29 @@ void invalidate_existence_cache(const SCP_string& slot)
 } // namespace
 
 // ------------------------------------------------------------------
+// Availability
+// ------------------------------------------------------------------
+
+bool mission_checkpoint_allowed()
+{
+	if (Game_mode & GM_MULTIPLAYER) {
+		return false;
+	}
+
+	// A designer may well want checkpoints while the mission is being replayed on its own and
+	// not during the campaign proper, or the other way round, so the two are separate switches.
+	if (Game_mode & GM_CAMPAIGN_MODE) {
+		if (The_mission.flags[Mission::Mission_Flags::No_checkpoints_in_campaign]) {
+			return false;
+		}
+	} else if (The_mission.flags[Mission::Mission_Flags::No_checkpoints_in_simulator]) {
+		return false;
+	}
+
+	return true;
+}
+
+// ------------------------------------------------------------------
 // Store
 // ------------------------------------------------------------------
 
@@ -742,6 +765,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 {
 	if (!(Game_mode & GM_IN_MISSION)) {
 		mprintf(("CHECKPOINT => store called outside a mission; ignoring.\n"));
+		return false;
+	}
+
+	if (!mission_checkpoint_allowed()) {
+		mprintf(("CHECKPOINT => Checkpoints are switched off for this mission; not storing.\n"));
 		return false;
 	}
 
@@ -907,6 +935,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 bool mission_checkpoint_exists(const SCP_string& slot)
 {
+	// A checkpoint that cannot be loaded in this mode may as well not be there.
+	if (!mission_checkpoint_allowed()) {
+		return false;
+	}
+
 	auto cached = Existence_cache.find(slot);
 	if (cached != Existence_cache.end() && cached->second.mission == Game_current_mission_filename) {
 		return cached->second.exists;
@@ -940,6 +973,11 @@ void mission_checkpoint_delete(const SCP_string& slot)
 
 void mission_checkpoint_request_load(const SCP_string& slot, LoadFlags flags)
 {
+	if (!mission_checkpoint_allowed()) {
+		mprintf(("CHECKPOINT => Checkpoints are switched off for this mission; not loading.\n"));
+		return;
+	}
+
 	Pending_load.queued = true;
 	Pending_load.slot = slot;
 	Pending_load.flags = flags;
@@ -1419,7 +1457,7 @@ void mission_checkpoint_maybe_offer_resume()
 		return;
 	}
 
-	if (Game_mode & GM_MULTIPLAYER) {
+	if (!mission_checkpoint_allowed()) {
 		return;
 	}
 
@@ -1455,13 +1493,38 @@ void mission_checkpoint_maybe_offer_resume()
 		return;
 	}
 
+	// The entry prompt has no arguments to take options from, so the loadout choices come from
+	// the mission instead.  "Reopen loadout" is deliberately not available here: the player has
+	// only just come through the loadout screen.
+	LoadFlags flags = LoadFlags::None;
+	if (The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_player_loadout]) {
+		flags |= LoadFlags::KeepPlayerLoadout;
+	}
+	if (The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_wing_loadout]) {
+		flags |= LoadFlags::KeepWingLoadout;
+	}
+
 	// No mission reload needed.  The reload the SEXP path performs exists only to get back to
 	// a freshly parsed mission, and entering a mission is already exactly that -- so all that
 	// is left is the bash, which mission_checkpoint_apply() does immediately after this.
 	Pending_load.slot = slot;
-	Pending_load.flags = LoadFlags::None;
+	Pending_load.flags = flags;
 	Pending_load.data = std::move(data);
 	Pending_load.in_progress = true;
+}
+
+void mission_checkpoint_mission_complete()
+{
+	if (!The_mission.flags[Mission::Mission_Flags::Checkpoint_delete_on_completion]) {
+		return;
+	}
+
+	int deleted = checkpoint_delete_all(SCP_string());
+	if (deleted > 0) {
+		mprintf(("CHECKPOINT => Mission complete; discarded %d checkpoint(s).\n", deleted));
+	}
+
+	Existence_cache.clear();
 }
 
 void mission_checkpoint_apply()
