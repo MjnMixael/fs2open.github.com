@@ -233,12 +233,18 @@ struct goal_state {
 // happened, a ship that is known destroyed.  A plain SEXP_TRUE/SEXP_FALSE is recomputed every
 // frame anyway, so storing it would just bloat the file.
 //
+// SEXP_NUM_EVAL is sticky too, and less obviously so: `rand` rolls once and then parks both the
+// marker and the rolled number on the node (rand_sexp(), sexp.cpp), so it never rolls again.  That
+// is why the text comes along -- for those nodes the text *is* the value, and without it a
+// restored mission re-rolls every random delay the mission had already settled.
+//
 // Identified by node index, which is only meaningful for an identical parse of an identical
 // mission file.  That is exactly what the fingerprint check guarantees.
 struct sexp_node_state {
 	int index = 0;
 	int value = 0;
 	int flags = 0;
+	SCP_string text;   // only stored when the node's text carries state, i.e. SEXP_NUM_EVAL
 };
 
 // Containers hold runtime data the same way SEXP variables do.
