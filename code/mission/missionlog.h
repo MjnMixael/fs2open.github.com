@@ -89,6 +89,10 @@ struct log_line_complete {
 // function prototypes
 
 // to be called before each mission starts
+// The log itself.  Exposed so the checkpoint system can capture and replay it; everything else
+// should be going through the functions below.
+extern SCP_vector<log_entry> Log_entries;
+
 extern void mission_log_init();
 
 // adds an entry to the mission log.  The name is a string identifier that is the object

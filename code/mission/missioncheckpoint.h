@@ -190,6 +190,57 @@ struct scoring_state {
 	SCP_map<SCP_string, int> class_kills;
 };
 
+// What an event had got up to.  Matched back by name; everything the mission file defines about
+// the event -- its formula, interval, score, objective text -- is reproduced by the mission load
+// and is deliberately absent.  repeat_count and trigger_count are here because they count *down*
+// as the event fires.
+struct event_state {
+	SCP_string name;
+
+	int result = 0;
+	int previous_result = 0;
+	int repeat_count = 0;
+	int trigger_count = 0;
+	int count = 0;
+	int mission_log_flags = 0;
+
+	// Only the bits that change while the mission runs; see Event_flag_table in
+	// missioncheckpoint.cpp.  The parse-time bits are left as the mission load set them.
+	SCP_vector<SCP_string> flags;
+
+	int timestamp = 0;
+	int satisfied_time = 0;
+	int born_on_date = 0;
+
+	SCP_vector<SCP_string> log_buffer;
+	SCP_vector<SCP_string> log_variable_buffer;
+	SCP_vector<SCP_string> log_container_buffer;
+	SCP_vector<SCP_string> log_argument_buffer;
+	SCP_vector<SCP_string> backup_log_buffer;
+};
+
+// Goals only really have one piece of runtime state.
+struct goal_state {
+	SCP_string name;
+	int satisfied = 0;
+};
+
+// A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
+// timestamp, so it is restored as-is rather than shifted.
+struct log_entry_state {
+	int type = 0;
+	int flags = 0;
+	fix timestamp = 0;
+	int timer_padding = 0;
+	int index = 0;
+	int primary_team = -1;
+	int secondary_team = -1;
+	SCP_string pname;
+	SCP_string sname;
+	SCP_string pname_display;
+	SCP_string sname_display;
+};
+
 struct checkpoint_data {
 	// --- identity and validity ---
 	int version = 0;
@@ -218,6 +269,12 @@ struct checkpoint_data {
 	SCP_vector<wing_state> wings;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;
+
+	// --- mission logic ---
+	SCP_vector<event_state> events;
+	SCP_vector<goal_state> goals;
+	SCP_vector<log_entry_state> log_entries;
+	int goal_timestamp = 0;
 
 	bool loaded = false;
 };
