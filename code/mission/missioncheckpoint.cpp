@@ -1005,6 +1005,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.shield_quadrants.assign(objp->shield_quadrant.begin(), objp->shield_quadrant.end());
 
 		collect_flags(shipp->flags, Ship_flag_table, state.flags);
+
+		if (shipp->flags[Ship::Ship_Flags::Escort]) {
+			mprintf(("CHECKPOINT => Storing '%s' as an escort.\n", shipp->ship_name));
+		}
 		collect_flags(objp->flags, Object_flag_table, state.object_flags);
 		store_ship_scalars(*shipp, state.floats, state.ints);
 		store_physics(objp->phys_info, state.physics_floats, state.physics_vecs);
@@ -1851,12 +1855,18 @@ void apply_hud_state(const checkpoint_data& data)
 		if (Ships[entry->shipnum].flags[Ship::Ship_Flags::Escort]) {
 			hud_add_remove_ship_escort(entry->objnum, 1);
 			escorts++;
+		} else if (std::find(state.flags.begin(), state.flags.end(), SCP_string("escort")) != state.flags.end()) {
+			// The file says escort but the live ship does not, which means the flag did not survive
+			// apply_ship() -- a different problem from the rebuild failing.
+			mprintf(("CHECKPOINT => '%s' is an escort in the checkpoint but lost the flag on restore.\n",
+			         state.name.c_str()));
 		}
 	}
 
-	mprintf(("CHECKPOINT => Escort list: %d ship(s) flagged in the checkpoint, %d re-added.\n",
+	mprintf(("CHECKPOINT => Escort list: %d ship(s) flagged in the checkpoint, %d re-added, %d now on the list.\n",
 	         flagged_in_file,
-	         escorts));
+	         escorts,
+	         hud_escort_num_ships_on_list()));
 
 	if (Player == nullptr) {
 		return;
