@@ -225,6 +225,31 @@ struct goal_state {
 	int satisfied = 0;
 };
 
+// A SEXP node whose evaluation state has stopped being the default.
+//
+// Only nodes that have reached a *sticky* state are worth carrying: SEXP_KNOWN_TRUE,
+// SEXP_KNOWN_FALSE and SEXP_NAN_FOREVER never change again, and they are what stops an event
+// re-triggering something the ship restore has already accounted for -- an arrival that has
+// happened, a ship that is known destroyed.  A plain SEXP_TRUE/SEXP_FALSE is recomputed every
+// frame anyway, so storing it would just bloat the file.
+//
+// Identified by node index, which is only meaningful for an identical parse of an identical
+// mission file.  That is exactly what the fingerprint check guarantees.
+struct sexp_node_state {
+	int index = 0;
+	int value = 0;
+	int flags = 0;
+};
+
+// Containers hold runtime data the same way SEXP variables do.
+struct container_state {
+	SCP_string name;
+	SCP_vector<SCP_string> list_data;
+	// Flattened key/value pairs, in the order they come out of the map.
+	SCP_vector<SCP_string> map_keys;
+	SCP_vector<SCP_string> map_values;
+};
+
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
 // timestamp, so it is restored as-is rather than shifted.
 struct log_entry_state {
@@ -274,6 +299,8 @@ struct checkpoint_data {
 	SCP_vector<event_state> events;
 	SCP_vector<goal_state> goals;
 	SCP_vector<log_entry_state> log_entries;
+	SCP_vector<sexp_node_state> sexp_nodes;
+	SCP_vector<container_state> containers;
 	int goal_timestamp = 0;
 
 	bool loaded = false;
