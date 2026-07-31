@@ -366,6 +366,8 @@ void write_subsystems(pilot::FileHandler* handler, const SCP_vector<checkpoint::
 		handler->writeInt("ordinal", subsys.ordinal);
 		handler->writeString("sub_name", subsys.sub_name.c_str());
 		handler->writeString("cargo_title", subsys.cargo_title.c_str());
+		handler->writeString("cargo", subsys.cargo.c_str());
+		handler->writeBool("cargo_no_deplete", subsys.cargo_no_deplete);
 		handler->writeString("turret_target", subsys.turret_target.c_str());
 
 		write_string_list(handler, "flags", subsys.flags);
@@ -398,6 +400,8 @@ void read_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::subsyst
 		subsys.ordinal = handler->readIntOr("ordinal", 0);
 		subsys.sub_name = handler->readStringOr("sub_name", "");
 		subsys.cargo_title = handler->readStringOr("cargo_title", "");
+		subsys.cargo = handler->readStringOr("cargo", "");
+		subsys.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 		subsys.turret_target = handler->readStringOr("turret_target", "");
 
 		read_string_list(handler, "flags", subsys.flags);
@@ -440,7 +444,8 @@ void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoi
 		handler->writeInt("respawn_priority", p_obj.respawn_priority);
 		handler->writeInt("alt_type_index", p_obj.alt_type_index);
 		handler->writeInt("callsign_index", p_obj.callsign_index);
-		handler->writeInt("cargo1", p_obj.cargo1);
+		handler->writeString("cargo", p_obj.cargo.c_str());
+		handler->writeBool("cargo_no_deplete", p_obj.cargo_no_deplete);
 
 		write_string_list(handler, "flags", p_obj.flags);
 
@@ -481,7 +486,8 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 		p_obj.respawn_priority = handler->readIntOr("respawn_priority", 0);
 		p_obj.alt_type_index = handler->readIntOr("alt_type_index", -1);
 		p_obj.callsign_index = handler->readIntOr("callsign_index", -1);
-		p_obj.cargo1 = static_cast<char>(handler->readIntOr("cargo1", 0));
+		p_obj.cargo = handler->readStringOr("cargo", "");
+		p_obj.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 
 		read_string_list(handler, "flags", p_obj.flags);
 
@@ -562,7 +568,9 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			handler->writeString("wing", ship_data.wing_name.c_str());
 			handler->writeString("cargo_title", ship_data.cargo_title.c_str());
 			handler->writeString("countermeasure_class", ship_data.countermeasure_class.c_str());
-			handler->writeInt("cargo1", ship_data.cargo1);
+			handler->writeString("persona", ship_data.persona.c_str());
+			handler->writeString("cargo", ship_data.cargo.c_str());
+			handler->writeBool("cargo_no_deplete", ship_data.cargo_no_deplete);
 
 			write_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
 			write_vector(handler, "fvec_x", "fvec_y", "fvec_z", ship_data.orient.vec.fvec);
@@ -630,7 +638,9 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			ship_data.wing_name = handler->readStringOr("wing", "");
 			ship_data.cargo_title = handler->readStringOr("cargo_title", "");
 			ship_data.countermeasure_class = handler->readStringOr("countermeasure_class", "");
-			ship_data.cargo1 = static_cast<char>(handler->readIntOr("cargo1", 0));
+			ship_data.persona = handler->readStringOr("persona", "");
+			ship_data.cargo = handler->readStringOr("cargo", "");
+			ship_data.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 
 			read_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
 			read_vector(handler, "fvec_x", "fvec_y", "fvec_z", ship_data.orient.vec.fvec);
@@ -865,8 +875,8 @@ void write_log(pilot::FileHandler* handler, const checkpoint::checkpoint_data& d
 		handler->writeInt("timestamp", static_cast<std::int32_t>(entry.timestamp));
 		handler->writeInt("timer_padding", entry.timer_padding);
 		handler->writeInt("index", entry.index);
-		handler->writeInt("primary_team", entry.primary_team);
-		handler->writeInt("secondary_team", entry.secondary_team);
+		handler->writeString("primary_team", entry.primary_team.c_str());
+		handler->writeString("secondary_team", entry.secondary_team.c_str());
 		handler->writeString("pname", entry.pname.c_str());
 		handler->writeString("sname", entry.sname.c_str());
 		handler->writeString("pname_display", entry.pname_display.c_str());
@@ -896,8 +906,8 @@ void read_log(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		entry.timestamp = static_cast<fix>(handler->readIntOr("timestamp", 0));
 		entry.timer_padding = handler->readIntOr("timer_padding", 0);
 		entry.index = handler->readIntOr("index", 0);
-		entry.primary_team = handler->readIntOr("primary_team", -1);
-		entry.secondary_team = handler->readIntOr("secondary_team", -1);
+		entry.primary_team = handler->readStringOr("primary_team", "");
+		entry.secondary_team = handler->readStringOr("secondary_team", "");
 		entry.pname = handler->readStringOr("pname", "");
 		entry.sname = handler->readStringOr("sname", "");
 		entry.pname_display = handler->readStringOr("pname_display", "");
