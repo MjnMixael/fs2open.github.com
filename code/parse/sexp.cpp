@@ -18946,8 +18946,9 @@ static checkpoint::LoadFlags sexp_checkpoint_load_flags(int node)
 
 static void sexp_store_checkpoint(int node)
 {
-	if (Game_mode & GM_MULTIPLAYER) {
-		mprintf(("CHECKPOINT => store-checkpoint does nothing in multiplayer.\n"));
+	// mission_checkpoint_store() checks this too; doing it here as well keeps the log quiet when
+	// a mission has checkpoints switched off for the mode it is being flown in.
+	if (!mission_checkpoint_allowed()) {
 		return;
 	}
 
@@ -18956,8 +18957,7 @@ static void sexp_store_checkpoint(int node)
 
 static void sexp_load_checkpoint(int node)
 {
-	if (Game_mode & GM_MULTIPLAYER) {
-		mprintf(("CHECKPOINT => load-checkpoint does nothing in multiplayer.\n"));
+	if (!mission_checkpoint_allowed()) {
 		return;
 	}
 
@@ -18972,7 +18972,7 @@ static void sexp_load_checkpoint(int node)
 
 static void sexp_prompt_user_checkpoint_load(int node)
 {
-	if (Game_mode & GM_MULTIPLAYER) {
+	if (!mission_checkpoint_allowed()) {
 		return;
 	}
 
@@ -19038,10 +19038,6 @@ static void sexp_prompt_user_checkpoint_load(int node)
 
 static int sexp_checkpoint_exists(int node)
 {
-	if (Game_mode & GM_MULTIPLAYER) {
-		return SEXP_FALSE;
-	}
-
 	return mission_checkpoint_exists(sexp_checkpoint_slot(node)) ? SEXP_TRUE : SEXP_FALSE;
 }
 
@@ -42509,7 +42505,8 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\t1: Optional name for this checkpoint slot, so that a mission can keep more than one.  Defaults to \"default\".\r\n\r\n"
 		"The checkpoint is written to disk under the current pilot and campaign, so it survives quitting the game.  "
 		"It records every ship's damage, subsystems, weapons, position and movement, wing wave state, SEXP variables, "
-		"the player's score and kills, and the mission time.  Does nothing in multiplayer."
+		"the player's score and kills, and the mission time.  Does nothing in multiplayer, or when checkpoints have "
+		"been switched off for this mission in Mission Specs -> Checkpoints."
 	},
 
 	{ OP_LOAD_CHECKPOINT, "load-checkpoint\r\n"
@@ -42537,8 +42534,8 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"If no usable checkpoint exists the player is not asked at all.  Does nothing in multiplayer.\r\n\r\n"
 		"Use this for offering a checkpoint at a scripted moment mid-mission, such as after the player fails an "
 		"objective.  You do NOT need it to offer a checkpoint when the mission starts: the engine already asks "
-		"automatically on the way in whenever a usable checkpoint exists, without reloading the mission.  Set the "
-		"\"No Checkpoint Resume Prompt\" mission flag to suppress that automatic prompt."
+		"automatically on the way in whenever a usable checkpoint exists, without reloading the mission.  That "
+		"prompt, and what it does about the loadout, is configured in Mission Specs -> Checkpoints."
 	},
 
 	{ OP_CHECKPOINT_EXISTS, "checkpoint-exists\r\n"
