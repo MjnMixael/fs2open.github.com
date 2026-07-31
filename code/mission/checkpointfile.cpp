@@ -597,6 +597,178 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	}
 }
 
+void write_events(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointEvents);
+
+	handler->writeInt("goal_timestamp", data.goal_timestamp);
+
+	handler->startArrayWrite("events", data.events.size());
+	for (const auto& event : data.events) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("name", event.name.c_str());
+		handler->writeInt("result", event.result);
+		handler->writeInt("previous_result", event.previous_result);
+		handler->writeInt("repeat_count", event.repeat_count);
+		handler->writeInt("trigger_count", event.trigger_count);
+		handler->writeInt("count", event.count);
+		handler->writeInt("mission_log_flags", event.mission_log_flags);
+		handler->writeInt("timestamp", event.timestamp);
+		handler->writeInt("satisfied_time", event.satisfied_time);
+		handler->writeInt("born_on_date", event.born_on_date);
+
+		write_string_list(handler, "flags", event.flags);
+		write_string_list(handler, "log_buffer", event.log_buffer);
+		write_string_list(handler, "log_variable_buffer", event.log_variable_buffer);
+		write_string_list(handler, "log_container_buffer", event.log_container_buffer);
+		write_string_list(handler, "log_argument_buffer", event.log_argument_buffer);
+		write_string_list(handler, "backup_log_buffer", event.backup_log_buffer);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_events(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.goal_timestamp = handler->readIntOr("goal_timestamp", 0);
+
+	data.events.clear();
+
+	if (!handler->hasField("events")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("events");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::event_state event;
+
+		event.name = handler->readStringOr("name", "");
+		event.result = handler->readIntOr("result", 0);
+		event.previous_result = handler->readIntOr("previous_result", 0);
+		event.repeat_count = handler->readIntOr("repeat_count", 0);
+		event.trigger_count = handler->readIntOr("trigger_count", 0);
+		event.count = handler->readIntOr("count", 0);
+		event.mission_log_flags = handler->readIntOr("mission_log_flags", 0);
+		event.timestamp = handler->readIntOr("timestamp", -1);
+		event.satisfied_time = handler->readIntOr("satisfied_time", -1);
+		event.born_on_date = handler->readIntOr("born_on_date", -1);
+
+		read_string_list(handler, "flags", event.flags);
+		read_string_list(handler, "log_buffer", event.log_buffer);
+		read_string_list(handler, "log_variable_buffer", event.log_variable_buffer);
+		read_string_list(handler, "log_container_buffer", event.log_container_buffer);
+		read_string_list(handler, "log_argument_buffer", event.log_argument_buffer);
+		read_string_list(handler, "backup_log_buffer", event.backup_log_buffer);
+
+		if (!event.name.empty()) {
+			data.events.push_back(std::move(event));
+		}
+	}
+	handler->endArrayRead();
+}
+
+void write_goals(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointGoals);
+
+	handler->startArrayWrite("goals", data.goals.size());
+	for (const auto& goal : data.goals) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", goal.name.c_str());
+		handler->writeInt("satisfied", goal.satisfied);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_goals(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.goals.clear();
+
+	if (!handler->hasField("goals")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("goals");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::goal_state goal;
+
+		goal.name = handler->readStringOr("name", "");
+		goal.satisfied = handler->readIntOr("satisfied", 0);
+
+		if (!goal.name.empty()) {
+			data.goals.push_back(std::move(goal));
+		}
+	}
+	handler->endArrayRead();
+}
+
+void write_log(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointLog);
+
+	handler->startArrayWrite("entries", data.log_entries.size());
+	for (const auto& entry : data.log_entries) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		// LogType's values are written out explicitly in the enum, so they cannot shift when
+		// somebody adds a new one and the raw number is safe to store.
+		handler->writeInt("type", entry.type);
+		handler->writeInt("flags", entry.flags);
+		handler->writeInt("timestamp", static_cast<std::int32_t>(entry.timestamp));
+		handler->writeInt("timer_padding", entry.timer_padding);
+		handler->writeInt("index", entry.index);
+		handler->writeInt("primary_team", entry.primary_team);
+		handler->writeInt("secondary_team", entry.secondary_team);
+		handler->writeString("pname", entry.pname.c_str());
+		handler->writeString("sname", entry.sname.c_str());
+		handler->writeString("pname_display", entry.pname_display.c_str());
+		handler->writeString("sname_display", entry.sname_display.c_str());
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_log(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.log_entries.clear();
+
+	if (!handler->hasField("entries")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("entries");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::log_entry_state entry;
+
+		entry.type = handler->readIntOr("type", 0);
+		entry.flags = handler->readIntOr("flags", 0);
+		entry.timestamp = static_cast<fix>(handler->readIntOr("timestamp", 0));
+		entry.timer_padding = handler->readIntOr("timer_padding", 0);
+		entry.index = handler->readIntOr("index", 0);
+		entry.primary_team = handler->readIntOr("primary_team", -1);
+		entry.secondary_team = handler->readIntOr("secondary_team", -1);
+		entry.pname = handler->readStringOr("pname", "");
+		entry.sname = handler->readStringOr("sname", "");
+		entry.pname_display = handler->readStringOr("pname_display", "");
+		entry.sname_display = handler->readStringOr("sname_display", "");
+
+		if (entry.type != 0) {
+			data.log_entries.push_back(std::move(entry));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_scoring(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointScoring);
@@ -849,16 +1021,22 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_ships(handler.get(), data);
 	write_wings(handler.get(), data);
 	write_scoring(handler.get(), data);
+	write_events(handler.get(), data);
+	write_goals(handler.get(), data);
+	write_log(handler.get(), data);
 
 	handler->endWritingSections();
 
 	handler->flush();
 
-	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables)\n",
+	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries)\n",
 	         filename.c_str(),
 	         static_cast<int>(data.ships.size()),
 	         static_cast<int>(data.wings.size()),
-	         static_cast<int>(data.variables.size())));
+	         static_cast<int>(data.variables.size()),
+	         static_cast<int>(data.events.size()),
+	         static_cast<int>(data.goals.size()),
+	         static_cast<int>(data.log_entries.size())));
 
 	return true;
 }
@@ -923,6 +1101,18 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointScoring:
 			read_scoring(handler.get(), data);
+			break;
+
+		case Section::CheckpointEvents:
+			read_events(handler.get(), data);
+			break;
+
+		case Section::CheckpointGoals:
+			read_goals(handler.get(), data);
+			break;
+
+		case Section::CheckpointLog:
+			read_log(handler.get(), data);
 			break;
 
 		default:

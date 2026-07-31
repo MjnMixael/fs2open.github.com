@@ -15,6 +15,8 @@
 #include "mission/checkpointfields.h"
 #include "mission/checkpointfile.h"
 #include "mission/missioncampaign.h"
+#include "mission/missiongoals.h"
+#include "mission/missionlog.h"
 #include "mission/missionparse.h"
 #include "mod_table/mod_table.h"
 #include "object/object.h"
@@ -27,6 +29,8 @@
 #include "ship/shipfx.h"
 #include "stats/scoring.h"
 #include "weapon/weapon.h"
+
+#include <algorithm>
 
 extern char Game_current_mission_filename[];
 
@@ -176,6 +180,56 @@ const weapon_flag_entry Weapon_flag_table[] = {
 	{Ship::Weapon_Flags::Turret_Lock, "turret_lock"},
 	{Ship::Weapon_Flags::Tagged_Only, "tagged_only"},
 };
+
+// mission_event::flags is a plain int of MEF_ bits rather than a flagset, so it gets its own pair
+// of helpers below.  Only the bits that change while the mission runs are listed: the rest
+// (MEF_USING_TRIGGER_COUNT, MEF_USE_MSECS) come from the mission file and the mission load has
+// already put them back.
+struct event_flag_entry {
+	int flag;
+	const char* name;
+};
+
+const event_flag_entry Event_flag_table[] = {
+	{MEF_CURRENT, "current"},
+	{MEF_DIRECTIVE_SPECIAL, "directive_special"},
+	{MEF_DIRECTIVE_TEMP_TRUE, "directive_temp_true"},
+	{MEF_TIMESTAMP_HAS_INTERVAL, "timestamp_has_interval"},
+	{MEF_EVENT_IS_DONE, "event_is_done"},
+};
+
+void collect_int_flags(int flags, SCP_vector<SCP_string>& out)
+{
+	out.clear();
+
+	for (const auto& entry : Event_flag_table) {
+		if (flags & entry.flag) {
+			out.emplace_back(entry.name);
+		}
+	}
+}
+
+void apply_int_flags(const SCP_vector<SCP_string>& names, int& flags)
+{
+	// Clear only what this table covers, so the parse-time bits survive.
+	for (const auto& entry : Event_flag_table) {
+		flags &= ~entry.flag;
+	}
+
+	for (const auto& name : names) {
+		bool found = false;
+		for (const auto& entry : Event_flag_table) {
+			if (!stricmp(name.c_str(), entry.name)) {
+				flags |= entry.flag;
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			mprintf(("CHECKPOINT => Unknown event flag '%s'; ignoring it.\n", name.c_str()));
+		}
+	}
+}
 
 template <typename FlagType, typename EntryType, size_t N>
 void collect_flags(const flagset<FlagType>& flags, const EntryType (&table)[N], SCP_vector<SCP_string>& out)
@@ -923,6 +977,61 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		}
 	}
 
+	// --- mission logic ---
+	// This is what stops a restored mission replaying itself: without it every `when` whose
+	// condition still holds fires again, satisfied directives re-announce, and the log restarts.
+	for (const auto& event : Mission_events) {
+		event_state state;
+
+		state.name = event.name;
+		state.result = event.result;
+		state.previous_result = event.previous_result;
+		state.repeat_count = event.repeat_count;
+		state.trigger_count = event.trigger_count;
+		state.count = event.count;
+		state.mission_log_flags = event.mission_log_flags;
+		collect_int_flags(event.flags, state.flags);
+
+		state.timestamp = event.timestamp.value();
+		state.satisfied_time = event.satisfied_time.value();
+		state.born_on_date = event.born_on_date.value();
+
+		state.log_buffer = event.event_log_buffer;
+		state.log_variable_buffer = event.event_log_variable_buffer;
+		state.log_container_buffer = event.event_log_container_buffer;
+		state.log_argument_buffer = event.event_log_argument_buffer;
+		state.backup_log_buffer = event.backup_log_buffer;
+
+		data.events.push_back(std::move(state));
+	}
+
+	for (const auto& goal : Mission_goals) {
+		goal_state state;
+		state.name = goal.name;
+		state.satisfied = goal.satisfied;
+		data.goals.push_back(std::move(state));
+	}
+
+	for (const auto& entry : Log_entries) {
+		log_entry_state state;
+
+		state.type = static_cast<int>(entry.type);
+		state.flags = entry.flags;
+		state.timestamp = entry.timestamp;
+		state.timer_padding = entry.timer_padding;
+		state.index = entry.index;
+		state.primary_team = entry.primary_team;
+		state.secondary_team = entry.secondary_team;
+		state.pname = entry.pname;
+		state.sname = entry.sname;
+		state.pname_display = entry.pname_display;
+		state.sname_display = entry.sname_display;
+
+		data.log_entries.push_back(std::move(state));
+	}
+
+	data.goal_timestamp = Mission_goal_timestamp.value();
+
 	bool written = checkpoint_write(data);
 	invalidate_existence_cache(slot);
 
@@ -1422,6 +1531,89 @@ void apply_scoring(const checkpoint_data& data)
 // pre-player-entry skip in freespace.cpp uses.  It does NOT make the saved stamps correct on its
 // own -- see the note above translate_stamp() for why -- so we also compute the offset between
 // the checkpoint's clock and this run's, which every restored stamp is then shifted by.
+// Events, goals and the log -- the mission's memory of what has already happened.
+//
+// Matched by name rather than by index, so an event moved around in FRED still finds its state.
+// The fingerprint check makes that mostly academic, but it costs nothing and it means the failure
+// mode for a mismatched file is "this event starts fresh" rather than "this event gets some other
+// event's state".
+void apply_mission_logic(const checkpoint_data& data)
+{
+	for (const auto& state : data.events) {
+		auto it = std::find_if(Mission_events.begin(), Mission_events.end(), [&state](const mission_event& e) {
+			return lcase_equal(e.name, state.name);
+		});
+
+		if (it == Mission_events.end()) {
+			mprintf(("CHECKPOINT => Event '%s' is no longer in this mission.\n", state.name.c_str()));
+			continue;
+		}
+
+		it->result = state.result;
+		it->previous_result = state.previous_result;
+		it->repeat_count = state.repeat_count;
+		it->trigger_count = state.trigger_count;
+		it->count = state.count;
+		it->mission_log_flags = state.mission_log_flags;
+		apply_int_flags(state.flags, it->flags);
+
+		it->timestamp = TIMESTAMP(translate_stamp(state.timestamp));
+		it->satisfied_time = TIMESTAMP(translate_stamp(state.satisfied_time));
+		it->born_on_date = TIMESTAMP(translate_stamp(state.born_on_date));
+
+		it->event_log_buffer = state.log_buffer;
+		it->event_log_variable_buffer = state.log_variable_buffer;
+		it->event_log_container_buffer = state.log_container_buffer;
+		it->event_log_argument_buffer = state.log_argument_buffer;
+		it->backup_log_buffer = state.backup_log_buffer;
+	}
+
+	for (const auto& state : data.goals) {
+		auto it = std::find_if(Mission_goals.begin(), Mission_goals.end(), [&state](const mission_goal& g) {
+			return lcase_equal(g.name, state.name);
+		});
+
+		if (it == Mission_goals.end()) {
+			mprintf(("CHECKPOINT => Goal '%s' is no longer in this mission.\n", state.name.c_str()));
+			continue;
+		}
+
+		it->satisfied = state.satisfied;
+	}
+
+	// The log is replayed wholesale rather than merged: mission_log_add_entry() has been suppressed
+	// throughout the restore (see Game_restoring), so whatever is here now is only what the fresh
+	// load produced, and the saved log is the truth.
+	Log_entries.clear();
+	for (const auto& state : data.log_entries) {
+		log_entry entry;
+
+		entry.type = static_cast<LogType>(state.type);
+		entry.flags = state.flags;
+		// Mission time, not an engine timestamp -- the clock has already been put back to match,
+		// so this is restored as written.
+		entry.timestamp = state.timestamp;
+		entry.timer_padding = state.timer_padding;
+		entry.index = state.index;
+		entry.primary_team = state.primary_team;
+		entry.secondary_team = state.secondary_team;
+		strcpy_s(entry.pname, state.pname.c_str());
+		strcpy_s(entry.sname, state.sname.c_str());
+		entry.pname_display = state.pname_display;
+		entry.sname_display = state.sname_display;
+
+		Log_entries.push_back(std::move(entry));
+	}
+
+	Mission_goal_timestamp = TIMESTAMP(translate_stamp(data.goal_timestamp));
+
+	mprintf(("CHECKPOINT => Restored %d event(s), %d goal(s) and %d log entr%s.\n",
+	         static_cast<int>(data.events.size()),
+	         static_cast<int>(data.goals.size()),
+	         static_cast<int>(data.log_entries.size()),
+	         data.log_entries.size() == 1 ? "y" : "ies"));
+}
+
 void apply_clock(const checkpoint_data& data)
 {
 	// timestamp() reads a value snapshotted at the start of the frame, and adjusting the clock
@@ -1607,6 +1799,9 @@ void mission_checkpoint_apply()
 	apply_wings(data);
 	apply_variables(data);
 	apply_scoring(data);
+
+	// After the world, because a restored event's state describes ships that now exist.
+	apply_mission_logic(data);
 
 	// Player_obj and friends still point at whatever the fresh load created.  If the player's
 	// ship had its class changed above, change_ship_type() has already fixed the ship and
