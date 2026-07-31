@@ -235,6 +235,45 @@ void apply_int_flags(const SCP_vector<SCP_string>& names, int& flags)
 	}
 }
 
+// The engine's own flag_def_list_new tables are declared as incomplete arrays, so they come with
+// an explicit count rather than being deduced like the local tables below.
+template <typename FlagType>
+void collect_def_flags(const flagset<FlagType>& flags,
+	const flag_def_list_new<FlagType>* table,
+	size_t count,
+	SCP_vector<SCP_string>& out)
+{
+	out.clear();
+
+	for (size_t i = 0; i < count; i++) {
+		if (table[i].in_use && flags[table[i].def]) {
+			out.emplace_back(table[i].name);
+		}
+	}
+}
+
+template <typename FlagType>
+void apply_def_flags(const SCP_vector<SCP_string>& names,
+	const flag_def_list_new<FlagType>* table,
+	size_t count,
+	flagset<FlagType>& flags)
+{
+	for (size_t i = 0; i < count; i++) {
+		if (table[i].in_use) {
+			flags.remove(table[i].def);
+		}
+	}
+
+	for (const auto& name : names) {
+		for (size_t i = 0; i < count; i++) {
+			if (table[i].in_use && !stricmp(name.c_str(), table[i].name)) {
+				flags.set(table[i].def);
+				break;
+			}
+		}
+	}
+}
+
 template <typename FlagType, typename EntryType, size_t N>
 void collect_flags(const flagset<FlagType>& flags, const EntryType (&table)[N], SCP_vector<SCP_string>& out)
 {
@@ -1070,6 +1109,35 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		data.containers.push_back(std::move(state));
 	}
 
+	// Ships that have not arrived, but whose parse object a SEXP has already rewritten.
+	for (const auto& entry : Ship_registry) {
+		if (entry.status != ShipStatus::NOT_YET_PRESENT || !entry.has_p_objp()) {
+			continue;
+		}
+
+		const p_object* p_objp = entry.p_objp();
+		parse_object_state state;
+
+		state.name = p_objp->name;
+		state.ship_class = ship_class_name(p_objp->ship_class);
+		state.team = team_name(p_objp->team);
+
+		state.initial_hull = p_objp->initial_hull;
+		state.initial_shields = p_objp->initial_shields;
+		state.arrival_distance = p_objp->arrival_distance;
+		state.arrival_delay = p_objp->arrival_delay;
+		state.departure_delay = p_objp->departure_delay;
+		state.escort_priority = p_objp->escort_priority;
+		state.respawn_priority = p_objp->respawn_priority;
+		state.alt_type_index = p_objp->alt_type_index;
+		state.callsign_index = p_objp->callsign_index;
+		state.cargo1 = p_objp->cargo1;
+
+		collect_def_flags(p_objp->flags, Parse_object_flags, Num_parse_object_flags, state.flags);
+
+		data.parse_objects.push_back(std::move(state));
+	}
+
 	// Hull debris only -- see the note on debris_state.
 	for (const auto& db : Debris) {
 		if (!db.flags[Debris_Flags::Used] || !db.is_hull || db.objnum < 0) {
@@ -1613,6 +1681,51 @@ void apply_scoring(const checkpoint_data& data)
 // pre-player-entry skip in freespace.cpp uses.  It does NOT make the saved stamps correct on its
 // own -- see the note above translate_stamp() for why -- so we also compute the offset between
 // the checkpoint's clock and this run's, which every restored stamp is then shifted by.
+// Put back the changes SEXPs had made to ships that had not arrived yet.
+//
+// Runs before the arrival replay, so a ship that is about to be brought in is created from the
+// parse object the checkpoint recorded rather than the one the mission file describes.
+void apply_parse_objects(const checkpoint_data& data)
+{
+	for (const auto& state : data.parse_objects) {
+		auto entry = ship_registry_get(state.name);
+		if (entry == nullptr || !entry->has_p_objp()) {
+			continue;
+		}
+
+		// Only worth applying to something still waiting to arrive; anything already in the
+		// mission is restored properly by apply_ship().
+		if (entry->status != ShipStatus::NOT_YET_PRESENT) {
+			continue;
+		}
+
+		p_object* p_objp = entry->p_objp();
+
+		int ship_class = lookup_ship_class(state.ship_class);
+		if (ship_class >= 0 && ship_class != p_objp->ship_class) {
+			swap_parse_object(p_objp, ship_class);
+		}
+
+		int team = lookup_team(state.team);
+		if (team >= 0) {
+			p_objp->team = team;
+		}
+
+		p_objp->initial_hull = state.initial_hull;
+		p_objp->initial_shields = state.initial_shields;
+		p_objp->arrival_distance = state.arrival_distance;
+		p_objp->arrival_delay = state.arrival_delay;
+		p_objp->departure_delay = state.departure_delay;
+		p_objp->escort_priority = state.escort_priority;
+		p_objp->respawn_priority = state.respawn_priority;
+		p_objp->alt_type_index = state.alt_type_index;
+		p_objp->callsign_index = state.callsign_index;
+		p_objp->cargo1 = state.cargo1;
+
+		apply_def_flags(state.flags, Parse_object_flags, Num_parse_object_flags, p_objp->flags);
+	}
+}
+
 // Put back the hull debris that was floating around.
 //
 // The ships these came off are destroyed and gone, so there is no source object to create them
@@ -1957,6 +2070,10 @@ void mission_checkpoint_apply()
 	// The clock goes first: everything restored after this point stores timestamps that are
 	// only meaningful relative to it.
 	apply_clock(data);
+
+	// Parse objects first: a ship the reconciliation is about to bring in should be created from
+	// the parse object the checkpoint recorded, not the one the mission file describes.
+	apply_parse_objects(data);
 
 	// Then decide which ships should exist at all, before bashing state onto the ones that do.
 	reconcile_ship_existence(data);
