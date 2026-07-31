@@ -9027,7 +9027,9 @@ void ship_cleanup(int shipnum, int cleanup_mode)
 
 	// add mission log entry?
 	// (vanished ships and red-alert deleted ships have no log, and destroyed ships are logged in ship_hit_kill)
-	if ((cleanup_mode == SHIP_DEPARTED_WARP) || (cleanup_mode == SHIP_DEPARTED_BAY) || (cleanup_mode == SHIP_DEPARTED)) {
+	// (while restoring, the log is being replayed from the saved state, so nothing new belongs in it)
+	if (!Game_restoring &&
+		((cleanup_mode == SHIP_DEPARTED_WARP) || (cleanup_mode == SHIP_DEPARTED_BAY) || (cleanup_mode == SHIP_DEPARTED))) {
 		// see if this ship departed within the radius of a jump node -- if so, put the node name into
 		// the secondary mission log field
 		auto jnp = jumpnode_get_which_in(objp);
@@ -9039,9 +9041,11 @@ void ship_cleanup(int shipnum, int cleanup_mode)
 
 	// run "On Ship Depart" conditional hook variable that accounts for all departure types
 	// the hook is not limited to only warping --wookieejedi
-	if ((cleanup_mode == SHIP_DEPARTED_WARP) || (cleanup_mode == SHIP_DEPARTED_BAY) ||
+	// (not while restoring: the script already saw this departure in the run that was saved)
+	if (!Game_restoring &&
+		((cleanup_mode == SHIP_DEPARTED_WARP) || (cleanup_mode == SHIP_DEPARTED_BAY) ||
 	    (cleanup_mode == SHIP_DEPARTED) || (cleanup_mode == SHIP_DEPARTED_REDALERT) ||
-	    (cleanup_mode == SHIP_VANISHED)) {
+	    (cleanup_mode == SHIP_VANISHED))) {
 		const char* departmethod = get_departure_name(cleanup_mode);
 
 		if (scripting::hooks::OnShipDepart->isActive()) {

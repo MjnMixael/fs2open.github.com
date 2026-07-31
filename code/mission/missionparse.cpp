@@ -425,7 +425,8 @@ flag_def_list_new<Mission::Mission_Flags> Parse_mission_flags[] = {
 	{"Full Nebula Background Bitmaps",            Mission::Mission_Flags::Fullneb_background_bitmaps, true, true},
 	{"Preload Subspace Tunnel",                   Mission::Mission_Flags::Preload_subspace,           true, false},
 	{"Large Ships Do Not Collide By Default",    Mission::Mission_Flags::Large_ships_no_collide_by_default, true, false},
-	{"Limit Support Rearm to Mission Pool",       Mission::Mission_Flags::Limited_support_rearm_pool, true, true}
+	{"Limit Support Rearm to Mission Pool",       Mission::Mission_Flags::Limited_support_rearm_pool, true, true},
+	{"No Checkpoint Resume Prompt",               Mission::Mission_Flags::No_checkpoint_resume_prompt, true, false}
 };
 
 parse_object_flag_description<Mission::Mission_Flags> Parse_mission_flag_descriptions[] = {
@@ -461,6 +462,7 @@ parse_object_flag_description<Mission::Mission_Flags> Parse_mission_flag_descrip
 	{Mission::Mission_Flags::Preload_subspace,         "Preload the subspace tunnel for both the sexp and specs checkbox"},
 	{Mission::Mission_Flags::Large_ships_no_collide_by_default, "Automatically places all large ships in the configured collision group, preventing large ships from colliding with each other"},
 	{Mission::Mission_Flags::Limited_support_rearm_pool, "Support ships can only rearm from the mission weapon pool"},
+	{Mission::Mission_Flags::No_checkpoint_resume_prompt, "Don't ask the player whether to resume from a saved checkpoint when entering this mission.  The checkpoint is still there and load-checkpoint still works; only the automatic prompt is suppressed"},
 };
 
 const size_t Num_parse_mission_flags = sizeof(Parse_mission_flags) / sizeof(flag_def_list_new<Mission::Mission_Flags>);
@@ -2882,10 +2884,12 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 	// warpin effect
 	if ((Game_mode & GM_IN_MISSION) && (!Fred_running))
 	{
-		mission_log_add_entry(LOG_SHIP_ARRIVED, shipp->ship_name, NULL);
-
+		// while restoring, the log is replayed from the saved state and the ship's position comes
+		// back from the save, so neither the log entry nor the arrival placement belongs here
 		if (!Game_restoring)
 		{
+			mission_log_add_entry(LOG_SHIP_ARRIVED, shipp->ship_name, NULL);
+
 			// if this ship isn't in a wing, determine its arrival location
 			if (shipp->wingnum == -1)
 			{
@@ -8696,7 +8700,8 @@ int mission_did_ship_arrive(p_object *objp, bool force_arrival)
 		Assert(object_num >= 0 && object_num < MAX_OBJECTS);
 		
 		// Play the music track for an arrival
-		if ( !(Ships[Objects[object_num].instance].flags[Ship::Ship_Flags::No_arrival_music]) )
+		// (not while restoring -- the player is not watching this ship show up, it is just being put back)
+		if ( !Game_restoring && !(Ships[Objects[object_num].instance].flags[Ship::Ship_Flags::No_arrival_music]) )
 			if ( timestamp_elapsed(Allow_arrival_music_timestamp) ) {
 				Allow_arrival_music_timestamp = timestamp(ARRIVAL_MUSIC_MIN_SEPARATION);
 				event_music_arrival(Ships[Objects[object_num].instance].team);

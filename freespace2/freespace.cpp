@@ -107,6 +107,7 @@
 #include "menuui/trainingmenu.h"
 #include "mission/missionbriefcommon.h"
 #include "mission/missioncampaign.h"
+#include "mission/missioncheckpoint.h"
 #include "mission/missiongoals.h"
 #include "mission/missionhotkey.h"
 #include "mission/missionload.h"
@@ -1050,6 +1051,9 @@ void game_level_init()
 {
 	game_busy( NOX("** starting game_level_init() **") );
 	load_gl_init = time(nullptr);
+
+	// anything remembered about the last mission is about to stop being true
+	mission_checkpoint_level_init();
 
 	// seed the random number generator in multiplayer
 	if ( Game_mode & GM_MULTIPLAYER ) {
@@ -3921,6 +3925,11 @@ void game_simulation_frame()
 	// Kick off externally injected operations after the simulation step has finished
 	executor::OnSimulationExecutor->process();
 	scripting::hooks::OnSimulation->run();
+
+	// A checkpoint load requested by a SEXP earlier this frame restarts the mission, which
+	// cannot happen while SEXP evaluation is still on the stack.  Now that the simulation step
+	// is over it is safe to act on it.
+	mission_checkpoint_process_pending_load();
 }
 
 // Maybe render and process the dead-popup
@@ -5028,6 +5037,19 @@ void game_process_event( int current_state, int event )
 			// clear multiplayer button info
 			extern button_info Multi_ship_status_bi;
 			memset(&Multi_ship_status_bi, 0, sizeof(button_info));
+
+			// Restore a checkpoint, if one is being loaded or the player asks for one.
+			//
+			// This has to happen here rather than in game_post_level_init(), which runs back in
+			// GS_STATE_START_GAME -- before the briefing, and so before commit_pressed() calls
+			// create_wings() and before the GS_STATE_GAME_PLAY enter handler calls
+			// wss_direct_restore_loadout().  Both of those rewrite the starting wings' ship
+			// classes and weapons, so a checkpoint applied any earlier gets overwritten.  Every
+			// route into gameplay funnels through this event, and the first game_do_frame() has
+			// not run yet, so this is the one place that is after all the loadout bashing and
+			// still before the mission starts.
+			mission_checkpoint_maybe_offer_resume();
+			mission_checkpoint_apply();
 
 			// Make hv.Player available in "On Gameplay Start" hook -zookeeper
 			scripting::hooks::OnGameplayStart->run(scripting::hook_param_list(

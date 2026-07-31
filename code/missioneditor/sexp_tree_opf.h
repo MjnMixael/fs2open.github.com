@@ -138,6 +138,7 @@ public:
 	static sexp_list_item* get_listing_opf_traitor_overrides();
 	static sexp_list_item* get_listing_opf_lua_general_orders();
 	static sexp_list_item* get_listing_opf_message_types();
+	static sexp_list_item* get_listing_opf_checkpoint_load_flags();
 	sexp_list_item* get_listing_opf_lua_enum(int parent_node, int arg_index) const;
 	static sexp_list_item* get_listing_opf_mission_custom_strings();
 	static sexp_list_item* check_for_dynamic_sexp_enum(int opf);
