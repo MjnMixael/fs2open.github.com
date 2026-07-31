@@ -983,6 +983,7 @@ namespace FieldId {
     constexpr int Spec_CustomStrings   = 7625;
     constexpr int Spec_MissionDesc     = 7626;
     constexpr int Spec_DesignerNotes   = 7627;
+    constexpr int Spec_Checkpoints     = 7628;
     constexpr int Spec_MissionFlag     = 7700; // + flag list index
     // Coordinate Point editor (direct-edit; pushes to the main stack). One id
     // per field so consecutive spinbox scrubs of the same control merge into a

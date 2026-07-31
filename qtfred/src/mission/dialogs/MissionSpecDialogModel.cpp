@@ -83,6 +83,13 @@ void MissionSpecDialogModel::initializeData() {
 		}
 	}
 
+	_m_checkpoint_settings.noResumePrompt = The_mission.flags[Mission::Mission_Flags::No_checkpoint_resume_prompt];
+	_m_checkpoint_settings.keepPlayerLoadout = The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_player_loadout];
+	_m_checkpoint_settings.keepWingLoadout = The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_wing_loadout];
+	_m_checkpoint_settings.deleteOnCompletion = The_mission.flags[Mission::Mission_Flags::Checkpoint_delete_on_completion];
+	_m_checkpoint_settings.disallowInCampaign = The_mission.flags[Mission::Mission_Flags::No_checkpoints_in_campaign];
+	_m_checkpoint_settings.disallowInSimulator = The_mission.flags[Mission::Mission_Flags::No_checkpoints_in_simulator];
+
 	_m_contrail_threshold = The_mission.contrail_threshold;
 	_m_contrail_threshold_flag = (_m_contrail_threshold != CONTRAIL_THRESHOLD_DEFAULT);
 	_m_large_ship_no_collide_collision_group = The_mission.large_ship_no_collide_collision_group;
@@ -389,6 +396,25 @@ void MissionSpecDialogModel::setSupportRearmSettings(const SupportRearmSettings&
 	setMissionFlagDirect(Mission::Mission_Flags::Limited_support_rearm_pool, settings.limitRearmToPool);
 }
 
+CheckpointSettings MissionSpecDialogModel::getCheckpointSettings() const
+{
+	return _m_checkpoint_settings;
+}
+
+void MissionSpecDialogModel::setCheckpointSettings(const CheckpointSettings& settings)
+{
+	modify(_m_checkpoint_settings, settings);
+
+	// These are all just mission flags, so the flagset copy in apply() carries them across; there
+	// is nothing else to write.
+	setMissionFlagDirect(Mission::Mission_Flags::No_checkpoint_resume_prompt, settings.noResumePrompt);
+	setMissionFlagDirect(Mission::Mission_Flags::Checkpoint_keep_player_loadout, settings.keepPlayerLoadout);
+	setMissionFlagDirect(Mission::Mission_Flags::Checkpoint_keep_wing_loadout, settings.keepWingLoadout);
+	setMissionFlagDirect(Mission::Mission_Flags::Checkpoint_delete_on_completion, settings.deleteOnCompletion);
+	setMissionFlagDirect(Mission::Mission_Flags::No_checkpoints_in_campaign, settings.disallowInCampaign);
+	setMissionFlagDirect(Mission::Mission_Flags::No_checkpoints_in_simulator, settings.disallowInSimulator);
+}
+
 void MissionSpecDialogModel::setTrailThresholdFlag(bool m_contrail_threshold_flag) {
 	modify(_m_contrail_threshold_flag, m_contrail_threshold_flag);
 }
@@ -481,13 +507,51 @@ bool MissionSpecDialogModel::getMissionFlag(Mission::Mission_Flags flag) const {
 	return _m_flags[flag];
 }
 
+// Flags that already have a control of their own somewhere in Mission Specs, and so must not also
+// turn up in the general flag list.
+//
+// This is deliberately an editor-side list rather than a column in Parse_mission_flags: whether a
+// flag has its own widget is a question about this dialog, not about the flag.  It used to ride on
+// the is_special column, which parse_string_flag_list uses to mean something entirely different --
+// harmless only for as long as mission flags were never run through that parser.
+//
+// Add a flag here when you give it a dedicated control.  Forgetting to is not dangerous; the flag
+// simply appears in both places, which is easy to spot.
+static const Mission::Mission_Flags Flags_with_dedicated_controls[] = {
+	Mission::Mission_Flags::Subspace,
+	Mission::Mission_Flags::Fullneb,
+	Mission::Mission_Flags::Toggle_ship_trails,
+	Mission::Mission_Flags::Support_repairs_hull,
+	Mission::Mission_Flags::Override_hashcommand,
+	Mission::Mission_Flags::Neb2_fog_color_override,
+	Mission::Mission_Flags::Fullneb_background_bitmaps,
+	Mission::Mission_Flags::Limited_support_rearm_pool,
+	// Mission Specs -> Checkpoints
+	Mission::Mission_Flags::No_checkpoint_resume_prompt,
+	Mission::Mission_Flags::Checkpoint_keep_player_loadout,
+	Mission::Mission_Flags::Checkpoint_keep_wing_loadout,
+	Mission::Mission_Flags::Checkpoint_delete_on_completion,
+	Mission::Mission_Flags::No_checkpoints_in_campaign,
+	Mission::Mission_Flags::No_checkpoints_in_simulator,
+};
+
+static bool flag_has_dedicated_control(Mission::Mission_Flags flag)
+{
+	for (auto handled : Flags_with_dedicated_controls) {
+		if (handled == flag) {
+			return true;
+		}
+	}
+	return false;
+}
+
 const SCP_vector<std::pair<SCP_string, bool>>& MissionSpecDialogModel::getMissionFlagsList() {
 	_m_flag_data.clear();
 	for (size_t i = 0; i < Num_parse_mission_flags; ++i) {
 		auto flagDef = Parse_mission_flags[i];
 
-		// Skip flags that have checkboxes elsewhere than the flag list or are inactive
-		if (flagDef.is_special || !flagDef.in_use) {
+		// Skip flags that have controls elsewhere than the flag list, or are inactive
+		if (!flagDef.in_use || flag_has_dedicated_control(flagDef.def)) {
 			continue;
 		}
 
@@ -504,7 +568,7 @@ SCP_vector<std::pair<SCP_string, SCP_string>> MissionSpecDialogModel::getMission
 	descriptions.reserve(Num_parse_mission_flags);
 	for (size_t i = 0; i < Num_parse_mission_flags; ++i) {
 		const auto& flagDef = Parse_mission_flags[i];
-		if (flagDef.is_special || !flagDef.in_use)
+		if (!flagDef.in_use || flag_has_dedicated_control(flagDef.def))
 			continue;
 		for (size_t j = 0; j < num_descs; ++j) {
 			if (Parse_mission_flag_descriptions[j].def == flagDef.def) {

@@ -37,6 +37,29 @@ struct SupportRearmSettings {
 	}
 };
 
+// Everything in here is a mission flag; the struct exists so the Checkpoints subdialog can be
+// cancelled without having touched the mission, the same way the support settings work.
+struct CheckpointSettings {
+	bool noResumePrompt = false;
+	bool keepPlayerLoadout = false;
+	bool keepWingLoadout = false;
+	bool deleteOnCompletion = false;
+	bool disallowInCampaign = false;
+	bool disallowInSimulator = false;
+
+	bool operator==(const CheckpointSettings& rhs) const
+	{
+		return noResumePrompt == rhs.noResumePrompt && keepPlayerLoadout == rhs.keepPlayerLoadout &&
+			   keepWingLoadout == rhs.keepWingLoadout && deleteOnCompletion == rhs.deleteOnCompletion &&
+			   disallowInCampaign == rhs.disallowInCampaign && disallowInSimulator == rhs.disallowInSimulator;
+	}
+
+	bool operator!=(const CheckpointSettings& rhs) const
+	{
+		return !(*this == rhs);
+	}
+};
+
 
 class MissionSpecDialogModel : public AbstractDialogModel {
 private:
@@ -83,6 +106,7 @@ private:
 
 	int _m_type;
 	SupportRearmSettings _m_support_rearm_settings;
+	CheckpointSettings _m_checkpoint_settings;
 
 public:
 	MissionSpecDialogModel(QObject* parent, EditorViewport* viewport);
@@ -135,6 +159,9 @@ public:
 
 	SupportRearmSettings getSupportRearmSettings() const;
 	void setSupportRearmSettings(const SupportRearmSettings& settings);
+
+	CheckpointSettings getCheckpointSettings() const;
+	void setCheckpointSettings(const CheckpointSettings& settings);
 
 	void setTrailThresholdFlag(bool);
 	bool getTrailThresholdFlag();

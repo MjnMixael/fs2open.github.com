@@ -2575,13 +2575,35 @@ int Fred_mission_save::save_mission_info()
 
 	fout(" %d", The_mission.game_type);
 
-	if (optional_string_fred("+Flags:")) {
-		parse_comments(1);
-	} else {
-		fout("\n+Flags:");
-	}
+	// Retail stored these as a bitfield, which makes the order of Mission_Flags part of the file
+	// format and runs out of room as the enum grows.  A mission that already requires 26.1 gains
+	// nothing from the old form, so it gets the name list instead -- the way ship flags have
+	// always been written.  Anything older keeps the bitfield and stays loadable by the builds it
+	// was written for.
+	auto flag_list_version = gameversion::version(26, 1);
+	if (save_config.save_format != MissionFormat::RETAIL && The_mission.required_fso_version >= flag_list_version) {
+		if (optional_string_fred("+Flags List:")) {
+			parse_comments(1);
+		} else {
+			fout("\n+Flags List:");
+		}
 
-	fout(" %" PRIu64, The_mission.flags.to_u64());
+		fout(" (");
+		for (size_t i = 0; i < Num_parse_mission_flags; i++) {
+			if (Parse_mission_flags[i].in_use && The_mission.flags[Parse_mission_flags[i].def]) {
+				fout(" \"%s\"", Parse_mission_flags[i].name);
+			}
+		}
+		fout(" )");
+	} else {
+		if (optional_string_fred("+Flags:")) {
+			parse_comments(1);
+		} else {
+			fout("\n+Flags:");
+		}
+
+		fout(" %" PRIu64, The_mission.flags.to_u64());
+	}
 
 	// maybe write out Nebula values
 	if (The_mission.flags[Mission::Mission_Flags::Fullneb]) {
@@ -3186,7 +3208,15 @@ void Fred_mission_save::save_mission_internal(const char* pathname)
 	auto version_24_1 = gameversion::version(24, 1);
 	auto version_24_3 = gameversion::version(24, 3);
 	auto version_25_1 = gameversion::version(25, 1);
-	if (MISSION_VERSION >= version_25_1) {
+	auto version_26_1 = gameversion::version(26, 1);
+	if (MISSION_VERSION >= version_26_1) {
+		Warning(LOCATION,
+			"Notify an SCP coder: now that the required mission version is at least 26.1, the check_for_26_1_data(), "
+			"check_for_25_1_data(), check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can "
+			"be removed");
+	} else if (check_for_26_1_data()) {
+		The_mission.required_fso_version = version_26_1;
+	} else if (MISSION_VERSION >= version_25_1) {
 		Warning(LOCATION,
 			"Notify an SCP coder: now that the required mission version is at least 25.1, the check_for_25_1_data(), "
 			"check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can be removed");

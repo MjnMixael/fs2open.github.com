@@ -8,6 +8,7 @@
 #include <ui/dialogs/MissionSpecs/CustomStringsDialog.h>
 #include <ui/dialogs/MissionSpecs/CustomWingNamesDialog.h>
 #include <ui/dialogs/MissionSpecs/SoundEnvironmentDialog.h>
+#include <ui/dialogs/MissionSpecs/CheckpointsDialog.h>
 #include <ui/dialogs/MissionSpecs/SupportRearmDialog.h>
 #include <ui/util/default_dir.h>
 #include <ui/util/DialogUndo.h>
@@ -531,6 +532,21 @@ void MissionSpecDialog::on_supportRearmOptionsButton_clicked()
 	pushValueCommand(FieldId::Spec_SupportRearm, tr("Edit Support Ship Settings"), before,
 		_model->getSupportRearmSettings(),
 		[this](const SupportRearmSettings& v) { _model->setSupportRearmSettings(v); }, true);
+}
+
+void MissionSpecDialog::on_checkpointOptionsButton_clicked()
+{
+	CheckpointsDialog dlg(this, _viewport);
+	dlg.setInitial(_model->getCheckpointSettings());
+	if (dlg.exec() != QDialog::Accepted) {
+		return;
+	}
+
+	const CheckpointSettings before = _model->getCheckpointSettings();
+	_model->setCheckpointSettings(dlg.settings());
+	pushValueCommand(FieldId::Spec_Checkpoints, tr("Edit Checkpoint Settings"), before,
+		_model->getCheckpointSettings(),
+		[this](const CheckpointSettings& v) { _model->setCheckpointSettings(v); }, true);
 }
 
 void MissionSpecDialog::on_toggleTrail_toggled(bool enabled) {
