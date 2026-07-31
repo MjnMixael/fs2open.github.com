@@ -414,6 +414,70 @@ void read_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::subsyst
 	handler->endArrayRead();
 }
 
+void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startArrayWrite("parse_objects", data.parse_objects.size());
+	for (const auto& p_obj : data.parse_objects) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("name", p_obj.name.c_str());
+		handler->writeString("class", p_obj.ship_class.c_str());
+		handler->writeString("team", p_obj.team.c_str());
+
+		handler->writeInt("initial_hull", p_obj.initial_hull);
+		handler->writeInt("initial_shields", p_obj.initial_shields);
+		handler->writeInt("arrival_distance", p_obj.arrival_distance);
+		handler->writeInt("arrival_delay", p_obj.arrival_delay);
+		handler->writeInt("departure_delay", p_obj.departure_delay);
+		handler->writeInt("escort_priority", p_obj.escort_priority);
+		handler->writeInt("respawn_priority", p_obj.respawn_priority);
+		handler->writeInt("alt_type_index", p_obj.alt_type_index);
+		handler->writeInt("callsign_index", p_obj.callsign_index);
+		handler->writeInt("cargo1", p_obj.cargo1);
+
+		write_string_list(handler, "flags", p_obj.flags);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.parse_objects.clear();
+
+	if (!handler->hasField("parse_objects")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("parse_objects");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::parse_object_state p_obj;
+
+		p_obj.name = handler->readStringOr("name", "");
+		p_obj.ship_class = handler->readStringOr("class", "");
+		p_obj.team = handler->readStringOr("team", "");
+
+		p_obj.initial_hull = handler->readIntOr("initial_hull", 100);
+		p_obj.initial_shields = handler->readIntOr("initial_shields", 100);
+		p_obj.arrival_distance = handler->readIntOr("arrival_distance", 0);
+		p_obj.arrival_delay = handler->readIntOr("arrival_delay", 0);
+		p_obj.departure_delay = handler->readIntOr("departure_delay", 0);
+		p_obj.escort_priority = handler->readIntOr("escort_priority", 0);
+		p_obj.respawn_priority = handler->readIntOr("respawn_priority", 0);
+		p_obj.alt_type_index = handler->readIntOr("alt_type_index", -1);
+		p_obj.callsign_index = handler->readIntOr("callsign_index", -1);
+		p_obj.cargo1 = static_cast<char>(handler->readIntOr("cargo1", 0));
+
+		read_string_list(handler, "flags", p_obj.flags);
+
+		if (!p_obj.name.empty()) {
+			data.parse_objects.push_back(std::move(p_obj));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointShips);
@@ -467,6 +531,10 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	}
 	handler->endArrayWrite();
 
+	// Ships that have not arrived ride along in the same section; they are the same kind of thing
+	// seen from the other side.
+	write_parse_objects(handler, data);
+
 	handler->endSectionWrite();
 }
 
@@ -474,7 +542,9 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 {
 	data.ships.clear();
 
+	// Parse objects share this section, so an absent ships array must not skip them.
 	if (!handler->hasField("ships")) {
+		read_parse_objects(handler, data);
 		return;
 	}
 
@@ -526,6 +596,8 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		data.ships.push_back(std::move(ship_data));
 	}
 	handler->endArrayRead();
+
+	read_parse_objects(handler, data);
 }
 
 void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
@@ -1170,14 +1242,17 @@ bool checkpoint_write(const checkpoint_data& data)
 
 	handler->flush();
 
-	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries)\n",
+	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries, "
+	         "%d debris, %d pending arrivals)\n",
 	         filename.c_str(),
 	         static_cast<int>(data.ships.size()),
 	         static_cast<int>(data.wings.size()),
 	         static_cast<int>(data.variables.size()),
 	         static_cast<int>(data.events.size()),
 	         static_cast<int>(data.goals.size()),
-	         static_cast<int>(data.log_entries.size())));
+	         static_cast<int>(data.log_entries.size()),
+	         static_cast<int>(data.debris.size()),
+	         static_cast<int>(data.parse_objects.size())));
 
 	return true;
 }

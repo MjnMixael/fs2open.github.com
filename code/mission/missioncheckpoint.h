@@ -250,6 +250,33 @@ struct container_state {
 	SCP_vector<SCP_string> map_values;
 };
 
+// A ship that had not arrived yet, whose parse object had been changed since the mission loaded.
+//
+// SEXPs can rewrite a ship long before it shows up -- change-ship-class, change-iff, hull and
+// shield bashing, flag changes -- and a fresh mission load puts all of that back the way the file
+// had it.  Only the fields a SEXP can actually reach are captured; the rest is reproduced by the
+// parse.  Arrival and departure *anchors* are deliberately absent: they are anchor_t, which needs
+// name resolution of its own, and set-arrival-info on a ship that has not arrived is rare enough
+// to be worth leaving until that resolution exists.
+struct parse_object_state {
+	SCP_string name;
+	SCP_string ship_class;
+	SCP_string team;
+
+	int initial_hull = 100;
+	int initial_shields = 100;
+	int arrival_distance = 0;
+	int arrival_delay = 0;
+	int departure_delay = 0;
+	int escort_priority = 0;
+	int respawn_priority = 0;
+	int alt_type_index = -1;
+	int callsign_index = -1;
+	char cargo1 = 0;
+
+	SCP_vector<SCP_string> flags;
+};
+
 // A piece of hull debris.
 //
 // Only hull debris is captured.  Small debris expires in seconds and is pure decoration, but a
@@ -328,6 +355,7 @@ struct checkpoint_data {
 	SCP_vector<sexp_node_state> sexp_nodes;
 	SCP_vector<container_state> containers;
 	SCP_vector<debris_state> debris;
+	SCP_vector<parse_object_state> parse_objects;
 	int goal_timestamp = 0;
 
 	bool loaded = false;
