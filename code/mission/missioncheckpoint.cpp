@@ -23,6 +23,7 @@
 #include "object/objectdock.h"
 #include "parse/parselo.h"
 #include "parse/sexp.h"
+#include "parse/sexp_container.h"
 #include "playerman/player.h"
 #include "popup/popup.h"
 #include "ship/ship.h"
@@ -1030,6 +1031,42 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		data.log_entries.push_back(std::move(state));
 	}
 
+	// Sticky SEXP node states.  Without these an event that has already fired can re-trigger the
+	// arrival or destruction the ship restore has just accounted for.
+	for (int i = 0; i < Num_sexp_nodes; i++) {
+		if (Sexp_nodes[i].type == SEXP_NOT_USED) {
+			continue;
+		}
+
+		bool sticky = (Sexp_nodes[i].value == SEXP_KNOWN_TRUE) || (Sexp_nodes[i].value == SEXP_KNOWN_FALSE) ||
+					  (Sexp_nodes[i].value == SEXP_NAN_FOREVER);
+
+		if (!sticky && Sexp_nodes[i].flags == SNF_DEFAULT_VALUE) {
+			continue;
+		}
+
+		sexp_node_state state;
+		state.index = i;
+		state.value = Sexp_nodes[i].value;
+		state.flags = Sexp_nodes[i].flags;
+		data.sexp_nodes.push_back(state);
+	}
+
+	for (const auto& container : get_all_sexp_containers()) {
+		container_state state;
+		state.name = container.container_name;
+
+		for (const auto& value : container.list_data) {
+			state.list_data.push_back(value);
+		}
+		for (const auto& entry : container.map_data) {
+			state.map_keys.push_back(entry.first);
+			state.map_values.push_back(entry.second);
+		}
+
+		data.containers.push_back(std::move(state));
+	}
+
 	data.goal_timestamp = Mission_goal_timestamp.value();
 
 	bool written = checkpoint_write(data);
@@ -1605,13 +1642,49 @@ void apply_mission_logic(const checkpoint_data& data)
 		Log_entries.push_back(std::move(entry));
 	}
 
+	// Sticky node states last, so nothing above can re-dirty them.  These are what stop an event
+	// whose formula has already resolved from resolving it a second time and re-triggering an
+	// arrival or a destruction that the ship restore has already put back the way it was.
+	for (const auto& state : data.sexp_nodes) {
+		if (state.index < 0 || state.index >= Num_sexp_nodes) {
+			mprintf(("CHECKPOINT => SEXP node %d is out of range for this mission; skipping it.\n", state.index));
+			continue;
+		}
+		if (Sexp_nodes[state.index].type == SEXP_NOT_USED) {
+			continue;
+		}
+
+		Sexp_nodes[state.index].value = state.value;
+		Sexp_nodes[state.index].flags = state.flags;
+	}
+
+	for (const auto& state : data.containers) {
+		auto container = get_sexp_container(state.name.c_str());
+		if (container == nullptr) {
+			mprintf(("CHECKPOINT => Container '%s' is no longer in this mission.\n", state.name.c_str()));
+			continue;
+		}
+
+		container->list_data.clear();
+		for (const auto& value : state.list_data) {
+			container->list_data.push_back(value);
+		}
+
+		container->map_data.clear();
+		for (size_t i = 0; i < state.map_keys.size() && i < state.map_values.size(); i++) {
+			container->map_data.emplace(state.map_keys[i], state.map_values[i]);
+		}
+	}
+
 	Mission_goal_timestamp = TIMESTAMP(translate_stamp(data.goal_timestamp));
 
-	mprintf(("CHECKPOINT => Restored %d event(s), %d goal(s) and %d log entr%s.\n",
+	mprintf(("CHECKPOINT => Restored %d event(s), %d goal(s), %d log entr%s, %d SEXP node(s) and %d container(s).\n",
 	         static_cast<int>(data.events.size()),
 	         static_cast<int>(data.goals.size()),
 	         static_cast<int>(data.log_entries.size()),
-	         data.log_entries.size() == 1 ? "y" : "ies"));
+	         data.log_entries.size() == 1 ? "y" : "ies",
+	         static_cast<int>(data.sexp_nodes.size()),
+	         static_cast<int>(data.containers.size())));
 }
 
 void apply_clock(const checkpoint_data& data)
