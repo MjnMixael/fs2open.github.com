@@ -84,9 +84,13 @@
 	F(level2_tag_total)                                                                        \
 	F(level2_tag_left)
 
+// current_cmeasure (a weapon class index), persona_index (an index into Personas, built from
+// messages.tbl) and subsys_cargo_name / cargo1 (indices into Cargo_names, which set-cargo extends
+// at runtime) are all table or runtime indices and are captured by name instead; see the
+// "never write a runtime index" rule above.  hotkey is a hotkey *set* number, not an index into
+// anything, so it stays.
 #define CKPT_SHIP_INTS(F)                                                                      \
 	F(cmeasure_count)                                                                          \
-	F(current_cmeasure)                                                                        \
 	F(shield_recharge_index)                                                                   \
 	F(weapon_recharge_index)                                                                   \
 	F(engine_recharge_index)                                                                   \
@@ -94,7 +98,6 @@
 	F(respawn_priority)                                                                        \
 	F(score)                                                                                   \
 	F(hotkey)                                                                                  \
-	F(persona_index)                                                                           \
 	F(alt_type_index)                                                                          \
 	F(callsign_index)                                                                          \
 	F(ship_guardian_threshold)                                                                 \
@@ -145,8 +148,7 @@
 #define CKPT_SUBSYS_INTS(F)                                                                    \
 	F(subsys_guardian_threshold)                                                               \
 	F(turret_next_fire_pos)                                                                    \
-	F(turret_swarm_num)                                                                        \
-	F(subsys_cargo_name)
+	F(turret_swarm_num)
 
 #define CKPT_SUBSYS_STAMPS(F)                                                                  \
 	F(turret_next_enemy_check_stamp)                                                           \
