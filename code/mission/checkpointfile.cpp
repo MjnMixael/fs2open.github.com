@@ -244,7 +244,11 @@ void write_weapon_state(pilot::FileHandler* handler, const checkpoint::weapon_st
 	write_weapon_banks(handler, "primary_banks", weapons.primary_banks);
 	write_weapon_banks(handler, "secondary_banks", weapons.secondary_banks);
 	handler->writeString("tertiary_class", weapons.tertiary_class.c_str());
-	write_string_list(handler, "flags", weapons.flags);
+	// "weapon_flags", not "flags".  The weapon state is written flat into whatever object owns it
+	// -- a ship or a turret subsystem -- and both of those already have a "flags" of their own,
+	// which this would otherwise overwrite.  It nearly always would, too, since weapon flags are
+	// usually empty.
+	write_string_list(handler, "weapon_flags", weapons.flags);
 	write_int_map(handler, "scalars", weapons.scalars);
 }
 
@@ -253,7 +257,7 @@ void read_weapon_state(pilot::FileHandler* handler, checkpoint::weapon_state& we
 	read_weapon_banks(handler, "primary_banks", weapons.primary_banks);
 	read_weapon_banks(handler, "secondary_banks", weapons.secondary_banks);
 	weapons.tertiary_class = handler->readStringOr("tertiary_class", "");
-	read_string_list(handler, "flags", weapons.flags);
+	read_string_list(handler, "weapon_flags", weapons.flags);
 	read_int_map(handler, "scalars", weapons.scalars);
 }
 
