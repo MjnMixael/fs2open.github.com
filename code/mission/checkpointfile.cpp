@@ -920,6 +920,9 @@ void write_sexp(pilot::FileHandler* handler, const checkpoint::checkpoint_data& 
 		handler->writeInt("i", node.index);
 		handler->writeInt("v", node.value);
 		handler->writeInt("f", node.flags);
+		if (!node.text.empty()) {
+			handler->writeString("t", node.text.c_str());
+		}
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -950,6 +953,7 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			node.index = handler->readIntOr("i", -1);
 			node.value = handler->readIntOr("v", 0);
 			node.flags = handler->readIntOr("f", 0);
+			node.text = handler->readStringOr("t", "");
 
 			if (node.index >= 0) {
 				data.sexp_nodes.push_back(node);
