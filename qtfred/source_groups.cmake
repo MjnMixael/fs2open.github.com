@@ -147,6 +147,8 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/HelpTopicsDialogModel.h
 )
 add_file_folder("Source/Mission/Dialogs/MissionSpecs"
+	src/mission/dialogs/MissionSpecs/CheckpointsDialogModel.cpp
+	src/mission/dialogs/MissionSpecs/CheckpointsDialogModel.h
 	src/mission/dialogs/MissionSpecs/CustomDataDialogModel.cpp
 	src/mission/dialogs/MissionSpecs/CustomDataDialogModel.h
 	src/mission/dialogs/MissionSpecs/CustomStringsDialogModel.cpp
@@ -281,6 +283,8 @@ add_file_folder("Source/UI/Dialogs/BriefingEditor"
 	src/ui/dialogs/BriefingEditor/IconFromShipDialog.h
 )
 add_file_folder("Source/UI/Dialogs/MissionSpecs"
+	src/ui/dialogs/MissionSpecs/CheckpointsDialog.cpp
+	src/ui/dialogs/MissionSpecs/CheckpointsDialog.h
 	src/ui/dialogs/MissionSpecs/CustomDataDialog.cpp
 	src/ui/dialogs/MissionSpecs/CustomDataDialog.h
 	src/ui/dialogs/MissionSpecs/CustomStringsDialog.cpp
@@ -389,6 +393,7 @@ add_file_folder("UI"
 	ui/BriefingEditorDialog.ui
 	ui/CampaignEditorDialog.ui
 	ui/CheckBoxListDialog.ui
+	ui/CheckpointsDialog.ui
 	ui/CommandBriefingDialog.ui
 	ui/CustomDataDialog.ui
 	ui/CustomStringsDialog.ui

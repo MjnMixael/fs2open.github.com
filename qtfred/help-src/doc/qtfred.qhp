@@ -32,6 +32,7 @@
                     <section title="Mission Events"             ref="dialogs/MissionEventsDialog.html"/>
                     <section title="Mission Goals"              ref="dialogs/MissionGoalsDialog.html"/>
                     <section title="Mission Specs"              ref="dialogs/MissionSpecsDialog.html">
+                        <section title="Checkpoints"            ref="dialogs/CheckpointsDialog.html"/>
                         <section title="Custom Data"            ref="dialogs/CustomDataDialog.html"/>
                         <section title="Custom Strings"         ref="dialogs/CustomStringsDialog.html"/>
                         <section title="Custom Wing Names"      ref="dialogs/CustomWingNamesDialog.html"/>
@@ -116,6 +117,7 @@
             <keyword name="Mission Goals"           id="MissionGoalsDialog"             ref="dialogs/MissionGoalsDialog.html"/>
             <keyword name="Mission Specs"           id="MissionSpecDialog"              ref="dialogs/MissionSpecsDialog.html"/>
             <keyword name="Support Options"         id="SupportRearmDialog"             ref="dialogs/SupportRearmDialog.html"/>
+            <keyword name="Checkpoints"             id="CheckpointsDialog"              ref="dialogs/CheckpointsDialog.html"/>
             <keyword name="Custom Wing Names"       id="CustomWingNamesDialog"          ref="dialogs/CustomWingNamesDialog.html"/>
             <keyword name="Sound Environment"       id="SoundEnvironmentDialog"         ref="dialogs/SoundEnvironmentDialog.html"/>
             <keyword name="Custom Strings"          id="CustomStringsDialog"            ref="dialogs/CustomStringsDialog.html"/>
@@ -182,6 +184,7 @@
             <file>dialogs/MissionGoalsDialog.html</file>
             <file>dialogs/MissionSpecsDialog.html</file>
             <file>dialogs/SupportRearmDialog.html</file>
+            <file>dialogs/CheckpointsDialog.html</file>
             <file>dialogs/CustomWingNamesDialog.html</file>
             <file>dialogs/CustomStringsDialog.html</file>
             <file>dialogs/SoundEnvironmentDialog.html</file>
