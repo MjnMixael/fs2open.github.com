@@ -43,6 +43,10 @@ add_file_folder("missioneditor"
     missioneditor/test_object_bounds.cpp
 )
 
+add_file_folder("Mission"
+    mission/checkpointfile.cpp
+)
+
 add_file_folder("mod"
     mod/test_mod_table.cpp
 )
