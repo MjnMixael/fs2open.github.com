@@ -250,18 +250,33 @@ struct container_state {
 	SCP_vector<SCP_string> map_values;
 };
 
+// One hotkey set's contents.  Ships by name; how_added distinguishes a mission-file default from
+// something the player put there, which matters because the two are shown differently and the
+// player's choices are the half a fresh mission load cannot reproduce.
+struct hotkey_state {
+	int set = 0;
+	SCP_vector<SCP_string> ship_names;
+	SCP_vector<int> how_added;
+};
+
 // A ship that had not arrived yet, whose parse object had been changed since the mission loaded.
 //
 // SEXPs can rewrite a ship long before it shows up -- change-ship-class, change-iff, hull and
 // shield bashing, flag changes -- and a fresh mission load puts all of that back the way the file
 // had it.  Only the fields a SEXP can actually reach are captured; the rest is reproduced by the
-// parse.  Arrival and departure *anchors* are deliberately absent: they are anchor_t, which needs
-// name resolution of its own, and set-arrival-info on a ship that has not arrived is rare enough
-// to be worth leaving until that resolution exists.
+// parse.
 struct parse_object_state {
 	SCP_string name;
 	SCP_string ship_class;
 	SCP_string team;
+
+	// Anchors go by name: either a ship, or one of the "<any hostile>" specials.
+	SCP_string arrival_anchor;
+	SCP_string departure_anchor;
+	int arrival_location = 0;
+	int departure_location = 0;
+	int arrival_path_mask = 0;
+	int departure_path_mask = 0;
 
 	int initial_hull = 100;
 	int initial_shields = 100;
@@ -356,6 +371,7 @@ struct checkpoint_data {
 	SCP_vector<container_state> containers;
 	SCP_vector<debris_state> debris;
 	SCP_vector<parse_object_state> parse_objects;
+	SCP_vector<hotkey_state> hotkeys;
 	int goal_timestamp = 0;
 
 	bool loaded = false;
