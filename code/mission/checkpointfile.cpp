@@ -769,6 +769,71 @@ void read_log(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 }
 
+void write_sexp(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointSexp);
+
+	handler->startArrayWrite("nodes", data.sexp_nodes.size());
+	for (const auto& node : data.sexp_nodes) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeInt("i", node.index);
+		handler->writeInt("v", node.value);
+		handler->writeInt("f", node.flags);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("containers", data.containers.size());
+	for (const auto& container : data.containers) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", container.name.c_str());
+		write_string_list(handler, "list_data", container.list_data);
+		write_string_list(handler, "map_keys", container.map_keys);
+		write_string_list(handler, "map_values", container.map_values);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.sexp_nodes.clear();
+	data.containers.clear();
+
+	if (handler->hasField("nodes")) {
+		auto count = handler->startArrayRead("nodes");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::sexp_node_state node;
+			node.index = handler->readIntOr("i", -1);
+			node.value = handler->readIntOr("v", 0);
+			node.flags = handler->readIntOr("f", 0);
+
+			if (node.index >= 0) {
+				data.sexp_nodes.push_back(node);
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	if (handler->hasField("containers")) {
+		auto count = handler->startArrayRead("containers");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::container_state container;
+			container.name = handler->readStringOr("name", "");
+			read_string_list(handler, "list_data", container.list_data);
+			read_string_list(handler, "map_keys", container.map_keys);
+			read_string_list(handler, "map_values", container.map_values);
+
+			if (!container.name.empty()) {
+				data.containers.push_back(std::move(container));
+			}
+		}
+		handler->endArrayRead();
+	}
+}
+
 void write_scoring(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointScoring);
@@ -1024,6 +1089,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_events(handler.get(), data);
 	write_goals(handler.get(), data);
 	write_log(handler.get(), data);
+	write_sexp(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -1113,6 +1179,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointLog:
 			read_log(handler.get(), data);
+			break;
+
+		case Section::CheckpointSexp:
+			read_sexp(handler.get(), data);
 			break;
 
 		default:
