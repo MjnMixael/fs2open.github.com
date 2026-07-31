@@ -25,30 +25,26 @@ extern char Game_current_mission_filename[];
 
 namespace {
 
-// Slot names are written by mission designers and end up in a filename, so restrict them to
-// something every filesystem will accept.  Anything else becomes an underscore.
-SCP_string sanitize_for_filename(const SCP_string& in)
+// One component of a checkpoint's identity.
+//
+// Lowercased, so a pilot whose callsign is typed with different capitalisation still finds their
+// own checkpoints, and nothing else is touched.  These strings only ever feed a hash now, so they
+// do not need to be safe as filenames -- and mangling them the way a filename would require makes
+// genuinely different people collide: with punctuation folded to underscores, "Joe Bloggs",
+// "Joe_Bloggs" and "Joe-Bloggs" all become the same pilot and share one checkpoint.
+SCP_string identity_key(const SCP_string& in)
 {
 	SCP_string out;
 	out.reserve(in.size());
 
 	for (char ch : in) {
-		if (isalnum(static_cast<unsigned char>(ch)) || ch == '-' || ch == '_') {
-			out += static_cast<char>(tolower(static_cast<unsigned char>(ch)));
-		} else {
-			out += '_';
-		}
-	}
-
-	if (out.empty()) {
-		out = "default";
+		out += static_cast<char>(tolower(static_cast<unsigned char>(ch)));
 	}
 
 	return out;
 }
 
-// Strip the extension from a mission or campaign filename so it can go into a checkpoint
-// filename without a second dot confusing anything.
+// As above, for a mission or campaign filename, whose extension is not part of its identity.
 SCP_string base_name(const char* filename)
 {
 	SCP_string out(filename != nullptr ? filename : "");
@@ -58,7 +54,7 @@ SCP_string base_name(const char* filename)
 		out.erase(dot);
 	}
 
-	return sanitize_for_filename(out);
+	return identity_key(out);
 }
 
 // ------------------------------------------------------------------
@@ -1131,10 +1127,10 @@ SCP_string checkpoint_identity(const SCP_string& mission_name, const SCP_string&
 
 	sprintf(identity,
 	        "%s|%s|%s|%s",
-	        sanitize_for_filename(Player != nullptr ? Player->callsign : "").c_str(),
+	        identity_key(Player != nullptr ? Player->callsign : "").c_str(),
 	        base_name(Campaign.filename).c_str(),
 	        base_name(mission_name.empty() ? Game_current_mission_filename : mission_name.c_str()).c_str(),
-	        sanitize_for_filename(slot).c_str());
+	        identity_key(slot).c_str());
 
 	return identity;
 }
@@ -1162,7 +1158,7 @@ SCP_vector<found_checkpoint> checkpoint_find_files(const SCP_string& mission_nam
 	cf_get_file_list(files, CF_TYPE_CHECKPOINTS, "*.chk", CF_SORT_NAME, nullptr,
 	                 CF_LOCATION_ROOT_USER | CF_LOCATION_ROOT_GAME | CF_LOCATION_TYPE_ROOT);
 
-	SCP_string wanted_pilot = sanitize_for_filename(Player != nullptr ? Player->callsign : "");
+	SCP_string wanted_pilot = identity_key(Player != nullptr ? Player->callsign : "");
 	SCP_string wanted_campaign = base_name(Campaign.filename);
 	SCP_string wanted_mission =
 		base_name(mission_name.empty() ? Game_current_mission_filename : mission_name.c_str());
@@ -1176,7 +1172,7 @@ SCP_vector<found_checkpoint> checkpoint_find_files(const SCP_string& mission_nam
 			continue;
 		}
 
-		if (!lcase_equal(sanitize_for_filename(info.pilot), wanted_pilot) ||
+		if (!lcase_equal(identity_key(info.pilot), wanted_pilot) ||
 		    !lcase_equal(base_name(info.campaign.c_str()), wanted_campaign) ||
 		    !lcase_equal(base_name(info.mission_filename.c_str()), wanted_mission)) {
 			continue;
@@ -1435,6 +1431,25 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 bool checkpoint_matches_current_mission(const checkpoint_data& data)
 {
+	// The filename is a hash of pilot, campaign, mission and slot, so opening the right file is
+	// normally proof enough of all four.  Check the two the file records anyway: a hash is not a
+	// guarantee, and being handed another pilot's saved game is a bad way to find that out.
+	if (!lcase_equal(identity_key(data.pilot), identity_key(Player != nullptr ? Player->callsign : ""))) {
+		mprintf(("CHECKPOINT => '%s' belongs to pilot '%s', not '%s'.\n",
+		         data.slot.c_str(),
+		         data.pilot.c_str(),
+		         Player != nullptr ? Player->callsign : ""));
+		return false;
+	}
+
+	if (!lcase_equal(base_name(data.campaign.c_str()), base_name(Campaign.filename))) {
+		mprintf(("CHECKPOINT => '%s' belongs to campaign '%s', not '%s'.\n",
+		         data.slot.c_str(),
+		         data.campaign.c_str(),
+		         Campaign.filename));
+		return false;
+	}
+
 	if (stricmp(data.mission_filename.c_str(), Game_current_mission_filename) != 0) {
 		return false;
 	}
