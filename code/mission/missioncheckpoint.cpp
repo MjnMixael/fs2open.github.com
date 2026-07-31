@@ -676,7 +676,7 @@ void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes
 		swp.primary_next_slot[i] = bank.next_slot;
 		swp.next_primary_fire_stamp[i] = translate_stamp(bank.next_fire_stamp);
 		swp.last_primary_fire_stamp[i] = translate_stamp(bank.last_fire_stamp);
-		swp.primary_bank_rearm_time[i] = bank.rearm_time;
+		swp.primary_bank_rearm_time[i] = translate_stamp(bank.rearm_time);
 		swp.burst_counter[i] = bank.burst_counter;
 		swp.burst_seed[i] = bank.burst_seed;
 	}
@@ -698,7 +698,7 @@ void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes
 		swp.secondary_next_slot[i] = bank.next_slot;
 		swp.next_secondary_fire_stamp[i] = translate_stamp(bank.next_fire_stamp);
 		swp.last_secondary_fire_stamp[i] = translate_stamp(bank.last_fire_stamp);
-		swp.secondary_bank_rearm_time[i] = bank.rearm_time;
+		swp.secondary_bank_rearm_time[i] = translate_stamp(bank.rearm_time);
 		swp.burst_counter[MAX_SHIP_PRIMARY_BANKS + i] = bank.burst_counter;
 		swp.burst_seed[MAX_SHIP_PRIMARY_BANKS + i] = bank.burst_seed;
 	}
