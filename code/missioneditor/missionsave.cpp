@@ -2631,13 +2631,37 @@ int Fred_mission_save::save_mission_info()
 
 	fout(" %d", The_mission.game_type);
 
-	if (optional_string_fred("+Flags:")) {
-		parse_comments(1);
-	} else {
-		fout("\n+Flags:");
-	}
+	// Retail stored these as a bitfield, which makes the order of Mission_Flags part of the file
+	// format and runs out of room as the enum grows.  A mission that already requires 26.1 gains
+	// nothing from the old form, so it gets the name list instead -- the way ship flags have
+	// always been written.  Anything older keeps the bitfield and stays loadable by the builds it
+	// was written for.
+	auto flag_list_version = gameversion::version(26, 1);
+	if (save_config.save_format != MissionFormat::RETAIL && The_mission.required_fso_version >= flag_list_version) {
+		if (optional_string_fred("+Flags List:")) {
+			parse_comments(1);
+		} else {
+			fout("\n+Flags List:");
+		}
 
-	fout(" " UINT64_T_ARG, The_mission.flags.to_u64());
+		fout(" (");
+		for (size_t i = 0; i < Num_parse_mission_flags; i++) {
+			if (Parse_mission_flags[i].in_use && The_mission.flags[Parse_mission_flags[i].def]) {
+				fout(" \"%s\"", Parse_mission_flags[i].name);
+			}
+		}
+		fout(" )");
+	} else {
+		if (optional_string_fred("+Flags:")) {
+			parse_comments(1);
+		} else {
+			fout("
++Flags:");
+		}
+
+		// UINT64_T_ARG, not PRIu64: upstream standardised on the macro while this branch was out.
+		fout(" " UINT64_T_ARG, The_mission.flags.to_u64());
+	}
 
 	// maybe write out Nebula values
 	if (The_mission.flags[Mission::Mission_Flags::Fullneb]) {

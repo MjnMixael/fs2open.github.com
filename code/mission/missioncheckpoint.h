@@ -228,6 +228,13 @@ struct checkpoint_data {
 // Public API
 // ------------------------------------------------------------------
 
+// Are checkpoints usable in the mission that is loaded, played the way it is being played?
+// False in multiplayer, and false when the mission carries the flag that turns checkpoints off
+// for the mode it is being flown in -- a designer may want them in the simulator but not in the
+// campaign, or the other way round.  Every entry point checks this, so a mission with them
+// switched off behaves as though the operators were never called.
+bool mission_checkpoint_allowed();
+
 // Capture the current mission state and write it to the named slot.  Returns false (and logs)
 // if the file could not be written.  Safe to call from inside SEXP evaluation.
 bool mission_checkpoint_store(const SCP_string& slot);
@@ -269,6 +276,11 @@ void mission_checkpoint_apply();
 // Discard any queued or in-flight restore.  Called when leaving a mission by any route other
 // than a checkpoint load, so a stale request cannot leak into the next mission.
 void mission_checkpoint_clear_pending();
+
+// Throw away this mission's checkpoints if it is flagged to do that once completed.  Called when
+// the player finishes the mission, so that replaying it later starts clean rather than offering
+// a checkpoint from the previous run.
+void mission_checkpoint_mission_complete();
 
 // Parse a designer-supplied flag name into a LoadFlags bit.  Returns false if unrecognised.
 bool mission_checkpoint_parse_load_flag(const char* name, checkpoint::LoadFlags& out);
