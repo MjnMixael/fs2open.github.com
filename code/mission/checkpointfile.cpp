@@ -424,6 +424,13 @@ void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoi
 		handler->writeString("class", p_obj.ship_class.c_str());
 		handler->writeString("team", p_obj.team.c_str());
 
+		handler->writeString("arrival_anchor", p_obj.arrival_anchor.c_str());
+		handler->writeString("departure_anchor", p_obj.departure_anchor.c_str());
+		handler->writeInt("arrival_location", p_obj.arrival_location);
+		handler->writeInt("departure_location", p_obj.departure_location);
+		handler->writeInt("arrival_path_mask", p_obj.arrival_path_mask);
+		handler->writeInt("departure_path_mask", p_obj.departure_path_mask);
+
 		handler->writeInt("initial_hull", p_obj.initial_hull);
 		handler->writeInt("initial_shields", p_obj.initial_shields);
 		handler->writeInt("arrival_distance", p_obj.arrival_distance);
@@ -458,6 +465,13 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 		p_obj.ship_class = handler->readStringOr("class", "");
 		p_obj.team = handler->readStringOr("team", "");
 
+		p_obj.arrival_anchor = handler->readStringOr("arrival_anchor", "");
+		p_obj.departure_anchor = handler->readStringOr("departure_anchor", "");
+		p_obj.arrival_location = handler->readIntOr("arrival_location", 0);
+		p_obj.departure_location = handler->readIntOr("departure_location", 0);
+		p_obj.arrival_path_mask = handler->readIntOr("arrival_path_mask", 0);
+		p_obj.departure_path_mask = handler->readIntOr("departure_path_mask", 0);
+
 		p_obj.initial_hull = handler->readIntOr("initial_hull", 100);
 		p_obj.initial_shields = handler->readIntOr("initial_shields", 100);
 		p_obj.arrival_distance = handler->readIntOr("arrival_distance", 0);
@@ -473,6 +487,58 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 
 		if (!p_obj.name.empty()) {
 			data.parse_objects.push_back(std::move(p_obj));
+		}
+	}
+	handler->endArrayRead();
+}
+
+void write_hotkeys(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startArrayWrite("hotkeys", data.hotkeys.size());
+	for (const auto& set : data.hotkeys) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeInt("set", set.set);
+		write_string_list(handler, "ships", set.ship_names);
+
+		handler->startArrayWrite("how_added", set.how_added.size());
+		for (int how : set.how_added) {
+			handler->startSectionWrite(Section::Unnamed);
+			handler->writeInt("v", how);
+			handler->endSectionWrite();
+		}
+		handler->endArrayWrite();
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_hotkeys(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.hotkeys.clear();
+
+	if (!handler->hasField("hotkeys")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("hotkeys");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::hotkey_state set;
+
+		set.set = handler->readIntOr("set", -1);
+		read_string_list(handler, "ships", set.ship_names);
+
+		if (handler->hasField("how_added")) {
+			auto how_count = handler->startArrayRead("how_added");
+			for (size_t j = 0; j < how_count; j++, handler->nextArraySection()) {
+				set.how_added.push_back(handler->readIntOr("v", 0));
+			}
+			handler->endArrayRead();
+		}
+
+		if (set.set >= 0 && !set.ship_names.empty()) {
+			data.hotkeys.push_back(std::move(set));
 		}
 	}
 	handler->endArrayRead();
@@ -534,6 +600,7 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	// Ships that have not arrived ride along in the same section; they are the same kind of thing
 	// seen from the other side.
 	write_parse_objects(handler, data);
+	write_hotkeys(handler, data);
 
 	handler->endSectionWrite();
 }
@@ -545,6 +612,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	// Parse objects share this section, so an absent ships array must not skip them.
 	if (!handler->hasField("ships")) {
 		read_parse_objects(handler, data);
+		read_hotkeys(handler, data);
 		return;
 	}
 
@@ -598,6 +666,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 
 	read_parse_objects(handler, data);
+	read_hotkeys(handler, data);
 }
 
 void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
