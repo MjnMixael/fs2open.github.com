@@ -8,8 +8,11 @@
 
 #include "mission/missioncheckpoint.h"
 
+#include "debris/debris.h"
 #include "gamesequence/gamesequence.h"
 #include "globalincs/systemvars.h"
+#include "model/model.h"
+#include "species_defs/species_defs.h"
 #include "io/timer.h"
 #include "iff_defs/iff_defs.h"
 #include "mission/checkpointfields.h"
@@ -1067,6 +1070,48 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		data.containers.push_back(std::move(state));
 	}
 
+	// Hull debris only -- see the note on debris_state.
+	for (const auto& db : Debris) {
+		if (!db.flags[Debris_Flags::Used] || !db.is_hull || db.objnum < 0) {
+			continue;
+		}
+
+		const object* objp = &Objects[db.objnum];
+		debris_state state;
+
+		state.ship_class = ship_class_name(db.ship_info_index);
+		state.team = team_name(db.team);
+
+		auto pm = model_get(db.model_num);
+		if (pm != nullptr && db.submodel_num >= 0 && db.submodel_num < pm->n_models) {
+			state.submodel = pm->submodel[db.submodel_num].name;
+		}
+
+		if (db.species >= 0 && db.species < static_cast<int>(Species_info.size())) {
+			state.species = Species_info[db.species].species_name;
+		}
+		if (db.damage_type_idx >= 0 && db.damage_type_idx < static_cast<int>(Damage_types.size())) {
+			state.damage_type = Damage_types[db.damage_type_idx].name;
+		}
+
+		state.pos = objp->pos;
+		state.orient = objp->orient;
+		state.velocity = objp->phys_info.vel;
+		state.rotational_velocity = objp->phys_info.rotvel;
+
+		state.hull_strength = objp->hull_strength;
+		state.max_hull = db.max_hull;
+		state.lifeleft = db.lifeleft;
+		state.damage_mult = db.damage_mult;
+		state.parent_alt_name = db.parent_alt_name;
+		state.do_not_expire = db.flags[Debris_Flags::DoNotExpire];
+
+		// A chunk with no class or submodel cannot be recreated, and hull debris always has both.
+		if (!state.ship_class.empty() && !state.submodel.empty()) {
+			data.debris.push_back(std::move(state));
+		}
+	}
+
 	data.goal_timestamp = Mission_goal_timestamp.value();
 
 	bool written = checkpoint_write(data);
@@ -1568,6 +1613,88 @@ void apply_scoring(const checkpoint_data& data)
 // pre-player-entry skip in freespace.cpp uses.  It does NOT make the saved stamps correct on its
 // own -- see the note above translate_stamp() for why -- so we also compute the offset between
 // the checkpoint's clock and this run's, which every restored stamp is then shifted by.
+// Put back the hull debris that was floating around.
+//
+// The ships these came off are destroyed and gone, so there is no source object to create them
+// from; debris_create_only() takes explicit position and orientation for exactly that reason, and
+// deduces nothing it is given a real value for.
+void apply_debris(const checkpoint_data& data)
+{
+	int created = 0;
+
+	for (const auto& state : data.debris) {
+		int ship_class = lookup_ship_class(state.ship_class);
+		if (ship_class < 0) {
+			continue;
+		}
+
+		int model_num = Ship_info[ship_class].model_num;
+		if (model_num < 0) {
+			mprintf(("CHECKPOINT => No model loaded for '%s'; dropping its debris.\n", state.ship_class.c_str()));
+			continue;
+		}
+
+		int submodel_num = model_find_submodel_index(model_num, state.submodel.c_str());
+		if (submodel_num < 0) {
+			mprintf(("CHECKPOINT => '%s' has no submodel '%s' any more; dropping that debris.\n",
+			         state.ship_class.c_str(),
+			         state.submodel.c_str()));
+			continue;
+		}
+
+		int damage_type = -1;
+		if (!state.damage_type.empty()) {
+			for (int i = 0; i < static_cast<int>(Damage_types.size()); i++) {
+				if (!stricmp(Damage_types[i].name, state.damage_type.c_str())) {
+					damage_type = i;
+					break;
+				}
+			}
+		}
+
+		auto objp = debris_create_only(-1,
+			ship_class,
+			state.parent_alt_name,
+			lookup_team(state.team),
+			state.hull_strength,
+			0,
+			model_num,
+			submodel_num,
+			&state.pos,
+			&state.orient,
+			true,
+			false,
+			damage_type);
+
+		if (objp == nullptr) {
+			continue;
+		}
+
+		objp->phys_info.vel = state.velocity;
+		objp->phys_info.rotvel = state.rotational_velocity;
+		objp->hull_strength = state.hull_strength;
+
+		auto db = &Debris[objp->instance];
+		// lifeleft is re-rolled from the ship class on creation, so put the saved one back --
+		// including the -1 that makes a large chunk permanent.
+		db->lifeleft = state.lifeleft;
+		db->max_hull = state.max_hull;
+		db->damage_mult = state.damage_mult;
+		if (!state.species.empty()) {
+			db->species = species_info_lookup(state.species.c_str());
+		}
+		if (state.do_not_expire) {
+			db->flags.set(Debris_Flags::DoNotExpire);
+		}
+
+		created++;
+	}
+
+	if (created > 0) {
+		mprintf(("CHECKPOINT => Restored %d piece(s) of hull debris.\n", created));
+	}
+}
+
 // Events, goals and the log -- the mission's memory of what has already happened.
 //
 // Matched by name rather than by index, so an event moved around in FRED still finds its state.
@@ -1872,6 +1999,10 @@ void mission_checkpoint_apply()
 	apply_wings(data);
 	apply_variables(data);
 	apply_scoring(data);
+
+	// Debris is independent of everything else; it just needs the ship classes paged in, which the
+	// mission load has already done.
+	apply_debris(data);
 
 	// After the world, because a restored event's state describes ships that now exist.
 	apply_mission_logic(data);

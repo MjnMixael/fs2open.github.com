@@ -834,6 +834,80 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	}
 }
 
+void write_debris(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointDebris);
+
+	handler->startArrayWrite("debris", data.debris.size());
+	for (const auto& piece : data.debris) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("class", piece.ship_class.c_str());
+		handler->writeString("submodel", piece.submodel.c_str());
+		handler->writeString("team", piece.team.c_str());
+		handler->writeString("species", piece.species.c_str());
+		handler->writeString("damage_type", piece.damage_type.c_str());
+
+		write_vector(handler, "pos_x", "pos_y", "pos_z", piece.pos);
+		write_vector(handler, "fvec_x", "fvec_y", "fvec_z", piece.orient.vec.fvec);
+		write_vector(handler, "uvec_x", "uvec_y", "uvec_z", piece.orient.vec.uvec);
+		write_vector(handler, "rvec_x", "rvec_y", "rvec_z", piece.orient.vec.rvec);
+		write_vector(handler, "vel_x", "vel_y", "vel_z", piece.velocity);
+		write_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", piece.rotational_velocity);
+
+		handler->writeFloat("hull", piece.hull_strength);
+		handler->writeFloat("max_hull", piece.max_hull);
+		handler->writeFloat("lifeleft", piece.lifeleft);
+		handler->writeFloat("damage_mult", piece.damage_mult);
+		handler->writeInt("parent_alt_name", piece.parent_alt_name);
+		handler->writeBool("do_not_expire", piece.do_not_expire);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_debris(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.debris.clear();
+
+	if (!handler->hasField("debris")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("debris");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::debris_state piece;
+
+		piece.ship_class = handler->readStringOr("class", "");
+		piece.submodel = handler->readStringOr("submodel", "");
+		piece.team = handler->readStringOr("team", "");
+		piece.species = handler->readStringOr("species", "");
+		piece.damage_type = handler->readStringOr("damage_type", "");
+
+		read_vector(handler, "pos_x", "pos_y", "pos_z", piece.pos);
+		read_vector(handler, "fvec_x", "fvec_y", "fvec_z", piece.orient.vec.fvec);
+		read_vector(handler, "uvec_x", "uvec_y", "uvec_z", piece.orient.vec.uvec);
+		read_vector(handler, "rvec_x", "rvec_y", "rvec_z", piece.orient.vec.rvec);
+		read_vector(handler, "vel_x", "vel_y", "vel_z", piece.velocity);
+		read_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", piece.rotational_velocity);
+
+		piece.hull_strength = handler->readFloatOr("hull", 0.0f);
+		piece.max_hull = handler->readFloatOr("max_hull", 0.0f);
+		piece.lifeleft = handler->readFloatOr("lifeleft", -1.0f);
+		piece.damage_mult = handler->readFloatOr("damage_mult", 1.0f);
+		piece.parent_alt_name = handler->readIntOr("parent_alt_name", -1);
+		piece.do_not_expire = handler->readBoolOr("do_not_expire", false);
+
+		if (!piece.ship_class.empty() && !piece.submodel.empty()) {
+			data.debris.push_back(std::move(piece));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_scoring(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointScoring);
@@ -1090,6 +1164,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_goals(handler.get(), data);
 	write_log(handler.get(), data);
 	write_sexp(handler.get(), data);
+	write_debris(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -1183,6 +1258,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointSexp:
 			read_sexp(handler.get(), data);
+			break;
+
+		case Section::CheckpointDebris:
+			read_debris(handler.get(), data);
 			break;
 
 		default:
