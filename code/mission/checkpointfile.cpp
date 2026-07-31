@@ -1069,11 +1069,6 @@ void read_scoring(pilot::FileHandler* handler, checkpoint::checkpoint_data& data
 	read_int_map(handler, "class_kills", data.scoring.class_kills);
 }
 
-bool lcase_equal(const SCP_string& a, const SCP_string& b)
-{
-	return stricmp(a.c_str(), b.c_str()) == 0;
-}
-
 // Read nothing but the Info section, for enumeration.  Stops as soon as it has what it came for
 // rather than parsing every ship in the file.
 bool checkpoint_peek_info(const SCP_string& filename, checkpoint::checkpoint_data& data)
