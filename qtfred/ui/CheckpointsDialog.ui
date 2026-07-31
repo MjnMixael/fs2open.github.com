@@ -1,0 +1,80 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ui version="4.0">
+ <class>fso::fred::dialogs::CheckpointsDialog</class>
+ <widget class="QDialog" name="fso::fred::dialogs::CheckpointsDialog">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>460</width><height>300</height></rect></property>
+  <property name="windowTitle"><string>Checkpoint Options</string></property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="QGroupBox" name="availabilityGroup">
+     <property name="title"><string>Availability</string></property>
+     <layout class="QVBoxLayout" name="availabilityLayout">
+      <item>
+       <widget class="QCheckBox" name="disallowInCampaignCheck">
+        <property name="text"><string>Disallow checkpoints in campaign mode</string></property>
+        <property name="toolTip"><string>The checkpoint operators do nothing while this mission is flown as part of a campaign.</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="disallowInSimulatorCheck">
+        <property name="text"><string>Disallow checkpoints in simulator mode</string></property>
+        <property name="toolTip"><string>The checkpoint operators do nothing while this mission is flown outside a campaign, such as from the mission simulator.</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="resumeGroup">
+     <property name="title"><string>Resuming</string></property>
+     <layout class="QVBoxLayout" name="resumeLayout">
+      <item>
+       <widget class="QCheckBox" name="noResumePromptCheck">
+        <property name="text"><string>Do not offer to resume on mission entry</string></property>
+        <property name="toolTip"><string>Suppresses the prompt the engine shows on the way into the mission when a usable checkpoint exists.  The checkpoint is still there and load-checkpoint still works.</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="keepPlayerLoadoutCheck">
+        <property name="text"><string>Keep the player's briefing loadout when resuming</string></property>
+        <property name="toolTip"><string>Leaves the player's ship class and weapons as the briefing set them, instead of restoring the ones the checkpoint recorded.</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QCheckBox" name="keepWingLoadoutCheck">
+        <property name="text"><string>Keep the player wing's briefing loadout when resuming</string></property>
+        <property name="toolTip"><string>As above, for the rest of the player's wing.</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QGroupBox" name="lifetimeGroup">
+     <property name="title"><string>Lifetime</string></property>
+     <layout class="QVBoxLayout" name="lifetimeLayout">
+      <item>
+       <widget class="QCheckBox" name="deleteOnCompletionCheck">
+        <property name="text"><string>Delete this mission's checkpoints once it is completed</string></property>
+        <property name="toolTip"><string>Discards the checkpoints when the player finishes the mission successfully, so replaying it later starts clean.  A failed mission keeps them.</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+    </spacer>
+   </item>
+   <item>
+    <widget class="QDialogButtonBox" name="okAndCancelButtons">
+     <property name="standardButtons"><set>QDialogButtonBox::Cancel|QDialogButtonBox::Ok</set></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>

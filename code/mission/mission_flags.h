@@ -39,6 +39,11 @@ namespace Mission {
 		Large_ships_no_collide_by_default,	// Automatically puts all large ships in a shared collision group
 		Limited_support_rearm_pool, // Support ships can only rearm weapons while mission-level pool is available - MjnMixael
 		No_checkpoint_resume_prompt,	// Don't offer to resume from a checkpoint when entering this mission
+		Checkpoint_keep_player_loadout,	// Resuming from a checkpoint leaves the player's ship and weapons alone
+		Checkpoint_keep_wing_loadout,	// As above, for the rest of the player's wing
+		Checkpoint_delete_on_completion,	// Throw away this mission's checkpoints once it has been completed
+		No_checkpoints_in_campaign,		// Checkpoints do nothing when the mission is flown as part of a campaign
+		No_checkpoints_in_simulator,	// Checkpoints do nothing when the mission is flown outside a campaign
 
 		NUM_VALUES
 	};
