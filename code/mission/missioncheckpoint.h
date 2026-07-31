@@ -250,6 +250,32 @@ struct container_state {
 	SCP_vector<SCP_string> map_values;
 };
 
+// A piece of hull debris.
+//
+// Only hull debris is captured.  Small debris expires in seconds and is pure decoration, but a
+// large hull chunk has lifeleft == -1 -- it stays for the rest of the mission, it collides, and
+// it can be targeted and shot.  That makes a capital ship wreck part of the battlefield rather
+// than an effect, and a restore that loses it is immediately obvious.
+struct debris_state {
+	SCP_string ship_class;    // what it broke off
+	SCP_string submodel;      // by name, so a re-exported pof cannot scramble it
+	SCP_string team;
+	SCP_string species;
+	SCP_string damage_type;
+
+	vec3d pos = vmd_zero_vector;
+	matrix orient = vmd_identity_matrix;
+	vec3d velocity = vmd_zero_vector;
+	vec3d rotational_velocity = vmd_zero_vector;
+
+	float hull_strength = 0.0f;
+	float max_hull = 0.0f;
+	float lifeleft = -1.0f;
+	float damage_mult = 1.0f;
+	int parent_alt_name = -1;
+	bool do_not_expire = false;
+};
+
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
 // timestamp, so it is restored as-is rather than shifted.
 struct log_entry_state {
@@ -301,6 +327,7 @@ struct checkpoint_data {
 	SCP_vector<log_entry_state> log_entries;
 	SCP_vector<sexp_node_state> sexp_nodes;
 	SCP_vector<container_state> containers;
+	SCP_vector<debris_state> debris;
 	int goal_timestamp = 0;
 
 	bool loaded = false;
