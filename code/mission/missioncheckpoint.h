@@ -112,7 +112,9 @@ struct subsystem_state {
 
 	SCP_string sub_name;         // WMC's per-instance name override, if any
 	SCP_string cargo_title;
+	SCP_string cargo;            // subsys_cargo_name, by name -- see the note on ship_state::cargo
 	SCP_string turret_target;    // ship name this turret was firing on, if any
+	bool cargo_no_deplete = false;
 
 	SCP_vector<SCP_string> flags;
 	SCP_map<SCP_string, float> floats;
@@ -145,6 +147,13 @@ struct ship_state {
 	SCP_string wing_name;
 	SCP_string cargo_title;
 	SCP_string countermeasure_class;
+	SCP_string persona;          // Personas is built from messages.tbl, so the index is a table index
+
+	// ship::cargo1 packs an index into Cargo_names with the "do not deplete" bit.  set-cargo
+	// appends to Cargo_names at runtime, so an index saved in one run can point past the end of
+	// the freshly parsed list in the next; the name is stored instead and re-resolved on apply.
+	SCP_string cargo;
+	bool cargo_no_deplete = false;
 
 	vec3d pos = vmd_zero_vector;
 	matrix orient = vmd_identity_matrix;
@@ -153,8 +162,6 @@ struct ship_state {
 	float max_hull = 0.0f;
 	// Sized to match object::shield_quadrant, which is not fixed at four for every model.
 	SCP_vector<float> shield_quadrants;
-
-	char cargo1 = 0;
 
 	SCP_vector<SCP_string> flags;
 	SCP_vector<SCP_string> object_flags;
@@ -291,9 +298,14 @@ struct parse_object_state {
 	int departure_delay = 0;
 	int escort_priority = 0;
 	int respawn_priority = 0;
+	// Mission_alt_types and Mission_callsigns are built solely by the mission parse and nothing
+	// extends them at runtime, so these indices mean the same thing in any run of the same
+	// mission file -- which the fingerprint check guarantees.  Cargo_names is not like that; see
+	// the note on ship_state::cargo.
 	int alt_type_index = -1;
 	int callsign_index = -1;
-	char cargo1 = 0;
+	SCP_string cargo;
+	bool cargo_no_deplete = false;
 
 	SCP_vector<SCP_string> flags;
 };
@@ -320,7 +332,8 @@ struct debris_state {
 	float max_hull = 0.0f;
 	float lifeleft = -1.0f;
 	float damage_mult = 1.0f;
-	int parent_alt_name = -1;
+	int parent_alt_name = -1;   // index into Mission_alt_types, which only the mission parse builds
+
 	bool do_not_expire = false;
 };
 
@@ -332,8 +345,9 @@ struct log_entry_state {
 	fix timestamp = 0;
 	int timer_padding = 0;
 	int index = 0;
-	int primary_team = -1;
-	int secondary_team = -1;
+	// IFF indices come from iff_defs.tbl, so they shift if a mod reorders it.
+	SCP_string primary_team;
+	SCP_string secondary_team;
 	SCP_string pname;
 	SCP_string sname;
 	SCP_string pname_display;
