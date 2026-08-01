@@ -11,6 +11,7 @@
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QShortcut>
 
 namespace fso::fred::dialogs {
 
@@ -24,6 +25,12 @@ _viewport(viewport), _fredView(parent)
 	_dialogStack = new QUndoStack(this);
 	_fredView->undoGroup()->addStack(_dialogStack);
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Command Briefing"));
+
+	// F6 / Shift+F6 cycle to the next / previous stage, mirroring the Next/Prev buttons.
+	auto* nextShortcut = new QShortcut(QKeySequence(Qt::Key_F6), this);
+	connect(nextShortcut, &QShortcut::activated, this, [this] { ui->actionNextStage->click(); });
+	auto* prevShortcut = new QShortcut(QKeySequence(QStringLiteral("Shift+F6")), this);
+	connect(prevShortcut, &QShortcut::activated, this, [this] { ui->actionPrevStage->click(); });
 
 	ui->speechFilename->setMaxLength(NAME_LENGTH - 1);
 	ui->animationFilename->setMaxLength(NAME_LENGTH - 1);

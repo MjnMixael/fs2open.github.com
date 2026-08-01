@@ -25,6 +25,7 @@
 #include <QCloseEvent>
 #include <QFileDialog>
 #include <QFileInfo>
+#include <QShortcut>
 #include <QVBoxLayout>
 
 namespace fso::fred::dialogs {
@@ -86,6 +87,12 @@ BriefingEditorDialog::BriefingEditorDialog(FredView* parent, EditorViewport* vie
 	this->setFocus();
 	ui->setupUi(this);
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Briefing"));
+
+	// F6 / Shift+F6 cycle to the next / previous stage, mirroring the Next/Prev buttons.
+	auto* nextShortcut = new QShortcut(QKeySequence(Qt::Key_F6), this);
+	connect(nextShortcut, &QShortcut::activated, this, [this] { ui->nextStageButton->click(); });
+	auto* prevShortcut = new QShortcut(QKeySequence(QStringLiteral("Shift+F6")), this);
+	connect(prevShortcut, &QShortcut::activated, this, [this] { ui->prevStageButton->click(); });
 
 	ui->iconLabelLineEdit->setMaxLength(MAX_LABEL_LEN - 1);
 	ui->iconCloseupLabelLineEdit->setMaxLength(MAX_LABEL_LEN - 1);
