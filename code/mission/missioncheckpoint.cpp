@@ -1466,10 +1466,9 @@ namespace {
 // restored from the checkpoint in their own right.  The exited-ship entry it leaves behind says
 // "player deleted", so we correct that afterwards to what actually happened.
 //
-// KNOWN GAP: ship_cleanup() runs the On Ship Depart hook for departing and vanishing ships, so a
-// script will see a departure it already saw in the run that was saved.  Suppressing that needs a
-// general "a restore is in progress" notion, which belongs with the rest of the side-effect
-// handling in milestone 2.
+// Game_restoring is raised for the whole of the apply, which is what stops ship_cleanup() writing a
+// departure to the mission log or re-running the On Ship Depart hook for a departure the script
+// already saw in the run that was saved.  Both guards live at the call sites in ship.cpp.
 void remove_ship_for_restore(const ship_registry_entry* entry, const ship_state& state)
 {
 	int shipnum = entry->shipnum;
@@ -2103,9 +2102,12 @@ void apply_mission_logic(const checkpoint_data& data)
 		it->satisfied = state.satisfied;
 	}
 
-	// The log is replayed wholesale rather than merged: mission_log_add_entry() has been suppressed
-	// throughout the restore (see Game_restoring), so whatever is here now is only what the fresh
-	// load produced, and the saved log is the truth.
+	// The log is replayed wholesale rather than merged, so whatever is here now is discarded and
+	// the saved log is the truth.  mission_log_add_entry() itself is not suppressed -- only the
+	// departure call site in ship.cpp checks Game_restoring -- so this clear is what actually keeps
+	// the restored log clean, and it only works because everything that can write to the log during
+	// an apply runs before this point.  Anything added to the apply after it must either run earlier
+	// or suppress its own logging.
 	Log_entries.clear();
 	for (const auto& state : data.log_entries) {
 		log_entry entry;
