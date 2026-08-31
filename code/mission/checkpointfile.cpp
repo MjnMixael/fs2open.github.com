@@ -110,6 +110,23 @@ void read_named_map(pilot::FileHandler* handler, const char* name, SCP_map<SCP_s
 	handler->endArrayRead();
 }
 
+void write_string_map(pilot::FileHandler* handler, const char* name, const SCP_map<SCP_string, SCP_string>& values)
+{
+	handler->startArrayWrite(name, values.size());
+	for (const auto& entry : values) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("k", entry.first.c_str());
+		handler->writeString("v", entry.second.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_string_map(pilot::FileHandler* handler, const char* name, SCP_map<SCP_string, SCP_string>& values)
+{
+	read_named_map<SCP_string>(handler, name, values, [](pilot::FileHandler* h) { return h->readStringOr("v", ""); });
+}
+
 void write_int_map(pilot::FileHandler* handler, const char* name, const SCP_map<SCP_string, int>& values)
 {
 	handler->startArrayWrite(name, values.size());
@@ -1157,6 +1174,18 @@ void read_ai(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 }
 
+void write_script_data(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointScriptData);
+	write_string_map(handler, "data", data.script_data);
+	handler->endSectionWrite();
+}
+
+void read_script_data(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	read_string_map(handler, "data", data.script_data);
+}
+
 void write_mission_state(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	const auto& state = data.mission;
@@ -1932,6 +1961,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_animations(handler.get(), data);
 	write_environment(handler.get(), data);
 	write_mission_state(handler.get(), data);
+	write_script_data(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -2055,6 +2085,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointMissionState:
 			read_mission_state(handler.get(), data);
+			break;
+
+		case Section::CheckpointScriptData:
+			read_script_data(handler.get(), data);
 			break;
 
 		default:

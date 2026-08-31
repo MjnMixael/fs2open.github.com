@@ -2036,6 +2036,48 @@ ADE_FUNC(deleteCheckpoint,
 	return ADE_RETURN_NIL;
 }
 
+ADE_FUNC(setCheckpointData,
+	l_Mission,
+	"string key, string value",
+	"Stages a value to be written into the next checkpoint, so that a script can remember state the "
+	"engine knows nothing about.  Normally called from the On Checkpoint Save hook, but a value set "
+	"at any point is picked up by the next checkpoint written.  Strings only: encode anything more "
+	"structured yourself.  Cleared when the mission is torn down.",
+	nullptr,
+	nullptr)
+{
+	const char* key = nullptr;
+	const char* value = nullptr;
+	if (!ade_get_args(L, "ss", &key, &value)) {
+		return ADE_RETURN_NIL;
+	}
+
+	mission_checkpoint_set_script_data(key, value);
+
+	return ADE_RETURN_NIL;
+}
+
+ADE_FUNC(getCheckpointData,
+	l_Mission,
+	"string key",
+	"Reads back a value stored with setCheckpointData().  Normally called from the On Checkpoint "
+	"Restore hook, where it returns what the restored checkpoint carried.",
+	"string",
+	"The stored value, or nil if nothing was stored under that key")
+{
+	const char* key = nullptr;
+	if (!ade_get_args(L, "s", &key)) {
+		return ADE_RETURN_NIL;
+	}
+
+	SCP_string value;
+	if (!mission_checkpoint_get_script_data(key, value)) {
+		return ADE_RETURN_NIL;
+	}
+
+	return ade_set_args(L, "s", value);
+}
+
 ADE_FUNC(getCheckpointInfo,
 	l_Mission,
 	"[string slot=\"default\"]",

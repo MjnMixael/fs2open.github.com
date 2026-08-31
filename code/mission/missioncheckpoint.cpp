@@ -44,6 +44,8 @@
 #include "parse/sexp_container.h"
 #include "playerman/player.h"
 #include "popup/popup.h"
+#include "scripting/global_hooks.h"
+#include "scripting/hook_api.h"
 #include "ship/ship.h"
 #include "ship/shipfx.h"
 #include "species_defs/species_defs.h"
@@ -1903,6 +1905,11 @@ struct existence_cache_entry {
 
 SCP_map<SCP_string, existence_cache_entry> Existence_cache;
 
+// What scripts have asked to have remembered.  Lives across the reload a checkpoint load performs,
+// because the store side fills it before the write and the apply side fills it from the file; only
+// the level teardown empties it.
+SCP_map<SCP_string, SCP_string> Script_data;
+
 void invalidate_existence_cache(const SCP_string& slot)
 {
 	Existence_cache.erase(slot);
@@ -1947,6 +1954,12 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	if (!mission_checkpoint_allowed()) {
 		mprintf(("CHECKPOINT => Checkpoints are switched off for this mission; not storing.\n"));
 		return false;
+	}
+
+	// Before anything is gathered, so a script can stage whatever it wants remembered.
+	if (scripting::hooks::OnCheckpointSave->isActive()) {
+		scripting::hooks::OnCheckpointSave->run(
+			scripting::hook_param_list(scripting::hook_param("Slot", 's', slot)));
 	}
 
 	checkpoint_data data;
@@ -2325,6 +2338,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	}
 
 	data.goal_timestamp = Mission_goal_timestamp.value();
+
+	// Whatever the On Checkpoint Save hook staged, plus anything a script set earlier.
+	data.script_data = Script_data;
 
 	bool written = checkpoint_write(data);
 	invalidate_existence_cache(slot);
@@ -3952,6 +3968,16 @@ void mission_checkpoint_apply()
 
 	mprintf(("CHECKPOINT => Applied checkpoint at mission time %d.\n", f2i(Missiontime)));
 
+	// The script data comes back before the hook that reads it, and the hook runs after
+	// Game_restoring has been cleared so that a script sees a mission in its final state rather
+	// than one that is still being assembled.
+	Script_data = data.script_data;
+
+	if (scripting::hooks::OnCheckpointRestore->isActive()) {
+		scripting::hooks::OnCheckpointRestore->run(
+			scripting::hook_param_list(scripting::hook_param("Slot", 's', data.slot)));
+	}
+
 	// Release the snapshot.  A large mission's checkpoint is not small, and there is no reason
 	// to hold it for the rest of the mission.
 	mission_checkpoint_clear_pending();
@@ -4034,4 +4060,29 @@ void mission_checkpoint_level_init()
 	// either the checkpoint or the mission file.
 	Existence_cache.clear();
 	checkpoint_invalidate_fingerprint();
+
+	// Not cleared by mission_checkpoint_clear_pending(), which has to survive the very reload a
+	// checkpoint load asks for -- but the level teardown is exactly where one mission's script
+	// data stops being about the mission that is loading.  A restore refills it immediately
+	// afterwards, from the file.
+	Script_data.clear();
+}
+
+void mission_checkpoint_set_script_data(const SCP_string& key, const SCP_string& value)
+{
+	if (key.empty()) {
+		return;
+	}
+	Script_data[key] = value;
+}
+
+bool mission_checkpoint_get_script_data(const SCP_string& key, SCP_string& out_value)
+{
+	auto it = Script_data.find(key);
+	if (it == Script_data.end()) {
+		return false;
+	}
+
+	out_value = it->second;
+	return true;
 }

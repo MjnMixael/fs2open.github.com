@@ -20,8 +20,10 @@ extern const std::shared_ptr<Hook<>>									OnLoadScreen;
 extern const std::shared_ptr<Hook<>>									OnLoadComplete;
 extern const std::shared_ptr<Hook<>>									OnCampaignMissionAccept;
 extern const std::shared_ptr<Hook<>>									OnBriefStage;
-extern const std::shared_ptr<Hook<>>									OnMissionStart; 
+extern const std::shared_ptr<Hook<>>									OnMissionStart;
 extern const std::shared_ptr<Hook<>>									OnGameplayStart;
+extern const std::shared_ptr<Hook<>>									OnCheckpointSave;
+extern const std::shared_ptr<Hook<>>									OnCheckpointRestore;
 extern const std::shared_ptr<Hook<>>							OnPhotoModeStarted;
 extern const std::shared_ptr<Hook<>>							OnPhotoModeEnded;
 
