@@ -23,7 +23,7 @@ static void deserializeVec3d(QDataStream& ds, vec3d& v)
 	ds >> v.xyz.x >> v.xyz.y >> v.xyz.z;
 }
 
-QByteArray AsteroidEditorDialogModel::captureState() const
+QByteArray AsteroidEditorDialogModel::captureGlobalState()
 {
 	QByteArray data;
 	QDataStream ds(&data, QIODevice::WriteOnly);
@@ -62,7 +62,7 @@ QByteArray AsteroidEditorDialogModel::captureState() const
 	return data;
 }
 
-void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
+void AsteroidEditorDialogModel::restoreGlobalState(const QByteArray& state)
 {
 	QDataStream ds(state);
 
@@ -118,3 +118,26 @@ void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
 }
 
 } // namespace fso::fred::dialogs
+
+// The AbstractDialogModel overrides just delegate: the snapshot is of the
+// mission globals, not of this model's working copy, so an undo command can
+// restore it with no dialog alive.
+QByteArray AsteroidEditorDialogModel::captureState() const
+{
+	return captureGlobalState();
+}
+
+void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
+{
+	restoreGlobalState(state);
+	resyncFromGlobals();
+}
+
+// Re-read the working copy (and the reject() baseline) from the globals after
+// an undo/redo wrote them behind this dialog's back, so a later OK applies the
+// restored state instead of a stale one.
+void AsteroidEditorDialogModel::resyncFromGlobals()
+{
+	initializeData();
+	modelChanged();
+}

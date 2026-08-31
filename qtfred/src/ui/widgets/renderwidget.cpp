@@ -26,6 +26,7 @@
 #include "starfield/starfield.h"
 
 #include "mission/Editor.h"
+#include "mission/dialogs/EnvEditCommand.h"
 #include "mission/commands/FredCommands.h"
 #include "mission/dialogs/BackgroundEditorDialogModel.h"
 #include "mission/dialogs/BackgroundEditCommand.h"
@@ -169,9 +170,7 @@ void RenderWidget::keyPressEvent(QKeyEvent* key) {
 	// handles full revert). Env handles take precedence over the background
 	// drag below, matching the press-time pre-pass order.
 	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _handleGrabbed) {
-		_viewport->end_handle_drag();
-		_handleGrabbed = false;
-		_viewport->needsUpdate();
+		finalizeHandleDrag();
 		key->accept();
 		return;
 	}
@@ -277,9 +276,7 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	// Orbit camera: right button
 	if (event->button() == Qt::RightButton) {
 		if (_viewport != nullptr && _handleGrabbed) {
-			_viewport->end_handle_drag();
-			_handleGrabbed = false;
-			_viewport->needsUpdate();
+			finalizeHandleDrag();
 			event->accept();
 			return;
 		}
@@ -335,6 +332,17 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 			if (_viewport->begin_handle_drag(pick, px, py)) {
 				_handleGrabbed = true;
 				_usingMarkingBox = false;
+				// Snapshot the globals this gesture will edit, so the release can
+				// push one undo command for the whole drag. Captured after
+				// begin_handle_drag so a refused grab records nothing.
+				_handleDragEnv = env;
+				if (env == EnvironmentObject::VolumetricNebula) {
+					_handleDragBefore = dialogs::VolumetricNebulaDialogModel::captureGlobalState();
+				} else if (env == EnvironmentObject::AsteroidField) {
+					_handleDragBefore = dialogs::AsteroidEditorDialogModel::captureGlobalState();
+				} else {
+					_handleDragBefore.clear();
+				}
 			}
 			event->accept();
 			return;
@@ -508,6 +516,38 @@ void RenderWidget::wheelEvent(QWheelEvent* event)
 	event->accept();
 }
 
+void RenderWidget::finalizeHandleDrag() {
+	_viewport->commit_handle_drag();
+	_handleGrabbed = false;
+
+	// One gesture, one undo step. The command restores through the model's
+	// static global path, so it stays valid if the dialog is closed (or never
+	// was open); the model pointer only resyncs a dialog that is open.
+	if (!_handleDragBefore.isEmpty() && _handleDragEnv != EnvironmentObject::None) {
+		QByteArray after;
+		QString text;
+		if (_handleDragEnv == EnvironmentObject::VolumetricNebula) {
+			after = dialogs::VolumetricNebulaDialogModel::captureGlobalState();
+			text = tr("Move Volumetric Nebula");
+		} else {
+			after = dialogs::AsteroidEditorDialogModel::captureGlobalState();
+			text = tr("Resize Asteroid Field");
+		}
+		if (after != _handleDragBefore) {
+			_fredView->mainUndoStack()->push(new dialogs::EnvEditCommand(
+				_handleDragEnv == EnvironmentObject::VolumetricNebula
+					? dialogs::EnvEditCommand::Kind::VolumetricNebula
+					: dialogs::EnvEditCommand::Kind::AsteroidField,
+				_viewport->volumetricEditModel(), _viewport->asteroidEditModel(), fred,
+				_handleDragBefore, after, text));
+		}
+	}
+
+	_handleDragBefore.clear();
+	_handleDragEnv = EnvironmentObject::None;
+	_viewport->needsUpdate();
+}
+
 void RenderWidget::finalizeBackgroundDrag() {
 	_bgDragging = false;
 	_viewport->end_background_drag();
@@ -565,10 +605,15 @@ void RenderWidget::mouseMoveEvent(QMouseEvent* event) {
 	// before the background drag below so the precedence matches the press,
 	// release and Escape paths.
 	if (_handleGrabbed) {
-		if (event->buttons().testFlag(Qt::LeftButton)) {
-			_viewport->drag_handle(event->position().x() * _window->devicePixelRatio(),
-				event->position().y() * _window->devicePixelRatio());
+		if (!event->buttons().testFlag(Qt::LeftButton)) {
+			// The button came up without a release reaching us (the same lost-release
+			// case the background drag guards against). Finalize now so we neither
+			// wedge the viewport in handle-drag mode nor lose the undo step.
+			finalizeHandleDrag();
+			return;
 		}
+		_viewport->drag_handle(event->position().x() * _window->devicePixelRatio(),
+			event->position().y() * _window->devicePixelRatio());
 		return;
 	}
 
@@ -677,9 +722,7 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 	// missionChanged() exactly once for the drag.
 	// Checked before the background drag: env handles win the click.
 	if (_handleGrabbed) {
-		_viewport->commit_handle_drag();
-		_handleGrabbed = false;
-		_viewport->needsUpdate();
+		finalizeHandleDrag();
 		event->accept();
 		return;
 	}

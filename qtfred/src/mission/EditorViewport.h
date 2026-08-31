@@ -14,6 +14,8 @@ namespace fso::fred {
 
 namespace dialogs {
 class BackgroundEditorDialogModel;
+class VolumetricNebulaDialogModel;
+class AsteroidEditorDialogModel;
 }
 
 // Eye-space distance at which background-element handles are placed for
@@ -156,6 +158,17 @@ class EditorViewport {
 	// draggable handles for its suns/bitmaps and route clicks/drags to it.
 	dialogs::BackgroundEditorDialogModel* backgroundEditModel() const { return _bgEditModel; }
 	void setBackgroundEditModel(dialogs::BackgroundEditorDialogModel* model);
+
+	// --- Environment gizmo editing ---------------------------------------
+	// Set while the corresponding editor dialog is open. The always-on
+	// volumetric/asteroid handles route their drags through the open dialog's
+	// model (which owns the working copy apply() writes back) instead of
+	// editing the mission globals directly, so an OK press can't clobber a
+	// drag with a stale working copy. Null = dialog closed = direct edit.
+	dialogs::VolumetricNebulaDialogModel* volumetricEditModel() const { return _volEditModel; }
+	void setVolumetricEditModel(dialogs::VolumetricNebulaDialogModel* model);
+	dialogs::AsteroidEditorDialogModel* asteroidEditModel() const { return _astEditModel; }
+	void setAsteroidEditModel(dialogs::AsteroidEditorDialogModel* model);
 
 	// Pick the background element (sun or bitmap) whose projected handle is
 	// nearest the cursor. Returns true and fills isSun/index on a hit.
@@ -356,6 +369,8 @@ class EditorViewport {
 private:
 	// Background editor integration (non-owning; valid only while the dialog lives)
 	dialogs::BackgroundEditorDialogModel* _bgEditModel = nullptr;
+	dialogs::VolumetricNebulaDialogModel* _volEditModel = nullptr;
+	dialogs::AsteroidEditorDialogModel* _astEditModel = nullptr;
 	// Active background drag: -1 = none, else index into suns/bitmaps of the
 	// active background (which list is chosen by _bgDragIsSun).
 	int  _bgDragIndex = -1;

@@ -13,7 +13,7 @@
 
 namespace fso::fred::dialogs {
 
-QByteArray VolumetricNebulaDialogModel::captureState() const
+QByteArray VolumetricNebulaDialogModel::captureGlobalState()
 {
 	QByteArray data;
 	QDataStream ds(&data, QIODevice::WriteOnly);
@@ -70,7 +70,7 @@ QByteArray VolumetricNebulaDialogModel::captureState() const
 	return data;
 }
 
-void VolumetricNebulaDialogModel::restoreState(const QByteArray& state)
+void VolumetricNebulaDialogModel::restoreGlobalState(const QByteArray& state)
 {
 	QDataStream ds(state);
 
@@ -150,3 +150,26 @@ void VolumetricNebulaDialogModel::restoreState(const QByteArray& state)
 }
 
 } // namespace fso::fred::dialogs
+
+// The AbstractDialogModel overrides just delegate: the snapshot is of the
+// mission globals, not of this model's working copy, so an undo command can
+// restore it with no dialog alive.
+QByteArray VolumetricNebulaDialogModel::captureState() const
+{
+	return captureGlobalState();
+}
+
+void VolumetricNebulaDialogModel::restoreState(const QByteArray& state)
+{
+	restoreGlobalState(state);
+	resyncFromGlobals();
+}
+
+// Re-read the working copy (and the reject() baseline) from the globals after
+// an undo/redo wrote them behind this dialog's back, so a later OK applies the
+// restored state instead of a stale one.
+void VolumetricNebulaDialogModel::resyncFromGlobals()
+{
+	initializeData();
+	modelChanged();
+}
