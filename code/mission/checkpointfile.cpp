@@ -679,6 +679,64 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	read_hotkeys(handler, data);
 }
 
+// AI orders.  Shared between the AI section and the wings section, since a wing carries the same
+// array of them.
+void write_ai_goals(pilot::FileHandler* handler, const char* name, const SCP_vector<checkpoint::ai_goal_state>& goals)
+{
+	handler->startArrayWrite(name, goals.size());
+	for (const auto& goal : goals) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("mode", goal.mode.c_str());
+		handler->writeString("type", goal.type.c_str());
+		handler->writeString("target_name", goal.target_name.c_str());
+		handler->writeString("docker_point", goal.docker_point.c_str());
+		handler->writeString("dockee_point", goal.dockee_point.c_str());
+		handler->writeInt("signature", goal.signature);
+		handler->writeInt("submode", goal.submode);
+		handler->writeInt("priority", goal.priority);
+		handler->writeInt("time", static_cast<std::int32_t>(goal.time));
+		handler->writeInt("wp_list_index", goal.wp_list_index);
+		handler->writeInt("int_data", goal.int_data);
+		handler->writeFloat("float_data", goal.float_data);
+		write_string_list(handler, "flags", goal.flags);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_ai_goals(pilot::FileHandler* handler, const char* name, SCP_vector<checkpoint::ai_goal_state>& goals)
+{
+	goals.clear();
+
+	if (!handler->hasField(name)) {
+		return;
+	}
+
+	auto count = handler->startArrayRead(name);
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::ai_goal_state goal;
+
+		goal.mode = handler->readStringOr("mode", "none");
+		goal.type = handler->readStringOr("type", "invalid");
+		goal.target_name = handler->readStringOr("target_name", "");
+		goal.docker_point = handler->readStringOr("docker_point", "");
+		goal.dockee_point = handler->readStringOr("dockee_point", "");
+		goal.signature = handler->readIntOr("signature", -1);
+		goal.submode = handler->readIntOr("submode", -1);
+		goal.priority = handler->readIntOr("priority", 0);
+		goal.time = static_cast<fix>(handler->readIntOr("time", 0));
+		goal.wp_list_index = handler->readIntOr("wp_list_index", -1);
+		goal.int_data = handler->readIntOr("int_data", 0);
+		goal.float_data = handler->readFloatOr("float_data", 0.0f);
+		read_string_list(handler, "flags", goal.flags);
+
+		goals.push_back(std::move(goal));
+	}
+	handler->endArrayRead();
+}
+
 void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointWings);
@@ -700,6 +758,7 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		write_int_map(handler, "ints", wing_data.ints);
 		write_string_list(handler, "ships", wing_data.ship_names);
 		write_string_list(handler, "flags", wing_data.flags);
+		write_ai_goals(handler, "goals", wing_data.goals);
 
 		handler->endSectionWrite();
 	}
@@ -743,6 +802,7 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_int_map(handler, "ints", wing_data.ints);
 			read_string_list(handler, "ships", wing_data.ship_names);
 			read_string_list(handler, "flags", wing_data.flags);
+			read_ai_goals(handler, "goals", wing_data.goals);
 
 			data.wings.push_back(std::move(wing_data));
 		}
@@ -1003,6 +1063,98 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		}
 		handler->endArrayRead();
 	}
+}
+
+void write_ai(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointAI);
+
+	handler->startArrayWrite("ai", data.ai.size());
+	for (const auto& state : data.ai) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("ship", state.ship.c_str());
+		handler->writeString("ai_class", state.ai_class.c_str());
+
+		handler->writeString("target", state.target.c_str());
+		handler->writeString("previous_target", state.previous_target.c_str());
+		handler->writeString("goal_ship", state.goal_ship.c_str());
+		handler->writeString("guard_ship", state.guard_ship.c_str());
+		handler->writeString("ignore", state.ignore.c_str());
+		handler->writeString("support_ship", state.support_ship.c_str());
+		handler->writeString("hitter", state.hitter.c_str());
+		handler->writeString("attacker", state.attacker.c_str());
+		handler->writeString("artillery_target", state.artillery_target.c_str());
+
+		handler->writeString("targeted_subsys_ship", state.targeted_subsys_ship.c_str());
+		handler->writeString("targeted_subsys", state.targeted_subsys.c_str());
+		handler->writeInt("targeted_subsys_ordinal", state.targeted_subsys_ordinal);
+		handler->writeString("last_subsys_target_ship", state.last_subsys_target_ship.c_str());
+		handler->writeString("last_subsys_target", state.last_subsys_target.c_str());
+		handler->writeInt("last_subsys_target_ordinal", state.last_subsys_target_ordinal);
+
+		write_string_list(handler, "flags", state.flags);
+		write_string_list(handler, "override_flags", state.override_flags);
+		write_string_list(handler, "ignore_new", state.ignore_new);
+		write_int_map(handler, "ints", state.ints);
+		write_float_map(handler, "floats", state.floats);
+		write_vec_map(handler, "vecs", state.vecs);
+		write_float_map(handler, "override_floats", state.override_floats);
+		write_ai_goals(handler, "goals", state.goals);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_ai(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.ai.clear();
+
+	if (!handler->hasField("ai")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("ai");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::ai_state state;
+
+		state.ship = handler->readStringOr("ship", "");
+		state.ai_class = handler->readStringOr("ai_class", "");
+
+		state.target = handler->readStringOr("target", "");
+		state.previous_target = handler->readStringOr("previous_target", "");
+		state.goal_ship = handler->readStringOr("goal_ship", "");
+		state.guard_ship = handler->readStringOr("guard_ship", "");
+		state.ignore = handler->readStringOr("ignore", "");
+		state.support_ship = handler->readStringOr("support_ship", "");
+		state.hitter = handler->readStringOr("hitter", "");
+		state.attacker = handler->readStringOr("attacker", "");
+		state.artillery_target = handler->readStringOr("artillery_target", "");
+
+		state.targeted_subsys_ship = handler->readStringOr("targeted_subsys_ship", "");
+		state.targeted_subsys = handler->readStringOr("targeted_subsys", "");
+		state.targeted_subsys_ordinal = handler->readIntOr("targeted_subsys_ordinal", 0);
+		state.last_subsys_target_ship = handler->readStringOr("last_subsys_target_ship", "");
+		state.last_subsys_target = handler->readStringOr("last_subsys_target", "");
+		state.last_subsys_target_ordinal = handler->readIntOr("last_subsys_target_ordinal", 0);
+
+		read_string_list(handler, "flags", state.flags);
+		read_string_list(handler, "override_flags", state.override_flags);
+		read_string_list(handler, "ignore_new", state.ignore_new);
+		read_int_map(handler, "ints", state.ints);
+		read_float_map(handler, "floats", state.floats);
+		read_vec_map(handler, "vecs", state.vecs);
+		read_float_map(handler, "override_floats", state.override_floats);
+		read_ai_goals(handler, "goals", state.goals);
+
+		if (!state.ship.empty()) {
+			data.ai.push_back(std::move(state));
+		}
+	}
+	handler->endArrayRead();
 }
 
 void write_docking(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
@@ -1379,13 +1531,14 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_sexp(handler.get(), data);
 	write_debris(handler.get(), data);
 	write_docking(handler.get(), data);
+	write_ai(handler.get(), data);
 
 	handler->endWritingSections();
 
 	handler->flush();
 
 	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries, "
-	         "%d debris, %d pending arrivals, %d docked pairs)\n",
+	         "%d debris, %d pending arrivals, %d docked pairs, %d AI states)\n",
 	         filename.c_str(),
 	         static_cast<int>(data.ships.size()),
 	         static_cast<int>(data.wings.size()),
@@ -1395,7 +1548,8 @@ bool checkpoint_write(const checkpoint_data& data)
 	         static_cast<int>(data.log_entries.size()),
 	         static_cast<int>(data.debris.size()),
 	         static_cast<int>(data.parse_objects.size()),
-	         static_cast<int>(data.dock_pairs.size())));
+	         static_cast<int>(data.dock_pairs.size()),
+	         static_cast<int>(data.ai.size())));
 
 	return true;
 }
@@ -1484,6 +1638,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointDocking:
 			read_docking(handler.get(), data);
+			break;
+
+		case Section::CheckpointAI:
+			read_ai(handler.get(), data);
 			break;
 
 		default:

@@ -9,6 +9,7 @@
 #include "mission/missioncheckpoint.h"
 
 #include "ai/ai.h"
+#include "ai/aigoals.h"
 #include "debris/debris.h"
 #include "gamesequence/gamesequence.h"
 #include "globalincs/systemvars.h"
@@ -211,6 +212,140 @@ const wing_flag_entry Wing_flag_table[] = {
 	{Ship::Wing_Flags::Same_arrival_warp_when_docked, "same_arrival_warp_when_docked"},
 	{Ship::Wing_Flags::Same_departure_warp_when_docked, "same_departure_warp_when_docked"},
 	{Ship::Wing_Flags::Has_display_name, "has_display_name"},
+};
+
+struct ai_flag_entry {
+	AI::AI_Flags flag;
+	const char* name;
+};
+
+// What the AI is in the middle of doing.  The path and shockwave-avoidance bits are left out
+// along with the state they describe -- see the note in checkpointfields.h -- and so are the
+// collision-recovery bits, which last a second and re-establish themselves.
+const ai_flag_entry Ai_flag_table[] = {
+	{AI::AI_Flags::Formation_wing, "formation_wing"},
+	{AI::AI_Flags::Formation_object, "formation_object"},
+	{AI::AI_Flags::Awaiting_repair, "awaiting_repair"},
+	{AI::AI_Flags::Being_repaired, "being_repaired"},
+	{AI::AI_Flags::Repairing, "repairing"},
+	{AI::AI_Flags::Repair_obstructed, "repair_obstructed"},
+	{AI::AI_Flags::Seek_lock, "seek_lock"},
+	{AI::AI_Flags::Temporary_ignore, "temporary_ignore"},
+	{AI::AI_Flags::Unload_primaries, "unload_primaries"},
+	{AI::AI_Flags::Unload_secondaries, "unload_secondaries"},
+	{AI::AI_Flags::Attack_slowly, "attack_slowly"},
+	{AI::AI_Flags::Kamikaze, "kamikaze"},
+	{AI::AI_Flags::No_dynamic, "no_dynamic"},
+	{AI::AI_Flags::Stealth_pursuit, "stealth_pursuit"},
+	{AI::AI_Flags::Trying_unsuccessfully_to_warp, "trying_unsuccessfully_to_warp"},
+	{AI::AI_Flags::Free_afterburner_use, "free_afterburner_use"},
+	{AI::AI_Flags::Waypoints_no_formation, "waypoints_no_formation"},
+};
+
+struct ai_override_flag_entry {
+	AI::Maneuver_Override_Flags flag;
+	const char* name;
+};
+
+// A SEXP- or script-driven maneuver override.  All of these are runtime-only by definition.
+const ai_override_flag_entry Ai_override_flag_table[] = {
+	{AI::Maneuver_Override_Flags::Full_rot, "full_rot"},
+	{AI::Maneuver_Override_Flags::Roll, "roll"},
+	{AI::Maneuver_Override_Flags::Pitch, "pitch"},
+	{AI::Maneuver_Override_Flags::Heading, "heading"},
+	{AI::Maneuver_Override_Flags::Full_lat, "full_lat"},
+	{AI::Maneuver_Override_Flags::Up, "up"},
+	{AI::Maneuver_Override_Flags::Sideways, "sideways"},
+	{AI::Maneuver_Override_Flags::Forward, "forward"},
+	{AI::Maneuver_Override_Flags::Dont_bank_when_turning, "dont_bank_when_turning"},
+	{AI::Maneuver_Override_Flags::Dont_clamp_max_velocity, "dont_clamp_max_velocity"},
+	{AI::Maneuver_Override_Flags::Instantaneous_acceleration, "instantaneous_acceleration"},
+	{AI::Maneuver_Override_Flags::Lateral_never_expire, "lateral_never_expire"},
+	{AI::Maneuver_Override_Flags::Rotational_never_expire, "rotational_never_expire"},
+	{AI::Maneuver_Override_Flags::Dont_override_old_maneuvers, "dont_override_old_maneuvers"},
+};
+
+struct ai_goal_flag_entry {
+	AI::Goal_Flags flag;
+	const char* name;
+};
+
+// Docker_index_valid and Dockee_index_valid are deliberately absent: they say the dockpoint
+// unions hold indices rather than names, and the file always carries names, so they are dropped
+// on the way out and the goal re-resolves its dockpoints the next time it is evaluated.
+// Subsys_needs_fixup is absent for the same reason -- it means the subsystem index is stale and
+// must be recovered from the name, which is exactly the state a restored goal should be in.
+const ai_goal_flag_entry Ai_goal_flag_table[] = {
+	{AI::Goal_Flags::Goal_on_hold, "on_hold"},
+	{AI::Goal_Flags::Goal_override, "override"},
+	{AI::Goal_Flags::Want_override, "want_override"},
+	{AI::Goal_Flags::Purge, "purge"},
+	{AI::Goal_Flags::Purge_when_new_goal_added, "purge_when_new_goal_added"},
+	{AI::Goal_Flags::Goals_purged, "goals_purged"},
+	{AI::Goal_Flags::Depart_sound_played, "depart_sound_played"},
+	{AI::Goal_Flags::Target_own_team, "target_own_team"},
+	{AI::Goal_Flags::Afterburn_hard, "afterburn_hard"},
+	{AI::Goal_Flags::Waypoints_in_reverse, "waypoints_in_reverse"},
+	{AI::Goal_Flags::Clear_all_goals_first, "clear_all_goals_first"},
+};
+
+// ai_goal_mode and ai_goal_type are source enums rather than table data, but they are written by
+// name for the same reason the flags are: inserting a value is an ordinary thing to do to an enum,
+// and doing it would otherwise turn every stored attack order into whatever now sits at that
+// number.  Ai_goal_names[] is not reused for this -- those are FRED's display strings, they do not
+// cover every mode, and they are free to be reworded.
+struct ai_goal_mode_entry {
+	ai_goal_mode mode;
+	const char* name;
+};
+
+const ai_goal_mode_entry Ai_goal_mode_table[] = {
+	{AI_GOAL_NONE, "none"},
+	{AI_GOAL_SCHROEDINGER, "schroedinger"},
+	{AI_GOAL_CHASE, "chase"},
+	{AI_GOAL_DOCK, "dock"},
+	{AI_GOAL_WAYPOINTS, "waypoints"},
+	{AI_GOAL_WAYPOINTS_ONCE, "waypoints_once"},
+	{AI_GOAL_WARP, "warp"},
+	{AI_GOAL_DESTROY_SUBSYSTEM, "destroy_subsystem"},
+	{AI_GOAL_FORM_ON_WING, "form_on_wing"},
+	{AI_GOAL_UNDOCK, "undock"},
+	{AI_GOAL_CHASE_WING, "chase_wing"},
+	{AI_GOAL_GUARD, "guard"},
+	{AI_GOAL_DISABLE_SHIP, "disable_ship"},
+	{AI_GOAL_DISARM_SHIP, "disarm_ship"},
+	{AI_GOAL_CHASE_ANY, "chase_any"},
+	{AI_GOAL_IGNORE, "ignore"},
+	{AI_GOAL_GUARD_WING, "guard_wing"},
+	{AI_GOAL_EVADE_SHIP, "evade_ship"},
+	{AI_GOAL_STAY_NEAR_SHIP, "stay_near_ship"},
+	{AI_GOAL_KEEP_SAFE_DISTANCE, "keep_safe_distance"},
+	{AI_GOAL_REARM_REPAIR, "rearm_repair"},
+	{AI_GOAL_STAY_STILL, "stay_still"},
+	{AI_GOAL_PLAY_DEAD, "play_dead"},
+	{AI_GOAL_CHASE_WEAPON, "chase_weapon"},
+	{AI_GOAL_FLY_TO_SHIP, "fly_to_ship"},
+	{AI_GOAL_IGNORE_NEW, "ignore_new"},
+	{AI_GOAL_CHASE_SHIP_CLASS, "chase_ship_class"},
+	{AI_GOAL_CHASE_SHIP_TYPE, "chase_ship_type"},
+	{AI_GOAL_PLAY_DEAD_PERSISTENT, "play_dead_persistent"},
+	{AI_GOAL_LUA, "lua"},
+	{AI_GOAL_DISARM_SHIP_TACTICAL, "disarm_ship_tactical"},
+	{AI_GOAL_DISABLE_SHIP_TACTICAL, "disable_ship_tactical"},
+};
+
+struct ai_goal_type_entry {
+	ai_goal_type type;
+	const char* name;
+};
+
+const ai_goal_type_entry Ai_goal_type_table[] = {
+	{ai_goal_type::INVALID, "invalid"},
+	{ai_goal_type::EVENT_SHIP, "event_ship"},
+	{ai_goal_type::EVENT_WING, "event_wing"},
+	{ai_goal_type::PLAYER_SHIP, "player_ship"},
+	{ai_goal_type::PLAYER_WING, "player_wing"},
+	{ai_goal_type::DYNAMIC, "dynamic"},
 };
 
 // mission_event::flags is a plain int of MEF_ bits rather than a flagset, so it gets its own pair
@@ -600,6 +735,176 @@ void load_physics(physics_info& obj, const SCP_map<SCP_string, float>& in_floats
 	}
 }
 
+// ------------------------------------------------------------------
+// AI state
+// ------------------------------------------------------------------
+
+// The ship an objnum refers to, or an empty string for anything that is not a live ship.  Every
+// object reference the AI holds goes through this: an objnum is a slot in a table rebuilt from
+// scratch on every load, so it means nothing in the run that reads the file.
+SCP_string ship_name_for_objnum(int objnum)
+{
+	if (objnum < 0 || objnum >= MAX_OBJECTS) {
+		return SCP_string();
+	}
+
+	const object* objp = &Objects[objnum];
+	if (objp->type != OBJ_SHIP || objp->instance < 0) {
+		return SCP_string();
+	}
+
+	return SCP_string(Ships[objp->instance].ship_name);
+}
+
+// The reverse, plus the signature that goes with it.  The signature is recomputed rather than
+// stored, because a signature is regenerated every load and the pair only has to agree with
+// itself: what it guards against is the objnum being reused by a different object later in the
+// mission, which a freshly read signature does correctly.
+void resolve_ship_reference(const SCP_string& name, int& out_objnum, int& out_signature)
+{
+	out_objnum = -1;
+	out_signature = -1;
+
+	if (name.empty()) {
+		return;
+	}
+
+	auto entry = ship_registry_get(name);
+	if (entry == nullptr || !entry->has_objp()) {
+		return;
+	}
+
+	out_objnum = entry->objnum;
+	out_signature = Objects[entry->objnum].signature;
+}
+
+// As above where the field has no signature beside it.
+int resolve_ship_objnum(const SCP_string& name)
+{
+	int objnum = -1;
+	int signature = -1;
+	resolve_ship_reference(name, objnum, signature);
+	return objnum;
+}
+
+SCP_string ai_goal_mode_name(ai_goal_mode mode)
+{
+	for (const auto& entry : Ai_goal_mode_table) {
+		if (entry.mode == mode) {
+			return SCP_string(entry.name);
+		}
+	}
+	return SCP_string("none");
+}
+
+ai_goal_mode lookup_ai_goal_mode(const SCP_string& name)
+{
+	for (const auto& entry : Ai_goal_mode_table) {
+		if (lcase_equal(name, entry.name)) {
+			return entry.mode;
+		}
+	}
+	return AI_GOAL_NONE;
+}
+
+SCP_string ai_goal_type_name(ai_goal_type type)
+{
+	for (const auto& entry : Ai_goal_type_table) {
+		if (entry.type == type) {
+			return SCP_string(entry.name);
+		}
+	}
+	return SCP_string("invalid");
+}
+
+ai_goal_type lookup_ai_goal_type(const SCP_string& name)
+{
+	for (const auto& entry : Ai_goal_type_table) {
+		if (lcase_equal(name, entry.name)) {
+			return entry.type;
+		}
+	}
+	return ai_goal_type::INVALID;
+}
+
+// ai_class indexes Ai_classes, which is built from ai.tbl, so it shifts whenever a mod adds or
+// reorders an AI class -- the same trap persona_index turned out to be.
+SCP_string ai_class_name(int index)
+{
+	if (index < 0 || index >= static_cast<int>(Ai_classes.size())) {
+		return SCP_string();
+	}
+	return SCP_string(Ai_classes[index].name);
+}
+
+int lookup_ai_class(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+
+	for (size_t i = 0; i < Ai_classes.size(); i++) {
+		if (lcase_equal(name, Ai_classes[i].name)) {
+			return static_cast<int>(i);
+		}
+	}
+	return -1;
+}
+
+void store_ai_scalars(const ai_info& obj,
+	SCP_map<SCP_string, float>& out_floats,
+	SCP_map<SCP_string, int>& out_ints,
+	SCP_map<SCP_string, vec3d>& out_vecs)
+{
+	{
+		auto& out = out_floats;
+		CKPT_AI_FLOATS(CKPT_STORE_FLOAT)
+	}
+	{
+		auto& out = out_ints;
+		CKPT_AI_INTS(CKPT_STORE_INT)
+		CKPT_AI_FIXES(CKPT_STORE_INT)
+		CKPT_AI_STAMPS(CKPT_STORE_INT)
+	}
+	{
+		auto& out = out_vecs;
+		CKPT_AI_VECS(CKPT_STORE_VEC)
+	}
+}
+
+void load_ai_scalars(ai_info& obj,
+	const SCP_map<SCP_string, float>& in_floats,
+	const SCP_map<SCP_string, int>& in_ints,
+	const SCP_map<SCP_string, vec3d>& in_vecs)
+{
+	{
+		const auto& in = in_floats;
+		CKPT_AI_FLOATS(CKPT_LOAD_FLOAT)
+	}
+	{
+		const auto& in = in_ints;
+		CKPT_AI_INTS(CKPT_LOAD_INT)
+		CKPT_AI_FIXES(CKPT_LOAD_INT)
+		CKPT_AI_STAMPS(CKPT_LOAD_STAMP)
+	}
+	{
+		const auto& in = in_vecs;
+		CKPT_AI_VECS(CKPT_LOAD_VEC)
+	}
+}
+
+void store_override_ci(const control_info& obj, SCP_map<SCP_string, float>& out_floats)
+{
+	auto& out = out_floats;
+	CKPT_AI_OVERRIDE_FLOATS(CKPT_STORE_FLOAT)
+}
+
+void load_override_ci(control_info& obj, const SCP_map<SCP_string, float>& in_floats)
+{
+	const auto& in = in_floats;
+	CKPT_AI_OVERRIDE_FLOATS(CKPT_LOAD_FLOAT)
+}
+
 void store_ship_scalars(const ship& obj, SCP_map<SCP_string, float>& out_floats, SCP_map<SCP_string, int>& out_ints)
 {
 	{
@@ -957,6 +1262,94 @@ pending_load_state Pending_load;
 // A dockpoint's name, or an empty string if the model no longer has that bay.  Names rather than
 // indices, for the same reason subsystems and debris submodels use them: a re-exported pof can
 // renumber the docking bays, and docking a support ship to the wrong bay is not a subtle failure.
+// ------------------------------------------------------------------
+// AI orders
+// ------------------------------------------------------------------
+
+void store_ai_goal(const ai_goal& in, ai_goal_state& out)
+{
+	out.mode = ai_goal_mode_name(in.ai_mode);
+	out.type = ai_goal_type_name(in.type);
+	collect_flags(in.flags, Ai_goal_flag_table, out.flags);
+
+	out.signature = in.signature;
+	out.submode = in.ai_submode;
+	out.priority = in.priority;
+	out.time = in.time;
+	out.wp_list_index = in.wp_list_index;
+	out.int_data = in.int_data;
+	out.float_data = in.float_data;
+
+	if (in.target_name != nullptr) {
+		out.target_name = in.target_name;
+	}
+
+	// The dockpoint unions hold a name or an index depending on the two index-valid flags, and
+	// only the name form is worth keeping: an index is a position in a model's docking bay list,
+	// and the flags themselves are dropped so the goal re-resolves on its next evaluation.
+	if (!in.flags[AI::Goal_Flags::Docker_index_valid] && in.docker.name != nullptr) {
+		out.docker_point = in.docker.name;
+	}
+	if (!in.flags[AI::Goal_Flags::Dockee_index_valid] && in.dockee.name != nullptr) {
+		out.dockee_point = in.dockee.name;
+	}
+}
+
+void load_ai_goal(const ai_goal_state& in, ai_goal& out)
+{
+	ai_goal_reset(&out);
+
+	out.ai_mode = lookup_ai_goal_mode(in.mode);
+	out.type = lookup_ai_goal_type(in.type);
+	apply_flags(in.flags, Ai_goal_flag_table, out.flags);
+
+	out.signature = in.signature;
+	out.ai_submode = in.submode;
+	out.priority = in.priority;
+	out.time = in.time;
+	out.wp_list_index = in.wp_list_index;
+	out.int_data = in.int_data;
+	out.float_data = in.float_data;
+
+	// target_name is a pointer into the engine's own name pool, so it has to be interned rather
+	// than pointed at the string in the file, which will not outlive the restore.
+	if (!in.target_name.empty()) {
+		out.target_name = ai_get_goal_target_name(in.target_name.c_str(), &out.target_name_index);
+	}
+	if (!in.docker_point.empty()) {
+		int dummy = -1;
+		out.docker.name = ai_get_goal_target_name(in.docker_point.c_str(), &dummy);
+	}
+	if (!in.dockee_point.empty()) {
+		int dummy = -1;
+		out.dockee.name = ai_get_goal_target_name(in.dockee_point.c_str(), &dummy);
+	}
+}
+
+void store_ai_goals(const ai_goal (&in)[MAX_AI_GOALS], SCP_vector<ai_goal_state>& out)
+{
+	out.clear();
+
+	// The slot number matters -- active_goal is an index into this array -- so an empty slot is
+	// written out as an empty one rather than skipped, and the array always goes out whole.
+	for (int i = 0; i < MAX_AI_GOALS; i++) {
+		ai_goal_state state;
+		store_ai_goal(in[i], state);
+		out.push_back(std::move(state));
+	}
+}
+
+void load_ai_goals(const SCP_vector<ai_goal_state>& in, ai_goal (&out)[MAX_AI_GOALS])
+{
+	for (int i = 0; i < MAX_AI_GOALS; i++) {
+		if (i < static_cast<int>(in.size())) {
+			load_ai_goal(in[i], out[i]);
+		} else {
+			ai_goal_reset(&out[i]);
+		}
+	}
+}
+
 SCP_string dock_point_name(const object* objp, int dockpoint)
 {
 	if (objp == nullptr || objp->type != OBJ_SHIP || objp->instance < 0 || dockpoint < 0) {
@@ -986,6 +1379,131 @@ int dock_point_index(const object* objp, const SCP_string& name)
 	}
 
 	return model_find_dock_name_index(model_num, name.c_str());
+}
+
+// Locate a ship_subsys within its owning ship, as the name-and-ordinal pair the subsystem restore
+// already keys on.  Returns false if the pointer does not belong to that ship.
+bool find_subsys_key(const ship* shipp, const ship_subsys* target, SCP_string& out_name, int& out_ordinal)
+{
+	if (shipp == nullptr || target == nullptr) {
+		return false;
+	}
+
+	SCP_map<SCP_string, int> ordinals;
+
+	for (auto subsys = GET_FIRST(&shipp->subsys_list); subsys != END_OF_LIST(&shipp->subsys_list);
+	     subsys = GET_NEXT(subsys)) {
+		SCP_string name = subsys_key(subsys);
+		int ordinal = ordinals[name]++;
+
+		if (subsys == target) {
+			out_name = name;
+			out_ordinal = ordinal;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// The other half: the live subsystem for a saved ship-plus-name-plus-ordinal, or null.
+ship_subsys* lookup_subsys(const SCP_string& ship_name, const SCP_string& subsys_name, int ordinal)
+{
+	if (ship_name.empty() || subsys_name.empty()) {
+		return nullptr;
+	}
+
+	auto entry = ship_registry_get(ship_name);
+	if (entry == nullptr || !entry->has_shipp()) {
+		return nullptr;
+	}
+
+	auto live = index_subsystems(&Ships[entry->shipnum]);
+	auto it = live.find(subsys_lookup_key(subsys_name, ordinal));
+	return it != live.end() ? it->second : nullptr;
+}
+
+// What every live ship's AI was doing.
+void store_ai_states(SCP_vector<ai_state>& out)
+{
+	for (const auto& entry : Ship_registry) {
+		if (!entry.has_shipp() || !entry.has_objp()) {
+			continue;
+		}
+
+		const ship* shipp = &Ships[entry.shipnum];
+		if (shipp->ai_index < 0 || shipp->ai_index >= MAX_AI_INFO) {
+			continue;
+		}
+
+		const ai_info* aip = &Ai_info[shipp->ai_index];
+
+		ai_state state;
+		state.ship = shipp->ship_name;
+		state.ai_class = ai_class_name(aip->ai_class);
+
+		collect_flags(aip->ai_flags, Ai_flag_table, state.flags);
+		collect_flags(aip->ai_override_flags, Ai_override_flag_table, state.override_flags);
+
+		store_ai_scalars(*aip, state.floats, state.ints, state.vecs);
+		store_override_ci(aip->ai_override_ci, state.override_floats);
+
+		state.target = ship_name_for_objnum(aip->target_objnum);
+		state.previous_target = ship_name_for_objnum(aip->previous_target_objnum);
+		state.goal_ship = ship_name_for_objnum(aip->goal_objnum);
+		state.guard_ship = ship_name_for_objnum(aip->guard_objnum);
+		state.support_ship = ship_name_for_objnum(aip->support_ship_objnum);
+		state.hitter = ship_name_for_objnum(aip->hitter_objnum);
+		state.attacker = ship_name_for_objnum(aip->attacker_objnum);
+		state.artillery_target = ship_name_for_objnum(aip->artillery_objnum);
+
+		// ignore_objnum has a dual encoding: an objnum, or -(wingnum + 1) when the player told
+		// the ship to ignore a whole wing.  Tagging the wing case keeps the two apart without
+		// writing either kind of index.
+		if (aip->ignore_objnum < -1) {
+			int wingnum = -(aip->ignore_objnum + 1);
+			if (wingnum >= 0 && wingnum < Num_wings) {
+				state.ignore = SCP_string("wing:") + Wings[wingnum].name;
+			}
+		} else {
+			state.ignore = ship_name_for_objnum(aip->ignore_objnum);
+		}
+
+		for (int i = 0; i < MAX_IGNORE_NEW_OBJECTS; i++) {
+			state.ignore_new.push_back(ship_name_for_objnum(aip->ignore_new_objnums[i]));
+		}
+
+		// A targeted subsystem belongs to whichever ship the AI says it does, which is not
+		// necessarily the current target.
+		SCP_string parent = ship_name_for_objnum(aip->targeted_subsys_parent);
+		if (!parent.empty() && aip->targeted_subsys != nullptr) {
+			auto parent_entry = ship_registry_get(parent);
+			if (parent_entry != nullptr && parent_entry->has_shipp() &&
+				find_subsys_key(&Ships[parent_entry->shipnum],
+					aip->targeted_subsys,
+					state.targeted_subsys,
+					state.targeted_subsys_ordinal)) {
+				state.targeted_subsys_ship = parent;
+			}
+		}
+
+		// last_subsys_target carries no parent of its own, so it is looked for on the current
+		// target, which is where the AI put it.
+		if (aip->last_subsys_target != nullptr && !state.target.empty()) {
+			auto target_entry = ship_registry_get(state.target);
+			if (target_entry != nullptr && target_entry->has_shipp() &&
+				find_subsys_key(&Ships[target_entry->shipnum],
+					aip->last_subsys_target,
+					state.last_subsys_target,
+					state.last_subsys_target_ordinal)) {
+				state.last_subsys_target_ship = state.target;
+			}
+		}
+
+		store_ai_goals(aip->goals, state.goals);
+
+		out.push_back(std::move(state));
+	}
 }
 
 // Every live docking link, one entry per pair.
@@ -1196,6 +1714,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	// --- docking ---
 	store_dock_pairs(data.dock_pairs);
 
+	// --- AI ---
+	store_ai_states(data.ai);
+
 	// --- wings ---
 	for (int i = 0; i < Num_wings; i++) {
 		const wing* wingp = &Wings[i];
@@ -1217,6 +1738,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.arrival_path_mask = wingp->arrival_path_mask;
 		state.departure_path_mask = wingp->departure_path_mask;
 
+		store_ai_goals(wingp->ai_goals, state.goals);
 		store_wing_scalars(*wingp, state.ints);
 
 		for (int j = 0; j < wingp->current_count && j < MAX_SHIPS_PER_WING; j++) {
@@ -1879,6 +2401,116 @@ bool is_player_wing_ship(const SCP_string& name)
 	return Ships[entry->shipnum].flags[Ship::Ship_Flags::From_player_wing];
 }
 
+// Put every ship's AI back to what it was doing.
+//
+// This runs after the ship pass and after docking, because almost everything here is a reference
+// to another ship: the target, the ship being guarded, the support ship, the docker of a dock
+// order.  All of them have to exist before any of them can be resolved.
+void apply_ai_states(const checkpoint_data& data)
+{
+	int highest_goal_signature = -1;
+
+	for (const auto& state : data.ai) {
+		auto entry = ship_registry_get(state.ship);
+		if (entry == nullptr || !entry->has_shipp()) {
+			mprintf(("CHECKPOINT => No ship '%s' to restore AI state onto; skipping it.\n", state.ship.c_str()));
+			continue;
+		}
+
+		ship* shipp = &Ships[entry->shipnum];
+		if (shipp->ai_index < 0 || shipp->ai_index >= MAX_AI_INFO) {
+			continue;
+		}
+
+		ai_info* aip = &Ai_info[shipp->ai_index];
+
+		// An AI class the mod no longer has leaves the ship on whatever its class defaults to,
+		// which is a working ship rather than one indexing off the end of the table.
+		int ai_class = lookup_ai_class(state.ai_class);
+		if (ai_class >= 0) {
+			aip->ai_class = ai_class;
+		} else if (!state.ai_class.empty()) {
+			mprintf(("CHECKPOINT => '%s' had AI class '%s', which no longer exists; leaving the "
+			         "class default.\n",
+			         state.ship.c_str(),
+			         state.ai_class.c_str()));
+		}
+
+		apply_flags(state.flags, Ai_flag_table, aip->ai_flags);
+		apply_flags(state.override_flags, Ai_override_flag_table, aip->ai_override_flags);
+
+		load_ai_scalars(*aip, state.floats, state.ints, state.vecs);
+		load_override_ci(aip->ai_override_ci, state.override_floats);
+
+		resolve_ship_reference(state.target, aip->target_objnum, aip->target_signature);
+		resolve_ship_reference(state.goal_ship, aip->goal_objnum, aip->goal_signature);
+		resolve_ship_reference(state.guard_ship, aip->guard_objnum, aip->guard_signature);
+		resolve_ship_reference(state.hitter, aip->hitter_objnum, aip->hitter_signature);
+		resolve_ship_reference(state.artillery_target, aip->artillery_objnum, aip->artillery_sig);
+		aip->previous_target_objnum = resolve_ship_objnum(state.previous_target);
+		aip->attacker_objnum = resolve_ship_objnum(state.attacker);
+
+		// Docking has already run, and ai_do_objects_docked_stuff() sets the support ship pair on
+		// both sides as it links them.  This only has to cover a support ship that had been called
+		// and was still on its way, which is not docked to anything yet.
+		if (aip->support_ship_objnum < 0) {
+			resolve_ship_reference(state.support_ship, aip->support_ship_objnum, aip->support_ship_signature);
+		}
+
+		// The same dual encoding the store side unpicked.  A wing that no longer exists, or a
+		// ship that did not come back, leaves the ship ignoring nobody rather than ignoring
+		// whatever now sits in that slot.
+		aip->ignore_objnum = UNUSED_OBJNUM;
+		aip->ignore_signature = -1;
+		if (state.ignore.compare(0, 5, "wing:") == 0) {
+			int wingnum = wing_lookup(state.ignore.substr(5).c_str());
+			if (wingnum >= 0) {
+				aip->ignore_objnum = -(wingnum + 1);
+			}
+		} else {
+			resolve_ship_reference(state.ignore, aip->ignore_objnum, aip->ignore_signature);
+			if (aip->ignore_objnum < 0) {
+				aip->ignore_objnum = UNUSED_OBJNUM;
+			}
+		}
+
+		for (int i = 0; i < MAX_IGNORE_NEW_OBJECTS; i++) {
+			SCP_string name = (i < static_cast<int>(state.ignore_new.size())) ? state.ignore_new[i] : SCP_string();
+			resolve_ship_reference(name, aip->ignore_new_objnums[i], aip->ignore_new_signatures[i]);
+		}
+
+		aip->targeted_subsys = lookup_subsys(state.targeted_subsys_ship,
+			state.targeted_subsys,
+			state.targeted_subsys_ordinal);
+		aip->targeted_subsys_parent =
+			aip->targeted_subsys != nullptr ? resolve_ship_objnum(state.targeted_subsys_ship) : -1;
+
+		aip->last_subsys_target = lookup_subsys(state.last_subsys_target_ship,
+			state.last_subsys_target,
+			state.last_subsys_target_ordinal);
+
+		load_ai_goals(state.goals, aip->goals);
+
+		for (const auto& goal : state.goals) {
+			highest_goal_signature = MAX(highest_goal_signature, goal.signature);
+		}
+	}
+
+	// Wing goals travel with the wings, but their signatures come out of the same counter.
+	for (const auto& wing_data : data.wings) {
+		for (const auto& goal : wing_data.goals) {
+			highest_goal_signature = MAX(highest_goal_signature, goal.signature);
+		}
+	}
+
+	// Ai_goal_signature restarts at zero on every mission load, so a goal issued after the restore
+	// would otherwise be handed a signature a restored goal already has -- and signatures are what
+	// the goal code uses to tell two orders apart.  Push the counter past everything restored.
+	if (highest_goal_signature >= Ai_goal_signature) {
+		Ai_goal_signature = highest_goal_signature + 1;
+	}
+}
+
 // Re-join the ships the checkpoint had docked.
 //
 // ai_do_objects_docked_stuff() is the engine's own primitive for this: it links both dock lists and
@@ -2022,6 +2654,8 @@ void apply_wings(const checkpoint_data& data)
 		wingp->departure_location = static_cast<DepartureLocation>(state.departure_location);
 		wingp->arrival_path_mask = state.arrival_path_mask;
 		wingp->departure_path_mask = state.departure_path_mask;
+
+		load_ai_goals(state.goals, wingp->ai_goals);
 
 		// Rebuild ship_index from names.  current_count is corrected to whatever we could
 		// actually resolve, so a ship the mod no longer has cannot leave a dangling index.
@@ -2611,6 +3245,10 @@ void mission_checkpoint_apply()
 	// Docking after the ships, because every ship has to exist and be sitting where the checkpoint
 	// left it before the two ends of a link can be joined.
 	apply_dock_pairs(data);
+
+	// AI after docking, because ai_do_objects_docked_stuff() writes the support ship pair as it
+	// links, and because an AI order can name a ship this pass has to resolve.
+	apply_ai_states(data);
 
 	apply_wings(data);
 	apply_variables(data);

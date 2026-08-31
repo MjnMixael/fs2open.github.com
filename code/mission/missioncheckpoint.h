@@ -177,6 +177,77 @@ struct ship_state {
 	fix exit_time = 0;
 };
 
+// One AI order.
+//
+// ai_goal is already mostly name-based -- target_name, docker.name, dockee.name -- which is why an
+// order survives this trip almost unchanged.  The two things that need care are the mode and type
+// enums, which go out by name so that inserting a value into either enum cannot silently turn an
+// attack order into a dock order, and the dockpoint unions, which hold either a name or an index
+// depending on two of the flags.  The names are always stored and the two index-valid flags are
+// dropped on the way out, so the goal re-resolves its dockpoints the next time it is evaluated.
+struct ai_goal_state {
+	SCP_string mode;          // see Ai_goal_mode_table in missioncheckpoint.cpp
+	SCP_string type;          // see Ai_goal_type_table
+	SCP_vector<SCP_string> flags;
+
+	SCP_string target_name;
+	SCP_string docker_point;
+	SCP_string dockee_point;
+
+	int signature = 0;
+	int submode = -1;
+	int priority = 0;
+	fix time = 0;             // Missiontime the order was issued, not an engine timestamp
+	int wp_list_index = -1;
+	int int_data = 0;
+	float float_data = 0.0f;
+};
+
+// What a ship's AI was doing.  Keyed by ship name; the file never mentions ai_index.
+//
+// Without this a restored mission puts every ship back where it was and then has it forget its
+// orders: the wing told to guard the transport goes back to its mission-file goals, the bomber
+// ordered onto a subsystem picks a new target, the support ship forgets who called it.
+struct ai_state {
+	SCP_string ship;
+
+	SCP_string ai_class;      // an index into Ai_classes, which comes from ai.tbl, so by name
+
+	SCP_vector<SCP_string> flags;
+	SCP_vector<SCP_string> override_flags;
+
+	SCP_map<SCP_string, int> ints;
+	SCP_map<SCP_string, float> floats;
+	SCP_map<SCP_string, vec3d> vecs;
+	SCP_map<SCP_string, float> override_floats;
+
+	// Object references.  Every one of these is an objnum at runtime and a ship name here; the
+	// paired signatures are not stored, because they are recomputed from whatever the name
+	// resolves to.  ignore is either a ship name or "wing:<name>", matching the dual encoding
+	// ignore_objnum uses at runtime.
+	SCP_string target;
+	SCP_string previous_target;
+	SCP_string goal_ship;
+	SCP_string guard_ship;
+	SCP_string ignore;
+	SCP_string support_ship;
+	SCP_string hitter;
+	SCP_string attacker;
+	SCP_string artillery_target;
+	SCP_vector<SCP_string> ignore_new;
+
+	// Targeted subsystems, by owning ship plus the same name-and-ordinal key the subsystem
+	// restore uses.
+	SCP_string targeted_subsys_ship;
+	SCP_string targeted_subsys;
+	int targeted_subsys_ordinal = 0;
+	SCP_string last_subsys_target_ship;
+	SCP_string last_subsys_target;
+	int last_subsys_target_ordinal = 0;
+
+	SCP_vector<ai_goal_state> goals;
+};
+
 struct wing_state {
 	SCP_string name;
 	SCP_map<SCP_string, int> ints;
@@ -203,6 +274,10 @@ struct wing_state {
 	int departure_location = 0;
 	int arrival_path_mask = 0;
 	int departure_path_mask = 0;
+
+	// A wing carries its own ai_goals[], handed to each ship as it arrives, and a SEXP can rewrite
+	// them mid-mission.  Same struct as the per-ship orders.
+	SCP_vector<ai_goal_state> goals;
 };
 
 struct variable_state {
@@ -419,6 +494,7 @@ struct checkpoint_data {
 	// --- state ---
 	SCP_vector<ship_state> ships;
 	SCP_vector<dock_pair> dock_pairs;
+	SCP_vector<ai_state> ai;
 	SCP_vector<wing_state> wings;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;

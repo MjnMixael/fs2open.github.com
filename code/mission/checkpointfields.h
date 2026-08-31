@@ -224,4 +224,125 @@
 	F(ms_shots_hit)                                                                            \
 	F(ms_bonehead_hits)
 
+// ------------------------------------------------------------------
+// ai_info -- see code/ai/ai.h
+// ------------------------------------------------------------------
+//
+// ai_info is around two hundred fields, and most of them are scratch that the next frame
+// recomputes.  Only what actually describes what a ship was doing is captured.
+//
+// Deliberately absent, and worth knowing why:
+//
+//   - Everything path-related (path_start, path_cur, path_length, path_dir, mp_index,
+//     path_create_pos and friends).  These are indices into the global path point array, which is
+//     rebuilt from scratch every load, and the AI recreates its path within a frame or two of
+//     needing one.  Storing them would be storing a runtime index -- exactly what the rule above
+//     forbids -- and would gain nothing.
+//   - The ai_* tunables copied from the AI class and from ai_profiles (ai_accuracy, ai_evasion,
+//     ai_turn_time_scale, ai_profile_flags, and the rest).  All re-derived on load from the class
+//     the ship comes back as.
+//   - Per-frame scratch: best_dot_*, previous_dot_to_enemy, prev_accel, prev_dot_to_goal, last_dist,
+//     last_speed, last_target, last_secondary_index, current_target_distance and the trend
+//     counters, nearest_locked_*, next_predict_pos_time, last_aim_enemy_*.
+//   - stealth_*, avoid_*, big_recover_*, big_collision_normal: recovery and pursuit state that
+//     lasts a second or two and re-establishes itself.
+//   - abort_rearm_timestamp, which is multiplayer only, and ai_missile_locks_firing, which is
+//     rebuilt every frame.
+//   - lua_ai_target, which holds a luacpp::LuaValueList and is not serialisable.  A script that
+//     needs its AI target back across a restore has the checkpoint script data for it.
+//
+// Object references (target_objnum, goal_objnum, guard_objnum and the rest) are NOT here: an
+// objnum means nothing after a reload, so they travel by ship name in ai_state and are resolved in
+// a second pass once every ship exists.  ai_class is an index into Ai_classes, which comes from
+// ai.tbl, so it travels by name too.
+
+// enemy_wing and guard_wingnum index Wings[], which only the mission parse ever builds -- the same
+// reasoning that lets alt_type_index and callsign_index stay as indices.  wp_list_index and
+// wp_index are positions in a waypoint list, and waypoint lists likewise come only from the
+// mission file.
+#define CKPT_AI_INTS(F)                                                                        \
+	F(mode)                                                                                    \
+	F(previous_mode)                                                                           \
+	F(submode)                                                                                 \
+	F(previous_submode)                                                                        \
+	F(submode_parm0)                                                                           \
+	F(submode_parm1)                                                                           \
+	F(active_goal)                                                                             \
+	F(enemy_wing)                                                                              \
+	F(guard_wingnum)                                                                           \
+	F(wp_list_index)                                                                           \
+	F(wp_index)                                                                                \
+	F(wp_flags)                                                                                \
+	F(waypoint_speed_cap)                                                                      \
+	F(form_obj_slotnum)                                                                        \
+	F(kamikaze_damage)                                                                         \
+	F(danger_shield_quadrant)                                                                  \
+	F(rearm_first_missile)                                                                     \
+	F(rearm_first_ballistic_primary)
+
+// These are all `fix` values holding a Missiontime, not engine timestamps, so they are restored
+// verbatim -- Missiontime is itself restored, which makes them mean the same thing again.  They
+// ride in the same int map as everything else; the only reason they are a separate list is to say
+// out loud that they must NOT be translated.  Note resume_goal_time in particular: it reads like a
+// timestamp and is not one.
+#define CKPT_AI_FIXES(F)                                                                       \
+	F(submode_start_time)                                                                      \
+	F(resume_goal_time)                                                                        \
+	F(last_attack_time)                                                                        \
+	F(last_hit_time)                                                                           \
+	F(last_hit_target_time)                                                                    \
+	F(afterburner_stop_time)
+
+#define CKPT_AI_FLOATS(F)                                                                      \
+	F(submode_float0)                                                                          \
+	F(lethality)                                                                               \
+	F(aspect_locked_time)                                                                      \
+	F(target_time)                                                                             \
+	F(artillery_lock_time)
+
+// Real timestamp() values.  See the all-caps rule at the top of this file.
+#define CKPT_AI_STAMPS(F)                                                                      \
+	F(mode_time)                                                                               \
+	F(goal_check_time)                                                                         \
+	F(warp_out_timestamp)                                                                      \
+	F(next_rearm_request_timestamp)                                                            \
+	F(rearm_release_delay)                                                                     \
+	F(ignore_expire_timestamp)                                                                 \
+	F(self_destruct_timestamp)                                                                 \
+	F(force_warp_time)                                                                         \
+	F(ok_to_target_timestamp)                                                                  \
+	F(choose_enemy_timestamp)                                                                  \
+	F(scan_for_enemy_timestamp)                                                                \
+	F(primary_select_timestamp)                                                                \
+	F(secondary_select_timestamp)                                                              \
+	F(shield_manage_timestamp)                                                                 \
+	F(pick_big_attack_point_timestamp)                                                         \
+	F(multilock_check_timestamp)                                                               \
+	F(ai_override_lat_timestamp)                                                               \
+	F(ai_override_rot_timestamp)
+
+#define CKPT_AI_VECS(F)                                                                        \
+	F(goal_point)                                                                              \
+	F(prev_goal_point)                                                                         \
+	F(guard_vec)                                                                               \
+	F(big_attack_point)                                                                        \
+	F(artillery_lock_pos)
+
+// ------------------------------------------------------------------
+// control_info, as used for ai_info::ai_override_ci -- see code/physics/physics.h
+// ------------------------------------------------------------------
+
+// Only the six axes and the cruise percentage: a SEXP or script maneuver override sets those and
+// nothing else, and the firing counts belong to the player's controls rather than to the override.
+// Without these an override with Lateral_never_expire set comes back still flagged but with the
+// ship told to hold still.
+#define CKPT_AI_OVERRIDE_FLOATS(F)                                                             \
+	F(pitch)                                                                                   \
+	F(bank)                                                                                    \
+	F(heading)                                                                                 \
+	F(forward)                                                                                 \
+	F(sideways)                                                                                \
+	F(vertical)                                                                                \
+	F(forward_cruise_percent)
+
 #endif // _CHECKPOINTFIELDS_H
