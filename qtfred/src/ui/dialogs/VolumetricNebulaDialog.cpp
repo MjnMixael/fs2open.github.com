@@ -28,13 +28,11 @@ VolumetricNebulaDialog::VolumetricNebulaDialog(FredView* parent, EditorViewport*
 	_fredView->undoGroup()->addStack(_dialogStack);
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Volumetric Nebula"));
 
-	// Modal: the viewport is frozen while this dialog is open, so the nebula
-	// can only be repositioned through the spinboxes here (not by dragging the
-	// viewport handle). That keeps position editing unambiguous — the handle
-	// drag is a separate, dialog-closed interaction — and lets the drag path
-	// stay a simple direct edit. Position spinbox changes still preview live
-	// and are undone by Cancel via the model's reject() snapshot.
-	setModal(true);
+	// Non-modal, like every other direct-edit dialog. The viewport gizmo stays
+	// live while this is open; its drags route through _model (see
+	// EditorViewport::setVolumetricEditModel) so they land in the working copy
+	// apply() writes back, instead of being clobbered by a stale one on OK.
+	_viewport->setVolumetricEditModel(_model.get());
 
 	ui->setModelLineEdit->setMaxLength(MAX_FILENAME_LEN - 1);
 
@@ -47,7 +45,15 @@ VolumetricNebulaDialog::VolumetricNebulaDialog(FredView* parent, EditorViewport*
 	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &VolumetricNebulaDialog::updateUi);
 }
 
-VolumetricNebulaDialog::~VolumetricNebulaDialog() = default;
+VolumetricNebulaDialog::~VolumetricNebulaDialog()
+{
+	// Unregister only on destruction, not on hide: a merely-hidden dialog still
+	// owns the working copy its OK would apply, so handle drags must keep
+	// routing through it.
+	if (_viewport->volumetricEditModel() == _model.get()) {
+		_viewport->setVolumetricEditModel(nullptr);
+	}
+}
 
 void VolumetricNebulaDialog::accept()
 {

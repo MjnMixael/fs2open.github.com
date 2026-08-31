@@ -28,12 +28,11 @@ AsteroidEditorDialog::AsteroidEditorDialog(FredView *parent, EditorViewport* vie
 	_fredView->undoGroup()->addStack(_dialogStack);
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Asteroid Field"));
 
-	// Modal: the viewport is frozen while this dialog is open, so the field's
-	// boxes are edited through these fields (not by dragging the viewport
-	// handles). That keeps editing unambiguous and lets the handle-drag path
-	// stay a simple direct edit. Box edits still preview live and are undone by
-	// Cancel via the model's reject() snapshot. (Mirrors the volumetric dialog.)
-	setModal(true);
+	// Non-modal, like every other direct-edit dialog. The viewport gizmos stay
+	// live while this is open; their drags route through _model (see
+	// EditorViewport::setAsteroidEditModel) so they land in the working copy
+	// apply() writes back, instead of being clobbered by a stale one on OK.
+	_viewport->setAsteroidEditModel(_model.get());
 
 	// set our internal values, update the UI
 	initializeUi();
@@ -63,7 +62,15 @@ AsteroidEditorDialog::AsteroidEditorDialog(FredView *parent, EditorViewport* vie
 	ui->lineEditAvgSpeed->setValidator(&_speed_validator);
 }
 
-AsteroidEditorDialog::~AsteroidEditorDialog() = default;
+AsteroidEditorDialog::~AsteroidEditorDialog()
+{
+	// Unregister only on destruction, not on hide: a merely-hidden dialog still
+	// owns the working copy its OK would apply, so handle drags must keep
+	// routing through it.
+	if (_viewport->asteroidEditModel() == _model.get()) {
+		_viewport->setAsteroidEditModel(nullptr);
+	}
+}
 
 void AsteroidEditorDialog::accept()
 {

@@ -1,10 +1,11 @@
-#pragma once
+include <mission/EditorViewport.h>#pragma once
 
 #include <memory>
 
 #include <QWindow>
 #include <QWidget>
 #include <QByteArray>
+#include <mission/Editor.h>
 #include <mission/EditorViewport.h>
 
 #include "osapi/osapi.h"
@@ -66,6 +67,12 @@ class RenderWidget: public QWidget {
 	// normal object selection and dragging are bypassed entirely.
 	bool _handleGrabbed = false;
 
+	// Which environment entity the grabbed handle belongs to, and the global
+	// snapshot taken at grab time. Consumed on release to push one undo command
+	// per drag gesture (mirrors the background-drag tracking below).
+	EnvironmentObject _handleDragEnv = EnvironmentObject::None;
+	QByteArray _handleDragBefore;
+
 	// True iff the cursor is hovering a pickable viewport handle (and the
 	// editor is in Moving mode). updateCursor() consults this to show the
 	// move cursor, matching the affordance for hovering a real object.
@@ -86,6 +93,11 @@ class RenderWidget: public QWidget {
 	// revert if the dialog closed mid-drag) and clear the drag state. Shared by
 	// the release handler and the "button released off-widget" recovery path.
 	void finalizeBackgroundDrag();
+
+	// Commit an in-progress viewport-handle drag: fire the handle's on_release
+	// and push one undo command for the gesture. Shared by the release handler,
+	// the Escape/right-click cancels and the lost-release recovery path.
+	void finalizeHandleDrag();
 
 	// Ctrl+drag clone tracking — set on press, consumed on release.
 	bool            _wasDupDrag              = false;

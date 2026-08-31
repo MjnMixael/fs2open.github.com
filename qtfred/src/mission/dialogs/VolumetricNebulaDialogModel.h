@@ -24,6 +24,13 @@ public:
 	QByteArray captureState() const override;
 	void restoreState(const QByteArray& state) override;
 
+	// Snapshot/restore of the mission globals this dialog edits. Static so an
+	// undo command can restore them with no dialog instance alive.
+	static QByteArray captureGlobalState();
+	static void restoreGlobalState(const QByteArray& state);
+	// Re-read the working copy from the globals after an external restore.
+	void resyncFromGlobals();
+
 	// limits
 	static std::pair<float, float> getOpacityLimit()                { return {0.0001f, 1.0f}; }
 	static std::pair<float, float> getOpacityDistanceLimit()        { return {0.1f, 16777215.0f}; } // Qt max

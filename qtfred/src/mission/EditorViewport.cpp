@@ -21,6 +21,8 @@
 #include <prop/prop.h>
 #include <FredApplication.h>
 #include "mission/dialogs/BackgroundEditorDialogModel.h"
+#include "mission/dialogs/VolumetricNebulaDialogModel.h"
+#include "mission/dialogs/AsteroidEditorDialogModel.h"
 
 #include <algorithm>
 
@@ -1931,6 +1933,18 @@ void EditorViewport::setBackgroundEditModel(dialogs::BackgroundEditorDialogModel
 	needsUpdate();
 }
 
+void EditorViewport::setVolumetricEditModel(dialogs::VolumetricNebulaDialogModel* model)
+{
+	_volEditModel = model;
+	needsUpdate();
+}
+
+void EditorViewport::setAsteroidEditModel(dialogs::AsteroidEditorDialogModel* model)
+{
+	_astEditModel = model;
+	needsUpdate();
+}
+
 bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int& index) const
 {
 	if (_bgEditModel == nullptr) {
@@ -2361,6 +2375,37 @@ void translateAst(AstBox box, const vec3d& delta) {
 	setAstBound(box, mn, mx);
 }
 
+// Model-aware wrappers. While the Asteroid Field editor is open its model owns
+// the working copy that apply() writes back, so a drag must go through the
+// model (which clamps identically and pushes live to Asteroid_field for the
+// visualizer). With the dialog closed there is no working copy and the global
+// helpers above are the whole story.
+dialogs::AsteroidEditorDialogModel::BoundBox toModelBox(AstBox box) {
+	return box == AstBox::Outer ? dialogs::AsteroidEditorDialogModel::BoundBox::Outer
+	                            : dialogs::AsteroidEditorDialogModel::BoundBox::Inner;
+}
+
+dialogs::AsteroidEditorDialogModel::BoundCorner toModelCorner(AstCorner corner) {
+	return corner == AstCorner::Min ? dialogs::AsteroidEditorDialogModel::BoundCorner::Min
+	                                : dialogs::AsteroidEditorDialogModel::BoundCorner::Max;
+}
+
+void nudgeAst(EditorViewport* vp, AstBox box, AstCorner corner, int axis, float delta) {
+	if (auto* m = vp->asteroidEditModel()) {
+		m->nudgeBoundComponent(toModelBox(box), toModelCorner(corner), axis, delta);
+	} else {
+		nudgeAstComponent(box, corner, axis, delta);
+	}
+}
+
+void translateAstBox(EditorViewport* vp, AstBox box, const vec3d& delta) {
+	if (auto* m = vp->asteroidEditModel()) {
+		m->translateBound(toModelBox(box), delta);
+	} else {
+		translateAst(box, delta);
+	}
+}
+
 } // anonymous namespace
 
 void EditorViewport::refreshAsteroidHandles() {
@@ -2459,8 +2504,8 @@ void EditorViewport::refreshAsteroidHandles() {
 			h.is_enabled = axisAllowed(f.axis);
 			const AstCorner corner = f.is_max ? AstCorner::Max : AstCorner::Min;
 			const int axis = f.axis;
-			h.on_drag = [box, corner, axis, markChanged](const vec3d& delta) {
-				nudgeAstComponent(box, corner, axis, delta.a1d[axis]);
+			h.on_drag = [this, box, corner, axis, markChanged](const vec3d& delta) {
+				nudgeAst(this, box, corner, axis, delta.a1d[axis]);
 				markChanged();
 			};
 			handles.push_back(std::move(h));
@@ -2481,10 +2526,10 @@ void EditorViewport::refreshAsteroidHandles() {
 					const AstCorner cx = xi ? AstCorner::Max : AstCorner::Min;
 					const AstCorner cy = yi ? AstCorner::Max : AstCorner::Min;
 					const AstCorner cz = zi ? AstCorner::Max : AstCorner::Min;
-					h.on_drag = [box, cx, cy, cz, markChanged](const vec3d& delta) {
-						nudgeAstComponent(box, cx, 0, delta.xyz.x);
-						nudgeAstComponent(box, cy, 1, delta.xyz.y);
-						nudgeAstComponent(box, cz, 2, delta.xyz.z);
+					h.on_drag = [this, box, cx, cy, cz, markChanged](const vec3d& delta) {
+						nudgeAst(this, box, cx, 0, delta.xyz.x);
+						nudgeAst(this, box, cy, 1, delta.xyz.y);
+						nudgeAst(this, box, cz, 2, delta.xyz.z);
 						markChanged();
 					};
 					handles.push_back(std::move(h));
@@ -2505,8 +2550,8 @@ void EditorViewport::refreshAsteroidHandles() {
 				h.info_label = "Asteroid Field";  // name shown only for the main center
 				_asteroid_center_index = static_cast<int>(handles.size());
 			}
-			h.on_drag = [box, markChanged](const vec3d& delta) {
-				translateAst(box, delta);
+			h.on_drag = [this, box, markChanged](const vec3d& delta) {
+				translateAstBox(this, box, delta);
 				markChanged();
 			};
 			handles.push_back(std::move(h));
@@ -2642,11 +2687,17 @@ void EditorViewport::refreshVolumetricHandle() {
 		h.show_coords = true;
 		h.show_grid_position = true;
 		h.on_drag = [this](const vec3d& delta) {
-			// Direct edit straight into the mission. The editor dialog is modal,
-			// so a drag can only happen while it is closed — there is no working
-			// copy to route through here. Mark modified here (not on_release) so
-			// a select-click that never moves doesn't dirty the mission.
-			if (The_mission.volumetrics) {
+			// Dual path. With the editor open, go through its model so the drag
+			// lands in the working copy apply() writes back (a direct global
+			// edit would be clobbered by a later OK). With it closed there is no
+			// working copy, so edit the mission directly. Mark modified here
+			// (not on_release) so a select-click that never moves doesn't dirty
+			// the mission.
+			if (auto* m = volumetricEditModel()) {
+				m->setPosX(m->getPosX() + delta.xyz.x);
+				m->setPosY(m->getPosY() + delta.xyz.y);
+				m->setPosZ(m->getPosZ() + delta.xyz.z);
+			} else if (The_mission.volumetrics) {
 				vec3d p = The_mission.volumetrics->getPos();
 				vm_vec_add2(&p, &delta);
 				The_mission.volumetrics->setPos(p);

@@ -38,6 +38,13 @@ public:
 	QByteArray captureState() const override;
 	void restoreState(const QByteArray& state) override;
 
+	// Snapshot/restore of the mission globals this dialog edits. Static so an
+	// undo command can restore them with no dialog instance alive.
+	static QByteArray captureGlobalState();
+	static void restoreGlobalState(const QByteArray& state);
+	// Re-read the working copy from the globals after an external restore.
+	void resyncFromGlobals();
+
 	// toggles
 	void setFieldEnabled(bool enabled);
 	bool getFieldEnabled() const;
