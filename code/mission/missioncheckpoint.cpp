@@ -15,6 +15,7 @@
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
 #include "hud/hudtarget.h"
+#include "model/animation/modelanimation.h"
 #include "model/model.h"
 #include "species_defs/species_defs.h"
 #include "io/timer.h"
@@ -1506,6 +1507,69 @@ void store_ai_states(SCP_vector<ai_state>& out)
 	}
 }
 
+// ------------------------------------------------------------------
+// Model animations
+// ------------------------------------------------------------------
+
+struct animation_instance_flag_entry {
+	animation::Animation_Instance_Flags flag;
+	const char* name;
+};
+
+const animation_instance_flag_entry Animation_instance_flag_table[] = {
+	{animation::Animation_Instance_Flags::Stop_after_next_loop, "stop_after_next_loop"},
+	{animation::Animation_Instance_Flags::Seamless_loop_shutdown, "seamless_loop_shutdown"},
+	{animation::Animation_Instance_Flags::Seamless_fully_started, "seamless_fully_started"},
+};
+
+// Whatever each ship's model was in the middle of doing.
+void store_animations(SCP_vector<ship_animation_state>& out)
+{
+	for (const auto& entry : Ship_registry) {
+		if (!entry.has_shipp() || !entry.has_objp()) {
+			continue;
+		}
+
+		int pmi_id = object_get_model_instance_num(&Objects[entry.objnum]);
+		if (pmi_id < 0) {
+			continue;
+		}
+
+		auto running = animation::ModelAnimationSet::getRunningAnimations(pmi_id);
+		if (running == nullptr || running->empty()) {
+			continue;
+		}
+
+		ship_animation_state state;
+		state.ship = Ships[entry.shipnum].ship_name;
+
+		for (const auto& anim : *running) {
+			if (anim == nullptr) {
+				continue;
+			}
+
+			auto instance = anim->getInstance(pmi_id);
+			if (instance == nullptr || instance->state == animation::ModelAnimationState::UNTRIGGERED) {
+				continue;
+			}
+
+			animation_state anim_state;
+			anim_state.id = anim->id;
+			anim_state.state = static_cast<int>(instance->state);
+			anim_state.direction = static_cast<int>(instance->canonicalDirection);
+			anim_state.time = instance->time;
+			anim_state.speed = instance->speed;
+			collect_flags(instance->instance_flags, Animation_instance_flag_table, anim_state.instance_flags);
+
+			state.animations.push_back(std::move(anim_state));
+		}
+
+		if (!state.animations.empty()) {
+			out.push_back(std::move(state));
+		}
+	}
+}
+
 // Every live docking link, one entry per pair.
 //
 // dock_list is symmetric -- each end lists the other -- so the pair is only emitted from the end
@@ -1716,6 +1780,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	// --- AI ---
 	store_ai_states(data.ai);
+
+	// --- model animations ---
+	store_animations(data.animations);
 
 	// --- wings ---
 	for (int i = 0; i < Num_wings; i++) {
@@ -2511,6 +2578,59 @@ void apply_ai_states(const checkpoint_data& data)
 	}
 }
 
+// Put every model back into the pose it was in.
+//
+// Two steps, because they are two different things.  start() is what makes an animation running
+// again -- it registers the instance, recalculates the submodel buffer and works out the duration,
+// none of which can be faked.  Only then does the instance have somewhere for the saved time to go,
+// which is what setInstanceState() is for.  Pausing is a third call, because start() reads pause as
+// "pause what is already running" rather than as part of starting it.
+//
+// Animations come last of the world state, because dock-stage animations key off dock state and the
+// ship they belong to has to be in its final form first.
+void apply_animations(const checkpoint_data& data)
+{
+	for (const auto& state : data.animations) {
+		auto entry = ship_registry_get(state.ship);
+		if (entry == nullptr || !entry->has_objp()) {
+			continue;
+		}
+
+		int pmi_id = object_get_model_instance_num(&Objects[entry->objnum]);
+		polymodel_instance* pmi = (pmi_id >= 0) ? model_get_instance(pmi_id) : nullptr;
+		if (pmi == nullptr) {
+			continue;
+		}
+
+		for (const auto& anim_state : state.animations) {
+			auto it = animation::ModelAnimationSet::s_animationById.find(anim_state.id);
+			if (it == animation::ModelAnimationSet::s_animationById.end()) {
+				// The mod has changed this animation or removed it.  The id is a content hash of
+				// the animation and class names, so this is the same case as a renamed subsystem:
+				// leave the model at its default pose rather than guess at a replacement.
+				mprintf(("CHECKPOINT => '%s' was playing an animation this build does not have; "
+				         "leaving that submodel at its default.\n",
+				         state.ship.c_str()));
+				continue;
+			}
+
+			auto& anim = it->second;
+			auto direction = static_cast<animation::ModelAnimationDirection>(anim_state.direction);
+
+			anim->start(pmi, direction, true);
+
+			flagset<animation::Animation_Instance_Flags> instance_flags;
+			apply_flags(anim_state.instance_flags, Animation_instance_flag_table, instance_flags);
+			anim->setInstanceState(pmi->id, anim_state.time, anim_state.speed, instance_flags);
+
+			if (static_cast<animation::ModelAnimationState>(anim_state.state) ==
+				animation::ModelAnimationState::PAUSED) {
+				anim->start(pmi, direction, false, false, true);
+			}
+		}
+	}
+}
+
 // Re-join the ships the checkpoint had docked.
 //
 // ai_do_objects_docked_stuff() is the engine's own primitive for this: it links both dock lists and
@@ -3249,6 +3369,9 @@ void mission_checkpoint_apply()
 	// AI after docking, because ai_do_objects_docked_stuff() writes the support ship pair as it
 	// links, and because an AI order can name a ship this pass has to resolve.
 	apply_ai_states(data);
+
+	// Animations after docking, since dock-stage animations key off dock state.
+	apply_animations(data);
 
 	apply_wings(data);
 	apply_variables(data);

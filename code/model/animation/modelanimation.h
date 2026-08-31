@@ -266,7 +266,17 @@ namespace animation {
 		void stop(polymodel_instance* pmi, bool cleanup = true, bool forceStop = false);
 
 		float getTime(int pmi_id) const;
-		
+
+		//The instance data for one model instance, or nullptr if this animation has never run on
+		//it.  Exposed so that a caller which needs to record exactly where an animation had got to
+		//-- the mission checkpoint system -- can do so without a copy of the playback rules.
+		const instance_data* getInstance(int pmi_id) const;
+
+		//Put a running instance back to a given point.  This is a seek, not a trigger: the
+		//animation must already have been started.  Only for reproducing a recorded state, such as
+		//when a mission checkpoint is restored; ordinary callers want start() and stop().
+		void setInstanceState(int pmi_id, float time, float speed, const flagset<animation::Animation_Instance_Flags>& instance_flags);
+
 		static void stepAnimations(float frametime, polymodel_instance* pmi);
 
 		unsigned int id = 0;
@@ -336,6 +346,11 @@ namespace animation {
 		void changeShipName(const SCP_string& name);
 
 		static void stopAnimations(polymodel_instance* pmi = nullptr);
+
+		//The animations currently running on one model instance, or nullptr if none are.  Exposed
+		//for the same reason getInstance() is: something that has to write down which animations
+		//were playing needs to be able to enumerate them.
+		static const SCP_list<std::shared_ptr<ModelAnimation>>* getRunningAnimations(int pmi_id);
 
 		void clearShipData(polymodel_instance* pmi);
 

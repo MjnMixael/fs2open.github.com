@@ -47,7 +47,8 @@ enum class Section {
 	CheckpointSexp = 0x001F,
 	CheckpointDebris = 0x0020,
 	CheckpointDocking = 0x0021,
-	CheckpointAI = 0x0022
+	CheckpointAI = 0x0022,
+	CheckpointAnimations = 0x0023
 };
 #if defined(__GNUC__) && !defined(__clang__)
 #pragma GCC diagnostic pop

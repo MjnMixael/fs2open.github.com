@@ -1157,6 +1157,78 @@ void read_ai(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 }
 
+void write_animations(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointAnimations);
+
+	handler->startArrayWrite("ships", data.animations.size());
+	for (const auto& state : data.animations) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("ship", state.ship.c_str());
+
+		handler->startArrayWrite("animations", state.animations.size());
+		for (const auto& anim : state.animations) {
+			handler->startSectionWrite(Section::Unnamed);
+
+			handler->writeUInt("id", anim.id);
+			handler->writeInt("state", anim.state);
+			handler->writeInt("direction", anim.direction);
+			handler->writeFloat("time", anim.time);
+			handler->writeFloat("speed", anim.speed);
+			write_string_list(handler, "instance_flags", anim.instance_flags);
+
+			handler->endSectionWrite();
+		}
+		handler->endArrayWrite();
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_animations(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.animations.clear();
+
+	if (!handler->hasField("ships")) {
+		return;
+	}
+
+	auto ship_count = handler->startArrayRead("ships");
+	for (size_t i = 0; i < ship_count; i++, handler->nextArraySection()) {
+		checkpoint::ship_animation_state state;
+
+		state.ship = handler->readStringOr("ship", "");
+
+		if (handler->hasField("animations")) {
+			auto count = handler->startArrayRead("animations");
+			for (size_t j = 0; j < count; j++, handler->nextArraySection()) {
+				checkpoint::animation_state anim;
+
+				anim.id = handler->readUIntOr("id", 0);
+				anim.state = handler->readIntOr("state", 0);
+				anim.direction = handler->readIntOr("direction", 0);
+				anim.time = handler->readFloatOr("time", 0.0f);
+				anim.speed = handler->readFloatOr("speed", 1.0f);
+				read_string_list(handler, "instance_flags", anim.instance_flags);
+
+				if (anim.id != 0) {
+					state.animations.push_back(std::move(anim));
+				}
+			}
+			handler->endArrayRead();
+		}
+
+		if (!state.ship.empty() && !state.animations.empty()) {
+			data.animations.push_back(std::move(state));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_docking(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointDocking);
@@ -1532,13 +1604,14 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_debris(handler.get(), data);
 	write_docking(handler.get(), data);
 	write_ai(handler.get(), data);
+	write_animations(handler.get(), data);
 
 	handler->endWritingSections();
 
 	handler->flush();
 
 	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries, "
-	         "%d debris, %d pending arrivals, %d docked pairs, %d AI states)\n",
+	         "%d debris, %d pending arrivals, %d docked pairs, %d AI states, %d animated ships)\n",
 	         filename.c_str(),
 	         static_cast<int>(data.ships.size()),
 	         static_cast<int>(data.wings.size()),
@@ -1549,7 +1622,8 @@ bool checkpoint_write(const checkpoint_data& data)
 	         static_cast<int>(data.debris.size()),
 	         static_cast<int>(data.parse_objects.size()),
 	         static_cast<int>(data.dock_pairs.size()),
-	         static_cast<int>(data.ai.size())));
+	         static_cast<int>(data.ai.size()),
+	         static_cast<int>(data.animations.size())));
 
 	return true;
 }
@@ -1642,6 +1716,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointAI:
 			read_ai(handler.get(), data);
+			break;
+
+		case Section::CheckpointAnimations:
+			read_animations(handler.get(), data);
 			break;
 
 		default:

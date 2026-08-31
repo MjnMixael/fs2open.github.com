@@ -363,6 +363,25 @@ namespace animation {
 		return 0.0f;
 	}
 
+	const ModelAnimation::instance_data* ModelAnimation::getInstance(int pmi_id) const {
+		auto instance = m_instances.find(pmi_id);
+		if (instance != m_instances.end())
+			return &instance->second;
+		return nullptr;
+	}
+
+	void ModelAnimation::setInstanceState(int pmi_id, float time, float speed, const flagset<animation::Animation_Instance_Flags>& instance_flags) {
+		auto instance = m_instances.find(pmi_id);
+		if (instance == m_instances.end())
+			return;
+
+		//Duration is whatever starting the animation worked out, so a saved time from a build
+		//whose animation was longer cannot run off the end of this one.
+		instance->second.time = instance->second.duration > 0.0f ? MIN(time, instance->second.duration) : time;
+		instance->second.speed = speed;
+		instance->second.instance_flags = instance_flags;
+	}
+
 	void ModelAnimation::stepAnimations(float frametime, polymodel_instance* pmi) {
 		auto animListIt = ModelAnimationSet::s_runningAnimations.find(pmi->id);
 
@@ -758,6 +777,13 @@ namespace animation {
 			else
 				removeIt++;
 		}
+	}
+
+	const SCP_list<std::shared_ptr<ModelAnimation>>* ModelAnimationSet::getRunningAnimations(int pmi_id) {
+		auto animList = s_runningAnimations.find(pmi_id);
+		if (animList != s_runningAnimations.end())
+			return &animList->second.animationList;
+		return nullptr;
 	}
 
 	void ModelAnimationSet::stopAnimations(polymodel_instance* pmi) {

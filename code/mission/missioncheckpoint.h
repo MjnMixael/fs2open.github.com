@@ -432,6 +432,35 @@ struct debris_state {
 	bool do_not_expire = false;
 };
 
+// One animation that was playing on a ship's model instance.
+//
+// The id is a content hash of the animation's name combined with its ship class name, which is why
+// multiplayer can send it over the wire, and which makes it a name rather than an index for the
+// purposes of the rule above.  An id the current tables no longer define simply does not come
+// back.
+//
+// Without this a restored mission snaps every model to its default pose: opened fighter bays close,
+// deployed turrets retract, a submodel caught mid-swing jumps back to the start.  Note that the
+// turret rotation rates and timers already survive with the subsystems, so before this the two
+// disagreed.
+struct animation_state {
+	unsigned int id = 0;
+
+	int state = 0;             // ModelAnimationState
+	int direction = 0;         // ModelAnimationDirection
+	float time = 0.0f;         // how far into the animation it had got
+	float speed = 1.0f;
+
+	SCP_vector<SCP_string> instance_flags;
+};
+
+// The animations playing on one ship, keyed by ship name rather than by model instance, since a
+// model instance number is a runtime index.
+struct ship_animation_state {
+	SCP_string ship;
+	SCP_vector<animation_state> animations;
+};
+
 // One docking link between two ships.
 //
 // Docking that the mission file sets up is reproduced by the mission load, because the arrival path
@@ -495,6 +524,7 @@ struct checkpoint_data {
 	SCP_vector<ship_state> ships;
 	SCP_vector<dock_pair> dock_pairs;
 	SCP_vector<ai_state> ai;
+	SCP_vector<ship_animation_state> animations;
 	SCP_vector<wing_state> wings;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;
