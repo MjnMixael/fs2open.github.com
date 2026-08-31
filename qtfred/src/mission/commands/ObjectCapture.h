@@ -111,6 +111,10 @@ struct CapturedShip {
 	int        callsign_index          = -1;
 	SCP_vector<CapturedAltClass> alt_classes;
 
+	// Editor-defined per-ship custom data (editor.tbl schema + instance
+	// overrides). Captured so deleting a ship and undoing brings it back.
+	SCP_map<SCP_string, SCP_string> custom_data;
+
 	// ---- Arrival ----
 	ArrivalLocation arrival_location  = ArrivalLocation::AT_LOCATION;
 	int             arrival_distance  = 0;

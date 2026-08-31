@@ -756,6 +756,7 @@ namespace FieldId {
     constexpr int Ship_Reset             = 4436;
     constexpr int Ship_DockWarpin        = 4437;
     constexpr int Ship_DockWarpout       = 4438;
+    constexpr int Ship_CustomData        = 4439;
 
     // Debriefing editor       4501–4899 (in-dialog stack; per-stage ids are
     // offset by team * MAX_DEBRIEF_STAGES + stage so edits to different

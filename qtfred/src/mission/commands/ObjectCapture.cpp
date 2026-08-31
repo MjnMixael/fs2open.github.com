@@ -67,6 +67,7 @@ CapturedShip& CapturedShip::operator=(CapturedShip&& o) noexcept
 	alt_type_index    = o.alt_type_index;
 	callsign_index    = o.callsign_index;
 	alt_classes       = std::move(o.alt_classes);
+	custom_data       = std::move(o.custom_data);
 
 	arrival_location  = o.arrival_location;
 	arrival_distance  = o.arrival_distance;
@@ -183,6 +184,7 @@ CapturedShip captureShip(int objNum)
 	c.team_name      = s.team_name;
 	c.alt_type_index = s.alt_type_index;
 	c.callsign_index = s.callsign_index;
+	c.custom_data    = s.custom_data;
 
 	for (const auto& ac : s.s_alt_classes) {
 		CapturedAltClass cac;
@@ -353,6 +355,7 @@ int restoreShip(CapturedShip& c, Editor* editor)
 	s.team_name      = c.team_name;
 	s.alt_type_index = c.alt_type_index;
 	s.callsign_index = c.callsign_index;
+	s.custom_data    = c.custom_data;
 
 	s.s_alt_classes.clear();
 	for (const auto& cac : c.alt_classes) {
