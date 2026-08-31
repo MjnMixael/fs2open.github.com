@@ -1005,6 +1005,53 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	}
 }
 
+void write_docking(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointDocking);
+
+	handler->startArrayWrite("pairs", data.dock_pairs.size());
+	for (const auto& pair : data.dock_pairs) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("docker", pair.docker.c_str());
+		handler->writeString("dockee", pair.dockee.c_str());
+		handler->writeString("docker_point", pair.docker_point.c_str());
+		handler->writeString("dockee_point", pair.dockee_point.c_str());
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_docking(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.dock_pairs.clear();
+
+	if (!handler->hasField("pairs")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("pairs");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::dock_pair pair;
+
+		pair.docker = handler->readStringOr("docker", "");
+		pair.dockee = handler->readStringOr("dockee", "");
+		pair.docker_point = handler->readStringOr("docker_point", "");
+		pair.dockee_point = handler->readStringOr("dockee_point", "");
+
+		// A link missing any of its four names cannot be rebuilt, and guessing a bay would put
+		// one ship inside another.
+		if (!pair.docker.empty() && !pair.dockee.empty() && !pair.docker_point.empty() &&
+			!pair.dockee_point.empty()) {
+			data.dock_pairs.push_back(std::move(pair));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_debris(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointDebris);
@@ -1331,13 +1378,14 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_log(handler.get(), data);
 	write_sexp(handler.get(), data);
 	write_debris(handler.get(), data);
+	write_docking(handler.get(), data);
 
 	handler->endWritingSections();
 
 	handler->flush();
 
 	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries, "
-	         "%d debris, %d pending arrivals)\n",
+	         "%d debris, %d pending arrivals, %d docked pairs)\n",
 	         filename.c_str(),
 	         static_cast<int>(data.ships.size()),
 	         static_cast<int>(data.wings.size()),
@@ -1346,7 +1394,8 @@ bool checkpoint_write(const checkpoint_data& data)
 	         static_cast<int>(data.goals.size()),
 	         static_cast<int>(data.log_entries.size()),
 	         static_cast<int>(data.debris.size()),
-	         static_cast<int>(data.parse_objects.size())));
+	         static_cast<int>(data.parse_objects.size()),
+	         static_cast<int>(data.dock_pairs.size())));
 
 	return true;
 }
@@ -1431,6 +1480,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointDebris:
 			read_debris(handler.get(), data);
+			break;
+
+		case Section::CheckpointDocking:
+			read_docking(handler.get(), data);
 			break;
 
 		default:

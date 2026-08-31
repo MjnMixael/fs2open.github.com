@@ -357,6 +357,25 @@ struct debris_state {
 	bool do_not_expire = false;
 };
 
+// One docking link between two ships.
+//
+// Docking that the mission file sets up is reproduced by the mission load, because the arrival path
+// creates a docked group whole.  What is not reproduced is everything that happened afterwards: a
+// support ship that docked to rearm, a freighter that undocked its cargo, an ai-dock order that
+// completed.  A restore without this brings a docked pair back as two ships sitting in the right
+// places with no link between them, which the AI, the collision code and the departure logic all
+// read differently from a real dock.
+//
+// Emitted once per pair, with the two ends ordered by name so a pair cannot be written twice.
+// Dockpoints go by name for the same reason subsystems and debris submodels do: a re-exported pof
+// must not silently move a ship to a different bay.
+struct dock_pair {
+	SCP_string docker;
+	SCP_string dockee;
+	SCP_string docker_point;
+	SCP_string dockee_point;
+};
+
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
 // timestamp, so it is restored as-is rather than shifted.
 struct log_entry_state {
@@ -399,6 +418,7 @@ struct checkpoint_data {
 
 	// --- state ---
 	SCP_vector<ship_state> ships;
+	SCP_vector<dock_pair> dock_pairs;
 	SCP_vector<wing_state> wings;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;

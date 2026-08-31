@@ -8,6 +8,7 @@
 
 #include "mission/missioncheckpoint.h"
 
+#include "ai/ai.h"
 #include "debris/debris.h"
 #include "gamesequence/gamesequence.h"
 #include "globalincs/systemvars.h"
@@ -953,6 +954,87 @@ struct pending_load_state {
 
 pending_load_state Pending_load;
 
+// A dockpoint's name, or an empty string if the model no longer has that bay.  Names rather than
+// indices, for the same reason subsystems and debris submodels use them: a re-exported pof can
+// renumber the docking bays, and docking a support ship to the wrong bay is not a subtle failure.
+SCP_string dock_point_name(const object* objp, int dockpoint)
+{
+	if (objp == nullptr || objp->type != OBJ_SHIP || objp->instance < 0 || dockpoint < 0) {
+		return SCP_string();
+	}
+
+	int model_num = Ship_info[Ships[objp->instance].ship_info_index].model_num;
+	if (model_num < 0 || dockpoint >= model_get_num_dock_points(model_num)) {
+		return SCP_string();
+	}
+
+	return SCP_string(model_get_dock_name(model_num, dockpoint));
+}
+
+// The reverse of dock_point_name(): a dockpoint index for a saved name, or -1 if this run's model
+// has no such bay.  model_find_dock_name_index() also understands the generic type names, which is
+// what a mission file uses when it asks for "cargo" rather than a specific bay.
+int dock_point_index(const object* objp, const SCP_string& name)
+{
+	if (objp == nullptr || objp->type != OBJ_SHIP || objp->instance < 0 || name.empty()) {
+		return -1;
+	}
+
+	int model_num = Ship_info[Ships[objp->instance].ship_info_index].model_num;
+	if (model_num < 0) {
+		return -1;
+	}
+
+	return model_find_dock_name_index(model_num, name.c_str());
+}
+
+// Every live docking link, one entry per pair.
+//
+// dock_list is symmetric -- each end lists the other -- so the pair is only emitted from the end
+// whose ship name sorts first, which is what keeps it out of the file twice.  Only ship-to-ship
+// links are captured; nothing else in the mission docks.
+void store_dock_pairs(SCP_vector<dock_pair>& out)
+{
+	for (const auto& entry : Ship_registry) {
+		if (!entry.has_shipp() || !entry.has_objp()) {
+			continue;
+		}
+
+		object* objp = &Objects[entry.objnum];
+		const char* docker_name = Ships[entry.shipnum].ship_name;
+
+		for (const dock_instance* ptr = objp->dock_list; ptr != nullptr; ptr = ptr->next) {
+			object* other = ptr->docked_objp;
+			if (other == nullptr || other->type != OBJ_SHIP || other->instance < 0) {
+				continue;
+			}
+
+			const char* dockee_name = Ships[other->instance].ship_name;
+			if (stricmp(docker_name, dockee_name) >= 0) {
+				continue;
+			}
+
+			dock_pair pair;
+			pair.docker = docker_name;
+			pair.dockee = dockee_name;
+			pair.docker_point = dock_point_name(objp, ptr->dockpoint_used);
+			pair.dockee_point = dock_point_name(other, dock_find_dockpoint_used_by_object(other, objp));
+
+			// A link we cannot name both ends of is worse than no link at all: docking to the
+			// wrong bay puts a ship inside another one.
+			if (pair.docker_point.empty() || pair.dockee_point.empty()) {
+				mprintf(("CHECKPOINT => Cannot name the dockpoints joining '%s' and '%s'; "
+				         "not storing that link.\n",
+				         docker_name,
+				         dockee_name));
+				continue;
+			}
+
+			out.push_back(std::move(pair));
+		}
+	}
+}
+
 // checkpoint-exists and prompt-user-checkpoint-load are typically sat inside a `when`, so they
 // get evaluated every frame until they come true.  Reading and parsing the checkpoint each
 // time would mean a file read per frame, so the answer is cached.  The cache is keyed by
@@ -1110,6 +1192,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 		data.ships.push_back(std::move(state));
 	}
+
+	// --- docking ---
+	store_dock_pairs(data.dock_pairs);
 
 	// --- wings ---
 	for (int i = 0; i < Num_wings; i++) {
@@ -1794,6 +1879,112 @@ bool is_player_wing_ship(const SCP_string& name)
 	return Ships[entry->shipnum].flags[Ship::Ship_Flags::From_player_wing];
 }
 
+// Re-join the ships the checkpoint had docked.
+//
+// ai_do_objects_docked_stuff() is the engine's own primitive for this: it links both dock lists and
+// tells the AI, which is what makes the pair behave like a real dock rather than two ships that
+// happen to be touching.  It is asked not to update clients, since multiplayer never gets here.
+//
+// It only links; nothing here moves a ship.  apply_ship() has already put both ends where the
+// checkpoint recorded them, which is the correct relative position by construction, and letting the
+// dock code reposition would undo that.
+void apply_dock_pairs(const checkpoint_data& data)
+{
+	// Undock first, because the mission load reproduces the docking the mission file describes and
+	// the checkpoint is the authority on what is still docked.  A freighter that had released its
+	// cargo, or a support ship that had finished and pulled away, arrives back from the mission
+	// file still attached.
+	//
+	// The links to break are collected before any of them is broken, since undocking rewrites the
+	// lists being walked.
+	SCP_vector<std::pair<object*, object*>> to_undock;
+
+	for (const auto& entry : Ship_registry) {
+		if (!entry.has_shipp() || !entry.has_objp()) {
+			continue;
+		}
+
+		object* objp = &Objects[entry.objnum];
+		const char* docker_name = Ships[entry.shipnum].ship_name;
+
+		for (const dock_instance* ptr = objp->dock_list; ptr != nullptr; ptr = ptr->next) {
+			object* other = ptr->docked_objp;
+			if (other == nullptr || other->type != OBJ_SHIP || other->instance < 0) {
+				continue;
+			}
+
+			// Once per pair, same rule the store side uses.
+			const char* dockee_name = Ships[other->instance].ship_name;
+			if (stricmp(docker_name, dockee_name) >= 0) {
+				continue;
+			}
+
+			// A link is kept only if the checkpoint has the same two ships joined at the same two
+			// bays.  Same ships but different bays counts as unwanted, so that the pass below
+			// rebuilds it properly rather than leaving the mission file's arrangement in place.
+			SCP_string live_docker_point = dock_point_name(objp, ptr->dockpoint_used);
+			SCP_string live_dockee_point =
+				dock_point_name(other, dock_find_dockpoint_used_by_object(other, objp));
+
+			bool wanted = std::any_of(data.dock_pairs.begin(),
+				data.dock_pairs.end(),
+				[&](const dock_pair& pair) {
+					return lcase_equal(pair.docker, docker_name) && lcase_equal(pair.dockee, dockee_name) &&
+					       lcase_equal(pair.docker_point, live_docker_point) &&
+					       lcase_equal(pair.dockee_point, live_dockee_point);
+				});
+
+			if (!wanted) {
+				to_undock.emplace_back(objp, other);
+			}
+		}
+	}
+
+	for (const auto& pair : to_undock) {
+		ai_do_objects_undocked_stuff(pair.first, pair.second);
+	}
+
+	for (const auto& pair : data.dock_pairs) {
+		auto docker = ship_registry_get(pair.docker);
+		auto dockee = ship_registry_get(pair.dockee);
+
+		if (docker == nullptr || !docker->has_objp() || dockee == nullptr || !dockee->has_objp()) {
+			// One of the two did not come back -- a class the mod dropped, or a ship the restore
+			// could not recreate.  A half-link is not a thing, so the pair is skipped whole.
+			mprintf(("CHECKPOINT => '%s' and '%s' were docked, but one of them is not here; "
+			         "leaving them undocked.\n",
+			         pair.docker.c_str(),
+			         pair.dockee.c_str()));
+			continue;
+		}
+
+		object* docker_objp = &Objects[docker->objnum];
+		object* dockee_objp = &Objects[dockee->objnum];
+
+		if (dock_check_find_direct_docked_object(docker_objp, dockee_objp)) {
+			// Still joined after the pass above, which means the mission file docked them at the
+			// same bays the checkpoint recorded -- the arrival path built the group whole and got
+			// it right.  Nothing to do, and re-linking would be an error.
+			continue;
+		}
+
+		int docker_point = dock_point_index(docker_objp, pair.docker_point);
+		int dockee_point = dock_point_index(dockee_objp, pair.dockee_point);
+
+		if (docker_point < 0 || dockee_point < 0) {
+			mprintf(("CHECKPOINT => '%s' and '%s' were docked at '%s'/'%s', but at least one of "
+			         "those bays no longer exists; leaving them undocked.\n",
+			         pair.docker.c_str(),
+			         pair.dockee.c_str(),
+			         pair.docker_point.c_str(),
+			         pair.dockee_point.c_str()));
+			continue;
+		}
+
+		ai_do_objects_docked_stuff(docker_objp, docker_point, dockee_objp, dockee_point, false);
+	}
+}
+
 void apply_wings(const checkpoint_data& data)
 {
 	for (const auto& state : data.wings) {
@@ -2416,6 +2607,10 @@ void mission_checkpoint_apply()
 			resolve_turret_targets(&Ships[entry->shipnum], state.subsystems);
 		}
 	}
+
+	// Docking after the ships, because every ship has to exist and be sitting where the checkpoint
+	// left it before the two ends of a link can be joined.
+	apply_dock_pairs(data);
 
 	apply_wings(data);
 	apply_variables(data);
