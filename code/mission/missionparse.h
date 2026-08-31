@@ -632,6 +632,9 @@ void mission_parse_close();
 
 // used in fred management.cpp when creating a new mission
 void apply_default_custom_data(mission* pm);
+
+class campaign;	// defined in missioncampaign.h; only referenced by pointer here
+void apply_default_campaign_custom_data(campaign* pc);
 void parse_editor_custom_data_table();
 
 bool mission_maybe_make_ship_arrive(p_object *p_objp, bool force_arrival = false);

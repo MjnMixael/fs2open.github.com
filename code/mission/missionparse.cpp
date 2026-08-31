@@ -7173,6 +7173,21 @@ void apply_default_custom_data(mission* pm)
 	}
 }
 
+// Campaign twin of apply_default_custom_data().  Deliberately NOT called from
+// mission_campaign_clear(): mission_campaign_load() clears before it parses,
+// and parse_string_map() merges with emplace(), which does not overwrite an
+// existing key -- seeding before the parse would make every schema default win
+// over the campaign file's own saved value.  Seed after parsing instead, so
+// this only fills in keys the campaign doesn't already define.
+void apply_default_campaign_custom_data(campaign* pc)
+{
+	for (const auto& def : Default_campaign_custom_data) {
+		if (pc->custom_data.find(def.key) == pc->custom_data.end()) {
+			pc->custom_data.emplace(def.key, def.value);
+		}
+	}
+}
+
 // parse one #...CustomData section (header already consumed) into the given schema
 static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_data>& dest)
 {

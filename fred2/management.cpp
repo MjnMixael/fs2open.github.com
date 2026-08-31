@@ -468,6 +468,10 @@ bool fred_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	timer_start_frame();
 
 	mission_campaign_clear();
+	// Seed the editor.tbl campaign schema defaults into the blank campaign, so
+	// the campaign editor starts pre-populated even before one is loaded (a
+	// loaded campaign gets seeded by mission_campaign_load instead).
+	apply_default_campaign_custom_data(&Campaign);
 	create_new_mission();
 
 	gr_reset_clip();
