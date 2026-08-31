@@ -5063,6 +5063,12 @@ void game_process_event( int current_state, int event )
 			break;
 
 		case GS_EVENT_END_GAME:
+			// Leaving the mission for good.  A checkpoint load restarts the mission through
+			// GS_EVENT_START_GAME(_QUICK) and never passes through here, so anything still queued
+			// at this point is a request that was never serviced, and it must not leak into
+			// whatever mission is flown next.
+			mission_checkpoint_clear_pending();
+
 			if ( (current_state == GS_STATE_GAME_PLAY) || (current_state == GS_STATE_DEATH_DIED) ||
 				(current_state == GS_STATE_DEATH_BLEW_UP) ||	(current_state == GS_STATE_DEBRIEF) || (current_state == GS_STATE_MULTI_DOGFIGHT_DEBRIEF)) {
 					gameseq_set_state(GS_STATE_MAIN_MENU);
