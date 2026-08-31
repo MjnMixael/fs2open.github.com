@@ -1157,6 +1157,118 @@ void read_ai(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 }
 
+void write_environment(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	const auto& env = data.environment;
+
+	handler->startSectionWrite(Section::CheckpointEnvironment);
+
+	handler->writeString("skybox_model", env.skybox_model.c_str());
+	handler->writeString("skybox_texture", env.skybox_texture.c_str());
+	handler->writeUInt("skybox_flags_hi", env.skybox_flags_hi);
+	handler->writeUInt("skybox_flags_lo", env.skybox_flags_lo);
+	handler->writeFloat("skybox_alpha", env.skybox_alpha);
+	write_vector(handler, "skybox_fvec_x", "skybox_fvec_y", "skybox_fvec_z", env.skybox_orient.vec.fvec);
+	write_vector(handler, "skybox_uvec_x", "skybox_uvec_y", "skybox_uvec_z", env.skybox_orient.vec.uvec);
+	write_vector(handler, "skybox_rvec_x", "skybox_rvec_y", "skybox_rvec_z", env.skybox_orient.vec.rvec);
+
+	handler->writeInt("ambient_light", env.ambient_light);
+
+	handler->writeBool("fullneb", env.fullneb);
+	handler->writeFloat("neb_range", env.neb_range);
+	handler->writeString("neb_pattern", env.neb_pattern.c_str());
+	handler->writeBool("neb_fog_color_override", env.neb_fog_color_override);
+	handler->writeInt("neb_fog_r", env.neb_fog_r);
+	handler->writeInt("neb_fog_g", env.neb_fog_g);
+	handler->writeInt("neb_fog_b", env.neb_fog_b);
+
+	handler->writeBool("subspace", env.subspace);
+
+	handler->writeInt("background_index", env.background_index);
+	handler->writeBool("motion_debris_override", env.motion_debris_override);
+	handler->writeString("motion_debris_type", env.motion_debris_type.c_str());
+	handler->writeString("soundtrack", env.soundtrack.c_str());
+
+	handler->startArrayWrite("starfield", env.starfield.size());
+	for (const auto& entry : env.starfield) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("name", entry.name.c_str());
+		handler->writeBool("is_sun", entry.is_sun);
+		handler->writeFloat("scale_x", entry.scale_x);
+		handler->writeFloat("scale_y", entry.scale_y);
+		handler->writeInt("div_x", entry.div_x);
+		handler->writeInt("div_y", entry.div_y);
+		handler->writeFloat("ang_p", entry.ang.p);
+		handler->writeFloat("ang_b", entry.ang.b);
+		handler->writeFloat("ang_h", entry.ang.h);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_environment(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	auto& env = data.environment;
+	env = checkpoint::environment_state();
+
+	// Reaching this section at all is what says the file describes the sky; nothing here has a
+	// meaningful "absent" value, so the flag rather than a per-field default is what stops an
+	// older checkpoint from blanking it.
+	env.present = true;
+
+	env.skybox_model = handler->readStringOr("skybox_model", "");
+	env.skybox_texture = handler->readStringOr("skybox_texture", "");
+	env.skybox_flags_hi = handler->readUIntOr("skybox_flags_hi", 0);
+	env.skybox_flags_lo = handler->readUIntOr("skybox_flags_lo", 0);
+	env.skybox_alpha = handler->readFloatOr("skybox_alpha", 1.0f);
+	read_vector(handler, "skybox_fvec_x", "skybox_fvec_y", "skybox_fvec_z", env.skybox_orient.vec.fvec);
+	read_vector(handler, "skybox_uvec_x", "skybox_uvec_y", "skybox_uvec_z", env.skybox_orient.vec.uvec);
+	read_vector(handler, "skybox_rvec_x", "skybox_rvec_y", "skybox_rvec_z", env.skybox_orient.vec.rvec);
+
+	env.ambient_light = handler->readIntOr("ambient_light", 0);
+
+	env.fullneb = handler->readBoolOr("fullneb", false);
+	env.neb_range = handler->readFloatOr("neb_range", 0.0f);
+	env.neb_pattern = handler->readStringOr("neb_pattern", "");
+	env.neb_fog_color_override = handler->readBoolOr("neb_fog_color_override", false);
+	env.neb_fog_r = handler->readIntOr("neb_fog_r", 0);
+	env.neb_fog_g = handler->readIntOr("neb_fog_g", 0);
+	env.neb_fog_b = handler->readIntOr("neb_fog_b", 0);
+
+	env.subspace = handler->readBoolOr("subspace", false);
+
+	env.background_index = handler->readIntOr("background_index", -1);
+	env.motion_debris_override = handler->readBoolOr("motion_debris_override", false);
+	env.motion_debris_type = handler->readStringOr("motion_debris_type", "");
+	env.soundtrack = handler->readStringOr("soundtrack", "");
+
+	if (handler->hasField("starfield")) {
+		auto count = handler->startArrayRead("starfield");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::starfield_entry_state entry;
+
+			entry.name = handler->readStringOr("name", "");
+			entry.is_sun = handler->readBoolOr("is_sun", false);
+			entry.scale_x = handler->readFloatOr("scale_x", 1.0f);
+			entry.scale_y = handler->readFloatOr("scale_y", 1.0f);
+			entry.div_x = handler->readIntOr("div_x", 1);
+			entry.div_y = handler->readIntOr("div_y", 1);
+			entry.ang.p = handler->readFloatOr("ang_p", 0.0f);
+			entry.ang.b = handler->readFloatOr("ang_b", 0.0f);
+			entry.ang.h = handler->readFloatOr("ang_h", 0.0f);
+
+			if (!entry.name.empty()) {
+				env.starfield.push_back(std::move(entry));
+			}
+		}
+		handler->endArrayRead();
+	}
+}
+
 void write_animations(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointAnimations);
@@ -1605,6 +1717,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_docking(handler.get(), data);
 	write_ai(handler.get(), data);
 	write_animations(handler.get(), data);
+	write_environment(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -1720,6 +1833,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointAnimations:
 			read_animations(handler.get(), data);
+			break;
+
+		case Section::CheckpointEnvironment:
+			read_environment(handler.get(), data);
 			break;
 
 		default:

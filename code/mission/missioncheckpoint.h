@@ -461,6 +461,73 @@ struct ship_animation_state {
 	SCP_vector<animation_state> animations;
 };
 
+// One sun or background bitmap currently hanging in the sky.
+//
+// These are the live instances, not the background definitions the mission file carries:
+// add-background-bitmap and remove-sun-bitmap add to and take from the live lists, so a mission
+// that dresses its own sky loses all of it on a reload.  By name, with the geometry that goes with
+// it -- the same four numbers and three angles the mission file stores.
+struct starfield_entry_state {
+	SCP_string name;
+	bool is_sun = false;
+
+	float scale_x = 1.0f;
+	float scale_y = 1.0f;
+	int div_x = 1;
+	int div_y = 1;
+	angles ang = {0.0f, 0.0f, 0.0f};
+};
+
+// The world that is not made of ships.
+//
+// Almost none of this lives in The_mission -- it lives in module-level globals whose only reset is
+// that module's level_init, which a restore runs.  So every SEXP that dresses the mission
+// (change-background, set-skybox-model, nebula-change-pattern, change-soundtrack) is undone by a
+// reload unless it is written down here.
+//
+// Deliberately absent: the camera, cutscene bars, fades and subtitles, which last seconds and are
+// worse half-restored than not restored (the same reasoning that excluded shockwaves); the
+// per-gauge HUD text, coordinates and frames, which mutate table data in Ship_info; post-processing
+// effects, which live only in graphics state; and the subspace ambient sound, since sound handles
+// are never restored.
+struct environment_state {
+	// False in a checkpoint written before this section existed, in which case none of it is
+	// applied -- otherwise an absent section would blank the sky rather than leave it alone.
+	bool present = false;
+
+	// Skybox.  The model and its texture by filename; stars_set_background_model() reloads both.
+	SCP_string skybox_model;
+	SCP_string skybox_texture;
+	uint skybox_flags_hi = 0;   // Nmodel_flags is 64-bit, and the file writes 32 at a time
+	uint skybox_flags_lo = 0;
+	float skybox_alpha = 1.0f;
+	matrix skybox_orient = vmd_identity_matrix;
+
+	int ambient_light = 0;
+
+	// Nebula.  fullneb and the range go back through stars_set_nebula(), which owns all the
+	// derived state; the pattern and fog colour go through neb2_post_level_init().
+	bool fullneb = false;
+	float neb_range = 0.0f;
+	SCP_string neb_pattern;
+	bool neb_fog_color_override = false;
+	int neb_fog_r = 0;
+	int neb_fog_g = 0;
+	int neb_fog_b = 0;
+
+	bool subspace = false;
+
+	// Background: which set is live, and then the live sun and bitmap instances, which are not the
+	// same thing as that set's definition once a SEXP has been at them.
+	int background_index = -1;
+	SCP_vector<starfield_entry_state> starfield;
+
+	bool motion_debris_override = false;
+	SCP_string motion_debris_type;
+
+	SCP_string soundtrack;      // by name; Soundtracks is built from music.tbl
+};
+
 // One docking link between two ships.
 //
 // Docking that the mission file sets up is reproduced by the mission load, because the arrival path
@@ -526,6 +593,7 @@ struct checkpoint_data {
 	SCP_vector<ai_state> ai;
 	SCP_vector<ship_animation_state> animations;
 	SCP_vector<wing_state> wings;
+	environment_state environment;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;
 

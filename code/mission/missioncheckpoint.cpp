@@ -10,8 +10,11 @@
 
 #include "ai/ai.h"
 #include "ai/aigoals.h"
+#include "bmpman/bmpman.h"
 #include "debris/debris.h"
 #include "gamesequence/gamesequence.h"
+#include "gamesnd/eventmusic.h"
+#include "graphics/light.h"
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
 #include "hud/hudtarget.h"
@@ -30,6 +33,7 @@
 #include "mod_table/mod_table.h"
 #include "object/object.h"
 #include "object/objectdock.h"
+#include "nebula/neb.h"
 #include "parse/parselo.h"
 #include "parse/sexp.h"
 #include "parse/sexp_container.h"
@@ -37,12 +41,17 @@
 #include "popup/popup.h"
 #include "ship/ship.h"
 #include "ship/shipfx.h"
+#include "starfield/starfield.h"
 #include "stats/scoring.h"
 #include "weapon/weapon.h"
 
 #include <algorithm>
 
 extern char Game_current_mission_filename[];
+
+// Defined in freespace.cpp and declared here rather than pulling in the whole freespace
+// header, which is what checkpointfile.cpp does for the mission filename above.
+extern int Game_subspace_effect;
 
 using namespace checkpoint;
 
@@ -1508,6 +1517,100 @@ void store_ai_states(SCP_vector<ai_state>& out)
 }
 
 // ------------------------------------------------------------------
+// Environment
+// ------------------------------------------------------------------
+
+// Motion_debris_ptr points into one of the Motion_debris_info entries rather than naming it, so
+// the name is recovered by finding the entry it points into.
+SCP_string motion_debris_name()
+{
+	if (Motion_debris_ptr == nullptr) {
+		return SCP_string();
+	}
+
+	for (const auto& info : Motion_debris_info) {
+		if (info.bitmaps == Motion_debris_ptr) {
+			return info.name;
+		}
+	}
+
+	return SCP_string();
+}
+
+void store_environment(environment_state& out)
+{
+	out.present = true;
+
+	if (Nmodel_num >= 0) {
+		auto pm = model_get(Nmodel_num);
+		if (pm != nullptr) {
+			out.skybox_model = pm->filename;
+		}
+	}
+	if (Nmodel_bitmap >= 0) {
+		const char* texture = bm_get_filename(Nmodel_bitmap);
+		if (texture != nullptr) {
+			out.skybox_texture = texture;
+		}
+	}
+	out.skybox_flags_hi = static_cast<uint>(Nmodel_flags >> 32);
+	out.skybox_flags_lo = static_cast<uint>(Nmodel_flags & 0xffffffffu);
+	out.skybox_alpha = Nmodel_alpha;
+	out.skybox_orient = Nmodel_orient;
+
+	out.ambient_light = The_mission.ambient_light_level;
+
+	out.fullneb = The_mission.flags[Mission::Mission_Flags::Fullneb];
+	out.neb_range = Neb2_awacs;
+	out.neb_pattern = Neb2_texture_name;
+	out.neb_fog_color_override = The_mission.flags[Mission::Mission_Flags::Neb2_fog_color_override];
+	out.neb_fog_r = Neb2_fog_color[0];
+	out.neb_fog_g = Neb2_fog_color[1];
+	out.neb_fog_b = Neb2_fog_color[2];
+
+	out.subspace = The_mission.flags[Mission::Mission_Flags::Subspace];
+
+	out.background_index = Cur_background;
+
+	// Suns first, then bitmaps, which is the order stars_load_background() adds them in and so the
+	// order the restore puts them back in.
+	for (int pass = 0; pass < 2; pass++) {
+		bool is_sun = (pass == 0);
+		int count = stars_get_num_entries(is_sun, false);
+
+		for (int i = 0; i < count; i++) {
+			const char* name = stars_get_name_from_instance(i, is_sun);
+			if (name == nullptr || *name == '\0') {
+				// An instance marked unused keeps its slot but loses its name; it is not in the
+				// sky any more, so it does not go in the file either.
+				continue;
+			}
+
+			starfield_list_entry sle;
+			stars_get_data(is_sun, i, sle);
+
+			starfield_entry_state entry;
+			entry.name = name;
+			entry.is_sun = is_sun;
+			entry.scale_x = sle.scale_x;
+			entry.scale_y = sle.scale_y;
+			entry.div_x = sle.div_x;
+			entry.div_y = sle.div_y;
+			entry.ang = sle.ang;
+
+			out.starfield.push_back(std::move(entry));
+		}
+	}
+
+	out.motion_debris_override = Motion_debris_override;
+	out.motion_debris_type = motion_debris_name();
+
+	if (Current_soundtrack_num >= 0 && Current_soundtrack_num < static_cast<int>(Soundtracks.size())) {
+		out.soundtrack = Soundtracks[Current_soundtrack_num].name;
+	}
+}
+
+// ------------------------------------------------------------------
 // Model animations
 // ------------------------------------------------------------------
 
@@ -1783,6 +1886,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	// --- model animations ---
 	store_animations(data.animations);
+
+	// --- environment ---
+	store_environment(data.environment);
 
 	// --- wings ---
 	for (int i = 0; i < Num_wings; i++) {
@@ -2575,6 +2681,93 @@ void apply_ai_states(const checkpoint_data& data)
 	// the goal code uses to tell two orders apart.  Push the counter past everything restored.
 	if (highest_goal_signature >= Ai_goal_signature) {
 		Ai_goal_signature = highest_goal_signature + 1;
+	}
+}
+
+// Put the sky, the nebula and the music back.
+//
+// Everything here goes through the engine's own setters rather than by bashing the globals, because
+// most of them own derived state: stars_set_background_model() reloads the model and rebuilds the
+// environment map, stars_set_nebula() moves the render mode and the HUD contrast with it, and
+// neb2_post_level_init() rebuilds the fog.
+void apply_environment(const checkpoint_data& data)
+{
+	const auto& env = data.environment;
+
+	// A checkpoint written before this section existed says nothing about the sky, and saying
+	// nothing must leave it alone rather than blank it.
+	if (!env.present) {
+		return;
+	}
+
+	// The nebula first, because turning it on rewrites the render mode and the background model
+	// that the skybox settings below then override.
+	stars_set_nebula(env.fullneb, env.neb_range);
+
+	if (env.fullneb) {
+		strcpy_s(Neb2_texture_name, env.neb_pattern.c_str());
+		The_mission.flags.set(Mission::Mission_Flags::Neb2_fog_color_override, env.neb_fog_color_override);
+		if (env.neb_fog_color_override) {
+			Neb2_fog_color[0] = static_cast<ubyte>(env.neb_fog_r);
+			Neb2_fog_color[1] = static_cast<ubyte>(env.neb_fog_g);
+			Neb2_fog_color[2] = static_cast<ubyte>(env.neb_fog_b);
+		}
+		neb2_post_level_init(env.neb_fog_color_override);
+	}
+
+	// Subspace: the flag and the visual, but not the ambient sound, which is a sound handle and so
+	// on the list of things this system does not carry.
+	Game_subspace_effect = env.subspace ? 1 : 0;
+	The_mission.flags.set(Mission::Mission_Flags::Subspace, env.subspace);
+	stars_set_dynamic_environment(env.subspace);
+
+	std::uint64_t skybox_flags =
+		(static_cast<std::uint64_t>(env.skybox_flags_hi) << 32) | static_cast<std::uint64_t>(env.skybox_flags_lo);
+
+	stars_set_background_model(env.skybox_model.empty() ? nullptr : env.skybox_model.c_str(),
+		env.skybox_texture.empty() ? nullptr : env.skybox_texture.c_str(),
+		skybox_flags,
+		env.skybox_alpha);
+	stars_set_background_orientation(&env.skybox_orient);
+
+	The_mission.ambient_light_level = env.ambient_light;
+	gr_set_ambient_light((env.ambient_light & 0x0000ff),
+		(env.ambient_light & 0x00ff00) >> 8,
+		(env.ambient_light & 0xff0000) >> 16);
+
+	// Clearing and rebuilding, rather than diffing: stars_load_background(-1) is the public way to
+	// empty the live sun and bitmap lists, and every entry that should be in the sky is in the
+	// file.
+	stars_load_background(-1);
+	Cur_background = env.background_index;
+
+	for (const auto& entry : env.starfield) {
+		starfield_list_entry sle;
+		strcpy_s(sle.filename, entry.name.c_str());
+		sle.scale_x = entry.scale_x;
+		sle.scale_y = entry.scale_y;
+		sle.div_x = entry.div_x;
+		sle.div_y = entry.div_y;
+		sle.ang = entry.ang;
+
+		int added = entry.is_sun ? stars_add_sun_entry(&sle) : stars_add_bitmap_entry(&sle);
+		if (added < 0) {
+			mprintf(("CHECKPOINT => The sky had %s '%s', which this build does not have; leaving "
+			         "it out.\n",
+			         entry.is_sun ? "a sun" : "a bitmap",
+			         entry.name.c_str()));
+		}
+	}
+
+	if (!env.motion_debris_type.empty()) {
+		stars_load_debris(The_mission.flags[Mission::Mission_Flags::Fullneb] ? 1 : 0, env.motion_debris_type);
+	}
+	Motion_debris_override = env.motion_debris_override;
+
+	// The soundtrack is looked up by name, so a mod that has reordered music.tbl still gets the
+	// track the checkpoint was playing rather than whatever now sits at that index.
+	if (!env.soundtrack.empty()) {
+		event_sexp_change_soundtrack(env.soundtrack.c_str());
 	}
 }
 
@@ -3383,6 +3576,9 @@ void mission_checkpoint_apply()
 
 	// After the world, because a restored event's state describes ships that now exist.
 	apply_mission_logic(data);
+
+	// The sky and the music, which depend on nothing above them.
+	apply_environment(data);
 
 	// HUD state last: the escort list is rebuilt from the ship flags, so every ship has to be in
 	// its final state first.
