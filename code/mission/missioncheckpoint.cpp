@@ -10,19 +10,20 @@
 
 #include "ai/ai.h"
 #include "ai/aigoals.h"
+#include "asteroid/asteroid.h"
+#include "autopilot/autopilot.h"
 #include "bmpman/bmpman.h"
 #include "debris/debris.h"
 #include "gamesequence/gamesequence.h"
 #include "gamesnd/eventmusic.h"
-#include "graphics/light.h"
 #include "globalincs/systemvars.h"
+#include "graphics/light.h"
+#include "hud/hud.h"
 #include "hud/hudescort.h"
 #include "hud/hudtarget.h"
-#include "model/animation/modelanimation.h"
-#include "model/model.h"
-#include "species_defs/species_defs.h"
-#include "io/timer.h"
 #include "iff_defs/iff_defs.h"
+#include "io/timer.h"
+#include "jumpnode/jumpnode.h"
 #include "mission/checkpointfields.h"
 #include "mission/checkpointfile.h"
 #include "mission/missioncampaign.h"
@@ -31,9 +32,12 @@
 #include "mission/missionmessage.h"
 #include "mission/missionparse.h"
 #include "mod_table/mod_table.h"
+#include "model/animation/modelanimation.h"
+#include "model/model.h"
+#include "nebula/neb.h"
 #include "object/object.h"
 #include "object/objectdock.h"
-#include "nebula/neb.h"
+#include "object/waypoint.h"
 #include "parse/parselo.h"
 #include "parse/sexp.h"
 #include "parse/sexp_container.h"
@@ -41,6 +45,7 @@
 #include "popup/popup.h"
 #include "ship/ship.h"
 #include "ship/shipfx.h"
+#include "species_defs/species_defs.h"
 #include "starfield/starfield.h"
 #include "stats/scoring.h"
 #include "weapon/weapon.h"
@@ -1608,6 +1613,103 @@ void store_environment(environment_state& out)
 	if (Current_soundtrack_num >= 0 && Current_soundtrack_num < static_cast<int>(Soundtracks.size())) {
 		out.soundtrack = Soundtracks[Current_soundtrack_num].name;
 	}
+
+	out.hud_draw = (HUD_draw != 0);
+	out.hud_disable_except_messages = (hud_disabled_except_messages() != 0);
+	out.hud_max_targeting_range = Hud_max_targeting_range;
+	out.hud_display_warpout = Sexp_hud_display_warpout;
+	out.hud_timer_padding = The_mission.HUD_timer_padding;
+
+	const auto& support = The_mission.support_ships;
+	out.support_ship_class = ship_class_name(support.ship_class);
+	out.support_arrival_anchor = anchor_name(support.arrival_anchor);
+	out.support_departure_anchor = anchor_name(support.departure_anchor);
+	out.support_arrival_location = static_cast<int>(support.arrival_location);
+	out.support_departure_location = static_cast<int>(support.departure_location);
+	out.support_max_ships = support.max_support_ships;
+	out.support_max_concurrent = support.max_concurrent_ships;
+	out.support_tally = support.tally;
+	out.support_available_for_species = support.support_available_for_species;
+	out.support_max_hull_repair = support.max_hull_repair_val;
+	out.support_max_subsys_repair = support.max_subsys_repair_val;
+	out.support_disallow_rearm = support.disallow_rearm;
+
+	// Only the entries that hold something: the pool is a sparse array of weapon classes, and the
+	// weapon goes by name because the index is a position in weapons.tbl.
+	for (int team = 0; team < MAX_TVT_TEAMS; team++) {
+		for (int i = 0; i < weapon_info_size(); i++) {
+			if (support.rearm_weapon_pool[team][i] == 0) {
+				continue;
+			}
+
+			rearm_pool_entry entry;
+			entry.team = team;
+			entry.weapon_class = weapon_class_name(i);
+			entry.count = support.rearm_weapon_pool[team][i];
+			out.rearm_pool.push_back(std::move(entry));
+		}
+	}
+
+	out.no_traitor = The_mission.flags[Mission::Mission_Flags::No_traitor];
+	if (The_mission.traitor_override != nullptr) {
+		out.traitor_override = The_mission.traitor_override->name;
+	}
+	out.debriefing_persona = persona_name(The_mission.debriefing_persona);
+
+	out.asteroids_enabled = (Asteroids_enabled != 0);
+
+	// Navpoints go out whole, unused slots included, since a nav is identified by its slot.
+	for (int i = 0; i < MAX_NAVPOINTS; i++) {
+		const NavPoint& nav = Navs[i];
+
+		navpoint_state state;
+		state.name = nav.m_NavName;
+		state.flags = nav.flags;
+
+		if (nav.flags & NP_WAYPOINT) {
+			auto wp_list = find_waypoint_list_at_index(nav.target_index);
+			if (wp_list != nullptr) {
+				state.target = wp_list->get_name();
+			}
+			state.waypoint_num = nav.waypoint_num;
+		} else if (nav.flags & NP_SHIP) {
+			state.target = ship_name_for_objnum(nav.target_index);
+		}
+
+		for (int c = 0; c < 3; c++) {
+			state.normal_color[c] = nav.normal_color[c];
+			state.visited_color[c] = nav.visited_color[c];
+		}
+
+		out.navpoints.push_back(std::move(state));
+	}
+	out.current_nav = CurrentNav;
+
+	for (size_t i = 0; i < Jump_nodes.size(); i++) {
+		const auto& node = Jump_nodes[i];
+
+		jump_node_state state;
+		state.index = static_cast<int>(i);
+		state.name = node.GetName();
+		state.hidden = node.IsHidden();
+		state.colored = node.IsColored();
+
+		if (node.HasDisplayName()) {
+			state.display_name = node.GetDisplayName();
+		}
+		if (node.IsSpecialModel()) {
+			state.model = node.GetModelFilename();
+		}
+		if (state.colored) {
+			const color& c = node.GetColor();
+			state.color[0] = c.red;
+			state.color[1] = c.green;
+			state.color[2] = c.blue;
+			state.color[3] = c.alpha;
+		}
+
+		out.jump_nodes.push_back(std::move(state));
+	}
 }
 
 // ------------------------------------------------------------------
@@ -2768,6 +2870,134 @@ void apply_environment(const checkpoint_data& data)
 	// track the checkpoint was playing rather than whatever now sits at that index.
 	if (!env.soundtrack.empty()) {
 		event_sexp_change_soundtrack(env.soundtrack.c_str());
+	}
+
+	hud_set_draw(env.hud_draw ? 1 : 0);
+	hud_disable_except_messages(env.hud_disable_except_messages ? 1 : 0);
+	Hud_max_targeting_range = env.hud_max_targeting_range;
+	// Anything above 1 is a stamp saying when the warpout gauge stops being forced on; 0 and 1 are
+	// plain off and on and translate_stamp() leaves them alone.
+	Sexp_hud_display_warpout = translate_stamp(env.hud_display_warpout);
+	The_mission.HUD_timer_padding = env.hud_timer_padding;
+
+	auto& support = The_mission.support_ships;
+	int support_class = lookup_ship_class(env.support_ship_class);
+	if (support_class >= 0) {
+		support.ship_class = support_class;
+	}
+	auto support_arrival = lookup_anchor(env.support_arrival_anchor);
+	if (support_arrival.isValid()) {
+		support.arrival_anchor = support_arrival;
+	}
+	auto support_departure = lookup_anchor(env.support_departure_anchor);
+	if (support_departure.isValid()) {
+		support.departure_anchor = support_departure;
+	}
+	support.arrival_location = static_cast<ArrivalLocation>(env.support_arrival_location);
+	support.departure_location = static_cast<DepartureLocation>(env.support_departure_location);
+	support.max_support_ships = env.support_max_ships;
+	support.max_concurrent_ships = env.support_max_concurrent;
+	support.tally = env.support_tally;
+	support.support_available_for_species = env.support_available_for_species;
+	support.max_hull_repair_val = env.support_max_hull_repair;
+	support.max_subsys_repair_val = env.support_max_subsys_repair;
+	support.disallow_rearm = env.support_disallow_rearm;
+
+	// The pool is rebuilt rather than merged, because the file lists everything that was left in
+	// it: a weapon that has been spent to nothing is absent, and must come back absent rather
+	// than keeping whatever the mission file stocked.
+	for (int team = 0; team < MAX_TVT_TEAMS; team++) {
+		for (int i = 0; i < weapon_info_size(); i++) {
+			support.rearm_weapon_pool[team][i] = 0;
+		}
+	}
+	for (const auto& entry : env.rearm_pool) {
+		int weapon_class = lookup_weapon_class(entry.weapon_class);
+		if (weapon_class >= 0 && entry.team >= 0 && entry.team < MAX_TVT_TEAMS) {
+			support.rearm_weapon_pool[entry.team][weapon_class] = entry.count;
+		}
+	}
+
+	The_mission.flags.set(Mission::Mission_Flags::No_traitor, env.no_traitor);
+	The_mission.traitor_override =
+		env.traitor_override.empty() ? nullptr : get_traitor_override_pointer(env.traitor_override);
+	int debrief_persona = lookup_persona(env.debriefing_persona);
+	if (debrief_persona >= 0) {
+		The_mission.debriefing_persona = debrief_persona;
+	}
+
+	// Only the toggle.  A field that a SEXP rebuilt mid-mission is not restored -- recreating it
+	// destroys and respawns every rock, which is a large visible event to run during a restore for
+	// an arrangement the player cannot tell apart from the mission file's own.
+	Asteroids_enabled = env.asteroids_enabled ? 1 : 0;
+
+	for (size_t i = 0; i < env.navpoints.size() && i < static_cast<size_t>(MAX_NAVPOINTS); i++) {
+		const auto& state = env.navpoints[i];
+		NavPoint& nav = Navs[i];
+
+		if (state.name.empty()) {
+			nav.clear();
+			continue;
+		}
+
+		strcpy_s(nav.m_NavName, state.name.c_str());
+		nav.flags = state.flags;
+		nav.waypoint_num = state.waypoint_num;
+		nav.target_index = -1;
+
+		if (state.flags & NP_WAYPOINT) {
+			nav.target_index = find_matching_waypoint_list_index(state.target.c_str());
+		} else if (state.flags & NP_SHIP) {
+			nav.target_index = resolve_ship_objnum(state.target);
+		}
+
+		// A nav whose target has gone is cleared rather than left pointing at nothing, since the
+		// autopilot code dereferences it.
+		if ((state.flags & NP_VALIDTYPE) && nav.target_index < 0) {
+			mprintf(("CHECKPOINT => Navpoint '%s' has lost what it pointed at; dropping it.\n",
+			         state.name.c_str()));
+			nav.clear();
+			continue;
+		}
+
+		for (int c = 0; c < 3; c++) {
+			nav.normal_color[c] = static_cast<ubyte>(state.normal_color[c]);
+			nav.visited_color[c] = static_cast<ubyte>(state.visited_color[c]);
+		}
+	}
+	// Only point at a nav that survived; the autopilot indexes Navs[CurrentNav] without checking.
+	CurrentNav = -1;
+	if (env.current_nav >= 0 && env.current_nav < MAX_NAVPOINTS && Navs[env.current_nav].m_NavName[0] != '\0') {
+		CurrentNav = env.current_nav;
+	}
+
+	// Autopilot is deliberately not resumed.  Half of what it needs is the flight path it had
+	// worked out, which is not stored, and a restore that drops the player into a half-engaged
+	// autopilot flying nowhere is worse than one that hands the controls back.
+	AutoPilotEngaged = false;
+
+	for (const auto& state : env.jump_nodes) {
+		if (state.index < 0 || state.index >= static_cast<int>(Jump_nodes.size())) {
+			continue;
+		}
+
+		auto& node = Jump_nodes[state.index];
+
+		node.SetName(state.name.c_str());
+		// Passing the node's own name is how the display name is cleared, and an empty string is
+		// not the same thing -- that would leave the node flagged as having a blank display name.
+		node.SetDisplayName(state.display_name.empty() ? state.name.c_str() : state.display_name.c_str());
+		node.SetVisibility(!state.hidden);
+
+		if (state.colored) {
+			node.SetAlphaColor(state.color[0], state.color[1], state.color[2], state.color[3]);
+		}
+
+		if (state.model.empty()) {
+			node.ResetToDefaultModel();
+		} else {
+			node.SetModel(state.model.c_str());
+		}
 	}
 }
 

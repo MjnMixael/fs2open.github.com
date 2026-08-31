@@ -478,6 +478,49 @@ struct starfield_entry_state {
 	angles ang = {0.0f, 0.0f, 0.0f};
 };
 
+// One weapon in the support ship rearm stockpile.  The pool is a [team][weapon class] array of
+// counts, spent as the mission runs; only the non-empty entries are written, and the weapon goes by
+// name because the index is a position in weapons.tbl.
+struct rearm_pool_entry {
+	int team = 0;
+	SCP_string weapon_class;
+	int count = 0;
+};
+
+// One autopilot navpoint.
+//
+// A whole family of operators adds, deletes, hides, restricts and marks these visited while the
+// mission runs, so the array is runtime state rather than mission-file state.  target_index is an
+// object index unless the nav is bound to a waypoint, so it goes out as a ship name, or as a
+// waypoint list name plus the node within it.
+struct navpoint_state {
+	SCP_string name;
+	int flags = 0;
+
+	SCP_string target;     // ship name, or waypoint list name when the nav is a waypoint nav
+	int waypoint_num = -1;
+
+	int normal_color[3] = {0, 0, 0};
+	int visited_color[3] = {0, 0, 0};
+};
+
+// One jump node, as the mission has left it.
+//
+// Identified by its position in Jump_nodes rather than by name, because set-jumpnode-name renames
+// the thing that would otherwise be the key.  That list is built solely by the mission parse, which
+// the fingerprint check makes identical across runs -- the same reasoning that lets alt_type_index
+// stay an index.
+struct jump_node_state {
+	int index = 0;
+
+	SCP_string name;
+	SCP_string display_name;
+	SCP_string model;      // filename; empty means the default model
+	bool hidden = false;
+	bool colored = false;
+	int color[4] = {0, 0, 0, 0};
+};
+
 // The world that is not made of ships.
 //
 // Almost none of this lives in The_mission -- it lives in module-level globals whose only reset is
@@ -526,6 +569,44 @@ struct environment_state {
 	SCP_string motion_debris_type;
 
 	SCP_string soundtrack;      // by name; Soundtracks is built from music.tbl
+
+	// HUD.  display_warpout is dual-purpose: 0 and 1 are off and on, anything larger is a
+	// timestamp saying when to stop, so it goes in the translated set.
+	bool hud_draw = true;
+	bool hud_disable_except_messages = false;
+	int hud_max_targeting_range = 0;
+	int hud_display_warpout = 0;
+	int hud_timer_padding = 0;
+
+	// Support ships.  Everything a SEXP or the mission itself can move: which class turns up,
+	// how many are left, and the rearm stockpile, which is genuinely spent as the mission runs
+	// and would otherwise refill on a restore.
+	SCP_string support_ship_class;
+	SCP_string support_arrival_anchor;
+	SCP_string support_departure_anchor;
+	int support_arrival_location = 0;
+	int support_departure_location = 0;
+	int support_max_ships = 0;
+	int support_max_concurrent = 0;
+	int support_tally = 0;
+	int support_available_for_species = 0;
+	float support_max_hull_repair = 0.0f;
+	float support_max_subsys_repair = 0.0f;
+	bool support_disallow_rearm = false;
+	SCP_vector<rearm_pool_entry> rearm_pool;
+
+	bool no_traitor = false;
+	SCP_string traitor_override;   // by name; nullptr means none
+	SCP_string debriefing_persona; // by name, the persona_index precedent
+
+	bool asteroids_enabled = true;
+
+	// Autopilot navpoints.  The array is fixed length, so it goes out whole -- an unused slot is
+	// an entry with an empty name.
+	SCP_vector<navpoint_state> navpoints;
+	int current_nav = -1;
+
+	SCP_vector<jump_node_state> jump_nodes;
 };
 
 // One docking link between two ships.

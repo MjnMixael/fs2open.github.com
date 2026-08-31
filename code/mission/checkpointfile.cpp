@@ -1189,6 +1189,75 @@ void write_environment(pilot::FileHandler* handler, const checkpoint::checkpoint
 	handler->writeString("motion_debris_type", env.motion_debris_type.c_str());
 	handler->writeString("soundtrack", env.soundtrack.c_str());
 
+	handler->writeBool("hud_draw", env.hud_draw);
+	handler->writeBool("hud_disable_except_messages", env.hud_disable_except_messages);
+	handler->writeInt("hud_max_targeting_range", env.hud_max_targeting_range);
+	handler->writeInt("hud_display_warpout", env.hud_display_warpout);
+	handler->writeInt("hud_timer_padding", env.hud_timer_padding);
+
+	handler->writeString("support_ship_class", env.support_ship_class.c_str());
+	handler->writeString("support_arrival_anchor", env.support_arrival_anchor.c_str());
+	handler->writeString("support_departure_anchor", env.support_departure_anchor.c_str());
+	handler->writeInt("support_arrival_location", env.support_arrival_location);
+	handler->writeInt("support_departure_location", env.support_departure_location);
+	handler->writeInt("support_max_ships", env.support_max_ships);
+	handler->writeInt("support_max_concurrent", env.support_max_concurrent);
+	handler->writeInt("support_tally", env.support_tally);
+	handler->writeInt("support_available_for_species", env.support_available_for_species);
+	handler->writeFloat("support_max_hull_repair", env.support_max_hull_repair);
+	handler->writeFloat("support_max_subsys_repair", env.support_max_subsys_repair);
+	handler->writeBool("support_disallow_rearm", env.support_disallow_rearm);
+
+	handler->writeBool("no_traitor", env.no_traitor);
+	handler->writeString("traitor_override", env.traitor_override.c_str());
+	handler->writeString("debriefing_persona", env.debriefing_persona.c_str());
+	handler->writeBool("asteroids_enabled", env.asteroids_enabled);
+	handler->writeInt("current_nav", env.current_nav);
+
+	handler->startArrayWrite("rearm_pool", env.rearm_pool.size());
+	for (const auto& entry : env.rearm_pool) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeInt("team", entry.team);
+		handler->writeString("weapon_class", entry.weapon_class.c_str());
+		handler->writeInt("count", entry.count);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("navpoints", env.navpoints.size());
+	for (const auto& nav : env.navpoints) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", nav.name.c_str());
+		handler->writeInt("flags", nav.flags);
+		handler->writeString("target", nav.target.c_str());
+		handler->writeInt("waypoint_num", nav.waypoint_num);
+		handler->writeInt("normal_r", nav.normal_color[0]);
+		handler->writeInt("normal_g", nav.normal_color[1]);
+		handler->writeInt("normal_b", nav.normal_color[2]);
+		handler->writeInt("visited_r", nav.visited_color[0]);
+		handler->writeInt("visited_g", nav.visited_color[1]);
+		handler->writeInt("visited_b", nav.visited_color[2]);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("jump_nodes", env.jump_nodes.size());
+	for (const auto& node : env.jump_nodes) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeInt("index", node.index);
+		handler->writeString("name", node.name.c_str());
+		handler->writeString("display_name", node.display_name.c_str());
+		handler->writeString("model", node.model.c_str());
+		handler->writeBool("hidden", node.hidden);
+		handler->writeBool("colored", node.colored);
+		handler->writeInt("color_r", node.color[0]);
+		handler->writeInt("color_g", node.color[1]);
+		handler->writeInt("color_b", node.color[2]);
+		handler->writeInt("color_a", node.color[3]);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
 	handler->startArrayWrite("starfield", env.starfield.size());
 	for (const auto& entry : env.starfield) {
 		handler->startSectionWrite(Section::Unnamed);
@@ -1245,6 +1314,88 @@ void read_environment(pilot::FileHandler* handler, checkpoint::checkpoint_data& 
 	env.motion_debris_override = handler->readBoolOr("motion_debris_override", false);
 	env.motion_debris_type = handler->readStringOr("motion_debris_type", "");
 	env.soundtrack = handler->readStringOr("soundtrack", "");
+
+	env.hud_draw = handler->readBoolOr("hud_draw", true);
+	env.hud_disable_except_messages = handler->readBoolOr("hud_disable_except_messages", false);
+	env.hud_max_targeting_range = handler->readIntOr("hud_max_targeting_range", 0);
+	env.hud_display_warpout = handler->readIntOr("hud_display_warpout", 0);
+	env.hud_timer_padding = handler->readIntOr("hud_timer_padding", 0);
+
+	env.support_ship_class = handler->readStringOr("support_ship_class", "");
+	env.support_arrival_anchor = handler->readStringOr("support_arrival_anchor", "");
+	env.support_departure_anchor = handler->readStringOr("support_departure_anchor", "");
+	env.support_arrival_location = handler->readIntOr("support_arrival_location", 0);
+	env.support_departure_location = handler->readIntOr("support_departure_location", 0);
+	env.support_max_ships = handler->readIntOr("support_max_ships", 0);
+	env.support_max_concurrent = handler->readIntOr("support_max_concurrent", 0);
+	env.support_tally = handler->readIntOr("support_tally", 0);
+	env.support_available_for_species = handler->readIntOr("support_available_for_species", 0);
+	env.support_max_hull_repair = handler->readFloatOr("support_max_hull_repair", 0.0f);
+	env.support_max_subsys_repair = handler->readFloatOr("support_max_subsys_repair", 0.0f);
+	env.support_disallow_rearm = handler->readBoolOr("support_disallow_rearm", false);
+
+	env.no_traitor = handler->readBoolOr("no_traitor", false);
+	env.traitor_override = handler->readStringOr("traitor_override", "");
+	env.debriefing_persona = handler->readStringOr("debriefing_persona", "");
+	env.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
+	env.current_nav = handler->readIntOr("current_nav", -1);
+
+	if (handler->hasField("rearm_pool")) {
+		auto count = handler->startArrayRead("rearm_pool");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::rearm_pool_entry entry;
+			entry.team = handler->readIntOr("team", 0);
+			entry.weapon_class = handler->readStringOr("weapon_class", "");
+			entry.count = handler->readIntOr("count", 0);
+
+			if (!entry.weapon_class.empty()) {
+				env.rearm_pool.push_back(std::move(entry));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	if (handler->hasField("navpoints")) {
+		auto count = handler->startArrayRead("navpoints");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::navpoint_state nav;
+			nav.name = handler->readStringOr("name", "");
+			nav.flags = handler->readIntOr("flags", 0);
+			nav.target = handler->readStringOr("target", "");
+			nav.waypoint_num = handler->readIntOr("waypoint_num", -1);
+			nav.normal_color[0] = handler->readIntOr("normal_r", 0);
+			nav.normal_color[1] = handler->readIntOr("normal_g", 0);
+			nav.normal_color[2] = handler->readIntOr("normal_b", 0);
+			nav.visited_color[0] = handler->readIntOr("visited_r", 0);
+			nav.visited_color[1] = handler->readIntOr("visited_g", 0);
+			nav.visited_color[2] = handler->readIntOr("visited_b", 0);
+
+			env.navpoints.push_back(std::move(nav));
+		}
+		handler->endArrayRead();
+	}
+
+	if (handler->hasField("jump_nodes")) {
+		auto count = handler->startArrayRead("jump_nodes");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::jump_node_state node;
+			node.index = handler->readIntOr("index", -1);
+			node.name = handler->readStringOr("name", "");
+			node.display_name = handler->readStringOr("display_name", "");
+			node.model = handler->readStringOr("model", "");
+			node.hidden = handler->readBoolOr("hidden", false);
+			node.colored = handler->readBoolOr("colored", false);
+			node.color[0] = handler->readIntOr("color_r", 0);
+			node.color[1] = handler->readIntOr("color_g", 0);
+			node.color[2] = handler->readIntOr("color_b", 0);
+			node.color[3] = handler->readIntOr("color_a", 0);
+
+			if (node.index >= 0 && !node.name.empty()) {
+				env.jump_nodes.push_back(std::move(node));
+			}
+		}
+		handler->endArrayRead();
+	}
 
 	if (handler->hasField("starfield")) {
 		auto count = handler->startArrayRead("starfield");
