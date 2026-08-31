@@ -3038,10 +3038,6 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.shield_quadrants.assign(objp->shield_quadrant.begin(), objp->shield_quadrant.end());
 
 		collect_flags(shipp->flags, Ship_flag_table, state.flags);
-
-		if (shipp->flags[Ship::Ship_Flags::Escort]) {
-			mprintf(("CHECKPOINT => Storing '%s' as an escort.\n", shipp->ship_name));
-		}
 		collect_flags(objp->flags, Object_flag_table, state.object_flags);
 		store_ship_scalars(*shipp, state.floats, state.ints);
 		store_physics(objp->phys_info, state.physics_floats, state.physics_vecs);
