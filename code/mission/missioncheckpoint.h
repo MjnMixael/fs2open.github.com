@@ -609,6 +609,44 @@ struct environment_state {
 	SCP_vector<jump_node_state> jump_nodes;
 };
 
+// One reinforcement's remaining allowance.
+//
+// num_uses counts up as the player calls them in and the availability bit is set when the mission
+// makes one callable, so both move as the mission runs.  Everything else about a reinforcement --
+// how many uses it started with, its type, its acknowledgement messages -- comes from the mission
+// file and is reproduced by the load.  Without this a player who has spent two of their three
+// support calls gets them back.
+struct reinforcement_state {
+	SCP_string name;
+	int num_uses = 0;
+	bool available = false;
+};
+
+// Mission state that belongs to no ship: the built-in message budget, the personas already spoken
+// for, the mission mood, the training context and the reinforcement allowances.
+//
+// Deliberately absent, and each worth naming: the mission message queue and the training message
+// queue, both of which live in file statics in their own modules and hold at most a few seconds of
+// text that has not been said yet; Squadmsg_history, which is a log of orders given rather than
+// state that affects play, and whose four ship references each have their own encoding;
+// Players_target and the lock tracking beside it, which the training update recomputes every frame.
+struct mission_state {
+	// As with the environment, an absent section has to mean "says nothing" rather than "all
+	// zeroes" -- zero built-in messages used is a real value.
+	bool present = false;
+
+	SCP_map<SCP_string, int> player_ints;
+	SCP_map<SCP_string, int> training_ints;
+	int training_context_speed_timestamp = 0;
+
+	SCP_vector<SCP_string> used_personas;   // by name; Personas comes from messages.tbl
+	int mission_mood = 0;
+	bool no_builtin_msgs = false;
+	bool no_builtin_command = false;
+
+	SCP_vector<reinforcement_state> reinforcements;
+};
+
 // One docking link between two ships.
 //
 // Docking that the mission file sets up is reproduced by the mission load, because the arrival path
@@ -675,6 +713,7 @@ struct checkpoint_data {
 	SCP_vector<ship_animation_state> animations;
 	SCP_vector<wing_state> wings;
 	environment_state environment;
+	mission_state mission;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;
 

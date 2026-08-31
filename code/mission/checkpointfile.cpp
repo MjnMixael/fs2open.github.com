@@ -1157,6 +1157,68 @@ void read_ai(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 }
 
+void write_mission_state(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	const auto& state = data.mission;
+
+	handler->startSectionWrite(Section::CheckpointMissionState);
+
+	handler->writeInt("mission_mood", state.mission_mood);
+	handler->writeBool("no_builtin_msgs", state.no_builtin_msgs);
+	handler->writeBool("no_builtin_command", state.no_builtin_command);
+	handler->writeInt("training_context_speed_timestamp", state.training_context_speed_timestamp);
+
+	write_int_map(handler, "player", state.player_ints);
+	write_int_map(handler, "training", state.training_ints);
+	write_string_list(handler, "used_personas", state.used_personas);
+
+	handler->startArrayWrite("reinforcements", state.reinforcements.size());
+	for (const auto& reinforcement : state.reinforcements) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", reinforcement.name.c_str());
+		handler->writeInt("num_uses", reinforcement.num_uses);
+		handler->writeBool("available", reinforcement.available);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_mission_state(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	auto& state = data.mission;
+	state = checkpoint::mission_state();
+
+	// Same rule as the environment: reaching the section is what says the file describes this,
+	// since zero built-in messages used is a real value rather than an absent one.
+	state.present = true;
+
+	state.mission_mood = handler->readIntOr("mission_mood", 0);
+	state.no_builtin_msgs = handler->readBoolOr("no_builtin_msgs", false);
+	state.no_builtin_command = handler->readBoolOr("no_builtin_command", false);
+	state.training_context_speed_timestamp = handler->readIntOr("training_context_speed_timestamp", 0);
+
+	read_int_map(handler, "player", state.player_ints);
+	read_int_map(handler, "training", state.training_ints);
+	read_string_list(handler, "used_personas", state.used_personas);
+
+	if (handler->hasField("reinforcements")) {
+		auto count = handler->startArrayRead("reinforcements");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::reinforcement_state reinforcement;
+			reinforcement.name = handler->readStringOr("name", "");
+			reinforcement.num_uses = handler->readIntOr("num_uses", 0);
+			reinforcement.available = handler->readBoolOr("available", false);
+
+			if (!reinforcement.name.empty()) {
+				state.reinforcements.push_back(std::move(reinforcement));
+			}
+		}
+		handler->endArrayRead();
+	}
+}
+
 void write_environment(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	const auto& env = data.environment;
@@ -1869,6 +1931,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_ai(handler.get(), data);
 	write_animations(handler.get(), data);
 	write_environment(handler.get(), data);
+	write_mission_state(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -1988,6 +2051,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointEnvironment:
 			read_environment(handler.get(), data);
+			break;
+
+		case Section::CheckpointMissionState:
+			read_mission_state(handler.get(), data);
 			break;
 
 		default:

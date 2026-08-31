@@ -31,6 +31,7 @@
 #include "mission/missionlog.h"
 #include "mission/missionmessage.h"
 #include "mission/missionparse.h"
+#include "mission/missiontraining.h"
 #include "mod_table/mod_table.h"
 #include "model/animation/modelanimation.h"
 #include "model/model.h"
@@ -1522,6 +1523,74 @@ void store_ai_states(SCP_vector<ai_state>& out)
 }
 
 // ------------------------------------------------------------------
+// Mission state
+// ------------------------------------------------------------------
+
+// The registries below name globals rather than members of a struct, so they need their own pair
+// of expansions; the lists themselves work exactly like the others.
+#define CKPT_STORE_GLOBAL_INT(field) out[#field] = static_cast<int>(field);
+#define CKPT_LOAD_GLOBAL_INT(field)                                                            \
+	{                                                                                          \
+		auto it = in.find(#field);                                                             \
+		if (it != in.end())                                                                    \
+			field = static_cast<decltype(field)>(it->second);                                  \
+	}
+
+void store_player_scalars(const player& obj, SCP_map<SCP_string, int>& out)
+{
+	CKPT_PLAYER_INTS(CKPT_STORE_INT)
+	CKPT_PLAYER_STAMPS(CKPT_STORE_INT)
+}
+
+void load_player_scalars(player& obj, const SCP_map<SCP_string, int>& in)
+{
+	CKPT_PLAYER_INTS(CKPT_LOAD_INT)
+	CKPT_PLAYER_STAMPS(CKPT_LOAD_STAMP)
+}
+
+void store_training_scalars(SCP_map<SCP_string, int>& out)
+{
+	CKPT_TRAINING_INTS(CKPT_STORE_GLOBAL_INT)
+}
+
+void load_training_scalars(const SCP_map<SCP_string, int>& in)
+{
+	CKPT_TRAINING_INTS(CKPT_LOAD_GLOBAL_INT)
+}
+
+void store_mission_state(mission_state& out)
+{
+	out.present = true;
+
+	if (Player != nullptr) {
+		store_player_scalars(*Player, out.player_ints);
+	}
+
+	store_training_scalars(out.training_ints);
+	out.training_context_speed_timestamp = Training_context_speed_timestamp.value();
+
+	// Personas are marked used as the mission hands them out, and cleared on load, so without this
+	// a restored mission can give the same voice to a second ship.
+	for (size_t i = 0; i < Personas.size(); i++) {
+		if (Personas[i].flags & PERSONA_FLAG_USED) {
+			out.used_personas.emplace_back(Personas[i].name);
+		}
+	}
+
+	out.mission_mood = Current_mission_mood;
+	out.no_builtin_msgs = The_mission.flags[Mission::Mission_Flags::No_builtin_msgs];
+	out.no_builtin_command = The_mission.flags[Mission::Mission_Flags::No_builtin_command];
+
+	for (const auto& reinforcement : Reinforcements) {
+		reinforcement_state state;
+		state.name = reinforcement.name;
+		state.num_uses = reinforcement.num_uses;
+		state.available = (reinforcement.flags & RF_IS_AVAILABLE) != 0;
+		out.reinforcements.push_back(std::move(state));
+	}
+}
+
+// ------------------------------------------------------------------
 // Environment
 // ------------------------------------------------------------------
 
@@ -1991,6 +2060,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	// --- environment ---
 	store_environment(data.environment);
+
+	// --- mission bookkeeping ---
+	store_mission_state(data.mission);
 
 	// --- wings ---
 	for (int i = 0; i < Num_wings; i++) {
@@ -2783,6 +2855,60 @@ void apply_ai_states(const checkpoint_data& data)
 	// the goal code uses to tell two orders apart.  Push the counter past everything restored.
 	if (highest_goal_signature >= Ai_goal_signature) {
 		Ai_goal_signature = highest_goal_signature + 1;
+	}
+}
+
+// Put back the mission's own bookkeeping: the built-in message budget, the personas already spoken
+// for, the mood, the training context and the reinforcement allowances.
+void apply_mission_state(const checkpoint_data& data)
+{
+	const auto& state = data.mission;
+
+	if (!state.present) {
+		return;
+	}
+
+	if (Player != nullptr) {
+		load_player_scalars(*Player, state.player_ints);
+	}
+
+	load_training_scalars(state.training_ints);
+	Training_context_speed_timestamp = TIMESTAMP(translate_stamp(state.training_context_speed_timestamp));
+
+	// Rebuilt rather than merged: the file lists every persona that had been spoken for, so one
+	// that is absent has to come back unused.
+	for (auto& persona : Personas) {
+		persona.flags &= ~PERSONA_FLAG_USED;
+	}
+	for (const auto& name : state.used_personas) {
+		int index = lookup_persona(name);
+		if (index >= 0) {
+			Personas[index].flags |= PERSONA_FLAG_USED;
+		}
+	}
+
+	Current_mission_mood = state.mission_mood;
+	The_mission.flags.set(Mission::Mission_Flags::No_builtin_msgs, state.no_builtin_msgs);
+	The_mission.flags.set(Mission::Mission_Flags::No_builtin_command, state.no_builtin_command);
+
+	// Matched by name, because Reinforcements is built by the mission parse in the order the file
+	// lists them and a reinforcement that has been renamed is a different one.
+	for (const auto& saved : state.reinforcements) {
+		auto it = std::find_if(Reinforcements.begin(),
+			Reinforcements.end(),
+			[&saved](const reinforcements& live) { return lcase_equal(live.name, saved.name); });
+
+		if (it == Reinforcements.end()) {
+			mprintf(("CHECKPOINT => Reinforcement '%s' is no longer in this mission.\n", saved.name.c_str()));
+			continue;
+		}
+
+		it->num_uses = saved.num_uses;
+		if (saved.available) {
+			it->flags |= RF_IS_AVAILABLE;
+		} else {
+			it->flags &= ~RF_IS_AVAILABLE;
+		}
 	}
 }
 
@@ -3809,6 +3935,9 @@ void mission_checkpoint_apply()
 
 	// The sky and the music, which depend on nothing above them.
 	apply_environment(data);
+
+	// The mission's own bookkeeping, which depends on nothing else.
+	apply_mission_state(data);
 
 	// HUD state last: the escort list is rebuilt from the ship flags, so every ship has to be in
 	// its final state first.

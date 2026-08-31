@@ -329,6 +329,63 @@
 	F(artillery_lock_pos)
 
 // ------------------------------------------------------------------
+// player, mission-scoped fields only -- see code/playerman/player.h
+// ------------------------------------------------------------------
+//
+// The player struct is mostly per-frame HUD bookkeeping and per-pilot career data, neither of which
+// belongs here.  What does belong is the built-in message budget: how many times the player has
+// been warned, praised, screamed at or asked for help this mission.  Those counters are what
+// Builtin_messages[].max_count is compared against, so losing them hands the player a fresh
+// allowance of every built-in message and a mission that had gone quiet starts chattering again.
+
+#define CKPT_PLAYER_INTS(F)                                                                    \
+	F(warn_count)                                                                              \
+	F(praise_count)                                                                            \
+	F(ask_help_count)                                                                          \
+	F(scream_count)                                                                            \
+	F(low_ammo_complaint_count)                                                                \
+	F(praise_self_count)                                                                       \
+	F(distance_warning_count)
+
+// The matching "not before" stamps.  Without these a restore lets every throttled message fire at
+// once, which is the same failure the mission events had before their timestamps were translated.
+#define CKPT_PLAYER_STAMPS(F)                                                                   \
+	F(check_warn_timestamp)                                                                    \
+	F(allow_warn_timestamp)                                                                    \
+	F(allow_praise_timestamp)                                                                  \
+	F(praise_delay_timestamp)                                                                  \
+	F(allow_ask_help_timestamp)                                                                \
+	F(allow_scream_timestamp)                                                                  \
+	F(allow_ammo_timestamp)                                                                    \
+	F(praise_self_timestamp)                                                                   \
+	F(request_repair_timestamp)                                                                \
+	F(check_for_all_alone_msg)
+
+// ------------------------------------------------------------------
+// Training state -- see code/mission/missiontraining.h
+// ------------------------------------------------------------------
+//
+// The context is what a training mission checks its directives against: which waypoint path the
+// player is meant to be flying, which node of it they have reached, and what speed they are
+// supposed to hold.  The directives themselves are mission events and come back with the events
+// section, so this is only the frame around them.
+//
+// Training_message_method and Training_failure are here because both are set by the mission as it
+// runs.  The message queue and the message currently on screen are not: both live in file statics
+// in missiontraining.cpp, and they hold at most a few seconds of pending text.
+
+#define CKPT_TRAINING_INTS(F)                                                                  \
+	F(Training_message_method)                                                                 \
+	F(Training_failure)                                                                        \
+	F(Training_context)                                                                        \
+	F(Training_context_speed_set)                                                              \
+	F(Training_context_speed_min)                                                              \
+	F(Training_context_speed_max)                                                              \
+	F(Training_context_waypoint_path)                                                          \
+	F(Training_context_goal_waypoint)                                                          \
+	F(Training_context_at_waypoint)
+
+// ------------------------------------------------------------------
 // control_info, as used for ai_info::ai_override_ci -- see code/physics/physics.h
 // ------------------------------------------------------------------
 
