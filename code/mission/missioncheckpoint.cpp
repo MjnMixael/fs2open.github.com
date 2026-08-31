@@ -188,6 +188,30 @@ const weapon_flag_entry Weapon_flag_table[] = {
 	{Ship::Weapon_Flags::Tagged_Only, "tagged_only"},
 };
 
+struct wing_flag_entry {
+	Ship::Wing_Flags flag;
+	const char* name;
+};
+
+// The arrival and departure bits are here because set-arrival-info, set-departure-info and the
+// warp-effect operators reach them; the rest are moved by the engine as the wing arrives, departs
+// or is called in as a reinforcement.  Everything else in Wing_Flags is parse-time and the mission
+// load has already put it back.
+const wing_flag_entry Wing_flag_table[] = {
+	{Ship::Wing_Flags::Gone, "gone"},
+	{Ship::Wing_Flags::Departing, "departing"},
+	{Ship::Wing_Flags::Departure_ordered, "departure_ordered"},
+	{Ship::Wing_Flags::Reinforcement, "reinforcement"},
+	{Ship::Wing_Flags::Reset_reinforcement, "reset_reinforcement"},
+	{Ship::Wing_Flags::Expanded, "expanded"},
+	{Ship::Wing_Flags::Nav_carry, "nav_carry"},
+	{Ship::Wing_Flags::No_arrival_warp, "no_arrival_warp"},
+	{Ship::Wing_Flags::No_departure_warp, "no_departure_warp"},
+	{Ship::Wing_Flags::Same_arrival_warp_when_docked, "same_arrival_warp_when_docked"},
+	{Ship::Wing_Flags::Same_departure_warp_when_docked, "same_departure_warp_when_docked"},
+	{Ship::Wing_Flags::Has_display_name, "has_display_name"},
+};
+
 // mission_event::flags is a plain int of MEF_ bits rather than a flagset, so it gets its own pair
 // of helpers below.  Only the bits that change while the mission runs are listed: the rest
 // (MEF_USING_TRIGGER_COUNT, MEF_USE_MSECS) come from the mission file and the mission load has
@@ -1098,6 +1122,16 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.name = wingp->name;
 		state.time_gone = wingp->time_gone;
 		state.wave_delay_timestamp = wingp->wave_delay_timestamp.value();
+		state.display_name = wingp->display_name;
+		collect_flags(wingp->flags, Wing_flag_table, state.flags);
+
+		state.arrival_anchor = anchor_name(wingp->arrival_anchor);
+		state.departure_anchor = anchor_name(wingp->departure_anchor);
+		state.arrival_location = static_cast<int>(wingp->arrival_location);
+		state.departure_location = static_cast<int>(wingp->departure_location);
+		state.arrival_path_mask = wingp->arrival_path_mask;
+		state.departure_path_mask = wingp->departure_path_mask;
+
 		store_wing_scalars(*wingp, state.ints);
 
 		for (int j = 0; j < wingp->current_count && j < MAX_SHIPS_PER_WING; j++) {
@@ -1760,10 +1794,6 @@ bool is_player_wing_ship(const SCP_string& name)
 	return Ships[entry->shipnum].flags[Ship::Ship_Flags::From_player_wing];
 }
 
-// KNOWN GAP: wing_state carries no flags, so Wing_Flags::Gone and Departing are not restored --
-// they are left at whatever replaying the waves produced.  Directives that key off a wing being
-// wiped out can therefore read wrong.  Belongs with the rest of the mission logic state in
-// milestone 2, alongside the goals and events those directives are made of.
 void apply_wings(const checkpoint_data& data)
 {
 	for (const auto& state : data.wings) {
@@ -1778,6 +1808,29 @@ void apply_wings(const checkpoint_data& data)
 		load_wing_scalars(*wingp, state.ints);
 		wingp->time_gone = state.time_gone;
 		wingp->wave_delay_timestamp = TIMESTAMP(translate_stamp(state.wave_delay_timestamp));
+		apply_flags(state.flags, Wing_flag_table, wingp->flags);
+
+		// Only bash the display name when the flag came back with it; a wing that never had one
+		// keeps whatever the mission file gave it.
+		if (wingp->flags[Ship::Wing_Flags::Has_display_name]) {
+			wingp->display_name = state.display_name;
+		}
+
+		// Same rule as the parse objects: an anchor that no longer resolves is left as the mission
+		// file had it rather than being blanked, which would break the arrival outright.
+		auto arrival_anchor = lookup_anchor(state.arrival_anchor);
+		if (arrival_anchor.isValid()) {
+			wingp->arrival_anchor = arrival_anchor;
+		}
+		auto departure_anchor = lookup_anchor(state.departure_anchor);
+		if (departure_anchor.isValid()) {
+			wingp->departure_anchor = departure_anchor;
+		}
+
+		wingp->arrival_location = static_cast<ArrivalLocation>(state.arrival_location);
+		wingp->departure_location = static_cast<DepartureLocation>(state.departure_location);
+		wingp->arrival_path_mask = state.arrival_path_mask;
+		wingp->departure_path_mask = state.departure_path_mask;
 
 		// Rebuild ship_index from names.  current_count is corrected to whatever we could
 		// actually resolve, so a ship the mod no longer has cannot leave a dangling index.

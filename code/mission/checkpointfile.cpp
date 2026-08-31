@@ -690,8 +690,16 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->writeString("name", wing_data.name.c_str());
 		handler->writeInt("time_gone", static_cast<std::int32_t>(wing_data.time_gone));
 		handler->writeInt("wave_delay_timestamp", wing_data.wave_delay_timestamp);
+		handler->writeString("display_name", wing_data.display_name.c_str());
+		handler->writeString("arrival_anchor", wing_data.arrival_anchor.c_str());
+		handler->writeString("departure_anchor", wing_data.departure_anchor.c_str());
+		handler->writeInt("arrival_location", wing_data.arrival_location);
+		handler->writeInt("departure_location", wing_data.departure_location);
+		handler->writeInt("arrival_path_mask", wing_data.arrival_path_mask);
+		handler->writeInt("departure_path_mask", wing_data.departure_path_mask);
 		write_int_map(handler, "ints", wing_data.ints);
 		write_string_list(handler, "ships", wing_data.ship_names);
+		write_string_list(handler, "flags", wing_data.flags);
 
 		handler->endSectionWrite();
 	}
@@ -725,8 +733,16 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			wing_data.name = handler->readStringOr("name", "");
 			wing_data.time_gone = static_cast<fix>(handler->readIntOr("time_gone", 0));
 			wing_data.wave_delay_timestamp = handler->readIntOr("wave_delay_timestamp", 0);
+			wing_data.display_name = handler->readStringOr("display_name", "");
+			wing_data.arrival_anchor = handler->readStringOr("arrival_anchor", "");
+			wing_data.departure_anchor = handler->readStringOr("departure_anchor", "");
+			wing_data.arrival_location = handler->readIntOr("arrival_location", 0);
+			wing_data.departure_location = handler->readIntOr("departure_location", 0);
+			wing_data.arrival_path_mask = handler->readIntOr("arrival_path_mask", 0);
+			wing_data.departure_path_mask = handler->readIntOr("departure_path_mask", 0);
 			read_int_map(handler, "ints", wing_data.ints);
 			read_string_list(handler, "ships", wing_data.ship_names);
+			read_string_list(handler, "flags", wing_data.flags);
 
 			data.wings.push_back(std::move(wing_data));
 		}

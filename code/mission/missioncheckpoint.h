@@ -183,6 +183,26 @@ struct wing_state {
 	SCP_vector<SCP_string> ship_names;   // wing::ship_index, resolved to names
 	fix time_gone = 0;
 	int wave_delay_timestamp = 0;
+
+	// Named flags from wing::flags; see Wing_flag_table in missioncheckpoint.cpp.  Gone and
+	// Departing are the ones that matter most: directives keyed on a wing being wiped out read
+	// them, and replaying the waves does not reproduce either.
+	SCP_vector<SCP_string> flags;
+
+	// Carried alongside the Has_display_name flag, since restoring one without the other would
+	// leave the wing claiming a display name it does not have.
+	SCP_string display_name;
+
+	// set-arrival-info and set-departure-info rewrite all of this on a wing exactly as they do on
+	// a ship that has not arrived, so it needs the same treatment parse_object_state gets: anchors
+	// by name, everything else verbatim.  arrival_distance and the two delays are already in the
+	// CKPT_WING_INTS and CKPT_WING_STAMPS lists.
+	SCP_string arrival_anchor;
+	SCP_string departure_anchor;
+	int arrival_location = 0;
+	int departure_location = 0;
+	int arrival_path_mask = 0;
+	int departure_path_mask = 0;
 };
 
 struct variable_state {
