@@ -29,8 +29,6 @@
 #include "mission/missionparse.h"
 #include "missioneditor/common.h"
 #include "model/model.h"
-#include "starfield/starfield.h"
-#include "jumpnode/jumpnode.h"
 #include "ShipFlagsDlg.h"
 #include "mission/missionmessage.h"
 #include "ShipSpecialDamage.h"
@@ -1065,7 +1063,7 @@ void CShipEditorDlg::initialize_data(int full_update)
 // Once the error no longer occurs, bypass mode is cleared and data is updated.
 int CShipEditorDlg::update_data(int redraw)
 {
-	char *str, old_name[255];
+	char old_name[255];
 	object *ptr;
 	int i, z, wing;
 	CSingleLock sync(&CS_cur_object_index), sync2(&CS_update);
@@ -1092,123 +1090,18 @@ int CShipEditorDlg::update_data(int redraw)
 		update_ship(player_ship);
 
 	} else if (single_ship >= 0) {  // editing a single ship
-		m_ship_name.TrimLeft(); 
+		m_ship_name.TrimLeft();
 		m_ship_name.TrimRight();
-		if (m_ship_name.IsEmpty()) {
+
+		SCP_string conflict = check_name_conflict("ship", m_ship_name, single_ship);
+		if (!conflict.empty()) {
 			if (bypass_errors)
 				return 1;
 
 			bypass_errors = 1;
-			z = MessageBox("A ship name cannot be empty\n"
-				"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
-
-			if (z == IDCANCEL)
-				return -1;
-
-			m_ship_name = _T(Ships[single_ship].ship_name);
-			UpdateData(FALSE);
-		}
-
-		ptr = GET_FIRST(&obj_used_list);
-		while (ptr != END_OF_LIST(&obj_used_list)) {
-			if (((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) && (single_ship != ptr->instance)) {
-				str = Ships[ptr->instance].ship_name;
-				if (!stricmp(m_ship_name, str)) {
-					if (bypass_errors)
-						return 1;
-
-					bypass_errors = 1;
-					z = MessageBox("This ship name is already being used by another ship\n"
-						"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
-
-					if (z == IDCANCEL)
-						return -1;
-
-					m_ship_name = _T(Ships[single_ship].ship_name);
-					UpdateData(FALSE);
-				}
-			}
-
-			ptr = GET_NEXT(ptr);
-		}
-
-		for (i=0; i<MAX_WINGS; i++) {
-			if (Wings[i].wave_count && !stricmp(Wings[i].name, m_ship_name)) {
-				if (bypass_errors)
-					return 1;
-
-				bypass_errors = 1;
-				z = MessageBox("This ship name is already being used by a wing\n"
-					"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
-
-				if (z == IDCANCEL)
-					return -1;
-
-				m_ship_name = _T(Ships[single_ship].ship_name);
-				UpdateData(FALSE);
-			}
-		}
-
-		// We don't need to check teams.  "Unknown" is a valid name and also an IFF.
-
-		for ( i=0; i < (int)Ai_tp_list.size(); i++) {
-			if (!stricmp(m_ship_name, Ai_tp_list[i].name)) 
-			{
-				if (bypass_errors)
-					return 1;
-
-				bypass_errors = 1;
-				z = MessageBox("This ship name is already being used by a target priority group.\n"
-					"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
-
-				if (z == IDCANCEL)
-					return -1;
-
-				m_ship_name = _T(Ships[single_ship].ship_name);
-				UpdateData(FALSE);
-			}
-		}
-
-		if (find_matching_waypoint_list((LPCSTR) m_ship_name) != NULL)
-		{
-			if (bypass_errors)
-				return 0;
-
-			bypass_errors = 1;
-			z = MessageBox("This ship name is already being used by a waypoint path\n"
-				"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
-
-			if (z == IDCANCEL)
-				return -1;
-
-			m_ship_name = _T(Ships[single_ship].ship_name);
-			UpdateData(FALSE);
-		}
-
-		if(jumpnode_get_by_name(m_ship_name) != NULL)
-		{
-			if (bypass_errors)
-				return 1;
-
-			bypass_errors = 1;
-
-			z = MessageBox("This ship name is already being used by a jump node\n"
-			"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
-
-			if (z == IDCANCEL)
-			return -1;
-
-			m_ship_name = _T(Ships[single_ship].ship_name);
-			UpdateData(FALSE);
-		}
-		
-		if (!stricmp(m_ship_name.Left(1), "<")) {
-			if (bypass_errors)
-				return 1;
-
-			bypass_errors = 1;
-			z = MessageBox("Ship names not allowed to begin with <\n"
-				"Press OK to restore old name", "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
+			CString msg;
+			msg.Format("%s\nPress OK to restore old name", conflict.c_str());
+			z = MessageBox(msg, "Error", MB_ICONEXCLAMATION | MB_OKCANCEL);
 
 			if (z == IDCANCEL)
 				return -1;
@@ -1243,17 +1136,11 @@ int CShipEditorDlg::update_data(int redraw)
 		if (z)
 			return z;
 
-		strcpy_s(old_name, Ships[single_ship].ship_name);
-		string_copy(Ships[single_ship].ship_name, m_ship_name, NAME_LENGTH - 1, 1);
-		str = Ships[single_ship].ship_name;
-		if (strcmp(old_name, str)) {
-			update_sexp_references(old_name, str);
-			ai_update_goal_references(sexp_ref_type::SHIP, old_name, str);
-			update_texture_replacements(old_name, str);
-			i = find_item_with_string(Reinforcements, &reinforcements::name, old_name);
-			if (i >= 0)
-				strcpy_s(Reinforcements[i].name, str);
-
+		char new_name[NAME_LENGTH];
+		string_copy(new_name, m_ship_name, NAME_LENGTH - 1, 1);
+		if (strcmp(Ships[single_ship].ship_name, new_name) != 0) {
+			// the display name was already handled in update_ship
+			rename_ship(single_ship, new_name, false);
 			Update_window = 1;
 		}
 	}

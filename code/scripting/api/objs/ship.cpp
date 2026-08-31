@@ -343,7 +343,7 @@ ADE_VIRTVAR(ArmorClass, l_Ship, "string", "Current Armor class", "string", "Armo
 	return ade_set_args(L, "s", name);
 }
 
-ADE_VIRTVAR(Name, l_Ship, "string", "Ship name. This is the actual name of the ship. Use <i>getDisplayString</i> to get the string which should be displayed to the player.", "string", "Ship name, or empty string if handle is invalid")
+ADE_VIRTVAR(Name, l_Ship, "string", "Ship name. This is the actual name of the ship. Use <i>getDisplayString</i> to get the string which should be displayed to the player.  Beware of setting the name to the name of an existing ship!", "string", "Ship name, or empty string if handle is invalid")
 {
 	object_h *objh;
 	const char* s = nullptr;
@@ -355,10 +355,18 @@ ADE_VIRTVAR(Name, l_Ship, "string", "Ship name. This is the actual name of the s
 
 	ship *shipp = &Ships[objh->objp()->instance];
 
-	if(ADE_SETTING_VAR && s != nullptr) {
+	if(ADE_SETTING_VAR && s != nullptr)
+	{
+		int ship_entry_index = ship_registry_get_index(shipp->ship_name);
+		Assertion(ship_entry_index >= 0, "Ship %s must be in the ship registry!", shipp->ship_name);
+
 		auto len = sizeof(shipp->ship_name);
 		strncpy(shipp->ship_name, s, len);
 		shipp->ship_name[len - 1] = 0;
+
+		// need to update the ship registry too
+		if (ship_entry_index >= 0)
+			ship_registry_rename(ship_entry_index, shipp->ship_name, true);
 	}
 
 	return ade_set_args(L, "s", shipp->ship_name);
@@ -784,20 +792,21 @@ ADE_VIRTVAR(Target, l_Ship, "object", "Target of ship. Value may also be a deriv
 		return ade_set_error(L, "o", l_Object.Set(object_h()));
 
 	if(ADE_SETTING_VAR && !(newh && aip->target_signature == newh->sig)) {
-		// we have a different target, or are clearng the target
+		// we have a different target, or are clearing the target
 		if(newh && newh->isValid())	{
-			aip->target_objnum = newh->objnum;
-			aip->target_signature = newh->sig;
-			aip->target_time = 0.0f;
-			set_targeted_subsys(aip, nullptr, -1);
+			aip->ok_to_target_timestamp = timestamp(0);
+			set_target_objnum(aip, newh->objnum);
 
-			if (aip == Player_ai)
+			if (aip == Player_ai) {
+				// prevent hud_target_change_check() from restoring the wrong targeted subsystem
+				if (newh->objp()->type == OBJ_SHIP)
+					Ships[newh->objp()->instance].last_targeted_subobject[Player_num] = nullptr;
+
 				hud_shield_hit_reset(newh->objp());
+			}
 		} else if (lua_isnil(L, 2)) {
-			aip->target_objnum = -1;
-			aip->target_signature = -1;
-			aip->target_time = 0.0f;
-			set_targeted_subsys(aip, nullptr, -1);
+			aip->ok_to_target_timestamp = timestamp(0);
+			set_target_objnum(aip, -1);
 		}
 	}
 
@@ -825,25 +834,21 @@ ADE_VIRTVAR(TargetSubsystem, l_Ship, "subsystem", "Target subsystem of ship.", "
 	{
 		if(newh && newh->isValid())
 		{
-			if (aip == Player_ai) {
-				if (aip->target_signature != newh->objh.sig)
-					hud_shield_hit_reset(newh->objh.objp());
+			// this must be checked before the signature is updated in set_target_objnum
+			if (aip == Player_ai && aip->target_signature != newh->objh.sig)
+				hud_shield_hit_reset(newh->objh.objp());
 
+			aip->ok_to_target_timestamp = timestamp(0);
+			set_target_objnum(aip, newh->objh.objnum);
+			set_targeted_subsys(aip, newh->ss, newh->objh.objnum);
+
+			if (aip == Player_ai)
 				Ships[Objects[newh->ss->parent_objnum].instance].last_targeted_subobject[Player_num] = newh->ss;
-			}
-
-			aip->target_objnum = newh->objh.objnum;
-			aip->target_signature = newh->objh.sig;
-			aip->target_time = 0.0f;
-			set_targeted_subsys(aip, newh->ss, aip->target_objnum);
 		}
 		else
 		{
-			aip->target_objnum = -1;
-			aip->target_signature = -1;
-			aip->target_time = 0.0f;
-
-			set_targeted_subsys(aip, NULL, -1);
+			aip->ok_to_target_timestamp = timestamp(0);
+			set_target_objnum(aip, -1);
 		}
 	}
 
@@ -1160,24 +1165,6 @@ ADE_VIRTVAR(Orders, l_Ship, "shiporders", "Array of ship orders", "shiporders", 
 	}
 
 	return ade_set_args(L, "o", l_ShipOrders.Set(object_h(objh->objp())));
-}
-
-ADE_VIRTVAR(MaxGuardRadius, l_Ship, "number", "Sets the max range in meters at which any ships guarding this ship will engage with threats. If the value is <= 0, regular dynamic guard range behavior will resume.", "number", "Max range in meters, or 0 if handle is invalid")
-{
-	object_h *objh;
-	float new_max_guard_radius = -1;
-	if (!ade_get_args(L, "o|f", l_Ship.GetPtr(&objh), &new_max_guard_radius))
-		return ade_set_error(L, "f", 0.0f);
-
-	if(!objh->isValid())
-		return ade_set_error(L, "f", 0.0f);
-
-	ship *shipp = &Ships[objh->objp()->instance];
-
-	if (ADE_SETTING_VAR)
-		shipp->max_guard_radius = new_max_guard_radius;
-
-	return ade_set_args(L, "f", shipp->max_guard_radius);
 }
 
 ADE_VIRTVAR(WaypointSpeedCap, l_Ship, "number", "Waypoint speed cap", "number", "The limit on the ship's speed for traversing waypoints.  -1 indicates no speed cap.  0 will be returned if handle is invalid.")

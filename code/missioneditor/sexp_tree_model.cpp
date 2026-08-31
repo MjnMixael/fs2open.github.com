@@ -28,6 +28,7 @@
 // Used by both FRED2 (MFC) and QtFRED (Qt) sexp tree implementations.
 
 constexpr int TREE_NODE_INCREMENT = 100;
+constexpr int MIN_SEXP_SEARCH_COST = 10;
 
 // -----------------------------------------------------------------------
 // sexp_list_item implementation
@@ -952,9 +953,8 @@ SCP_string SexpTreeModel::match_closest_operator(const SCP_string& str, int node
 	opf = query_operator_argument_type(op, arg_num);
 
 	// find the best operator
-	int best = sexp_match_closest_operator(str, opf);
+	int best = sexp_match_closest_operator(str, opf, MIN_SEXP_SEARCH_COST);
 	if (best < 0) {
-		Warning(LOCATION, "Unable to find an operator match for string '%s' and argument type %d", str.c_str(), opf);
 		return str;
 	}
 	return Operators[best].text;
@@ -1149,25 +1149,24 @@ int SexpTreeModel::get_loadout_variable_count(int var_index)
 	// we shouldn't be being passed the index of variables that do not exist
 	Assertion(var_index >= 0 && var_index < MAX_SEXP_VARIABLES, "Invalid variable index");
 
-	int idx;
 	int count = 0;
+	const char *var_name = Sexp_variables[var_index].variable_name;
 
 	for (auto& team_datum : Team_data) {
-		for (idx = 0; idx < team_datum.num_ship_choices; idx++) {
-			if (!strcmp(team_datum.ship_list_variables[idx], Sexp_variables[var_index].variable_name)) {
+		for (auto& entry : team_datum.ship_choices) {
+			if (entry.class_variable == var_name) {
 				count++;
 			}
-
-			if (!strcmp(team_datum.ship_count_variables[idx], Sexp_variables[var_index].variable_name)) {
+			if (entry.count_variable == var_name) {
 				count++;
 			}
 		}
 
-		for (idx = 0; idx < team_datum.num_weapon_choices; idx++) {
-			if (!strcmp(team_datum.weaponry_pool_variable[idx], Sexp_variables[var_index].variable_name)) {
+		for (auto& entry : team_datum.weapon_choices) {
+			if (entry.class_variable == var_name) {
 				count++;
 			}
-			if (!strcmp(team_datum.weaponry_amount_variable[idx], Sexp_variables[var_index].variable_name)) {
+			if (entry.count_variable == var_name) {
 				count++;
 			}
 		}

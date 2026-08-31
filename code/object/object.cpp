@@ -150,6 +150,8 @@ const char *Object_type_names[MAX_OBJECT_TYPES] = {
 //XSTR:ON
 };
 
+static_assert(MAX_OBJECT_TYPES == OBJ_COORDINATE_POINT + 1, "Object_type_names needs an entry for every object type!");
+
 obj_flag_name Object_flag_names[] = {
     { Object::Object_Flags::Invulnerable,			"invulnerable",						},
 	{ Object::Object_Flags::Protected,				"protect-ship",						},
@@ -1429,7 +1431,9 @@ void obj_move_all_post(object *objp, float frametime)
 
 			//Check for changing team colors
 			ship* shipp = &Ships[objp->instance];
-			if (Ship_info[shipp->ship_info_index].uses_team_colors && stricmp(shipp->secondary_team_name.c_str(), "none") != 0) {
+			// team_change_time is nonzero only while a fade is in progress (see sexp_change_team_color),
+			// so use that as the initial short-circuit check before the string match
+			if (shipp->team_change_time != 0 && Ship_info[shipp->ship_info_index].uses_team_colors && stricmp(shipp->secondary_team_name.c_str(), "none") != 0) {
 				if (f2fl(Missiontime) * 1000 > f2fl(shipp->team_change_timestamp) * 1000 + shipp->team_change_time) {
 					shipp->team_name = shipp->secondary_team_name;
 					shipp->team_change_timestamp = 0;
@@ -1726,7 +1730,7 @@ void obj_move_all(float frametime)
 		obj_move_all_post(objp, frametime);
 
 		// Equipment script processing
-		if (objp->type == OBJ_SHIP) {
+		if (objp->type == OBJ_SHIP && scripting::hooks::OnWeaponEquipped->isActive()) {
 			ship* shipp = &Ships[objp->instance];
 			object* target;
 
@@ -1737,13 +1741,11 @@ void obj_move_all(float frametime)
 			if (objp == Player_obj && Player_ai->target_objnum != -1)
 				target = &Objects[Player_ai->target_objnum];
 
-			if (scripting::hooks::OnWeaponEquipped->isActive()) {
-				scripting::hooks::OnWeaponEquipped->run(scripting::hooks::WeaponEquippedConditions{ shipp, target },
-					scripting::hook_param_list(
-						scripting::hook_param("User", 'o', objp),
-						scripting::hook_param("Target", 'o', target)
-					));
-			}
+			scripting::hooks::OnWeaponEquipped->run(scripting::hooks::WeaponEquippedConditions{ shipp, target },
+				scripting::hook_param_list(
+					scripting::hook_param("User", 'o', objp),
+					scripting::hook_param("Target", 'o', target)
+				));
 		}
 	}
 
@@ -2254,9 +2256,20 @@ int object_get_model_num(const object *objp)
 			return Weapon_info[wp->weapon_info_index].model_num;
 		}
 		case OBJ_RAW_POF:
-			return Pof_objects[objp->instance].model_num;
+		{
+			// Pof_objects is a map with a monotonic id as the key, not an array with an index
+			auto pof_it = Pof_objects.find(objp->instance);
+			if (pof_it == Pof_objects.end())
+				return -1;
+			return pof_it->second.model_num;
+		}
 		case OBJ_PROP:
-			return Prop_info[objp->instance].model_num;
+		{
+			// the instance of a prop object is an index into Props, not into Prop_info
+			if (objp->instance < 0 || objp->instance >= static_cast<int>(Props.size()) || !Props[objp->instance].has_value())
+				return -1;
+			return Prop_info[Props[objp->instance]->prop_info_index].model_num;
+		}
 		default:
 			break;
 	}
@@ -2310,9 +2323,19 @@ int object_get_model_instance_num(const object *objp)
 			return jnp->GetPolymodelInstanceNum();
 		}
 		case OBJ_RAW_POF:
-			return Pof_objects[objp->instance].model_instance;
+		{
+			auto pof_it = Pof_objects.find(objp->instance);
+			if (pof_it == Pof_objects.end())
+				return -1;
+			return pof_it->second.model_instance;
+		}
 		case OBJ_PROP:
-			return prop_id_lookup(objp->instance)->model_instance_num;
+		{
+			// props_level_close() clears Props while the prop objects can still be alive
+			if (objp->instance < 0 || objp->instance >= static_cast<int>(Props.size()) || !Props[objp->instance].has_value())
+				return -1;
+			return Props[objp->instance]->model_instance_num;
+		}
 		default:
 			break;
 	}

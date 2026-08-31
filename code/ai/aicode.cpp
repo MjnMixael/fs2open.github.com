@@ -203,10 +203,9 @@ object *En_objp;
 #define	STEALTH_MAX_VIEW_DIST	400		// dist at which 1) stealth no longer visible 2) firing inaccuracy is greatest
 #define	STEALTH_VIEW_CONE_DOT	0.707		// (half angle of 45 degrees)
 
-ai_class *Ai_classes = NULL;
+SCP_vector<ai_class> Ai_classes;
 int	Ai_firing_enabled = 1;
 int	Num_ai_classes;
-int Num_alloced_ai_classes;
 
 int	AI_FrameCount = 0;
 int	AI_watch_object = 0; // Debugging, object to spew debug info for.
@@ -289,7 +288,7 @@ pnode		*Ppfp;			//	Free pointer in path points.
 
 float	AI_frametime;
 
-char** Ai_class_names = NULL;
+SCP_vector<const char*> Ai_class_names;
 
 //used for good-primary-time
 typedef struct {
@@ -323,12 +322,16 @@ void ai_cleanup_dock_mode_objective(object *objp);
 // the "autopilot"
 object *Autopilot_flight_leader = NULL;
 
-static inline float ai_guard_threshold(const object* guarded_objp, float threshold)
+static inline float ai_guard_threshold(const object* guarded_objp, float threshold, const ship* guarder_ship)
 {
 	if (guarded_objp != nullptr && guarded_objp->type == OBJ_SHIP && guarded_objp->instance >= 0) {
-		const float configured = Ships[guarded_objp->instance].max_guard_radius;
-		if (configured > 0.0f) {
-			return configured;
+		for (const auto& range_entry : guarder_ship->max_guard_ranges) {
+			if (guarded_objp->instance == range_entry.shipnum) {
+				const float configured = range_entry.range;
+				if (configured > 0.0f) {
+					return configured;
+				}
+			}
 		}
 	}
 
@@ -612,15 +615,6 @@ int create_object_hash(object *objp)
 	return hashval;
 }
 
-void free_ai_stuff()
-{
-	if(Ai_classes != NULL)
-		vm_free(Ai_classes);
-	
-	if(Ai_class_names != NULL)
-		vm_free(Ai_class_names);
-}
-
 int ai_get_autoscale_index(int absolute_index)
 {
 	int index = 0;
@@ -765,11 +759,11 @@ void parse_ai_class()
 		}
 
 		// Setup a new ai class
-		aicp = &Ai_classes[Num_ai_classes];
+		Ai_classes.emplace_back();
+		aicp = &Ai_classes.back();
 		strcpy(aicp->name, thisName);
 
 		init_ai_class(aicp);
-		Ai_class_names[Num_ai_classes] = aicp->name;
 
 		Num_ai_classes++;
 
@@ -955,18 +949,6 @@ void parse_ai_class()
 	set_aic_flag(aicp, "$AI balances shields instead of directs when attacked:", AI::Profile_Flags::AI_balances_shields_when_attacked);
 }
 
-void reset_ai_class_names()
-{
-	ai_class *aicp;
-
-	for (int i = 0; i < Num_ai_classes; i++) {
-		aicp = &Ai_classes[i];
-
-		Ai_class_names[i] = aicp->name;
-	}
-}
-
-#define AI_CLASS_INCREMENT		10
 void parse_aitbl(const char* filename)
 {
 	try {
@@ -976,20 +958,7 @@ void parse_aitbl(const char* filename)
 		required_string("#AI Classes");
 
 		while (required_string_either("#End", "$Name:")) {
-
 			parse_ai_class();
-
-			if(Num_ai_classes >= Num_alloced_ai_classes)
-			{
-				Num_alloced_ai_classes += AI_CLASS_INCREMENT;
-				Ai_classes = (ai_class*) vm_realloc(Ai_classes, Num_alloced_ai_classes * sizeof(ai_class));
-
-				// Ai_class_names doesn't realloc all that well so we have to do it the hard way.
-				// Luckily, it's contents can be easily replaced so we don't have to save anything.
-				vm_free(Ai_class_names);
-				Ai_class_names = (char **) vm_malloc(Num_alloced_ai_classes * sizeof(char*));
-				reset_ai_class_names();
-			}
 		}
 
 	}
@@ -1010,13 +979,10 @@ LOCAL int ai_inited = 0;
 void ai_init()
 {
 	if ( !ai_inited )	{
-		// Do the first time initialization stuff here		
-		free_ai_stuff();
-
+		// Do the first time initialization stuff here
+		Ai_classes.clear();
+		Ai_class_names.clear();
 		Num_ai_classes = 0;
-		Num_alloced_ai_classes = AI_CLASS_INCREMENT;
-		Ai_classes = (ai_class*)vm_malloc(Num_alloced_ai_classes * sizeof(ai_class));
-		Ai_class_names = (char**)vm_malloc(Num_alloced_ai_classes * sizeof(char*));
 
 		parse_aitbl("ai.tbl");
 
@@ -1042,7 +1008,10 @@ void ai_init()
 			Ai_classes[autoscaled_class_index].ai_class_autoscale = false;
 		}
 
-		atexit(free_ai_stuff);
+		// fill in the name alias list
+		Ai_class_names.clear();
+		for (const auto &aic : Ai_classes)
+			Ai_class_names.push_back(aic.name);
 
 		ai_inited = 1;
 	}
@@ -2236,8 +2205,16 @@ int is_ignore_object(ai_info *aip, int objnum, int just_the_original = 0)
 	return 0;
 }
 
+//	Returns true if a ship of class type attacker_class_type is willing to chase a target of class type target_class_type.
+//	Mirrors the actively-pursues fallbacks in ai_chase(): if either class type is unknown, the chase is allowed.
+static bool ai_class_type_actively_pursues(int attacker_class_type, int target_class_type)
+{
+	if (attacker_class_type < 0 || target_class_type < 0)
+		return true;
 
-
+	const auto &pursues = Ship_types[attacker_class_type].ai_actively_pursues;
+	return std::any_of(pursues.begin(), pursues.end(), [target_class_type](int pursued_type) { return pursued_type == target_class_type; });
+}
 
 typedef struct eval_nearest_objnum {
 	int	objnum;
@@ -2245,6 +2222,7 @@ typedef struct eval_nearest_objnum {
 	int	enemy_team_mask;
 	int enemy_ship_info_index;
 	int enemy_class_type;
+	int	attacker_class_type;
 	int	enemy_wing;
 	float	range;
 	int	max_attackers;
@@ -2252,7 +2230,6 @@ typedef struct eval_nearest_objnum {
 	float	nearest_dist;
 	int	check_danger_weapon_objnum;
 } eval_nearest_objnum;
-
 
 void evaluate_object_as_nearest_objnum(eval_nearest_objnum *eno)
 {
@@ -2303,6 +2280,13 @@ void evaluate_object_as_nearest_objnum(eval_nearest_objnum *eno)
 			if (iff_matches_mask(shipp->team, eno->enemy_team_mask)) {
 				float	dist;
 				int	num_attacking;
+
+				// Don't pick a target that this ship's type refuses to chase, or it will park in AIM_NONE holding a target it never attacks.
+				// Only for unconstrained searches: an explicit chase-ship-class/type order should still produce a target even if ai_chase() doesn't chase it.
+				if (The_mission.ai_profile->flags[AI::Profile_Flags::Fix_ai_target_recovery]
+					&& eno->enemy_ship_info_index < 0 && eno->enemy_class_type < 0
+					&& !ai_class_type_actively_pursues(eno->attacker_class_type, Ship_info[shipp->ship_info_index].class_type))
+					return;
 
 				// Allow targeting of stealth in nebula by his firing at me
 				// This is done for a specific ship, not generally.
@@ -2383,6 +2367,7 @@ int get_nearest_objnum(int objnum, int enemy_team_mask, int enemy_wing, float ra
 	eno.enemy_team_mask = enemy_team_mask;
 	eno.enemy_ship_info_index = ship_info_index;
 	eno.enemy_class_type = class_type;
+	eno.attacker_class_type = Ship_info[Ships[Objects[objnum].instance].ship_info_index].class_type;
 	eno.enemy_wing = enemy_wing;
 	eno.max_attackers = max_attackers;
 	eno.objnum = objnum;
@@ -2544,28 +2529,36 @@ int find_enemy(int objnum, float range, int max_attackers, int ship_info_index, 
 
 	if (objnum < 0)
 		return -1;
+	object* objp = &Objects[objnum];
 
-	enemy_team_mask = iff_get_attackee_mask(obj_team(&Objects[objnum]));
+	enemy_team_mask = iff_get_attackee_mask(obj_team(objp));
 
 	//	if target_objnum != -1, use that as goal.
-	ai_info* aip = &Ai_info[Ships[Objects[objnum].instance].ai_index];
+	ship* shipp = &Ships[objp->instance];
+	ai_info* aip = &Ai_info[shipp->ai_index];
 	if (timestamp_elapsed(aip->choose_enemy_timestamp)) {
 		aip->choose_enemy_timestamp = timestamp(get_enemy_timestamp());
 
 		if (aip->target_objnum != -1) {
 			int target_objnum = aip->target_objnum;
+			object* target_objp = &Objects[target_objnum];
 
 			// DKA don't undo object as target in nebula missions.
 			// This could cause attack on ship on fringe on nebula to stop if attackee moves out of nebula range.  (BAD)
-			if (Objects[target_objnum].signature == aip->target_signature) {
-				ship* target_shipp = (Objects[target_objnum].type == OBJ_SHIP) ? &Ships[Objects[target_objnum].instance] : nullptr;
+			if (target_objp->signature == aip->target_signature) {
+				ship* target_shipp = (target_objp->type == OBJ_SHIP) ? &Ships[target_objp->instance] : nullptr;
 
 				if (target_shipp && iff_matches_mask(target_shipp->team, enemy_team_mask)) {
 					if (ship_info_index < 0 || ship_info_index == target_shipp->ship_info_index) {
-						if (class_type < 0 || (target_shipp->ship_info_index >= 0 &&
-							class_type == Ship_info[target_shipp->ship_info_index].class_type)) {
-							if (!(Objects[target_objnum].flags[Object::Object_Flags::Protected])) {
-								return target_objnum;
+						if (class_type < 0 || class_type == Ship_info[target_shipp->ship_info_index].class_type) {
+							if (!(target_objp->flags[Object::Object_Flags::Protected])) {
+								// same as get_nearest_objnum: only skip an unpursued target for unconstrained searches
+								if (!The_mission.ai_profile->flags[AI::Profile_Flags::Fix_ai_target_recovery]
+										|| ship_info_index >= 0 || class_type >= 0
+										|| ai_class_type_actively_pursues(Ship_info[shipp->ship_info_index].class_type,
+										                                  Ship_info[target_shipp->ship_info_index].class_type)) {
+									return target_objnum;
+								}
 							}
 						}
 					}
@@ -5162,10 +5155,13 @@ int maybe_resume_previous_mode(object *objp, ai_info *aip)
 
 			//	If guarding ship is far away from guardee and enemy is far away from guardee,
 			//	then stop chasing and resume guarding.
-			if (dist > ai_guard_threshold(guard_objp, (MAX_GUARD_DIST + guard_objp->radius) * 6))
+			if (dist > ai_guard_threshold(guard_objp, (MAX_GUARD_DIST + guard_objp->radius) * 6, &Ships[aip->shipnum]))
 				{
 				if ((En_objp != NULL) && (En_objp->type == OBJ_SHIP)) {
-					if (vm_vec_dist_quick(&guard_objp->pos, &En_objp->pos) > ai_guard_threshold(guard_objp, (MAX_GUARD_DIST + guard_objp->radius) * 6)) {
+					if (vm_vec_dist_quick(&guard_objp->pos, &En_objp->pos) >
+						ai_guard_threshold(guard_objp,
+							(MAX_GUARD_DIST + guard_objp->radius) * 6,
+							&Ships[aip->shipnum])) {
 						Assert(aip->previous_mode == AIM_GUARD);
 						aip->mode = aip->previous_mode;
 						aip->submode = AIS_GUARD_PATROL;
@@ -5683,6 +5679,14 @@ void ai_set_or_clear_preferred_primary_weapon(bool set_it, const object_ship_win
 	}
 }
 
+// find the first primary bank that actually contains a weapon, since banks might be empty for various reasons
+static int ai_first_loaded_primary_bank(const ship_weapon *swp)
+{
+	for (int i = 0; i < swp->num_primary_banks; i++)
+		if (swp->primary_bank_weapons[i] >= 0)
+			return i;
+	return -1;
+}
 
 //old version of this fuction, this will be useful for playing old missions and not having the new primary
 //selection code throw off the balance of the mission.
@@ -5700,7 +5704,7 @@ static int ai_select_primary_weapon_OLD(const object *objp, Weapon::Info_Flags f
 	Assert( shipp->ship_info_index >= 0 && shipp->ship_info_index < ship_info_size());
 
 	if (flags == Weapon::Info_Flags::Puncture) {
-		if (swp->current_primary_bank >= 0) {
+		if (swp->current_primary_bank >= 0 && swp->primary_bank_weapons[swp->current_primary_bank] >= 0) {
 			int	bank_index;
 
 			bank_index = swp->current_primary_bank;
@@ -5724,13 +5728,11 @@ static int ai_select_primary_weapon_OLD(const object *objp, Weapon::Info_Flags f
 		
 		// AL 26-3-98: If we couldn't find a puncture weapon, pick first available weapon if one isn't active
 		if ( swp->current_primary_bank < 0 ) {
-			if ( swp->num_primary_banks > 0 ) {
-				swp->current_primary_bank = 0;
-			}
+			swp->current_primary_bank = ai_first_loaded_primary_bank(swp);
 		}
 
 	} else {		//	Don't need to be using a puncture weapon.
-		if (swp->current_primary_bank >= 0) {
+		if (swp->current_primary_bank >= 0 && swp->primary_bank_weapons[swp->current_primary_bank] >= 0) {
 			if (!(Weapon_info[swp->primary_bank_weapons[swp->current_primary_bank]].wi_flags[Weapon::Info_Flags::Puncture])){
 				return swp->current_primary_bank;
 			}
@@ -5747,8 +5749,7 @@ static int ai_select_primary_weapon_OLD(const object *objp, Weapon::Info_Flags f
 		//	Wasn't able to find a non-puncture weapon.  Stick with what we have.
 	}
 
-	Assert( swp->current_primary_bank != -1 );		// get Alan or Allender
-
+	// this can legitimately be -1 if no bank contains a weapon
 	return swp->current_primary_bank;
 }
 
@@ -5780,6 +5781,11 @@ int ai_select_primary_weapon(object *objp, object *other_objp, Weapon::Info_Flag
 		mprintf(("'other_objpp == NULL' in ai_select_primary_weapon()\n"));
 		return -1;
 	}
+
+	// if the ship has no primary banks, there is nothing to select
+	// (this can happen when e.g. a turreted gunship is ordered to disable another ship)
+	if (swp->num_primary_banks <= 0)
+		return -1;
 
 	bool other_is_ship = (other_objp->type == OBJ_SHIP);
 
@@ -5832,7 +5838,7 @@ int ai_select_primary_weapon(object *objp, object *other_objp, Weapon::Info_Flag
 	//made it so it only selects puncture weapons if the active goal is to disable something -Bobboau
 	if ((flags == Weapon::Info_Flags::Puncture) && ai_goal_is_disable_or_disarm(Ai_info[shipp->ai_index].goals[0].ai_mode))
 	{
-		if (swp->current_primary_bank >= 0) 
+		if (swp->current_primary_bank >= 0 && swp->primary_bank_weapons[swp->current_primary_bank] >= 0)
 		{
 			int	bank_index = swp->current_primary_bank;
 
@@ -5911,7 +5917,9 @@ int ai_select_primary_weapon(object *objp, object *other_objp, Weapon::Info_Flag
 		}
 		if (i_hullfactor_prev_bank == -1)		// In the unlikely instance we don't find at least 1 candidate weapon
 		{
-			i_hullfactor_prev_bank = 0;		// Just switch to the first one
+			i_hullfactor_prev_bank = ai_first_loaded_primary_bank(swp);		// Just switch to the first one with a weapon in it
+			if (i_hullfactor_prev_bank == -1)	// no bank contains a weapon
+				return -1;
 		}
 		swp->current_primary_bank = i_hullfactor_prev_bank;		// Select the best weapon
 		nprintf(("AI", "%i: Ship %s selecting weapon %s (no shields) vs target %s\n", Framecount, shipp->ship_name, Weapon_info[swp->primary_bank_weapons[i_hullfactor_prev_bank]].name, (other_is_ship ? other_shipp->ship_name : "non-ship") ));
@@ -5921,7 +5929,7 @@ int ai_select_primary_weapon(object *objp, object *other_objp, Weapon::Info_Flag
 	//if the shields are above lets say 10% definitely use a pierceing weapon if there are any-Bobboau
 	if (enemy_remaining_shield >= 0.10f)
 	{
-		if (swp->current_primary_bank >= 0) 
+		if (swp->current_primary_bank >= 0 && swp->primary_bank_weapons[swp->current_primary_bank] >= 0)
 		{
 			auto wip = &Weapon_info[swp->primary_bank_weapons[swp->current_primary_bank]];
 
@@ -5971,7 +5979,9 @@ int ai_select_primary_weapon(object *objp, object *other_objp, Weapon::Info_Flag
 		}
 		if (i_balancedfactor_prev_bank == -1)		// In the unlikely instance we don't find at least 1 candidate weapon
 		{
-			i_balancedfactor_prev_bank = 0;		// Just switch to the first one
+			i_balancedfactor_prev_bank = ai_first_loaded_primary_bank(swp);		// Just switch to the first one with a weapon in it
+			if (i_balancedfactor_prev_bank == -1)	// no bank contains a weapon
+				return -1;
 		}
 		swp->current_primary_bank = i_balancedfactor_prev_bank;		// Select the best weapon
 		nprintf(("AI", "%i: Ship %s selecting weapon %s (<50%% shields)\n", Framecount, shipp->ship_name, Weapon_info[swp->primary_bank_weapons[i_balancedfactor_prev_bank]].name));
@@ -6001,7 +6011,9 @@ int ai_select_primary_weapon(object *objp, object *other_objp, Weapon::Info_Flag
 		}
 		if (i_shieldfactor_prev_bank == -1)		// In the unlikely instance we don't find at least 1 candidate weapon
 		{
-			i_shieldfactor_prev_bank = 0;		// Just switch to the first one
+			i_shieldfactor_prev_bank = ai_first_loaded_primary_bank(swp);		// Just switch to the first one with a weapon in it
+			if (i_shieldfactor_prev_bank == -1)	// no bank contains a weapon
+				return -1;
 		}
 		swp->current_primary_bank = i_shieldfactor_prev_bank;		// Select the best weapon
 		nprintf(("AI", "%i: Ship %s selecting weapon %s (>50%% shields)\n", Framecount, shipp->ship_name, Weapon_info[swp->primary_bank_weapons[i_shieldfactor_prev_bank]].name));
@@ -6331,6 +6343,10 @@ int ai_fire_primary_weapon(object *objp)
 		aip->primary_select_timestamp = timestamp(5 * MILLISECONDS_PER_SECOND);	//	Maybe change primary weapon five seconds from now.
 	}
 
+	// if the ship has no primary weapon selected, whether because it has no primary banks or because no bank contains a weapon, then there is nothing to fire
+	if (swp->current_primary_bank < 0 || swp->primary_bank_weapons[swp->current_primary_bank] < 0)
+		return 0;
+
 	//We can only check LoS if we have a target defined
 	weapon_info* wip = &Weapon_info[swp->primary_bank_weapons[swp->current_primary_bank]];
 	if (aip->target_objnum != -1 && (The_mission.ai_profile->flags[AI::Profile_Flags::Require_exact_los] || wip->wi_flags[Weapon::Info_Flags::Require_exact_los])) {
@@ -6484,7 +6500,7 @@ int num_nearby_fighters(int enemy_team_mask, const vec3d *pos, float threshold)
 bool ai_select_secondary_weapon(object *objp, ship_weapon *swp, flagset<Weapon::Info_Flags>* priority1 = NULL, flagset<Weapon::Info_Flags>* priority2 = NULL)
 {
 	int	num_weapon_types;
-	int	weapon_id_list[MAX_WEAPON_TYPES], weapon_bank_list[MAX_WEAPON_TYPES];
+	int	weapon_id_list[MAX_SHIP_SECONDARY_BANKS], weapon_bank_list[MAX_SHIP_SECONDARY_BANKS];
 	int	i;
 	flagset<Weapon::Info_Flags>	ignore_mask, ignore_mask_without_huge, prio1, prio2;
 	int	initial_bank;
@@ -6523,7 +6539,7 @@ bool ai_select_secondary_weapon(object *objp, ship_weapon *swp, flagset<Weapon::
 	}
 
 #ifndef NDEBUG
-	for (i=0; i<MAX_WEAPON_TYPES; i++) {
+	for (i=0; i<MAX_SHIP_SECONDARY_BANKS; i++) {
 		weapon_id_list[i] = -1;
 		weapon_bank_list[i] = -1;
 	}
@@ -6777,20 +6793,26 @@ bool check_los(int objnum, int target_objnum, float threshold, int primary_bank,
 		bool is_primary = secondary_bank == -1;
 		ship *shipp = &Ships[firing_ship->instance];
 		ship_weapon *swp = &shipp->weapons;
+		ship_info *sip = &Ship_info[shipp->ship_info_index];
 		weapon_info *wip = &Weapon_info[is_primary ? swp->primary_bank_weapons[primary_bank] : swp->secondary_bank_weapons[secondary_bank]];
-		polymodel* pm = model_get(Ship_info[shipp->ship_info_index].model_num);
-		
+		polymodel* pm = model_get(sip->model_num);
+
 		vec3d pnt = is_primary ? pm->gun_banks[primary_bank].pnt[swp->primary_next_slot[primary_bank]] : pm->missile_banks[secondary_bank].pnt[swp->secondary_next_slot[secondary_bank]];
 		vec3d firing_point;
 
+		// external model firing points only apply when the external models are actually drawn
+		// (matching ship_fire_primary and ship_fire_secondary)
+		bool draw_models = is_primary ? sip->draw_primary_models[primary_bank] : sip->draw_secondary_models[secondary_bank];
 		polymodel* weapon_model = nullptr;
-		if (wip->external_model_num >= 0) {
+		if (draw_models && wip->external_model_num >= 0) {
 			weapon_model = model_get(wip->external_model_num);
 		}
 
 		// use the same firing point the next shot will use
-		int external_bank = is_primary ? primary_bank : secondary_bank + MAX_SHIP_PRIMARY_BANKS;
-		vec3d external_fp_offset = ship_get_external_model_fp_offset(swp, wip, weapon_model, external_bank, false);
+		auto ext = is_primary ? &swp->primary_bank_external_weapon[primary_bank] : &swp->secondary_bank_external_weapon[secondary_bank];
+		auto ship_bank = is_primary ? &pm->gun_banks[primary_bank] : &pm->missile_banks[secondary_bank];
+		int slot = is_primary ? swp->primary_next_slot[primary_bank] : swp->secondary_next_slot[secondary_bank];
+		vec3d external_fp_offset = ship_get_external_model_fp_offset(ext, wip, weapon_model, ship_bank, slot, false);
 		vm_vec_add2(&pnt, &external_fp_offset);
 
 		vm_vec_unrotate(&firing_point, &pnt, &firing_ship->orient);
@@ -7572,7 +7594,7 @@ static void get_behind_ship(ai_info *aip)
 
 	dot = vm_vec_dot(&vec_from_enemy, &En_objp->orient.vec.fvec);
 	
-	if (ai_willing_to_afterburn_hard(aip) && dot > 0.9f && vm_vec_dist(&Pl_objp->pos, &En_objp->pos) > 1000.0f) {
+	if (ai_willing_to_afterburn_hard(aip) && dot > 0.9f && vm_vec_dist_squared(&Pl_objp->pos, &En_objp->pos) > 1000.0f * 1000.0f) {
 		ai_afterburn_hard(Pl_objp, aip);
 	} else if (dot > 0.25f) {
 		accelerate_ship(aip, 1.0f);
@@ -7741,8 +7763,8 @@ void mabs_pick_goal_point(object *objp, object *big_objp, vec3d *collision_point
 				}
 			}
 
-			Assert(i != -1);
-			if (i != -1) {
+			Assert(min_index != -1);
+			if (min_index != -1) {
 				*avoid_pos = goals[min_index].pos;
 				return;
 			}
@@ -7816,7 +7838,7 @@ bool better_collision_avoidance_triggered(bool flag_to_check, float avoidance_ag
 		collide_vec *= radius_contribution;
 
 		collide_vec += pl_objp->pos;
-		return (maybe_avoid_big_ship(pl_objp, ignore_objp, &Ai_info[shipp->ai_index], &collide_vec, 0.f, 0.1f));
+		return (maybe_avoid_big_ship(pl_objp, ignore_objp, &Ai_info[shipp->ai_index], &collide_vec, avoidance_aggression, 0.1f));
 	}
 	return false;
 }
@@ -8384,7 +8406,7 @@ void update_aspect_lock_information(ai_info *aip, vec3d *vec_to_enemy, float dis
 {
 	float	dot_to_enemy;
 	int	num_weapon_types;
-	int	weapon_id_list[MAX_WEAPON_TYPES], weapon_bank_list[MAX_WEAPON_TYPES];
+	int	weapon_id_list[MAX_SHIP_SECONDARY_BANKS], weapon_bank_list[MAX_SHIP_SECONDARY_BANKS];
 	ship	*shipp;
 	ship	*tshpp;
 	ship_weapon	*swp;
@@ -8994,15 +9016,8 @@ void ai_chase()
 		ship_info *esip = &Ship_info[Ships[En_objp->instance].ship_info_index];
 		if (esip->class_type > -1)
 		{
-			ship_type_info *stp = &Ship_types[sip->class_type];
-			size_t ap_size = stp->ai_actively_pursues.size();
-			for(size_t i = 0; i < ap_size; i++)
-			{
-				if(stp->ai_actively_pursues[i] == esip->class_type) {
-					go_after_it = true;
-					break;
-				}
-			}
+			const auto &pursues = Ship_types[sip->class_type].ai_actively_pursues;
+			go_after_it = std::any_of(pursues.begin(), pursues.end(), [esip](int pursued_type) { return pursued_type == esip->class_type; });
 		}
 		else
 		{
@@ -9015,6 +9030,15 @@ void ai_chase()
 
 	//WMC - Guess we do need this
 	if (!go_after_it) {
+		// If we picked this target ourselves -- through auto-attack, dynamic chase, or a standing chase order --
+		// drop it, so that the retargeting logic in ai_frame() can find something we are willing to chase.
+		if (The_mission.ai_profile->flags[AI::Profile_Flags::Fix_ai_target_recovery]) {
+			if (aip->active_goal < 0 || aip->active_goal == AI_ACTIVE_GOAL_DYNAMIC
+				|| (aip->active_goal < MAX_AI_GOALS && ai_goal_is_standing_chase(aip->goals[aip->active_goal].ai_mode))) {
+				aip->target_objnum = -1;
+				aip->target_signature = -1;
+			}
+		}
 		aip->mode = AIM_NONE;
 		return;
 	}
@@ -9140,6 +9164,9 @@ void ai_chase()
 						set_predicted_enemy_pos(&predicted_enemy_pos, Pl_objp, &aip->last_aim_enemy_pos, &aip->last_aim_enemy_vel, aip);
 				}
 			}
+		} else {
+			// no primary weapon to lead with, so just aim at the target
+			predicted_enemy_pos = enemy_pos;
 		}
 	}
 
@@ -10630,7 +10657,7 @@ int ai_guard_find_nearby_bomb(object *guarding_objp, object *guarded_objp)
 
 		dist = vm_vec_dist_quick(&bomb_objp->pos, &guarded_objp->pos);
 
-		if (dist < ai_guard_threshold(guarded_objp, (MAX_GUARD_DIST + guarded_objp->radius) * 3)) {
+		if (dist < ai_guard_threshold(guarded_objp, (MAX_GUARD_DIST + guarded_objp->radius) * 3, &Ships[guarding_objp->instance])) {
 			dist_to_guarding_obj = vm_vec_dist_quick(&bomb_objp->pos, &guarding_objp->pos);
 			if ( dist_to_guarding_obj < closest_dist_to_guarding_obj ) {
 				closest_dist_to_guarding_obj = dist_to_guarding_obj;
@@ -10681,10 +10708,11 @@ void ai_guard_find_nearby_ship(object *guarding_objp, object *guarded_objp)
 			if (Ship_info[eshipp->ship_info_index].class_type >= 0 && (Ship_types[Ship_info[eshipp->ship_info_index].class_type].flags[Ship::Type_Info_Flags::AI_guards_attack]))
 			{
 				dist = vm_vec_dist_quick(&enemy_objp->pos, &guarded_objp->pos);
-				if (dist < ai_guard_threshold(guarded_objp, (MAX_GUARD_DIST + guarded_objp->radius) * 3))
+				if (dist <
+					ai_guard_threshold(guarded_objp, (MAX_GUARD_DIST + guarded_objp->radius) * 3, guarding_shipp))
 				{
 					guard_object_was_hit(guarding_objp, enemy_objp);
-				} else if ((dist < ai_guard_threshold(guarded_objp, 3000.0f)) &&
+				} else if ((dist < ai_guard_threshold(guarded_objp, 3000.0f, guarding_shipp)) &&
 						   (Ai_info[eshipp->ai_index].target_objnum == guarding_aip->guard_objnum))
 				{
 					guard_object_was_hit(guarding_objp, enemy_objp);
@@ -10712,7 +10740,7 @@ void ai_guard_find_nearby_asteroid(object *guarding_objp, object *guarded_objp)
 		if ( asteroid_objp->type == OBJ_ASTEROID ) {
 			// Attack asteroid if near guarded ship
 			dist = vm_vec_dist_quick(&asteroid_objp->pos, &guarded_objp->pos);
-			if (dist < ai_guard_threshold(guarded_objp, (MAX_GUARD_DIST + guarded_objp->radius) * 2)) {
+			if (dist < ai_guard_threshold(guarded_objp, (MAX_GUARD_DIST + guarded_objp->radius) * 2, &Ships[guarding_objp->instance])) {
 				dist_to_self = vm_vec_dist_quick(&asteroid_objp->pos, &guarding_objp->pos);
 				if ( OBJ_INDEX(guarded_objp) == asteroid_collide_objnum(asteroid_objp) ) {
 					if( dist_to_self < closest_danger_asteroid_dist ) {
@@ -12353,10 +12381,12 @@ void ai_process_subobjects(int objnum)
 
 				// handle ending animations
 				if ( (pss->turret_animation_position == MA_POS_READY) && timestamp_elapsed(pss->turret_animation_done_time) ) {
+					ship_info* turret_sip = &Ship_info[shipp->ship_info_index];
+					polymodel_instance* turret_pmi = model_get_instance(shipp->model_instance_num);
 					//For legacy animations using subtype for turret number
-					bool started = (Ship_info[shipp->ship_info_index].animations.getAll(model_get_instance(shipp->model_instance_num), animation::ModelAnimationTriggerType::TurretFiring, pss->system_info->subobj_num, true)
+					bool started = (turret_sip->animations.getAll(turret_pmi, animation::ModelAnimationTriggerType::TurretFiring, pss->system_info->subobj_num, true)
 						//For modern animations using proper triggered-by-subsys name
-						+ Ship_info[shipp->ship_info_index].animations.get(model_get_instance(shipp->model_instance_num), animation::ModelAnimationTriggerType::TurretFiring, animation::anim_name_from_subsys(pss->system_info)))
+						+ turret_sip->animations.get(turret_pmi, animation::ModelAnimationTriggerType::TurretFiring, animation::anim_name_from_subsys(pss->system_info)))
 						.start(animation::ModelAnimationDirection::RWD);
 					
 					if (started) {
@@ -15509,15 +15539,23 @@ void ai_frame(int objnum)
 		En_objp = NULL;
 	}
 
-	if (aip->mode == AIM_CHASE || ((The_mission.ai_profile->flags[AI::Profile_Flags::Fix_target_updating_with_strafe]) && aip->mode == AIM_STRAFE)) {
+	if (aip->mode == AIM_CHASE || ((The_mission.ai_profile->flags[AI::Profile_Flags::Fix_ai_target_recovery]) && aip->mode == AIM_STRAFE)) {
 		// If we're chasing or strafing against large ship but have lost our target, clear the active goal
 		// to ensure ai_process_mission_orders() re-evaluates our orders next frame.
 		// Without this fighter/bomber whose strafe target is destroyed drops to AIM_NONE (see ai_execute_behavior)
 		// with its active_goal still set, so a standing order like attack-any is never re-processed
-		// and the ship slows to zero and remains still until another order is issued.  
+		// and the ship slows to zero and remains still until another order is issued.
 		if (En_objp == nullptr) {
 			aip->active_goal = -1;
 		}
+	}
+	// Similarly, a ship that has already dropped to AIM_NONE while holding a standing chase order can never
+	// recover on its own: ai_execute_behavior() does nothing in AIM_NONE, and ai_process_mission_orders()
+	// returns early while active_goal is set.  Clear the active goal so the order is re-processed next frame.
+	else if (The_mission.ai_profile->flags[AI::Profile_Flags::Fix_ai_target_recovery] && aip->mode == AIM_NONE
+		&& aip->active_goal >= 0 && aip->active_goal < MAX_AI_GOALS
+		&& ai_goal_is_standing_chase(aip->goals[aip->active_goal].ai_mode)) {
+		aip->active_goal = -1;
 	}
 
 	//	If there is a goal to resume and enough time has elapsed, resume the goal.
@@ -16744,6 +16782,12 @@ void ai_ship_destroy(int shipnum)
 
 		if (other_aip->hitter_objnum == dead_shipp->objnum)
 			other_aip->hitter_objnum = -1;
+
+		other_shipp->max_guard_ranges.erase(
+			std::remove_if(other_shipp->max_guard_ranges.begin(),
+				other_shipp->max_guard_ranges.end(),
+				[shipnum](const guard_range_entry& entry) { return entry.shipnum == shipnum; }),
+			other_shipp->max_guard_ranges.end());
 	}
 
 	if (dead_aip->ai_flags[AI::AI_Flags::Formation_object] && dead_aip->goal_objnum >= 0)

@@ -10,6 +10,8 @@
 
 
 
+#include <algorithm>
+
 #include "ai/aigoals.h"
 #include "anim/animplay.h"
 #include "anim/packunpack.h"
@@ -482,7 +484,6 @@ void active_list_remove(int ship_class)
 // can choose from.
 void init_active_list()
 {
-	int i;
 	ss_active_item	*sai;
 
 	Assert( Ss_pool != NULL );
@@ -490,11 +491,11 @@ void init_active_list()
 	clear_active_list();
 
 	// build the active list
-	for ( i = 0; i < ship_info_size(); i++ ) {
-		if ( Ss_pool[i] > 0 ) {
+	for ( const auto &[ship_class, count] : *Ss_pool ) {
+		if ( count > 0 ) {
 			sai = get_free_active_list_node();
 			if ( sai != NULL ) {
-				sai->ship_class = i;
+				sai->ship_class = ship_class;
 				list_append(&SS_active_head, sai);
 				SS_active_list_size++;
 			}
@@ -1680,7 +1681,7 @@ void draw_ship_icon_with_number(int screen_offset, int ship_class)
 		}
 	}
 
-	if ( Ss_pool[ship_class] <= 0 ) {
+	if ( Ss_pool->value_or(ship_class, -1) <= 0 ) {
 		return;
 	}
 
@@ -1713,7 +1714,7 @@ void draw_ship_icon_with_number(int screen_offset, int ship_class)
 	}
 
 	// blit the number
-	sprintf(buf, "%d", Ss_pool[ship_class] );
+	sprintf(buf, "%d", Ss_pool->value_or(ship_class, -1) );
 	gr_set_color_fast(&Color_white);
 	gr_string(num_x, num_y, buf, GR_RESIZE_MENU);
 }
@@ -1898,7 +1899,7 @@ bool check_for_gaps_in_weapon_slots()
 // select screens is pressed.  The ship selected is created, and the interface music is stopped.
 commit_pressed_status commit_pressed(bool API_Access)
 {
-	int j, player_ship_info_index;
+	int player_ship_info_index;
 	
 	if ( Wss_num_wings > 0 ) {
 		if(!(Game_mode & GM_MULTIPLAYER)){
@@ -1933,20 +1934,17 @@ commit_pressed_status commit_pressed(bool API_Access)
 	int num_required_weapons = 0;
 	int num_satisfied_weapons = 0;
 	SCP_string weapon_list;
-	for (j=0; j<weapon_info_size(); j++)
+	for (int weapon_class : Team_data[Common_team].required_weapons)
 	{
-		if (Team_data[Common_team].weapon_required[j])
-		{
-			// add it to the message list
-			num_required_weapons++;
-			if (num_required_weapons > 1)
-				weapon_list.append(1, EOLN);
-			weapon_list.append(Weapon_info[j].get_display_name());
+		// add it to the message list
+		num_required_weapons++;
+		if (num_required_weapons > 1)
+			weapon_list.append(1, EOLN);
+		weapon_list.append(Weapon_info[weapon_class].get_display_name());
 
-			// see if it's carried by any ship
-			if (is_weapon_carried(j))
-				num_satisfied_weapons++;
-		}
+		// see if it's carried by any ship
+		if (is_weapon_carried(weapon_class))
+			num_satisfied_weapons++;
 	}
 	if (num_satisfied_weapons < num_required_weapons)
 	{
@@ -2058,14 +2056,13 @@ int pick_from_ship_list(int screen_offset, int ship_class)
 	if ( ss_icon_being_carried() )
 		return rval;
 
-	if ( Ss_pool[ship_class] > 0 ) {
+	if ( Ss_pool->value_or(ship_class, -1) > 0 ) {
 		int mouse_x, mouse_y;
 
 		ss_set_carried_icon(-1, ship_class);
 		mouse_get_pos_unscaled( &mouse_x, &mouse_y );
 		Ss_delta_x = Ship_list_coords[gr_screen.res][screen_offset][0] - mouse_x;
 		Ss_delta_y = Ship_list_coords[gr_screen.res][screen_offset][1] - mouse_y;
-		Assert( Ss_pool[ship_class] >= 0 );
 		rval = 0;
 	}
 
@@ -2778,9 +2775,9 @@ void ss_reset_selected_ship()
 	}
 
 	// get the first ship class found in the pool
-	for ( i = 0; i < ship_info_size(); i++ ) {
-		if ( Ss_pool[i] > 0 ) {
-			Selected_ss_class = i;
+	for ( const auto &[ship_class, count] : *Ss_pool ) {
+		if ( count > 0 ) {
+			Selected_ss_class = ship_class;
 			return;
 		}
 	}
@@ -2795,19 +2792,21 @@ void ss_reset_selected_ship()
 
 // There may be ships that are in wings but not in Team_data[0].  Since we still want to show those
 // icons in the ship selection list, the code below checks for these cases.  If a ship is found in
-// a wing, and is not in Team_data[0], it is appended to the end of the ship_count[] and ship_list[] arrays
-// that are in Team_data[0]
+// a wing, and is not in Team_data[0], it is appended to the end of the ship_choices list
+// that is in Team_data[0]
 //
 // exit: number of distinct ship classes available to choose from
 int ss_fixup_team_data(team_data *tdata)
 {
-	int i, j, k, ship_in_parse_player, list_size;
+	int i, j;
 	p_object		*p_objp;
-	team_data	*p_team_data;
+	team_data	*p_team_data = tdata;
 
-	p_team_data = tdata;
-	ship_in_parse_player = 0;
-	list_size = p_team_data->num_ship_choices;
+	auto append_class = [p_team_data](int ship_class) {
+		auto &entry = p_team_data->ship_choices.emplace_back();
+		entry.class_index = ship_class;
+		entry.count = 0;
+	};
 
 	for ( i = 0; i < MAX_STARTING_WINGS; i++ ) {
 		wing *wp;
@@ -2815,21 +2814,9 @@ int ss_fixup_team_data(team_data *tdata)
 			continue;
 		wp = &Wings[Starting_wings[i]];
 		for ( j = 0; j < wp->current_count; j++ ) {
-			ship_in_parse_player = 0;
-			
-			for ( k = 0; k < p_team_data->num_ship_choices; k++ ) {
-				Assert( p_team_data->ship_count[k] >= 0 );
-				if ( p_team_data->ship_list[k] == Ships[wp->ship_index[j]].ship_info_index ) {
-					ship_in_parse_player = 1;
-					break;
-				}
-			}	// end for, go to next item in parse player
-
-			if ( !ship_in_parse_player ) {
-				p_team_data->ship_count[list_size] = 0;
-				p_team_data->ship_list[list_size] = Ships[wp->ship_index[j]].ship_info_index;
-				p_team_data->num_ship_choices++;
-				list_size++;
+			if ( !std::any_of(p_team_data->ship_choices.begin(), p_team_data->ship_choices.end(),
+					[&](const auto &e) { return e.class_index == Ships[wp->ship_index[j]].ship_info_index; }) ) {
+				append_class(Ships[wp->ship_index[j]].ship_info_index);
 			}
 		}	// end for, go get next ship in wing
 
@@ -2837,65 +2824,34 @@ int ss_fixup_team_data(team_data *tdata)
 
 			for ( p_objp = GET_FIRST(&Ship_arrival_list); p_objp != END_OF_LIST(&Ship_arrival_list); p_objp = GET_NEXT(p_objp) ) {
 				if ( p_objp->wingnum == WING_INDEX(wp) ) {
-					ship_in_parse_player = 0;
-			
-					for ( k = 0; k < p_team_data->num_ship_choices; k++ ) {
-						Assert( p_team_data->ship_count[k] >= 0 );
-						if ( p_team_data->ship_list[k] == p_objp->ship_class ) {
-							ship_in_parse_player = 1;
-							break;
-						}
-					}	// end for, go to next item in parse player
-
-					if ( !ship_in_parse_player ) {
-						p_team_data->ship_count[list_size] = 0;
-						p_team_data->ship_list[list_size] = p_objp->ship_class;
-						p_team_data->num_ship_choices++;
-						list_size++;
+					if ( !std::any_of(p_team_data->ship_choices.begin(), p_team_data->ship_choices.end(),
+							[&](const auto &e) { return e.class_index == p_objp->ship_class; }) ) {
+						append_class(p_objp->ship_class);
 					}
 				}
 			}
 		}
 	}	// end for, go to next wing
 
-	if ( list_size == 0 ) {
-		// ensure that the default player ship is in the ship_list too
-		ship_in_parse_player = 0;
-		for ( k = 0; k < p_team_data->num_ship_choices; k++ ) {
-			Assert( p_team_data->ship_count[k] >= 0 );
-			if ( p_team_data->ship_list[k] == p_team_data->default_ship ) {
-				ship_in_parse_player = 1;
-				break;
-			}
-		}
-		if ( !ship_in_parse_player ) {
-			p_team_data->ship_count[list_size] = 0;
-			p_team_data->ship_list[list_size] = p_team_data->default_ship;
-			p_team_data->num_ship_choices++;
-			list_size++;
-		}
+	if ( p_team_data->ship_choices.empty() && p_team_data->default_ship >= 0 ) {
+		// ensure that the default player ship is in the choices too
+		append_class(p_team_data->default_ship);
 	}
 
-	return list_size;
+	return sz2i(p_team_data->ship_choices.size());
 }
 
 // set numbers of ships in pool to default values
 void ss_init_pool(team_data *pteam)
 {
-	int i;
-
 	Assert( Ss_pool != NULL );
 
-	for ( i = 0; i < MAX_SHIP_CLASSES; i++ ) {
-		Ss_pool[i] = -1;
-	}
+	Ss_pool->clear();
 
 	// set number of available ships based on counts in team_data
-	for ( i = 0; i < pteam->num_ship_choices; i++ ) {
-		if (Ss_pool[pteam->ship_list[i]] == -1) {
-			Ss_pool[pteam->ship_list[i]] = 0; 
-		}
-		Ss_pool[pteam->ship_list[i]] += pteam->ship_count[i];
+	// (auto-insert starts new entries at 0, so classes listed with a count of 0 stay in the pool as exhausted)
+	for ( auto &entry : pteam->ship_choices ) {
+		(*Ss_pool)[entry.class_index] += entry.count;
 	}
 }
 
@@ -2947,7 +2903,7 @@ void ss_load_all_icons()
 		}
 		Ss_icons[i].model_index = -1;
 
-		if ( Ss_pool[i] >= 0 ) {
+		if ( Ss_pool->contains(i) ) {
 			ss_load_icons(i);
 		}
 	}
@@ -3394,13 +3350,13 @@ int ss_dump_to_list(int from_slot, int to_list, interface_snd_id *sound)
 	}
 
 	// put ship back in list
-	Ss_pool[to_list]++;		// return to list
+	(*Ss_pool)[to_list]++;		// return to list
 	slot->ship_class = -1;	// remove from slot
 
 	// put weapons back in list
 	for ( i = 0; i < MAX_SHIP_WEAPONS; i++ ) {
 		if ( (slot->wep[i] >= 0) && (slot->wep_count[i] > 0) ) {
-			Wl_pool[slot->wep[i]] += slot->wep_count[i];
+			(*Wl_pool)[slot->wep[i]] += slot->wep_count[i];
 			slot->wep[i] = -1;
 			slot->wep_count[i] = 0;
 		}
@@ -3421,7 +3377,7 @@ int ss_grab_from_list(int from_list, int to_slot, interface_snd_id *sound)
 	slot = &Wss_slots[to_slot];
 
 	// ensure that pool has ship
-	if ( Ss_pool[from_list] <= 0 )
+	if ( Ss_pool->value_or(from_list, -1) <= 0 )
 	{
 		*sound=InterfaceSounds::ICON_DROP;
 		return 0;
@@ -3430,7 +3386,7 @@ int ss_grab_from_list(int from_list, int to_slot, interface_snd_id *sound)
 	Assert(slot->ship_class < 0 );	// slot should be empty
 
 	// take ship from list->slot
-	Ss_pool[from_list]--;
+	(*Ss_pool)[from_list]--;
 	slot->ship_class = from_list;
 
 	// take weapons from list->slot
@@ -3455,7 +3411,7 @@ int ss_swap_list_slot(int from_list, int to_slot, interface_snd_id *sound)
 	Assert( (Ss_pool != NULL) && (Wl_pool != NULL) && (Wss_slots != NULL) );
 
 	// ensure that pool has ship
-	if ( Ss_pool[from_list] <= 0 )
+	if ( Ss_pool->value_or(from_list, -1) <= 0 )
 	{
 		*sound=InterfaceSounds::ICON_DROP;
 		return 0;
@@ -3465,21 +3421,21 @@ int ss_swap_list_slot(int from_list, int to_slot, interface_snd_id *sound)
 	Assert(slot->ship_class >= 0 );        // slot should be filled
 
 	// put ship from slot->list
-	Ss_pool[Wss_slots[to_slot].ship_class]++;
+	(*Ss_pool)[Wss_slots[to_slot].ship_class]++;
 
 	// put weapons from slot->list
 	for ( i = 0; i < MAX_SHIP_WEAPONS; i++ )
 	{
 		if ( (slot->wep[i] >= 0) && (slot->wep_count[i] > 0) )
 		{
-			Wl_pool[slot->wep[i]] += slot->wep_count[i];
+			(*Wl_pool)[slot->wep[i]] += slot->wep_count[i];
 			slot->wep[i] = -1;
 			slot->wep_count[i] = 0;
 		}
 	}
 
 	// take ship from list->slot
-	Ss_pool[from_list]--;
+	(*Ss_pool)[from_list]--;
 	slot->ship_class = from_list;
 
 	// take weapons from list->slot

@@ -6,6 +6,7 @@
 #include "mission/missionparse.h"
 #include "iff_defs/iff_defs.h"
 #include "jumpnode/jumpnode.h"
+#include "mission/missioncampaign.h"
 #include "object/object.h"
 #include "object/waypoint.h"
 #include "prop/prop.h"
@@ -117,28 +118,40 @@ void update_custom_wing_indexes()
 		TVT_wings[i] = wing_name_lookup(TVT_wing_names[i], 1);
 }
 
-void generate_weaponry_usage_list_team(int team, int* arr)
+void generate_ship_usage_list_wing(int wing_num, SCP_map<int, int>& usage)
 {
 	int i;
 
-	for (i = 0; i < MAX_WEAPON_TYPES; i++) {
-		arr[i] = 0;
+	if (wing_num < 0) {
+		return;
 	}
+
+	i = Wings[wing_num].wave_count;
+	while (i--) {
+		usage[Ships[Wings[wing_num].ship_index[i]].ship_info_index]++;
+	}
+}
+
+void generate_weaponry_usage_list_team(int team, SCP_map<int, int>& usage)
+{
+	int i;
+
+	usage.clear();
 
 	if (The_mission.game_type & MISSION_TYPE_MULTI_TEAMS) {
 		Assert(team >= 0 && team < MAX_TVT_TEAMS);
 
 		for (i = 0; i < MAX_TVT_WINGS_PER_TEAM; i++) {
-			generate_weaponry_usage_list_wing(TVT_wings[(team * MAX_TVT_WINGS_PER_TEAM) + i], arr);
+			generate_weaponry_usage_list_wing(TVT_wings[(team * MAX_TVT_WINGS_PER_TEAM) + i], usage);
 		}
 	} else {
 		for (i = 0; i < MAX_STARTING_WINGS; i++) {
-			generate_weaponry_usage_list_wing(Starting_wings[i], arr);
+			generate_weaponry_usage_list_wing(Starting_wings[i], usage);
 		}
 	}
 }
 
-void generate_weaponry_usage_list_wing(int wing_num, int* arr)
+void generate_weaponry_usage_list_wing(int wing_num, SCP_map<int, int>& usage)
 {
 	int i, j;
 	ship_weapon* swp;
@@ -152,20 +165,17 @@ void generate_weaponry_usage_list_wing(int wing_num, int* arr)
 		swp = &Ships[Wings[wing_num].ship_index[i]].weapons;
 		j = swp->num_primary_banks;
 		while (j--) {
-			if (swp->primary_bank_weapons[j] >= 0 &&
-				swp->primary_bank_weapons[j] < static_cast<int>(Weapon_info.size())) {
-				arr[swp->primary_bank_weapons[j]]++;
+			if (Weapon_info.in_bounds(swp->primary_bank_weapons[j])) {
+				usage[swp->primary_bank_weapons[j]]++;
 			}
 		}
 
 		j = swp->num_secondary_banks;
 		while (j--) {
-			if (swp->secondary_bank_weapons[j] >= 0 &&
-				swp->secondary_bank_weapons[j] < static_cast<int>(Weapon_info.size())) {
-				arr[swp->secondary_bank_weapons[j]] +=
-					(int)floor((swp->secondary_bank_ammo[j] * swp->secondary_bank_capacity[j] / 100.0f /
-								   Weapon_info[swp->secondary_bank_weapons[j]].cargo_size) +
-							   0.5f);
+			if (Weapon_info.in_bounds(swp->secondary_bank_weapons[j])) {
+				usage[swp->secondary_bank_weapons[j]] +=
+					sz2i(floor((swp->secondary_bank_ammo[j] * swp->secondary_bank_capacity[j] / 100.0f /
+								   Weapon_info[swp->secondary_bank_weapons[j]].cargo_size) + 0.5f));
 			}
 		}
 	}
@@ -236,6 +246,119 @@ bool set_single_player_start(int objnum)
 	ensure_valid_player_start_shipnum();
 
 	return changed;
+}
+
+SCP_string check_name_conflict(const char *entity_type, const char *name, int exclude_ship, int exclude_wing, int exclude_waypoint_list, int exclude_jump_node, int exclude_prop)
+{
+	SCP_string msg;
+
+	// Name must not be empty
+	if (name[0] == '\0') {
+		msg += "This ";
+		msg += entity_type;
+		msg += " name cannot be empty";
+		return msg;
+	}
+
+	// Check wings
+	for (int i = 0; i < MAX_WINGS; i++) {
+		if (Wings[i].wave_count && i != exclude_wing && !stricmp(Wings[i].name, name)) {
+			msg += "This ";
+			msg += entity_type;
+			msg += " name is already being used by ";
+			msg += (exclude_wing >= 0) ? "another wing" : "a wing";
+			return msg;
+		}
+	}
+
+	// Check ships
+	for (auto ptr: list_range(&obj_used_list)) {
+		if ((ptr->type == OBJ_SHIP || ptr->type == OBJ_START) && ptr->instance != exclude_ship) {
+			if (!stricmp(Ships[ptr->instance].ship_name, name)) {
+				msg += "This ";
+				msg += entity_type;
+				msg += " name is already being used by ";
+				msg += (exclude_ship >= 0) ? "another ship" : "a ship";
+				return msg;
+			}
+		}
+	}
+
+	// Check props
+	int prop_size = sz2i(Props.size());
+	for (int i = 0; i < prop_size; i++) {
+		if (i != exclude_prop && Props[i].has_value() && !stricmp(Props[i]->prop_name, name)) {
+			msg += "This ";
+			msg += entity_type;
+			msg += " name is already being used by ";
+			msg += (exclude_prop >= 0) ? "another prop" : "a prop";
+			return msg;
+		}
+	}
+
+	// We don't need to check teams.  "Unknown" is a valid name and also an IFF.
+
+	// Check target priority groups
+	for (const auto &ai_tp: Ai_tp_list) {
+		if (!stricmp(ai_tp.name, name)) {
+			msg += "This ";
+			msg += entity_type;
+			msg += " name is already being used by a target priority group";
+			return msg;
+		}
+	}
+
+	// Check waypoint lists
+	int wl_size = sz2i(Waypoint_lists.size());
+	for (int i = 0; i < wl_size; i++) {
+		if (i != exclude_waypoint_list && !stricmp(Waypoint_lists[i].get_name(), name)) {
+			msg += "This ";
+			msg += entity_type;
+			msg += " name is already being used by ";
+			msg += (exclude_waypoint_list >= 0) ? "another waypoint path" : "a waypoint path";
+			return msg;
+		}
+	}
+
+	// Check jump nodes
+	int jn_size = sz2i(Jump_nodes.size());
+	for (int i = 0; i < jn_size; i++) {
+		if (i != exclude_jump_node && !stricmp(Jump_nodes[i].GetName(), name)) {
+			msg += "This ";
+			msg += entity_type;
+			msg += " name is already being used by ";
+			msg += (exclude_jump_node >= 0) ? "another jump node" : "a jump node";
+			return msg;
+		}
+	}
+
+	// Name must not start with '<' (used for invalidated SEXP references)
+	if (name[0] == '<') {
+		msg += "This ";
+		msg += entity_type;
+		msg += " name is not allowed to begin with <";
+		return msg;
+	}
+
+	return "";	// no error
+}
+
+int load_and_find_campaign_mission(const char *mission_filename)
+{
+	if (!mission_filename || !mission_filename[0])
+		return -1;
+
+	int idx = mission_campaign_find_mission(mission_filename);
+	if (idx < 0)
+		return -1;
+
+	if (Campaign.missions[idx].flags & CMISSION_FLAG_FRED_LOAD_PENDING)
+	{
+		read_mission_goal_list(idx);
+		Campaign.missions[idx].flags &= ~CMISSION_FLAG_FRED_LOAD_PENDING;
+	}
+
+	return idx;
 }
 
 void reassign_ship_slot(int from, int to, const FredShipSlotConfig& cfg, bool resort_obj_list)

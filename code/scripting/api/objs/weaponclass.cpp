@@ -828,10 +828,14 @@ ADE_VIRTVAR(AllowedInCampaign, l_Weaponclass, "boolean", "Gets or sets whether t
 		return ade_set_error(L, "b", false);
 
 	if (ADE_SETTING_VAR) {
-		Campaign.weapons_allowed[idx] = new_value;
+		if (new_value) {
+			Campaign.weapons_allowed.insert(idx);
+		} else {
+			Campaign.weapons_allowed.erase(idx);
+		}
 	}
 
-	return Campaign.weapons_allowed[idx] ? ADE_RETURN_TRUE : ADE_RETURN_FALSE;
+	return Campaign.weapons_allowed.contains(idx) ? ADE_RETURN_TRUE : ADE_RETURN_FALSE;
 }
 
 ADE_VIRTVAR(CargoSize, l_Weaponclass, "number", "The cargo size of this weapon class", "number", "The new cargo size or -1 on error")
@@ -1367,7 +1371,7 @@ ADE_FUNC(isWeaponRequired,
 
 	//This could be requested before Common_team has been initialized, so let's check.
 	if (Common_select_inited) {
-		return ade_set_args(L, "b", Team_data[Common_team].weapon_required[idx]);
+		return ade_set_args(L, "b", Team_data[Common_team].required_weapons.contains(idx));
 	} else {
 		return ADE_RETURN_NIL;
 	}

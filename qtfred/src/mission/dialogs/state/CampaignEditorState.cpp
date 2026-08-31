@@ -42,12 +42,13 @@ QByteArray CampaignEditorDialogModel::captureWorkingState() const
 		ds << QString::fromStdString(value);
 	}
 
+	// the allowed lists are sets of class indices; absent = not allowed
 	ds << static_cast<qint32>(m_ships_allowed.size());
-	for (bool allowed : m_ships_allowed)
-		ds << static_cast<quint8>(allowed ? 1 : 0);
+	for (int ship_class : m_ships_allowed)
+		ds << static_cast<qint32>(ship_class);
 	ds << static_cast<qint32>(m_weapons_allowed.size());
-	for (bool allowed : m_weapons_allowed)
-		ds << static_cast<quint8>(allowed ? 1 : 0);
+	for (int weapon_class : m_weapons_allowed)
+		ds << static_cast<qint32>(weapon_class);
 
 	ds << static_cast<qint32>(m_missions.size());
 	for (const auto& mission : m_missions) {
@@ -111,19 +112,18 @@ void CampaignEditorDialogModel::restoreWorkingState(const QByteArray& state)
 		m_custom_data[key.toStdString()] = value.toStdString();
 	}
 
-	auto readBools = [&ds](SCP_vector<bool>& out) {
+	auto readClassSet = [&ds](SCP_set<int>& out) {
 		out.clear();
 		qint32 count;
 		ds >> count;
-		out.reserve(count);
 		for (int i = 0; i < count; ++i) {
-			quint8 allowed;
-			ds >> allowed;
-			out.push_back(allowed != 0);
+			qint32 class_index;
+			ds >> class_index;
+			out.insert(static_cast<int>(class_index));
 		}
 	};
-	readBools(m_ships_allowed);
-	readBools(m_weapons_allowed);
+	readClassSet(m_ships_allowed);
+	readClassSet(m_weapons_allowed);
 
 	qint32 missionCount;
 	ds >> missionCount;

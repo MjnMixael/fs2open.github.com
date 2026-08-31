@@ -1,3 +1,4 @@
+#include <QShortcut>
 #include <QtWidgets/QTextEdit>
 #include <ui/util/DialogUndo.h>
 #include "ui/dialogs/WaypointEditorDialog.h"
@@ -48,6 +49,12 @@ WaypointEditorDialog::WaypointEditorDialog(FredView* parent, EditorViewport* vie
 
 	ui->setupUi(this);
 	util::installMainStackUndoShortcuts(this, _fredView->mainUndoStack());
+
+	// F6 / Shift+F6 cycle to the next / previous waypoint path, mirroring the Next/Prev buttons.
+	auto* nextShortcut = new QShortcut(QKeySequence(Qt::Key_F6), this);
+	connect(nextShortcut, &QShortcut::activated, this, [this] { ui->nextPathButton->click(); });
+	auto* prevShortcut = new QShortcut(QKeySequence(QStringLiteral("Shift+F6")), this);
+	connect(prevShortcut, &QShortcut::activated, this, [this] { ui->prevPathButton->click(); });
 
 	ui->nameEdit->setMaxLength(NAME_LENGTH - 1);
 

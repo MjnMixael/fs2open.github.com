@@ -4,6 +4,7 @@
 #include <iff_defs/iff_defs.h>
 #include <unordered_set>
 #include "mission/dialogs/WaypointEditorDialogModel.h"
+#include "missioneditor/common.h"
 
 #include <QTimer>
 
@@ -129,25 +130,12 @@ const SCP_vector<int>& WaypointEditorDialogModel::getSelectedPathIndices() const
 }
 
 bool WaypointEditorDialogModel::validateName(const SCP_string& name) {
-	if (name.empty()) {
-		showErrorDialogNoCancel("Waypoint path name cannot be empty.");
+	int exclude_wl = _selectedWaypointPaths.empty() ? -1 : static_cast<int>(_selectedWaypointPaths.front());
+	SCP_string reason = check_name_conflict("waypoint path", name.c_str(), -1, -1, exclude_wl);
+	if (!reason.empty()) {
+		showErrorDialogNoCancel(reason);
 		return false;
 	}
-
-	// waypoint path names share a single namespace with ships, props, wings, jump nodes, etc.
-	const waypoint_list* current_path = &Waypoint_lists[_selectedWaypointPaths.front()];
-	SCP_string collision = fred_object_name_collision(name.c_str(), -1, current_path);
-	if (!collision.empty()) {
-		showErrorDialogNoCancel("This waypoint path name is already being used by " + collision);
-		return false;
-	}
-
-	// formatting
-	if (name[0] == '<') {
-		showErrorDialogNoCancel("Waypoint names not allowed to begin with '<'");
-		return false;
-	}
-
 	return true;
 }
 

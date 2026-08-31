@@ -754,7 +754,7 @@ uint model_material::get_shader_flags() const
 		Shader_flags |= MODEL_SDR_FLAG_THICK_OUTLINES;
 	}
 
-	// Must stay a genuine compile-time flag (like SHADOW_MAP/THICK_OUTLINES above),
+	// Must stay a genuine compile-time flag (like THICK_OUTLINES above),
 	// not one gated only via the runtime `flags` uniform below -- see the comment
 	// on MODEL_SDR_FLAG_RT_SHADOWS in model_shader_flags.h.
 	if (is_shadow_receiving() && shadows_use_raytracing()) {

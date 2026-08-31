@@ -7,6 +7,7 @@
 #include <mission/object.h>
 #include <model/model.h>
 #include <ship/ship.h>
+#include "missioneditor/common.h"
 
 #include <QTimer>
 
@@ -139,24 +140,17 @@ void JumpNodeEditorDialogModel::showErrorDialogNoCancel(const SCP_string& messag
 }
 
 bool JumpNodeEditorDialogModel::validateName(const SCP_string& name) {
-	if (name.empty()) {
-		showErrorDialogNoCancel("A jump node name cannot be empty.");
+	int exclude_jn = -1;
+	if (!_selectedJumpNodes.empty()) {
+		auto* jnp = jumpnode_get_by_objnum(_selectedJumpNodes.front());
+		if (jnp)
+			exclude_jn = static_cast<int>(jnp - Jump_nodes.data());
+	}
+	SCP_string reason = check_name_conflict("jump node", name.c_str(), -1, -1, -1, exclude_jn);
+	if (!reason.empty()) {
+		showErrorDialogNoCancel(reason);
 		return false;
 	}
-
-	if (name[0] == '<') {
-		showErrorDialogNoCancel("Jump node names are not allowed to begin with '<'.");
-		return false;
-	}
-
-	// jump node names share a single namespace with ships, props, wings, waypoints, etc.
-	int except_objnum = _selectedJumpNodes.empty() ? -1 : _selectedJumpNodes.front();
-	SCP_string collision = fred_object_name_collision(name.c_str(), except_objnum);
-	if (!collision.empty()) {
-		showErrorDialogNoCancel("This jump node name is already being used by " + collision + ".");
-		return false;
-	}
-
 	return true;
 }
 

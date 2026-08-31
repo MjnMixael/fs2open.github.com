@@ -19,6 +19,7 @@
 
 #include <ui/dialogs/General/CheckBoxListDialog.h>
 #include <QVariant>
+#include <QShortcut>
 
 namespace fso::fred::dialogs {
 
@@ -417,8 +418,25 @@ ShipEditorDialog::ShipEditorDialog(FredView* parent, EditorViewport* viewport)
 
 	ui->setupUi(this);
 	util::installMainStackUndoShortcuts(this, _fredView->mainUndoStack());
-	ui->HelpTitle->setVisible(viewport->Show_sexp_help_ship_editor);
-	ui->helpText->setVisible(viewport->Show_sexp_help_ship_editor);
+	_show_sexp_help = viewport->Show_sexp_help_ship_editor;
+	ui->HelpTitle->setVisible(_show_sexp_help);
+	ui->helpText->setVisible(_show_sexp_help);
+
+	// Shift+F1 toggles the sexp help pane for this session without changing the saved preference.
+	auto* helpToggle = new QShortcut(QKeySequence(QStringLiteral("Shift+F1")), this);
+	connect(helpToggle, &QShortcut::activated, this, [this] {
+		_show_sexp_help = !_show_sexp_help;
+		ui->HelpTitle->setVisible(!_cues_hidden && _show_sexp_help);
+		ui->helpText->setVisible(!_cues_hidden && _show_sexp_help);
+		QApplication::processEvents(QEventLoop::ExcludeUserInputEvents);
+		resize(sizeHint());
+	});
+
+	// F6 / Shift+F6 cycle to the next / previous ship, mirroring the Next/Prev buttons.
+	auto* nextShortcut = new QShortcut(QKeySequence(Qt::Key_F6), this);
+	connect(nextShortcut, &QShortcut::activated, this, [this] { ui->nextButton->click(); });
+	auto* prevShortcut = new QShortcut(QKeySequence(QStringLiteral("Shift+F6")), this);
+	connect(prevShortcut, &QShortcut::activated, this, [this] { ui->prevButton->click(); });
 
 	ui->shipNameEdit->setMaxLength(NAME_LENGTH - 1);
 	ui->shipDisplayNameEdit->setMaxLength(NAME_LENGTH - 1);
@@ -1737,7 +1755,7 @@ void ShipEditorDialog::on_specialStatsButton_clicked()
 }
 void ShipEditorDialog::on_hideCuesButton_clicked()
 {
-	const auto showHelp = _viewport->Show_sexp_help_ship_editor;
+	const auto showHelp = _show_sexp_help;
 
 	_cues_hidden = !_cues_hidden;
 

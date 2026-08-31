@@ -35,6 +35,7 @@
 #include "model/modelreplace.h"
 #include "model/modelsinc.h"
 #include "parse/parselo.h"
+#include "prop/prop.h"
 #include "render/3dinternal.h"
 #include "ship/ship.h"
 #include "starfield/starfield.h"
@@ -311,6 +312,16 @@ void model_unload(int modelnum, int force)
 		}
 		if (pm->id == wi.external_model_num) {
 			wi.external_model_num = -1;
+		}
+	}
+
+	// and props, for the same reason: props_level_close() only clears the prop
+	// instances, so without this the class-level handle survives the model being
+	// freed and the next placement of that prop class reads a slot that has since
+	// been reused by an unrelated model.
+	for (auto& pip : Prop_info) {
+		if (pm->id == pip.model_num) {
+			pip.model_num = -1;
 		}
 	}
 
@@ -4435,6 +4446,10 @@ bool model_rotate_gun(const object *objp, const polymodel *pm, const polymodel_i
 		vm_vec_sub(&dir, &planar_dst, &world_pos);
 		vm_vec_normalize(&dir);
 		desired_base_angle = vm_vec_delta_ang_norm(&rotated_vec, &dir, &world_axis);
+		// for ventral turrets without custom matrixes
+		if (vm_vec_dot(&base_sm->frame_of_reference.vec.uvec, &turret->turret_norm) < 0.0f) {
+			desired_base_angle = PI + desired_base_angle;
+		}
 
 		//------------
 		// Pretend the base is pointing directly at the target

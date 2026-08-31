@@ -1,6 +1,7 @@
 #include "mission/dialogs/PropEditorDialogModel.h"
 
 #include <globalincs/linklist.h>
+#include <missioneditor/common.h>
 #include <mission/object.h>
 #include <prop/prop.h>
 
@@ -238,9 +239,9 @@ bool PropEditorDialogModel::setPropName(const SCP_string& name) {
 	auto obj_idx = _selectedPropObjects.front();
 
 	// prop names share a single namespace with ships, wings, waypoints, jump nodes, etc.
-	SCP_string collision = fred_object_name_collision(trimmed.c_str(), obj_idx);
-	if (!collision.empty()) {
-		showErrorDialogNoCancel("This prop name is already being used by " + collision + ".");
+	SCP_string reason = check_name_conflict("prop", trimmed.c_str(), -1, -1, -1, -1, Objects[obj_idx].instance);
+	if (!reason.empty()) {
+		showErrorDialogNoCancel(reason);
 		return false;
 	}
 

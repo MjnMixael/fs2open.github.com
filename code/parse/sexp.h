@@ -702,7 +702,7 @@ enum : int {
 	OP_TOGGLE_POINT_VISIBILITY,
 	OP_SHIP_GUARDIAN_THRESHOLD,	// Goober5000
 	OP_SHIP_SUBSYS_GUARDIAN_THRESHOLD,	// Goober5000
-	OP_SET_GUARD_RANGE, //MjnMixael
+	OP_SET_GUARD_RANGE, //MjnMixael + The Force
 	OP_SET_SKYBOX_MODEL, // taylor
 	OP_SHIP_CREATE,
 	OP_PROP_CREATE,     // MjnMixael
@@ -1208,9 +1208,11 @@ enum sexp_error_check
 
 	SEXP_CHECK_NONOP_ARGS,              // non-operator has arguments
 	SEXP_CHECK_OP_EXPECTED,             // operator expected, but found data instead
+	SEXP_CHECK_DATA_EXPECTED,           // data expected, but found operator instead
 	SEXP_CHECK_UNKNOWN_OP,              // unrecognized operator
 	SEXP_CHECK_TYPE_MISMATCH,           // return type or data type mismatch
-	SEXP_CHECK_BAD_ARG_COUNT,           // argument count in incorrect
+	SEXP_CHECK_BAD_ARG_COUNT,           // argument count is incorrect
+	SEXP_CHECK_BAD_ARG_COUNT_BENIGN,    // ditto, but don't prevent the mission from loading
 	SEXP_CHECK_UNKNOWN_TYPE,            // unrecognized return type of data type
 
 	SEXP_CHECK_INVALID_NUM = 101,       // number is not valid
@@ -1501,7 +1503,7 @@ extern std::pair<int, sexp_src> query_referenced_in_sexp(sexp_ref_type type, con
 extern void stuff_sexp_text_string(SCP_string &dest, int node, int mode);
 extern int build_sexp_string(SCP_string &accumulator, int cur_node, int level, int mode);
 extern bool sexp_query_type_match(int opf, int opr);
-extern int sexp_match_closest_operator(const SCP_string &str, int opf);
+extern int sexp_match_closest_operator(const SCP_string &str, int opf, size_t min = SCP_string::npos);
 extern bool sexp_recoverable_error(int num);
 extern const char *sexp_error_message(int num);
 extern int count_free_sexp_nodes();

@@ -527,7 +527,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "ship-no-guardian",				OP_SHIP_NO_GUARDIAN,					1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "ship-guardian-threshold",		OP_SHIP_GUARDIAN_THRESHOLD,				2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "ship-subsys-guardian-threshold",	OP_SHIP_SUBSYS_GUARDIAN_THRESHOLD,		3,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
-	{ "set-guard-range",                OP_SET_GUARD_RANGE,                     2,  INT_MAX,    SEXP_ACTION_OPERATOR,   },  // MjnMixael
+	{ "set-guard-range",                OP_SET_GUARD_RANGE,                     3,  INT_MAX,    SEXP_ACTION_OPERATOR,   },  // MjnMixael + The Force
 	{ "self-destruct",					OP_SELF_DESTRUCT,						1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "destroy-instantly",				OP_DESTROY_INSTANTLY,					1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Admiral MS
 	{ "destroy-instantly-with-debris",	OP_DESTROY_INSTANTLY_WITH_DEBRIS,		1,	INT_MAX,	SEXP_ACTION_OPERATOR,   },	// Asteroth
@@ -1993,17 +1993,18 @@ int query_sexp_args_count(int node, bool only_valid_args = false)
 	return count;
 }
 
+enum class ArgCountCheck { CORRECT, INCORRECT_BENIGN, INCORRECT_FATAL };
 /**
  * Needed to fix bug with sexps like send-message list which have arguments that need to be supplied as a block
  * 
  * @return whether the number of arguments for the supplied operation is correct
  */
-static bool check_operator_argument_count(int count, int op_index)
+static ArgCountCheck check_operator_argument_count(int count, int op_index)
 {
 	Assertion(op_index >= 0 && op_index < sz2i(Operators.size()), "op_index is out of range!");
 
 	if (count < Operators[op_index].min || count > Operators[op_index].max)
-		return false;
+		return ArgCountCheck::INCORRECT_FATAL;
 
 	int op_const = Operators[op_index].value;
 
@@ -2015,9 +2016,9 @@ static bool check_operator_argument_count(int count, int op_index)
 
 	if (op_const == OP_SEND_MESSAGE_LIST || op_const == OP_SEND_MESSAGE_CHAIN)
 		if (count % 4 != 0)
-			return false;
+			return ArgCountCheck::INCORRECT_BENIGN;		// historically, this check didn't work at all, and sexps gracefully recovered at runtime
 
-	return true;
+	return ArgCountCheck::CORRECT;
 }
 
 // helper functions for check_container_value_data_type()
@@ -2163,6 +2164,7 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 	int var_index = -1;
 	size_t st;
 	const sexp_container *p_container = nullptr; // for SEXPs that take container name as arg
+	int deferred_error = SEXP_CHECK_NO_ERROR, deferred_bad_node = -1;	// for recoverable errors, so that the rest of the tree is still checked
 
 	Assertion(node >= 0 && node < Num_sexp_nodes, "Node %d must be a valid SEXP node!", node);
 	Assertion(Sexp_nodes[node].type != SEXP_NOT_USED, "Node %d must be in use!", node);
@@ -2211,8 +2213,15 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 
 	count = query_sexp_args_count(op_node);
 
-	if (!check_operator_argument_count(sz2i(count), op_index))
-		return SEXP_CHECK_BAD_ARG_COUNT;  // incorrect number of arguments
+	auto arg_count_result = check_operator_argument_count(sz2i(count), op_index);
+	if (arg_count_result == ArgCountCheck::INCORRECT_FATAL)
+		return SEXP_CHECK_BAD_ARG_COUNT;	// incorrect number of arguments
+	else if (arg_count_result == ArgCountCheck::INCORRECT_BENIGN)
+	{
+		// incorrect, but defer it and continue checking
+		deferred_error = SEXP_CHECK_BAD_ARG_COUNT_BENIGN;
+		deferred_bad_node = op_node;
+	}
 
 	node = Sexp_nodes[op_node].rest;
 	while (node != -1) {
@@ -2231,7 +2240,7 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 			// thing.  (i.e. in the case of a cond statement, the conditional will fall into this if
 			// statement.  MORE TO DO HERE!!!!
 			if (Sexp_nodes[i].subtype == SEXP_ATOM_LIST)
-				return 0;
+				break;
 
 			int op2_index = get_operator_index(i);
 			int op2_const = SCP_vector_inbounds(Operators, op2_index) ? Operators[op2_index].value : OP_NOT_AN_OP;
@@ -2246,9 +2255,18 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 				}
 
 				if ((z = check_sexp_syntax(i, (int)opr, recursive, bad_node)) != 0) {
-					return z;
+					if (!sexp_recoverable_error(z))
+						return z;
+					// defer recoverable errors so that the rest of the tree is still checked
+					if (deferred_error == SEXP_CHECK_NO_ERROR) {
+						deferred_error = z;
+						deferred_bad_node = bad_node ? *bad_node : -1;
+					}
 				}
 			}
+
+		} else if (node_subtype == SEXP_ATOM_OPERATOR) {
+			return SEXP_CHECK_DATA_EXPECTED;	// operators should not be found here
 
 		} else if (node_subtype == SEXP_ATOM_NUMBER) {
 			node_return_type = OPR_POSITIVE;
@@ -2380,9 +2398,8 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 			continue;
 
 		} else {
-			UNREACHABLE("SEXP subtype is %d when it should be SEXP_ATOM_LIST, SEXP_ATOM_NUMBER, SEXP_ATOM_STRING, "
-						"SEXP_ATOM_CONTAINER_NAME, or "
-						"SEXP_ATOM_CONTAINER_DATA!",
+			UNREACHABLE("SEXP subtype is %d when it should be SEXP_ATOM_LIST, SEXP_ATOM_OPERATOR, SEXP_ATOM_NUMBER, "
+						"SEXP_ATOM_STRING, SEXP_ATOM_CONTAINER_NAME, or SEXP_ATOM_CONTAINER_DATA!",
 				node_subtype);
 		}
 
@@ -3179,7 +3196,13 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 				// we should check the syntax of the actual goal!!!!
 				z = Sexp_nodes[node].first;
 				if ((z = check_sexp_syntax(z, OPR_AI_GOAL, recursive, bad_node)) != 0){
-					return z;
+					if (!sexp_recoverable_error(z))
+						return z;
+					// defer recoverable errors so that the rest of the tree is still checked
+					if (deferred_error == SEXP_CHECK_NO_ERROR) {
+						deferred_error = z;
+						deferred_bad_node = bad_node ? *bad_node : -1;
+					}
 				}
 
 				if (Fred_running) {
@@ -4244,6 +4267,14 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 
 		node = Sexp_nodes[node].rest;
 		argnum++;
+	}
+
+	// now that the rest of the tree has been checked, report any recoverable error that was noted along the way
+	if (deferred_error != SEXP_CHECK_NO_ERROR)
+	{
+		if (bad_node)
+			*bad_node = deferred_bad_node;
+		return deferred_error;
 	}
 
 	return 0;
@@ -5850,7 +5881,15 @@ const ship_registry_entry *eval_ship(int node)
 			return eval_ship(arg_node);
 	}
 
-	auto ship_it = Ship_registry_map.find(CTEXT(node));
+	// look up the ship in the ship registry
+	auto ship_name = CTEXT(node);
+	auto ship_it = Ship_registry_map.find(ship_name);
+	if (ship_it == Ship_registry_map.end())
+	{
+		SCP_string legacy_hashed;
+		if (wing_bash_legacy_hashed_ship_name(legacy_hashed, ship_name))
+			ship_it = Ship_registry_map.find(legacy_hashed);
+	}
 	if (ship_it != Ship_registry_map.end())
 	{
 		// cache the value if it can't change later
@@ -10411,6 +10450,11 @@ int sexp_percent_ships_arrive_depart_destroy_disarm_disable_scan(int n, int what
 		}
 	}
 
+	// if there is nothing to check, the percentage is meaningless; this can happen if, for example, a wing
+	// arrives from a docking bay and its mothership is destroyed before the wing has a chance to arrive
+	if ( total <= 0 )
+		return SEXP_FALSE;
+
 	// now, look at the percentage
 	if ( ((count * 100) / total) >= percent )
 		return SEXP_KNOWN_TRUE;
@@ -14036,8 +14080,9 @@ void sexp_set_player_target(int node)
 			new_subsys = ship_get_subsys(shipp, subsys_name);
 		}
 	}
-    set_target_objnum(Player_ai, objnum);
-    set_targeted_subsys(Player_ai, new_subsys, objnum);
+	set_target_objnum(Player_ai, objnum);
+	set_targeted_subsys(Player_ai, new_subsys, new_subsys ? objnum : -1);
+	shipp->last_targeted_subobject[Player_num] = new_subsys;
 }
 
 // Luytenky
@@ -19605,27 +19650,48 @@ void sexp_ship_guardian_threshold(int node)
 		ship_entry->shipp()->ship_guardian_threshold = threshold;
 	}
 }
-
-// MjnMixael
+// MjnMixael + The Force
 void sexp_set_guard_range(int node)
 {
 	int range, n = node;
 	bool is_nan, is_nan_forever;
-
-	range = eval_num(n, is_nan, is_nan_forever);
-	if (is_nan || is_nan_forever)
+	auto ship_entry = eval_ship(n);
+	if (!ship_entry || !ship_entry->has_shipp()) {
 		return;
+	}
+	int shipnum = ship_entry->shipnum;
 	n = CDR(n);
-
+	range = eval_num(n, is_nan, is_nan_forever);
+	if (is_nan || is_nan_forever) {
+		return;
+	}
+	auto true_range = static_cast<float>(range);
+	n = CDR(n);
 	for (; n != -1; n = CDR(n)) {
-		auto ship_entry = eval_ship(n);
-		if (!ship_entry || !ship_entry->has_shipp()) {
+		object_ship_wing_point_team oswpt;
+		eval_object_ship_wing_point_team(&oswpt, n);
+		if (oswpt.type == OSWPT_TYPE_SHIP) {
+			auto shipp = oswpt.shipp();
+			set_guard_range_ship(true_range, shipnum, shipp);
+		} else if (oswpt.type == OSWPT_TYPE_WING) {
+			for (int i = 0; i < oswpt.wingp()->current_count; ++i) {
+				auto shipp = &Ships[oswpt.wingp()->ship_index[i]];
+				set_guard_range_ship(true_range, shipnum, shipp);
+			}
+		} else if (oswpt.type == OSWPT_TYPE_WHOLE_TEAM) {
+			ship_obj* so;
+			for (so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so)) {
+				if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
+					continue;
+
+				auto shipp = &Ships[Objects[so->objnum].instance];
+				if (shipp->team == oswpt.team) {
+					set_guard_range_ship(true_range, shipnum, shipp);
+				}
+			}
+		} else {
 			continue;
 		}
-
-		// Intentionally no lower bound validation beyond disabling at <= 0.
-		// Mission authors may choose very small positive values for highly restrictive escort behavior.
-		ship_entry->shipp()->max_guard_radius = (range > 0) ? static_cast<float>(range) : -1.0f;
 	}
 }
 
@@ -29144,7 +29210,6 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_set_guard_range(node);
 				sexp_val = SEXP_TRUE;
 				break;
-
 			case OP_SHIP_SUBSYS_TARGETABLE:
 				sexp_ship_deal_with_subsystem_flag(cur_node, node, Ship::Subsystem_Flags::Untargetable, true, false);
 				sexp_val = SEXP_TRUE;
@@ -32634,9 +32699,11 @@ int query_operator_argument_type(int op_index, int argnum)
 
 		case OP_SET_GUARD_RANGE:
 			if (argnum == 0)
+				return OPF_SHIP;
+			else if (argnum == 1)
 				return OPF_NUMBER;
 			else
-				return OPF_SHIP;
+				return OPF_SHIP_WING_WHOLETEAM;
 
 		case OP_SHIP_SUBSYS_TARGETABLE:
 		case OP_SHIP_SUBSYS_UNTARGETABLE:
@@ -35508,12 +35575,15 @@ bool sexp_query_type_match(int opf, int opr)
  * Finds the operator that is the best textual match for the input string, given the required OPF type.  For equal matches,
  * the alphabetically earliest operator is returned.
  * 
+ * min defaults to SCP_string::npos, when specified to another value, this function will not always return a match  
+ *
  * Note: Returns the operator index, not the operator value.
  */
-int sexp_match_closest_operator(const SCP_string &str, int opf)
+int sexp_match_closest_operator(const SCP_string &str, int opf, size_t min)
 {
+	// Cyborg - This bool setup helps with readability
+	bool return_any = (min == SCP_string::npos);
 	int best = -1;
-	size_t min = SCP_string::npos;
 
 	for (int op_index : Sorted_operator_indexes)
 	{
@@ -35523,7 +35593,7 @@ int sexp_match_closest_operator(const SCP_string &str, int opf)
 		if (sexp_query_type_match(opf, opr))
 		{
 			size_t cost = stringcost(op_text, str, Max_operator_length, stringcost_tolower_equal);
-			if (best < 0 || cost < min)
+			if (cost < min || (return_any && best == -1) )
 			{
 				min = cost;
 				best = op_index;
@@ -35542,16 +35612,22 @@ bool sexp_recoverable_error(int num)
 		// but the mission will run without crashing.
 		case SEXP_CHECK_AMBIGUOUS_EVENT_NAME:
 		case SEXP_CHECK_AMBIGUOUS_GOAL_NAME:
+			return true;
 
 		// Having an invalid gauge in FSO won't hurt,
 		// as all places which call hud_get_gauge() or hud_get_custom_gauge() check its return value for NULL.
 		case SEXP_CHECK_INVALID_CUSTOM_HUD_GAUGE:
 		case SEXP_CHECK_INVALID_ANY_HUD_GAUGE:
+			return true;
 
 		// Trying to set an invalid sound environment has no effect, and all sound enviroments are invalid if EFX is disabled.
 		// Invalid sound environment options are simiarly harmless.
 		case SEXP_CHECK_INVALID_SOUND_ENVIRONMENT:
 		case SEXP_CHECK_INVALID_SOUND_ENVIRONMENT_OPTION:
+			return true;
+
+		// Certain argument counts historically weren't checked properly, but the runtime code could still recover
+		case SEXP_CHECK_BAD_ARG_COUNT_BENIGN:
 			return true;
 
 		// most errors will halt mission loading
@@ -35569,6 +35645,9 @@ const char *sexp_error_message(int num)
 		case SEXP_CHECK_OP_EXPECTED:
 			return "Operator expected instead of data";
 
+		case SEXP_CHECK_DATA_EXPECTED:
+			return "Data expected instead of operator";
+
 		case SEXP_CHECK_UNKNOWN_OP:
 			return "Unrecognized operator";
 
@@ -35576,6 +35655,7 @@ const char *sexp_error_message(int num)
 			return "Argument type mismatch";
 
 		case SEXP_CHECK_BAD_ARG_COUNT:
+		case SEXP_CHECK_BAD_ARG_COUNT_BENIGN:
 			return "Argument count is illegal";
 
 		case SEXP_CHECK_UNKNOWN_TYPE:
@@ -40822,12 +40902,14 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 
 	// MjnMixael
 	{ OP_SET_GUARD_RANGE, "set-guard-range\r\n"
-		"\tSets the max range in meters at which any ships guarding this ship will engage with threats.\r\n"
+		"\tLimits the range that selected ships or wings can move when guarding a specific ship\r\n"
 		"This range will override the default dynamic range behavior for ships obeying a guard order.\r\n"
-		"If the value is <= 0, regular dynamic guard range behavior will resume. Positive values are used as is with no size validation based on ship class.\r\n\r\n"
-		"Takes 2 or more arguments...\r\n"
-		"\t1:\tGuard range cap in meters (<= 0 disables cap).\r\n"
-		"\t2+:\tShip(s) to apply the cap to (ships must be in-mission)." },
+		"If the value is <= 0, regular dynamic guard range behavior will resume. Positive values are used as is with no size validation based on ship class.\r\n"
+		"Warning: Will not apply to future waves of wings or ships not currently in mission.\r\n\r\n"
+		"Takes 3 or more arguments...\r\n"
+		"\t1:\tShip the escorts won't leave the range of if guarding (Ship must be in mission)\r\n"
+		"\t2:\tGuard range cap in meters (<= 0 disables cap)\r\n"
+		"\t3+:\tEscort ships and wings that the limit applies to" },
 
 	// Goober5000
 	{ OP_SHIP_STEALTHY, "ship-stealthy\r\n"
