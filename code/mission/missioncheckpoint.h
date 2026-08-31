@@ -25,6 +25,39 @@
  * Everything that crosses the file is keyed by name -- ship names, class names, subsystem
  * names -- never by a runtime index, so a checkpoint survives table changes and engine
  * updates.  See checkpointfields.h for how the per-struct field lists work.
+ *
+ * WHAT IS DELIBERATELY NOT CAPTURED
+ *
+ * These are decisions rather than omissions, and they are written down here so that the next
+ * reader does not spend an afternoon working out whether each one was forgotten.  Individual
+ * structs below carry their own narrower notes; this is the list of whole categories.
+ *
+ *   Weapons in flight, and beams.  A weapon object carries unique_ptr swarm and homing caches, a
+ *   trail pointer, a back-reference to the turret that fired it and a live sound handle, and what
+ *   all that buys is under a second of gameplay -- the shots that were in the air when the
+ *   checkpoint was taken.  Turret firing cadence already resumes, because turret_next_fire_stamp
+ *   rides with the subsystems, so a restored battle picks straight back up.
+ *
+ *   Shockwaves.  shockwave::obj_sig_hitlist holds object signatures, which are regenerated on
+ *   every load and can name weapons or debris that do not survive at all; a bad remap double-
+ *   damages a ship.  total_time is about a second, so a checkpoint almost never lands inside one.
+ *
+ *   Small debris.  It expires in seconds, it is pure decoration, and debris_create_only() culls
+ *   it by distance anyway.  Hull debris is captured, because a capital ship wreck is permanent,
+ *   collidable and targetable -- battlefield terrain rather than an effect.
+ *
+ *   Particles, decals, trails, sparks, sound handles and RNG state.  None of these are ever worth
+ *   doing: they are either regenerated within a frame or two of the restore, or they are handles
+ *   into subsystems that were torn down with the level.
+ *
+ *   The camera, cutscene bars, fades and subtitles.  A checkpoint taken mid-cutscene is
+ *   pathological, the state lasts seconds, and a half-restored camera is worse than none.  The
+ *   bars and the fade are force-cleared on restore so a checkpoint taken mid-fade cannot resume
+ *   into a black screen.
+ *
+ *   A ship in the middle of its death roll is recorded as already destroyed, and contributes no
+ *   debris, because it had not produced any yet.  There is no way to resume a death roll on a
+ *   fresh load.
  */
 
 class object;
@@ -561,7 +594,9 @@ struct environment_state {
 	bool subspace = false;
 
 	// Background: which set is live, and then the live sun and bitmap instances, which are not the
-	// same thing as that set's definition once a SEXP has been at them.
+	// same thing as that set's definition once a SEXP has been at them.  The index is allowed to
+	// be an index because Backgrounds[] is built solely by the mission parse, which the fingerprint
+	// check makes identical across runs.
 	int background_index = -1;
 	SCP_vector<starfield_entry_state> starfield;
 

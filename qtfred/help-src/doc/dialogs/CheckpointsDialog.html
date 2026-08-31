@@ -11,12 +11,52 @@
 <h1>Checkpoint Options</h1>
 <p>Opens via <strong>Editors &rsaquo; Mission Specs &rsaquo; Checkpoints</strong>.</p>
 <p>Mission-wide settings for the in-engine checkpoint system. A checkpoint saves the state of a
-mission in progress &mdash; ship damage, subsystems, weapons, positions, wing waves, SEXP
-variables, score and mission time &mdash; so the player can resume from it later, including after
-quitting the game.</p>
+mission in progress so the player can resume from it later, including after quitting the game.</p>
 
 <p>Checkpoints are written by the <strong>store-checkpoint</strong> operator, so a mission that
 never calls it has none. These settings control what happens around that.</p>
+
+<h2>What a checkpoint remembers</h2>
+<p>Enough that a resumed mission is the mission you left, not a fresh copy of it:</p>
+<ul>
+    <li><strong>Ships</strong> &mdash; class, team, position, hull, shields, every subsystem, weapon
+        banks and ammunition, countermeasures, cargo, flags, and physics.</li>
+    <li><strong>Who is left</strong> &mdash; ships destroyed, departed or not yet arrived, wing
+        waves and their timers, and the mission log exactly as it read.</li>
+    <li><strong>Mission logic</strong> &mdash; events and their repeat counts, goals, SEXP variables
+        and containers, and the settled state of anything that had resolved for good, including
+        numbers <strong>rand</strong> had already rolled.</li>
+    <li><strong>Orders and docking</strong> &mdash; every AI order and target, what each ship was
+        guarding, chasing, ignoring or flying towards, which ships were docked to which, and at
+        which bays.</li>
+    <li><strong>The battlefield</strong> &mdash; capital ship wreckage, model animations such as
+        open bay doors and deployed turrets, and changes a mission made to ships that had not
+        arrived yet.</li>
+    <li><strong>The world</strong> &mdash; skybox, background bitmaps and suns, ambient light,
+        nebula, soundtrack, HUD toggles, jump nodes and navpoints.</li>
+    <li><strong>The player's context</strong> &mdash; score, hotkey assignments, the escort list,
+        support ship calls used and the rearm stockpile spent, built-in message allowances, and the
+        training directive context.</li>
+    <li><strong>Scripts</strong> &mdash; whatever a script asked to have remembered. See
+        <strong>On Checkpoint Save</strong>, <strong>On Checkpoint Restore</strong> and
+        <strong>mission.setCheckpointData()</strong>.</li>
+</ul>
+
+<h2>What it deliberately does not</h2>
+<p>These are decisions, not gaps. Each one either lasts a second or two, or cannot be reproduced
+without doing more harm than the loss:</p>
+<ul>
+    <li>Weapons and beams in flight. The shots that were in the air are gone, but turret firing
+        cadence resumes, so a restored battle picks straight back up.</li>
+    <li>Shockwaves, particles, decals, trails, sparks and looping sounds.</li>
+    <li>Small debris. Capital ship wreckage is kept, because it is cover.</li>
+    <li>The camera, cutscene bars, fades and subtitles. A checkpoint taken mid-fade resumes with a
+        clear screen rather than a black one.</li>
+    <li>Queued dialogue that had not been said yet, and an asteroid field that a mission rebuilt
+        mid-flight &mdash; the field the mission file describes comes back either way.</li>
+    <li>Autopilot, which is disengaged on resume rather than picked up half way.</li>
+    <li>A ship in the middle of its death roll, which is recorded as already destroyed.</li>
+</ul>
 
 <h2>Availability</h2>
 <table>
@@ -67,6 +107,10 @@ later <strong>store-checkpoint</strong> overwrites the slot.</p>
     <li>A checkpoint saved before the mission file was last edited is treated as absent, because
         the mission's events and variables would no longer line up with it.</li>
     <li>Checkpoints do nothing in multiplayer.</li>
+    <li>Scripts can attach their own data to a checkpoint with
+        <strong>mission.setCheckpointData()</strong> and read it back from the
+        <strong>On Checkpoint Restore</strong> hook, which runs once the mission is fully
+        restored.</li>
 </ul>
 </body>
 </html>

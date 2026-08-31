@@ -17,12 +17,11 @@ namespace checkpoint {
 // Written into every checkpoint so a stray file of another type is rejected outright.
 static const unsigned int CHECKPOINT_FILE_ID = 0x5f4b4843;   // "CHK_"
 
-// Bump ONLY for a structural change: a new or removed section, or a change to what an
-// existing key means.  Adding or removing individual fields needs no bump -- the reader
-// defaults anything the file does not carry, and ignores anything it does not recognise.
-//
-// 2: mission_checksum replaced by mission_fingerprint, which is computed differently.
-static const unsigned int CHECKPOINT_VERSION = 2;
+// Bump ONLY for a structural change: a change to what an existing key means.  Adding or removing
+// individual fields needs no bump -- the reader defaults anything the file does not carry, and
+// ignores anything it does not recognise -- and neither does adding a whole section, since an
+// unrecognised section is skipped.
+static const unsigned int CHECKPOINT_VERSION = 1;
 
 // Build the on-disk name for a slot of the currently loaded mission.
 //

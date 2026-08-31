@@ -42073,9 +42073,11 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\tSaves the current state of the mission so that it can be restored later with load-checkpoint.  Takes 0 or 1 arguments...\r\n"
 		"\t1: Optional name for this checkpoint slot, so that a mission can keep more than one.  Defaults to \"default\".\r\n\r\n"
 		"The checkpoint is written to disk under the current pilot and campaign, so it survives quitting the game.  "
-		"It records every ship's damage, subsystems, weapons, position and movement, wing wave state, SEXP variables, "
-		"the player's score and kills, and the mission time.  Does nothing in multiplayer, or when checkpoints have "
-		"been switched off for this mission in Mission Specs -> Checkpoints."
+		"It records every ship's damage, subsystems, weapons, position and movement, its AI orders and targets, "
+		"what was docked to what, wing wave state, events and goals, the mission log, SEXP variables and containers, "
+		"capital ship wreckage, model animations, the sky and the music, the player's score, kills and hotkeys, and "
+		"the mission time.  Mission Specs -> Checkpoints lists what it deliberately leaves out.  Does nothing in "
+		"multiplayer, or when checkpoints have been switched off for this mission."
 	},
 
 	{ OP_LOAD_CHECKPOINT, "load-checkpoint\r\n"
