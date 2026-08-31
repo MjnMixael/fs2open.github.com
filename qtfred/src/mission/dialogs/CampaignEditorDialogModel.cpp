@@ -457,6 +457,11 @@ void CampaignEditorDialogModel::createNewCampaign()
 	// First, clear the global state to ensure a clean load.
 	clearCampaignGlobal();
 
+	// Seed the editor.tbl campaign schema defaults into the fresh global before
+	// initializeData() copies it into the working copy, so a new campaign starts
+	// pre-populated the way a new mission does.
+	apply_default_campaign_custom_data(&Campaign);
+
 	// Initialize the model to a clean "new campaign" state.
 	initializeData();
 }

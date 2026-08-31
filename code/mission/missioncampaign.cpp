@@ -36,6 +36,7 @@
 #include "menuui/mainhallmenu.h"
 #include "menuui/techmenu.h"
 #include "mission/missioncampaign.h"
+#include "mission/missionparse.h"
 #include "mission/missiongoals.h"
 #include "missionui/missionscreencommon.h"
 #include "missionui/redalert.h"
@@ -686,6 +687,11 @@ int mission_campaign_load(const char* filename, const char* full_path, player* p
 		Campaign_load_failure = CAMPAIGN_ERROR_CORRUPT;
 		return CAMPAIGN_ERROR_CORRUPT;
 	}
+
+	// Fill in any editor.tbl campaign custom-data keys the file didn't define.
+	// Must run AFTER the parse: parse_string_map() merges with emplace(), which
+	// won't overwrite, so seeding earlier would beat the campaign's own values.
+	apply_default_campaign_custom_data(&Campaign);
 
 	// set up the other variables for the campaign stuff.  After initializing, we must try and load
 	// the campaign save file for this player.  Since all campaign loads go through this routine, I
