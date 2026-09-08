@@ -7827,8 +7827,6 @@ bool parse_main(const char *mission_name, int flags)
 {
 	bool rval;
 
-	Assert(Ship_info.size() <= MAX_SHIP_CLASSES);
-
 	Parsing_mission = true;
 
 	do {
