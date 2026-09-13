@@ -51,12 +51,14 @@ QByteArray MissionSpecDialogModel::captureState() const
 	ds << static_cast<qint8>(The_mission.support_ships.disallow_rearm ? 1 : 0);
 	ds << static_cast<qint8>(The_mission.support_ships.rearm_pool_from_loadout ? 1 : 0);
 	ds << static_cast<qint8>(The_mission.support_ships.allow_rearm_weapon_precedence ? 1 : 0);
-	// rearm_weapon_pool — only serialize weapon_info_size() entries per team
-	const auto numWeapons = static_cast<qint32>(weapon_info_size());
-	ds << numWeapons;
+	// rearm_weapon_pool — per team, a sparse map of weapon class -> amount. Only
+	// explicit entries are stored; absent classes resolve via rearm_pool_default().
 	for (const auto& pool : The_mission.support_ships.rearm_weapon_pool) {
-		for (int i = 0; i < numWeapons; ++i)
-			ds << static_cast<qint32>(pool[i]);
+		ds << static_cast<qint32>(pool.size());
+		for (const auto& [weaponClass, amount] : pool) {
+			ds << static_cast<qint32>(weaponClass);
+			ds << static_cast<qint32>(amount);
+		}
 	}
 
 	// Mission flags as a 64-bit integer
@@ -157,14 +159,16 @@ void MissionSpecDialogModel::restoreState(const QByteArray& state)
 	ds >> b8; The_mission.support_ships.disallow_rearm             = (b8 != 0);
 	ds >> b8; The_mission.support_ships.rearm_pool_from_loadout    = (b8 != 0);
 	ds >> b8; The_mission.support_ships.allow_rearm_weapon_precedence = (b8 != 0);
-	qint32 numWeapons;
-	ds >> numWeapons;
 	for (auto& pool : The_mission.support_ships.rearm_weapon_pool) {
-		for (int i = 0; i < numWeapons; ++i) {
-			ds >> i32;
-			if (i < MAX_WEAPON_TYPES) {
-				pool[i] = i32;
-			}
+		// clear first: the old dense array had every slot overwritten on restore, but a
+		// sparse map would otherwise keep entries added after the snapshot was taken
+		pool.clear();
+		qint32 entryCount;
+		ds >> entryCount;
+		for (int i = 0; i < entryCount; ++i) {
+			qint32 weaponClass, amount;
+			ds >> weaponClass >> amount;
+			pool[static_cast<int>(weaponClass)] = static_cast<int>(amount);
 		}
 	}
 
