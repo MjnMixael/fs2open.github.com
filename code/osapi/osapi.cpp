@@ -159,8 +159,25 @@ namespace
 					break;
 
 				case SDL_EVENT_WINDOW_RESIZED:
-					gr_screen_resize(e.window.data1, e.window.data2);
+				case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED: {
+					// SDL_EVENT_WINDOW_RESIZED reports the new size in window coordinates, which are
+					// only the same as pixels when the window's pixel density is 1. A fullscreen mode
+					// with a higher pixel density (createViewport asks for those) or a display scale
+					// change makes them differ, and gr_screen drives glViewport directly, so trusting
+					// the window coordinates would leave the engine drawing into a sub-rectangle of
+					// the drawable and never clearing the rest. Ask for the pixel size instead, which
+					// is what os::Viewport::getSize() (and therefore gr_opengl_use_viewport) uses.
+					int pixel_w = 0;
+					int pixel_h = 0;
+
+					if (SDL_GetWindowSizeInPixels(mainSDLWindow, &pixel_w, &pixel_h) && pixel_w > 0 &&
+						pixel_h > 0) {
+						gr_screen_resize(pixel_w, pixel_h);
+					} else {
+						gr_screen_resize(e.window.data1, e.window.data2);
+					}
 					break;
+				}
 			}
 
 			gr_activate(fAppActive);
@@ -446,6 +463,7 @@ void os_init(const char * wclass, const char * title, const char * app_name)
 #endif // WIN32
 
 	os::events::addEventListener(SDL_EVENT_WINDOW_RESIZED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
+	os::events::addEventListener(SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
 	os::events::addEventListener(SDL_EVENT_WINDOW_RESTORED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
 	os::events::addEventListener(SDL_EVENT_WINDOW_MINIMIZED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
 	os::events::addEventListener(SDL_EVENT_WINDOW_MAXIMIZED, os::events::DEFAULT_LISTENER_WEIGHT, window_event_handler);
