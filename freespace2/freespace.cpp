@@ -259,6 +259,7 @@ struct big_expl_flash {
 #define FRAME_FILTER 16
 
 #define DEFAULT_SKILL_LEVEL	1
+static int Default_skill_level = DEFAULT_SKILL_LEVEL; // can be overridden by default_settings.tbl
 int	Game_skill_level = DEFAULT_SKILL_LEVEL;
 
 static SCP_string skill_level_display(int value)
@@ -274,6 +275,7 @@ static void parse_skill_func()
 	value -= 1; // Parse 1-5 for the skill levels but convert to our internal 0-4
 	CLAMP(value, 0, 4);
 
+	Default_skill_level = value;
 	Game_skill_level = value;
 }
 
@@ -284,7 +286,7 @@ static auto GameSkillOption __UNUSED = options::OptionBuilder<int>("Game.SkillLe
                      .category(std::make_pair("Game", 1824))
                      .range(0, 4)
                      .level(options::ExpertLevel::Beginner)
-                     .default_func([]() { return DEFAULT_SKILL_LEVEL; })
+                     .default_func([]() { return Default_skill_level; })
                      .bind_to(&Game_skill_level)
                      .display(skill_level_display)
                      .importance(1)
@@ -622,7 +624,7 @@ const fs_builtin_mission *game_find_builtin_mission(const char *filename)
 
 int game_get_default_skill_level()
 {
-	return DEFAULT_SKILL_LEVEL;
+	return Default_skill_level;
 }
 
 // Resets the flash
@@ -1021,9 +1023,6 @@ void game_level_close()
 			// of letting it use a bunch of memory
 			extern void model_deallocate_interp_data();
 			model_deallocate_interp_data();
-
-			extern void model_collide_free_point_list();
-			model_collide_free_point_list();
 		}
 	}
 	else
@@ -8174,6 +8173,12 @@ int main(int argc, char *argv[])
 	crashdump::installCrashHandler();
 
 #ifdef WIN32
+#ifndef __MINGW32__
+	// Report leaks when the CRT shuts down, i.e. after static destructors have run.  Calling
+	// _CrtDumpMemoryLeaks() at the end of main() would report every global container as a leak.
+	_CrtSetDbgFlag(_CrtSetDbgFlag(_CRTDBG_REPORT_FLAG) | _CRTDBG_LEAK_CHECK_DF);
+#endif
+
 	// Don't let more than one instance of FreeSpace run.
 	HWND hwnd = FindWindow(NOX("FreeSpaceClass"), nullptr);
 	if (hwnd)	{
@@ -8253,10 +8258,6 @@ int main(int argc, char *argv[])
 	SCP_mspdbcs_Cleanup();
 
 	::CoUninitialize();
-
-#ifndef __MINGW32__
-	_CrtDumpMemoryLeaks();
-#endif
 #endif
 
 	return result;
