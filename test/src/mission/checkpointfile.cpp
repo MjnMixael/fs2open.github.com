@@ -412,31 +412,6 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 
 		data.ships.push_back(std::move(ship));
 
-		// The world section: ambient state that belongs to the mission rather than to a ship.
-		checkpoint::asteroid_state ast;
-		ast.type_name = "Brown";
-		ast.subtype = 2;
-		ast.pos = vm_vec_new(10.0f, 20.0f, 30.0f);
-		ast.vel = vm_vec_new(1.0f, 2.0f, 3.0f);
-		ast.hull = 15.5f;
-		ast.target_ship = "Beta 1";
-		ast.final_death_time = 4321;
-		data.asteroids.push_back(ast);
-		data.asteroids_enabled = true;
-
-		checkpoint::nav_state nav;
-		nav.name = "Rally Point";
-		nav.flags = 0x0004;
-		nav.waypoint_list = "Waypoint path 1";
-		nav.waypoint_num = 3;
-		data.navs.push_back(nav);
-
-		checkpoint::nav_state nav2;
-		nav2.name = "Escort";
-		nav2.flags = 0x0008;
-		nav2.target_ship = "Beta 1";
-		data.navs.push_back(nav2);
-
 		// Things in the air.  Both a weapon and a beam carry a flag list, and both live in the
 		// same section, so this is the same collision hazard the ship section had.
 		checkpoint::projectile_state shot;
@@ -480,23 +455,107 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		beam.shot_aim = {0.5f, 1.5f, 2.5f};
 		data.beams.push_back(beam);
 
-		data.support.tally = 2;
-		data.support.ship_class = "GTS Hygeia";
-		data.support.max_support_ships = 5;
-		data.support.max_concurrent_ships = 1;
-		data.support.arrival_location = "Near Ship";
-		data.support.departure_location = "Hyperspace";
-		data.support.arrival_anchor_ship = "Beta 1";
-		data.support.departure_anchor_special = 1 << 30;
-		data.support.rearm_pools.push_back({{"Subach HL-7", 12}, {"Harpoon", -1}});
-		data.support.rearm_pools.push_back({{"Harpoon", 0}});
+		// The world section: everything the mission load resets that a SEXP can have moved.
+		auto& env = data.environment;
+		env.present = true;
+		env.skybox_model = "skybox.pof";
+		env.skybox_texture = "skytex";
+		env.skybox_flags_hi = 1;
+		env.skybox_flags_lo = 0x80000000u;
+		env.skybox_alpha = 0.75f;
+		env.ambient_light = 0x00112233;
+		env.fullneb = true;
+		env.neb_range = 3000.0f;
+		env.neb_pattern = "Nebula01";
+		env.neb_fog_color_override = true;
+		env.neb_fog_r = 10;
+		env.neb_fog_g = 20;
+		env.neb_fog_b = 30;
+		env.subspace = true;
+		env.background_index = 1;
+		env.motion_debris_override = true;
+		env.motion_debris_type = "Default";
+		env.soundtrack = "3: Death's Door";
+		env.music_battle_started = true;
+		env.hud_draw = false;
+		env.hud_disable_except_messages = true;
+		env.hud_max_targeting_range = 5000;
+		env.hud_display_warpout = 12345;
+		env.no_traitor = true;
+		env.traitor_override = "Custom Traitor";
+		env.debriefing_persona = "Command";
+		env.asteroids_enabled = true;
+		env.squadron_wings = {"Alpha", "Beta", "", "Delta"};
 
-		data.squadron_wings = {"Alpha", "Beta", "", "Delta"};
+		checkpoint::starfield_entry_state sun;
+		sun.name = "SunGlow";
+		sun.is_sun = true;
+		sun.scale_x = 2.0f;
+		sun.div_x = 3;
+		sun.ang.p = 0.5f;
+		env.starfield.push_back(sun);
 
-		data.current_nav = "Escort";
-		data.autopilot_engaged = true;
-		data.soundtrack = "3: Death's Door";
-		data.music_battle_started = true;
+		checkpoint::starfield_entry_state bitmap;
+		bitmap.name = "Nebula02";
+		bitmap.is_sun = false;
+		bitmap.scale_y = 4.0f;
+		bitmap.div_y = 5;
+		bitmap.ang.h = 1.5f;
+		env.starfield.push_back(bitmap);
+
+		env.support_ship_class = "GTS Hygeia";
+		env.support_arrival_location = "Near Ship";
+		env.support_departure_location = "Hyperspace";
+		env.support_arrival_anchor_ship = "Beta 1";
+		env.support_departure_anchor_special = 1 << 30;
+		env.support_max_ships = 5;
+		env.support_max_concurrent = 1;
+		env.support_tally = 2;
+		env.support_available_for_species = 3;
+		env.support_max_hull_repair = 80.0f;
+		env.support_max_subsys_repair = 60.0f;
+		env.support_disallow_rearm = true;
+		env.rearm_pools.push_back({{"Subach HL-7", 12}, {"Harpoon", -1}});
+		env.rearm_pools.push_back({{"Harpoon", 0}});
+
+		checkpoint::navpoint_state nav;
+		nav.name = "Rally Point";
+		nav.flags = 0x0004;
+		nav.target = "Waypoint path 1";
+		nav.waypoint_num = 3;
+		nav.normal_color[0] = 11;
+		nav.visited_color[2] = 22;
+		env.navpoints.push_back(nav);
+
+		checkpoint::navpoint_state nav2;
+		nav2.name = "Escort";
+		nav2.flags = 0x0008;
+		nav2.target = "Beta 1";
+		env.navpoints.push_back(nav2);
+		env.current_nav = 1;
+
+		checkpoint::jump_node_state node;
+		node.index = 0;
+		node.name = "Alpha Node";
+		node.display_name = "The Gate";
+		node.model = "subspacenode.pof";
+		node.hidden = true;
+		node.colored = true;
+		node.color[0] = 1;
+		node.color[1] = 2;
+		node.color[2] = 3;
+		node.color[3] = 4;
+		env.jump_nodes.push_back(node);
+
+		checkpoint::asteroid_state ast;
+		ast.type_name = "Brown";
+		ast.subtype = 2;
+		ast.pos = vm_vec_new(10.0f, 20.0f, 30.0f);
+		ast.vel = vm_vec_new(1.0f, 2.0f, 3.0f);
+		ast.hull = 15.5f;
+		ast.target_ship = "Beta 1";
+		ast.final_death_time = 4321;
+		data.asteroids.push_back(ast);
 
 		return data;
 	}
@@ -594,46 +653,6 @@ TEST_F(CheckpointRoundTripTest, DocksAndAnimationsSurvive)
 	EXPECT_EQ(ship.animations[0].instance_flags, 0x1'0000'0001ULL);
 }
 
-// The world section holds two arrays plus a handful of scalars in one object, so it is the same
-// shape of hazard as the ship section: a key reused between the asteroid list and the nav list
-// would silently drop one of them.
-TEST_F(CheckpointRoundTripTest, WorldStateSurvives)
-{
-	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
-
-	checkpoint::checkpoint_data read;
-	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
-
-	ASSERT_EQ(read.asteroids.size(), 1u);
-	EXPECT_EQ(read.asteroids[0].type_name, SCP_string("Brown"));
-	EXPECT_EQ(read.asteroids[0].subtype, 2);
-	EXPECT_FLOAT_EQ(read.asteroids[0].pos.xyz.y, 20.0f);
-	EXPECT_FLOAT_EQ(read.asteroids[0].vel.xyz.z, 3.0f);
-	EXPECT_FLOAT_EQ(read.asteroids[0].hull, 15.5f);
-	EXPECT_EQ(read.asteroids[0].target_ship, SCP_string("Beta 1"));
-	EXPECT_EQ(read.asteroids[0].final_death_time, 4321);
-	EXPECT_TRUE(read.asteroids_enabled);
-
-	// Navs bind to either a waypoint path or a ship, and each is stored under its own key.
-	ASSERT_EQ(read.navs.size(), 2u);
-	EXPECT_EQ(read.navs[0].name, SCP_string("Rally Point"));
-	EXPECT_EQ(read.navs[0].waypoint_list, SCP_string("Waypoint path 1"));
-	EXPECT_EQ(read.navs[0].waypoint_num, 3);
-	EXPECT_TRUE(read.navs[0].target_ship.empty());
-	EXPECT_EQ(read.navs[1].name, SCP_string("Escort"));
-	EXPECT_EQ(read.navs[1].target_ship, SCP_string("Beta 1"));
-	EXPECT_TRUE(read.navs[1].waypoint_list.empty());
-
-	// Empty slots have to come back as empty rather than being dropped, since the position in
-	// the list is what says which squadron slot a wing occupies.
-	EXPECT_EQ(read.squadron_wings, SCP_vector<SCP_string>({"Alpha", "Beta", "", "Delta"}));
-
-	EXPECT_EQ(read.current_nav, SCP_string("Escort"));
-	EXPECT_TRUE(read.autopilot_engaged);
-	EXPECT_EQ(read.soundtrack, SCP_string("3: Death's Door"));
-	EXPECT_TRUE(read.music_battle_started);
-}
-
 // A weapon and a beam share a section and both carry a "flags" array, so this is the same shape
 // of hazard as the ship section -- one key reused between them would drop the other's list.
 TEST_F(CheckpointRoundTripTest, ProjectilesAndBeamsSurvive)
@@ -686,6 +705,91 @@ TEST_F(CheckpointRoundTripTest, ProjectilesAndBeamsSurvive)
 	EXPECT_FLOAT_EQ(beam.shot_aim[2], 2.5f);
 }
 
+// The world section is one object holding half a dozen arrays and several dozen scalars, so it
+// is the same shape of hazard as the ship section: a key reused between two of those arrays
+// would silently drop one of them.
+TEST_F(CheckpointRoundTripTest, WorldStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	const auto& env = read.environment;
+
+	// present is what tells a restore the section was written at all; without it an absent
+	// section would blank the sky rather than leave it alone.
+	EXPECT_TRUE(env.present);
+
+	EXPECT_EQ(env.skybox_model, SCP_string("skybox.pof"));
+	EXPECT_EQ(env.skybox_texture, SCP_string("skytex"));
+	// Above 32 bits, so this also pins the two-halves encoding.
+	EXPECT_EQ(env.skybox_flags_hi, 1u);
+	EXPECT_EQ(env.skybox_flags_lo, 0x80000000u);
+	EXPECT_FLOAT_EQ(env.skybox_alpha, 0.75f);
+	EXPECT_EQ(env.ambient_light, 0x00112233);
+
+	EXPECT_TRUE(env.fullneb);
+	EXPECT_FLOAT_EQ(env.neb_range, 3000.0f);
+	EXPECT_EQ(env.neb_pattern, SCP_string("Nebula01"));
+	EXPECT_TRUE(env.neb_fog_color_override);
+	EXPECT_EQ(env.neb_fog_g, 20);
+	EXPECT_TRUE(env.subspace);
+
+	EXPECT_EQ(env.background_index, 1);
+	ASSERT_EQ(env.starfield.size(), 2u);
+	EXPECT_EQ(env.starfield[0].name, SCP_string("SunGlow"));
+	EXPECT_TRUE(env.starfield[0].is_sun);
+	EXPECT_FLOAT_EQ(env.starfield[0].scale_x, 2.0f);
+	EXPECT_EQ(env.starfield[0].div_x, 3);
+	EXPECT_FLOAT_EQ(env.starfield[0].ang.p, 0.5f);
+	EXPECT_FALSE(env.starfield[1].is_sun);
+	EXPECT_FLOAT_EQ(env.starfield[1].ang.h, 1.5f);
+
+	EXPECT_TRUE(env.motion_debris_override);
+	EXPECT_EQ(env.motion_debris_type, SCP_string("Default"));
+	EXPECT_EQ(env.soundtrack, SCP_string("3: Death's Door"));
+	EXPECT_TRUE(env.music_battle_started);
+
+	EXPECT_FALSE(env.hud_draw);
+	EXPECT_TRUE(env.hud_disable_except_messages);
+	EXPECT_EQ(env.hud_max_targeting_range, 5000);
+	EXPECT_EQ(env.hud_display_warpout, 12345);
+
+	EXPECT_TRUE(env.no_traitor);
+	EXPECT_EQ(env.traitor_override, SCP_string("Custom Traitor"));
+	EXPECT_EQ(env.debriefing_persona, SCP_string("Command"));
+	EXPECT_TRUE(env.asteroids_enabled);
+
+	// Navs bind to either a waypoint path or a ship, and both go out under the same key.
+	ASSERT_EQ(env.navpoints.size(), 2u);
+	EXPECT_EQ(env.navpoints[0].name, SCP_string("Rally Point"));
+	EXPECT_EQ(env.navpoints[0].target, SCP_string("Waypoint path 1"));
+	EXPECT_EQ(env.navpoints[0].waypoint_num, 3);
+	EXPECT_EQ(env.navpoints[0].normal_color[0], 11);
+	EXPECT_EQ(env.navpoints[0].visited_color[2], 22);
+	EXPECT_EQ(env.navpoints[1].target, SCP_string("Beta 1"));
+	EXPECT_EQ(env.current_nav, 1);
+
+	ASSERT_EQ(env.jump_nodes.size(), 1u);
+	EXPECT_EQ(env.jump_nodes[0].name, SCP_string("Alpha Node"));
+	EXPECT_EQ(env.jump_nodes[0].display_name, SCP_string("The Gate"));
+	EXPECT_EQ(env.jump_nodes[0].model, SCP_string("subspacenode.pof"));
+	EXPECT_TRUE(env.jump_nodes[0].hidden);
+	EXPECT_TRUE(env.jump_nodes[0].colored);
+	EXPECT_EQ(env.jump_nodes[0].color[3], 4);
+
+	// Empty slots have to come back as empty rather than being dropped, since the position in
+	// the list is what says which squadron slot a wing occupies.
+	EXPECT_EQ(env.squadron_wings, SCP_vector<SCP_string>({"Alpha", "Beta", "", "Delta"}));
+
+	ASSERT_EQ(read.asteroids.size(), 1u);
+	EXPECT_EQ(read.asteroids[0].type_name, SCP_string("Brown"));
+	EXPECT_FLOAT_EQ(read.asteroids[0].pos.xyz.y, 20.0f);
+	EXPECT_FLOAT_EQ(read.asteroids[0].hull, 15.5f);
+	EXPECT_EQ(read.asteroids[0].final_death_time, 4321);
+}
+
 // Support ships are the one kind of ship the mission file will not recreate, so the restore has
 // to know which ships those were and what the mission's support settings had become.
 TEST_F(CheckpointRoundTripTest, SupportStateSurvives)
@@ -698,26 +802,30 @@ TEST_F(CheckpointRoundTripTest, SupportStateSurvives)
 	ASSERT_EQ(read.ships.size(), 1u);
 	EXPECT_TRUE(read.ships[0].no_parse_object);
 
-	const auto& support = read.support;
+	const auto& env = read.environment;
 
-	EXPECT_EQ(support.tally, 2);
-	EXPECT_EQ(support.ship_class, SCP_string("GTS Hygeia"));
-	EXPECT_EQ(support.max_support_ships, 5);
-	EXPECT_EQ(support.max_concurrent_ships, 1);
-	EXPECT_EQ(support.arrival_location, SCP_string("Near Ship"));
-	EXPECT_EQ(support.departure_location, SCP_string("Hyperspace"));
+	EXPECT_EQ(env.support_tally, 2);
+	EXPECT_EQ(env.support_ship_class, SCP_string("GTS Hygeia"));
+	EXPECT_EQ(env.support_max_ships, 5);
+	EXPECT_EQ(env.support_max_concurrent, 1);
+	EXPECT_EQ(env.support_arrival_location, SCP_string("Near Ship"));
+	EXPECT_EQ(env.support_departure_location, SCP_string("Hyperspace"));
+	EXPECT_EQ(env.support_available_for_species, 3);
+	EXPECT_FLOAT_EQ(env.support_max_hull_repair, 80.0f);
+	EXPECT_FLOAT_EQ(env.support_max_subsys_repair, 60.0f);
+	EXPECT_TRUE(env.support_disallow_rearm);
 
 	// A ship anchor travels by name, a special anchor by value, and the two must not be
 	// confused for one another.
-	EXPECT_EQ(support.arrival_anchor_ship, SCP_string("Beta 1"));
-	EXPECT_EQ(support.arrival_anchor_special, -1);
-	EXPECT_TRUE(support.departure_anchor_ship.empty());
-	EXPECT_EQ(support.departure_anchor_special, 1 << 30);
+	EXPECT_EQ(env.support_arrival_anchor_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(env.support_arrival_anchor_special, -1);
+	EXPECT_TRUE(env.support_departure_anchor_ship.empty());
+	EXPECT_EQ(env.support_departure_anchor_special, 1 << 30);
 
 	// Per-team pools, including the 0 and -1 that mean "not rearmable" and "unlimited".
-	ASSERT_EQ(support.rearm_pools.size(), 2u);
-	EXPECT_EQ(support.rearm_pools[0].at("Subach HL-7"), 12);
-	EXPECT_EQ(support.rearm_pools[0].at("Harpoon"), -1);
-	EXPECT_EQ(support.rearm_pools[1].at("Harpoon"), 0);
-	EXPECT_EQ(support.rearm_pools[1].count("Subach HL-7"), 0u);
+	ASSERT_EQ(env.rearm_pools.size(), 2u);
+	EXPECT_EQ(env.rearm_pools[0].at("Subach HL-7"), 12);
+	EXPECT_EQ(env.rearm_pools[0].at("Harpoon"), -1);
+	EXPECT_EQ(env.rearm_pools[1].at("Harpoon"), 0);
+	EXPECT_EQ(env.rearm_pools[1].count("Subach HL-7"), 0u);
 }
