@@ -869,18 +869,26 @@ void write_ai(pilot::FileHandler* handler, const checkpoint::ai_state& ai)
 	write_float_map(handler, "ai_floats", ai.floats);
 	write_int_map(handler, "ai_mission_times", ai.mission_times);
 	write_int_map(handler, "ai_stamps", ai.stamps);
+	write_vec_map(handler, "ai_vecs", ai.vecs);
+	write_float_map(handler, "ai_override_floats", ai.override_floats);
 
+	handler->writeString("ai_class", ai.ai_class.c_str());
 	handler->writeString("ai_target_ship", ai.target_ship.c_str());
+	handler->writeString("ai_previous_target_ship", ai.previous_target_ship.c_str());
 	handler->writeString("ai_target_subsystem", ai.target_subsystem.c_str());
 	handler->writeString("ai_goal_ship", ai.goal_ship.c_str());
 	handler->writeString("ai_guard_ship", ai.guard_ship.c_str());
 	handler->writeString("ai_guard_wing", ai.guard_wing.c_str());
 	handler->writeString("ai_ignore_ship", ai.ignore_ship.c_str());
 	handler->writeString("ai_ignore_wing", ai.ignore_wing.c_str());
+	write_string_list(handler, "ai_ignore_new", ai.ignore_new);
 	handler->writeString("ai_support_ship", ai.support_ship.c_str());
 	handler->writeString("ai_hitter_ship", ai.hitter_ship.c_str());
+	handler->writeString("ai_attacker_ship", ai.attacker_ship.c_str());
 	handler->writeString("ai_artillery_ship", ai.artillery_ship.c_str());
 	handler->writeString("ai_waypoint_list", ai.waypoint_list.c_str());
+	handler->writeString("ai_last_subsys_ship", ai.last_subsys_target_ship.c_str());
+	handler->writeString("ai_last_subsys", ai.last_subsys_target.c_str());
 
 	handler->startArrayWrite("ai_goals", ai.goals.size());
 	for (size_t i = 0; i < ai.goals.size(); i++) {
@@ -923,18 +931,26 @@ void read_ai(pilot::FileHandler* handler, checkpoint::ai_state& ai)
 	read_float_map(handler, "ai_floats", ai.floats);
 	read_int_map(handler, "ai_mission_times", ai.mission_times);
 	read_int_map(handler, "ai_stamps", ai.stamps);
+	read_vec_map(handler, "ai_vecs", ai.vecs);
+	read_float_map(handler, "ai_override_floats", ai.override_floats);
 
+	ai.ai_class = handler->readStringOr("ai_class", "");
 	ai.target_ship = handler->readStringOr("ai_target_ship", "");
+	ai.previous_target_ship = handler->readStringOr("ai_previous_target_ship", "");
 	ai.target_subsystem = handler->readStringOr("ai_target_subsystem", "");
 	ai.goal_ship = handler->readStringOr("ai_goal_ship", "");
 	ai.guard_ship = handler->readStringOr("ai_guard_ship", "");
 	ai.guard_wing = handler->readStringOr("ai_guard_wing", "");
 	ai.ignore_ship = handler->readStringOr("ai_ignore_ship", "");
 	ai.ignore_wing = handler->readStringOr("ai_ignore_wing", "");
+	read_string_list(handler, "ai_ignore_new", ai.ignore_new);
 	ai.support_ship = handler->readStringOr("ai_support_ship", "");
 	ai.hitter_ship = handler->readStringOr("ai_hitter_ship", "");
+	ai.attacker_ship = handler->readStringOr("ai_attacker_ship", "");
 	ai.artillery_ship = handler->readStringOr("ai_artillery_ship", "");
 	ai.waypoint_list = handler->readStringOr("ai_waypoint_list", "");
+	ai.last_subsys_target_ship = handler->readStringOr("ai_last_subsys_ship", "");
+	ai.last_subsys_target = handler->readStringOr("ai_last_subsys", "");
 
 	if (!handler->hasField("ai_goals")) {
 		return;
