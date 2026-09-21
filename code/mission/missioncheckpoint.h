@@ -264,6 +264,12 @@ struct ship_state {
 	SCP_string cargo;
 	bool cargo_no_deplete = false;
 
+	// This ship has no parse object: nothing in the mission file will recreate it, so the
+	// restore has to build it from scratch rather than waiting for an arrival cue that does not
+	// exist.  In practice this means a support ship, which is brought in mid-mission by
+	// mission_bring_in_support_ship() rather than parsed.
+	bool no_parse_object = false;
+
 	vec3d pos = vmd_zero_vector;
 	matrix orient = vmd_identity_matrix;
 
@@ -569,6 +575,31 @@ struct beam_shot_state {
 	SCP_vector<float> shot_aim;
 };
 
+// Mission-level support ship state.  The parse sets this up, but between the set-support-ship
+// SEXPs, the rearm code draining the weapon pools and each call incrementing the tally, most of
+// it moves during a mission -- and a restart puts the parsed values back.
+struct support_state {
+	int tally = 0;
+	SCP_string ship_class;          // by name; empty means "work it out from the requester's species"
+	int max_support_ships = 0;
+	int max_concurrent_ships = 0;
+
+	SCP_string arrival_location;    // by name, from Arrival_location_names
+	SCP_string departure_location;  // by name, from Departure_location_names
+
+	// An anchor is either an index into the ship registry or one of the ANCHOR_SPECIAL_* flag
+	// values.  The index is not stable across a reload, so a ship anchor is stored by name and
+	// only the flag values are stored as numbers.
+	SCP_string arrival_anchor_ship;
+	int arrival_anchor_special = -1;
+	SCP_string departure_anchor_ship;
+	int departure_anchor_special = -1;
+
+	// Per team, weapon class name -> rounds left in the pool.  An absent entry means the
+	// mission default, so only what the map actually holds is stored.
+	SCP_vector<SCP_map<SCP_string, int>> rearm_pools;
+};
+
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
 // timestamp, so it is restored as-is rather than shifted.
 struct log_entry_state {
@@ -631,6 +662,8 @@ struct checkpoint_data {
 	// with an empty string for an unused slot.  The set-squadron-wings SEXP can change this
 	// mid-mission, and a restart puts the mission's original wings back.
 	SCP_vector<SCP_string> squadron_wings;
+
+	support_state support;
 
 	SCP_vector<projectile_state> projectiles;
 	SCP_vector<beam_shot_state> beams;
