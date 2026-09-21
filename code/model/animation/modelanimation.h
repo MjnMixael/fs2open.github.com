@@ -266,6 +266,13 @@ namespace animation {
 		void stop(polymodel_instance* pmi, bool cleanup = true, bool forceStop = false);
 
 		float getTime(int pmi_id) const;
+
+		// Read and write the whole per-instance state, not just the time.  Needed so that a
+		// mission checkpoint can put an animation back exactly where it was rather than at one
+		// of its endpoints: a door caught half-open has to resume half-open.  Returns false when
+		// this animation has no instance for that pmi, i.e. it was never triggered there.
+		bool getInstanceData(int pmi_id, instance_data& out) const;
+		void setInstanceData(int pmi_id, const instance_data& in);
 		
 		static void stepAnimations(float frametime, polymodel_instance* pmi);
 
@@ -336,6 +343,14 @@ namespace animation {
 		void changeShipName(const SCP_string& name);
 
 		static void stopAnimations(polymodel_instance* pmi = nullptr);
+
+		// Every animation currently running on this model instance, paired with its state, and
+		// the means to put them back.  The id is ModelAnimation::id, which is a hash of the
+		// animation and ship class names rather than a table index, so it is stable across
+		// builds and table reorderings -- see ModelAnimationParseHelper::getUniqueAnimationID().
+		static SCP_vector<std::pair<unsigned int, ModelAnimation::instance_data>> getAnimationStates(int pmi_id);
+		static bool applyAnimationState(polymodel_instance* pmi, unsigned int id,
+		                                const ModelAnimation::instance_data& state);
 
 		void clearShipData(polymodel_instance* pmi);
 
