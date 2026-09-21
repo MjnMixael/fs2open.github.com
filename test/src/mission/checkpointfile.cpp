@@ -381,6 +381,8 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		bank.capacity = 60;
 		ship.weapons.primary_banks.push_back(bank);
 
+		ship.no_parse_object = true;
+
 		ship.ai.present = true;
 		ship.ai.flags = {"kamikaze", "no_dynamic"};
 		ship.ai.target_ship = "Beta 1";
@@ -477,6 +479,17 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		beam.shot_count = 3;
 		beam.shot_aim = {0.5f, 1.5f, 2.5f};
 		data.beams.push_back(beam);
+
+		data.support.tally = 2;
+		data.support.ship_class = "GTS Hygeia";
+		data.support.max_support_ships = 5;
+		data.support.max_concurrent_ships = 1;
+		data.support.arrival_location = "Near Ship";
+		data.support.departure_location = "Hyperspace";
+		data.support.arrival_anchor_ship = "Beta 1";
+		data.support.departure_anchor_special = 1 << 30;
+		data.support.rearm_pools.push_back({{"Subach HL-7", 12}, {"Harpoon", -1}});
+		data.support.rearm_pools.push_back({{"Harpoon", 0}});
 
 		data.squadron_wings = {"Alpha", "Beta", "", "Delta"};
 
@@ -671,4 +684,40 @@ TEST_F(CheckpointRoundTripTest, ProjectilesAndBeamsSurvive)
 	EXPECT_EQ(beam.shot_count, 3);
 	ASSERT_EQ(beam.shot_aim.size(), 3u);
 	EXPECT_FLOAT_EQ(beam.shot_aim[2], 2.5f);
+}
+
+// Support ships are the one kind of ship the mission file will not recreate, so the restore has
+// to know which ships those were and what the mission's support settings had become.
+TEST_F(CheckpointRoundTripTest, SupportStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	ASSERT_EQ(read.ships.size(), 1u);
+	EXPECT_TRUE(read.ships[0].no_parse_object);
+
+	const auto& support = read.support;
+
+	EXPECT_EQ(support.tally, 2);
+	EXPECT_EQ(support.ship_class, SCP_string("GTS Hygeia"));
+	EXPECT_EQ(support.max_support_ships, 5);
+	EXPECT_EQ(support.max_concurrent_ships, 1);
+	EXPECT_EQ(support.arrival_location, SCP_string("Near Ship"));
+	EXPECT_EQ(support.departure_location, SCP_string("Hyperspace"));
+
+	// A ship anchor travels by name, a special anchor by value, and the two must not be
+	// confused for one another.
+	EXPECT_EQ(support.arrival_anchor_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(support.arrival_anchor_special, -1);
+	EXPECT_TRUE(support.departure_anchor_ship.empty());
+	EXPECT_EQ(support.departure_anchor_special, 1 << 30);
+
+	// Per-team pools, including the 0 and -1 that mean "not rearmable" and "unlimited".
+	ASSERT_EQ(support.rearm_pools.size(), 2u);
+	EXPECT_EQ(support.rearm_pools[0].at("Subach HL-7"), 12);
+	EXPECT_EQ(support.rearm_pools[0].at("Harpoon"), -1);
+	EXPECT_EQ(support.rearm_pools[1].at("Harpoon"), 0);
+	EXPECT_EQ(support.rearm_pools[1].count("Subach HL-7"), 0u);
 }
