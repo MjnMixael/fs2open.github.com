@@ -2582,12 +2582,19 @@ void store_ai(const ship* shipp, ai_state& out)
 		out.ignore_ship = ship_name_for_objnum(aip->ignore_objnum);
 	}
 
-	// The targeted subsystem is a pointer into the target's subsystem list, so it is stored the
-	// same way subsystems are stored everywhere else: by name plus ordinal within that name.
-	if (aip->targeted_subsys != nullptr && aip->target_objnum >= 0 && aip->target_objnum < MAX_OBJECTS) {
-		const object* target = &Objects[aip->target_objnum];
-		if (target->type == OBJ_SHIP && target->instance >= 0) {
-			out.target_subsystem = subsys_key_for(&Ships[target->instance], aip->targeted_subsys);
+	// The targeted subsystem is a pointer into its owner's subsystem list, so it is stored the
+	// same way subsystems are stored everywhere else: by name plus ordinal within that name.  The
+	// owner is targeted_subsys_parent, which is its own objnum and need not be the current target.
+	if (aip->targeted_subsys != nullptr) {
+		SCP_string parent = ship_name_for_objnum(aip->targeted_subsys_parent);
+		if (!parent.empty()) {
+			auto parent_entry = ship_registry_get(parent);
+			if (parent_entry != nullptr && parent_entry->has_shipp()) {
+				out.target_subsystem = subsys_key_for(parent_entry->shipp(), aip->targeted_subsys);
+				if (!out.target_subsystem.empty()) {
+					out.target_subsystem_ship = parent;
+				}
+			}
 		}
 	}
 
@@ -2761,18 +2768,10 @@ void resolve_ai_references(ship* shipp, const ai_state& in)
 		}
 	}
 
-	aip->targeted_subsys = nullptr;
-	if (!in.target_subsystem.empty() && aip->target_objnum >= 0) {
-		const object* target = &Objects[aip->target_objnum];
-		if (target->type == OBJ_SHIP && target->instance >= 0) {
-			auto live = index_subsystems(&Ships[target->instance]);
-			auto it = live.find(in.target_subsystem);
-			if (it != live.end()) {
-				aip->targeted_subsys = it->second;
-				aip->targeted_subsys_parent = aip->target_objnum;
-			}
-		}
-	}
+	aip->targeted_subsys = find_subsys_by_key(in.target_subsystem_ship, in.target_subsystem);
+	aip->targeted_subsys_parent = (aip->targeted_subsys != nullptr)
+		? objnum_for_ship_name(in.target_subsystem_ship)
+		: -1;
 
 	aip->last_subsys_target = find_subsys_by_key(in.last_subsys_target_ship, in.last_subsys_target);
 }
