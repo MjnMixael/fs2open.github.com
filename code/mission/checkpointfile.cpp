@@ -356,6 +356,38 @@ void read_clock(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	data.saved_timestamp_ms = handler->readIntOr("saved_timestamp_ms", 0);
 }
 
+void write_docks(pilot::FileHandler* handler, const SCP_vector<checkpoint::dock_link_state>& docks)
+{
+	handler->startArrayWrite("docks", docks.size());
+	for (const auto& link : docks) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("other", link.other_ship.c_str());
+		handler->writeString("my_point", link.my_point.c_str());
+		handler->writeString("their_point", link.their_point.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_docks(pilot::FileHandler* handler, SCP_vector<checkpoint::dock_link_state>& docks)
+{
+	docks.clear();
+
+	if (!handler->hasField("docks")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("docks");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::dock_link_state link;
+		link.other_ship = handler->readStringOr("other", "");
+		link.my_point = handler->readStringOr("my_point", "");
+		link.their_point = handler->readStringOr("their_point", "");
+		docks.push_back(std::move(link));
+	}
+	handler->endArrayRead();
+}
+
 void write_ai(pilot::FileHandler* handler, const checkpoint::ai_state& ai)
 {
 	handler->writeBool("ai_present", ai.present);
@@ -707,6 +739,7 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			write_subsystems(handler, ship_data.subsystems);
 			write_weapon_state(handler, ship_data.weapons);
 			write_ai(handler, ship_data.ai);
+			write_docks(handler, ship_data.docks);
 		} else {
 			handler->writeInt("exit_time", static_cast<std::int32_t>(ship_data.exit_time));
 		}
@@ -778,6 +811,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_subsystems(handler, ship_data.subsystems);
 			read_weapon_state(handler, ship_data.weapons);
 			read_ai(handler, ship_data.ai);
+			read_docks(handler, ship_data.docks);
 		} else {
 			ship_data.exit_time = static_cast<fix>(handler->readIntOr("exit_time", 0));
 		}
