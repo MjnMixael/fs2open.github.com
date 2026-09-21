@@ -949,6 +949,7 @@ void write_ai(pilot::FileHandler* handler, const checkpoint::ai_state& ai)
 	handler->writeString("ai_target_ship", ai.target_ship.c_str());
 	handler->writeString("ai_previous_target_ship", ai.previous_target_ship.c_str());
 	handler->writeString("ai_target_subsystem", ai.target_subsystem.c_str());
+	handler->writeString("ai_target_subsystem_ship", ai.target_subsystem_ship.c_str());
 	handler->writeString("ai_goal_ship", ai.goal_ship.c_str());
 	handler->writeString("ai_guard_ship", ai.guard_ship.c_str());
 	handler->writeString("ai_guard_wing", ai.guard_wing.c_str());
@@ -988,6 +989,7 @@ void read_ai(pilot::FileHandler* handler, checkpoint::ai_state& ai)
 	ai.target_ship = handler->readStringOr("ai_target_ship", "");
 	ai.previous_target_ship = handler->readStringOr("ai_previous_target_ship", "");
 	ai.target_subsystem = handler->readStringOr("ai_target_subsystem", "");
+	ai.target_subsystem_ship = handler->readStringOr("ai_target_subsystem_ship", "");
 	ai.goal_ship = handler->readStringOr("ai_goal_ship", "");
 	ai.guard_ship = handler->readStringOr("ai_guard_ship", "");
 	ai.guard_wing = handler->readStringOr("ai_guard_wing", "");

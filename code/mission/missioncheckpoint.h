@@ -308,7 +308,10 @@ struct ai_state {
 	// Everything the AI points at, by name.  Empty means "nothing".
 	SCP_string target_ship;
 	SCP_string previous_target_ship;
+	// The targeted subsystem, and the ship that owns it.  Those are two different things:
+	// targeted_subsys_parent is its own objnum and need not be the current target.
 	SCP_string target_subsystem;   // name + ordinal key, as elsewhere
+	SCP_string target_subsystem_ship;
 	SCP_string goal_ship;
 	SCP_string guard_ship;
 	SCP_string guard_wing;
