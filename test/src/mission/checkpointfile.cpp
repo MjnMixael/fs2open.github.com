@@ -356,7 +356,8 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		ship.ship_class = "GTF Ulysses";
 		ship.team = "Friendly";
 		ship.hull = 42.5f;
-		ship.flags = {"cargo_revealed", "escort", "no_ets"};
+		ship.flags = {"cargo_revealed", "escort", "has_display_name", "no_ets"};
+		ship.display_name = "The Bold";
 		ship.object_flags = {"invulnerable", "protected"};
 		ship.ints["escort_priority"] = 7;
 		ship.floats["afterburner_fuel"] = 12.5f;
@@ -626,7 +627,7 @@ TEST_F(CheckpointRoundTripTest, FlagListsDoNotCollide)
 
 	const auto& ship = read.ships[0];
 
-	EXPECT_EQ(ship.flags, SCP_vector<SCP_string>({"cargo_revealed", "escort", "no_ets"}));
+	EXPECT_EQ(ship.flags, SCP_vector<SCP_string>({"cargo_revealed", "escort", "has_display_name", "no_ets"}));
 	EXPECT_EQ(ship.object_flags, SCP_vector<SCP_string>({"invulnerable", "protected"}));
 	EXPECT_EQ(ship.weapons.flags, SCP_vector<SCP_string>({"turret_lock"}));
 
@@ -648,6 +649,8 @@ TEST_F(CheckpointRoundTripTest, ShipStateSurvives)
 	EXPECT_EQ(ship.name, SCP_string("Alpha 1"));
 	EXPECT_EQ(ship.ship_class, SCP_string("GTF Ulysses"));
 	EXPECT_EQ(ship.team, SCP_string("Friendly"));
+	// The display name and the flag that says whether it is used have to arrive together.
+	EXPECT_EQ(ship.display_name, SCP_string("The Bold"));
 	EXPECT_FLOAT_EQ(ship.hull, 42.5f);
 	EXPECT_EQ(ship.ints.at("escort_priority"), 7);
 	EXPECT_FLOAT_EQ(ship.floats.at("afterburner_fuel"), 12.5f);
