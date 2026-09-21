@@ -2063,6 +2063,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		}
 	}
 
+	if (Player != nullptr) {
+		data.current_hotkey_set = Player->current_hotkey_set;
+	}
+
 	// Hull debris only -- see the note on debris_state.
 	for (const auto& db : Debris) {
 		if (!db.flags[Debris_Flags::Used] || !db.is_hull || db.objnum < 0) {
@@ -2745,6 +2749,10 @@ void apply_hud_state(const checkpoint_data& data)
 
 	for (int set = 0; set < MAX_KEYED_TARGETS; set++) {
 		hud_target_hotkey_clear(set);
+	}
+
+	if (Player != nullptr) {
+		Player->current_hotkey_set = data.current_hotkey_set;
 	}
 
 	for (const auto& state : data.hotkeys) {
