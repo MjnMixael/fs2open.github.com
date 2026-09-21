@@ -224,4 +224,76 @@
 	F(ms_shots_hit)                                                                            \
 	F(ms_bonehead_hits)
 
+// ------------------------------------------------------------------
+// ai_info -- see code/ai/ai.h
+// ------------------------------------------------------------------
+//
+// Everything here is behaviour the AI carries between frames.  Deliberately absent:
+//
+//   - path_* and mp_index, which index a global path array that is rebuilt from the models on
+//     every load, so a saved index points at someone else's path;
+//   - stealth_*, best_dot_*, time_enemy_in_range/near, last_predicted_enemy_pos, prev_accel and
+//     prev_dot_to_goal, which are a frame or two of tracking history that the AI refills on its
+//     own within a second of resuming;
+//   - ai_accuracy/evasion/courage/patience and the other tuning values, which are derived from
+//     ai_class and the AI profile -- restoring ai_class brings them back with it;
+//   - last_aim_enemy_pos/vel, which belong to turret aiming and are recomputed per frame.
+//
+// Object references (target, goal, guard, ignore, support ship, hitter) are NOT here: an objnum
+// means nothing after a reload, so those are stored by ship name in ai_state.
+
+#define CKPT_AI_INTS(F)                                                                        \
+	F(mode)                                                                                    \
+	F(previous_mode)                                                                           \
+	F(submode)                                                                                 \
+	F(previous_submode)                                                                        \
+	F(submode_parm0)                                                                           \
+	F(submode_parm1)                                                                           \
+	F(ai_class)                                                                                \
+	F(active_goal)                                                                             \
+	F(wp_index)                                                                                \
+	F(wp_flags)                                                                                \
+	F(waypoint_speed_cap)                                                                      \
+	F(danger_shield_quadrant)                                                                  \
+	F(enemy_wing)                                                                              \
+	F(kamikaze_damage)                                                                         \
+	F(form_obj_slotnum)                                                                        \
+	F(ai_aburn_use_factor)
+
+#define CKPT_AI_FLOATS(F)                                                                      \
+	F(submode_float0)                                                                          \
+	F(target_time)                                                                             \
+	F(artillery_lock_time)
+
+// Times measured in mission time (fix), not engine timestamps -- these are already relative to
+// the start of the mission, so they restore verbatim and must NOT be translated.
+#define CKPT_AI_MISSION_TIMES(F)                                                               \
+	F(submode_start_time)                                                                      \
+	F(last_attack_time)                                                                        \
+	F(last_hit_time)                                                                           \
+	F(last_hit_target_time)                                                                    \
+	F(resume_goal_time)
+
+#define CKPT_AI_STAMPS(F)                                                                      \
+	F(mode_time)                                                                               \
+	F(goal_check_time)                                                                         \
+	F(ignore_expire_timestamp)                                                                 \
+	F(warp_out_timestamp)                                                                      \
+	F(next_rearm_request_timestamp)                                                            \
+	F(primary_select_timestamp)                                                                \
+	F(secondary_select_timestamp)                                                              \
+	F(scan_for_enemy_timestamp)                                                                \
+	F(choose_enemy_timestamp)                                                                  \
+	F(shield_manage_timestamp)                                                                 \
+	F(self_destruct_timestamp)                                                                 \
+	F(ok_to_target_timestamp)                                                                  \
+	F(pick_big_attack_point_timestamp)                                                         \
+	F(big_recover_timestamp)                                                                   \
+	F(abort_rearm_timestamp)                                                                   \
+	F(rearm_release_delay)                                                                     \
+	F(ai_override_lat_timestamp)                                                               \
+	F(ai_override_rot_timestamp)                                                               \
+	F(multilock_check_timestamp)                                                               \
+	F(next_dynamic_path_check_time)
+
 #endif // _CHECKPOINTFIELDS_H
