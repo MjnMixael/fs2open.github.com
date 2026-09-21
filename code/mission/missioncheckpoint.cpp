@@ -11,6 +11,8 @@
 #include "debris/debris.h"
 #include "ai/ai.h"
 #include "asteroid/asteroid.h"
+#include "gamesnd/eventmusic.h"
+#include "autopilot/autopilot.h"
 #include "ai/aigoals.h"
 #include "object/waypoint.h"
 #include "gamesequence/gamesequence.h"
@@ -1010,50 +1012,45 @@ ai_goal_type ai_goal_type_value(const SCP_string& name)
 	return ai_goal_type::INVALID;
 }
 
-void store_ai_scalars(const ai_info& obj, ai_state& out)
+// The field macros below expand to references to `obj` and to a map called `out`, so each
+// block rebinds `out` to the map it is filling.  The parameter is named `state` so that
+// rebinding does not shadow it.
+void store_ai_scalars(const ai_info& obj, ai_state& state)
 {
 	{
-		auto& out_map = out.ints;
-		auto& out = out_map;
+		auto& out = state.ints;
 		CKPT_AI_INTS(CKPT_STORE_INT)
 	}
 	{
-		auto& out_map = out.floats;
-		auto& out = out_map;
+		auto& out = state.floats;
 		CKPT_AI_FLOATS(CKPT_STORE_FLOAT)
 	}
 	{
-		auto& out_map = out.mission_times;
-		auto& out = out_map;
+		auto& out = state.mission_times;
 		CKPT_AI_MISSION_TIMES(CKPT_STORE_INT)
 	}
 	{
-		auto& out_map = out.stamps;
-		auto& out = out_map;
+		auto& out = state.stamps;
 		CKPT_AI_STAMPS(CKPT_STORE_INT)
 	}
 }
 
-void load_ai_scalars(ai_info& obj, const ai_state& in)
+void load_ai_scalars(ai_info& obj, const ai_state& state)
 {
 	{
-		const auto& in_map = in.ints;
-		const auto& in = in_map;
+		const auto& in = state.ints;
 		CKPT_AI_INTS(CKPT_LOAD_INT)
 	}
 	{
-		const auto& in_map = in.floats;
-		const auto& in = in_map;
+		const auto& in = state.floats;
 		CKPT_AI_FLOATS(CKPT_LOAD_FLOAT)
 	}
 	{
-		const auto& in_map = in.mission_times;
-		const auto& in = in_map;
+		const auto& in = state.mission_times;
 		CKPT_AI_MISSION_TIMES(CKPT_LOAD_INT)
 	}
 	{
-		const auto& in_map = in.stamps;
-		const auto& in = in_map;
+		const auto& in = state.stamps;
 		CKPT_AI_STAMPS(CKPT_LOAD_STAMP)
 	}
 }
@@ -1218,6 +1215,98 @@ int lookup_asteroid_type(const SCP_string& name)
 
 	mprintf(("CHECKPOINT => Asteroid type '%s' no longer exists.\n", name.c_str()));
 	return -1;
+}
+
+// Nav points, autopilot and event music: all SEXP-driven world state that the mission load
+// resets to its opening values.  Without these a restore re-locks nav points the player had
+// unlocked, forgets which one was selected, and starts the mission's opening music track over a
+// battle already in progress.
+void store_world(checkpoint_data& data)
+{
+	data.autopilot_engaged = AutoPilotEngaged;
+
+	for (int i = 0; i < MAX_NAVPOINTS; i++) {
+		const NavPoint* nav = &Navs[i];
+		if (nav->m_NavName[0] == '\0') {
+			continue;
+		}
+
+		nav_state state;
+		state.name = nav->m_NavName;
+		state.flags = nav->flags;
+		state.waypoint_num = nav->waypoint_num;
+
+		// target_index means different things depending on the type, and neither meaning
+		// survives a reload as a number.
+		if (nav->flags & NP_WAYPOINT) {
+			state.waypoint_list = waypoint_list_name(nav->target_index);
+		} else if (nav->flags & NP_SHIP) {
+			state.target_ship = ship_name_for_objnum(nav->target_index);
+		}
+
+		if (i == CurrentNav) {
+			data.current_nav = state.name;
+		}
+
+		data.navs.push_back(std::move(state));
+	}
+
+	if (Current_soundtrack_num >= 0 && Current_soundtrack_num < static_cast<int>(Soundtracks.size())) {
+		data.soundtrack = Soundtracks[Current_soundtrack_num].name;
+	}
+	data.music_battle_started = (Event_Music_battle_started != 0);
+}
+
+void apply_world(const checkpoint_data& data)
+{
+	AutoPilotEngaged = data.autopilot_engaged;
+
+	CurrentNav = -1;
+	for (const auto& state : data.navs) {
+		// Match the nav the mission load created, by name -- the slot it lands in is not
+		// guaranteed to be the one it occupied before.
+		for (int i = 0; i < MAX_NAVPOINTS; i++) {
+			NavPoint* nav = &Navs[i];
+			if (stricmp(nav->m_NavName, state.name.c_str()) != 0) {
+				continue;
+			}
+
+			nav->flags = state.flags;
+			nav->waypoint_num = state.waypoint_num;
+
+			if (!state.waypoint_list.empty()) {
+				nav->target_index = find_matching_waypoint_list_index(state.waypoint_list.c_str());
+			} else if (!state.target_ship.empty()) {
+				nav->target_index = objnum_for_ship_name(state.target_ship);
+			}
+
+			if (state.name == data.current_nav) {
+				CurrentNav = i;
+			}
+			break;
+		}
+	}
+
+	// The mission parse has already put its own soundtrack in place, so there is only work to
+	// do if a SEXP had changed it before the checkpoint.  Go through the same entry point the
+	// change-soundtrack SEXP uses: assigning Current_soundtrack_num by hand would leave the
+	// previous track's patterns open and still playing.
+	int soundtrack_index = data.soundtrack.empty() ? -1 : event_music_get_soundtrack_index(data.soundtrack.c_str());
+	if (soundtrack_index >= 0 && soundtrack_index != Current_soundtrack_num) {
+		event_sexp_change_soundtrack(data.soundtrack.c_str());
+
+		// If the music level was not inited yet, the call above bailed out after clearing the
+		// index.  Put it back so whatever starts the level later picks up the right track.
+		if (Current_soundtrack_num < 0) {
+			Current_soundtrack_num = soundtrack_index;
+		}
+	}
+
+	// Ask for the battle song rather than setting the flag, which only means "already kicked
+	// off": forcing it on over the opening track would keep combat music from ever coming in.
+	if (data.music_battle_started) {
+		event_music_battle_start();
+	}
 }
 
 void store_asteroids(checkpoint_data& data)
@@ -2181,6 +2270,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	}
 
 	store_asteroids(data);
+	store_world(data);
 
 	// Hull debris only -- see the note on debris_state.
 	for (const auto& db : Debris) {
@@ -3275,6 +3365,7 @@ void mission_checkpoint_apply()
 	}
 
 	apply_asteroids(data);
+	apply_world(data);
 	apply_wings(data);
 	apply_variables(data);
 	apply_scoring(data);

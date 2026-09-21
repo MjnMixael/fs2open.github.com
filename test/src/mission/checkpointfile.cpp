@@ -410,6 +410,36 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 
 		data.ships.push_back(std::move(ship));
 
+		// The world section: ambient state that belongs to the mission rather than to a ship.
+		checkpoint::asteroid_state ast;
+		ast.type_name = "Brown";
+		ast.subtype = 2;
+		ast.pos = vm_vec_new(10.0f, 20.0f, 30.0f);
+		ast.vel = vm_vec_new(1.0f, 2.0f, 3.0f);
+		ast.hull = 15.5f;
+		ast.target_ship = "Beta 1";
+		ast.final_death_time = 4321;
+		data.asteroids.push_back(ast);
+		data.asteroids_enabled = true;
+
+		checkpoint::nav_state nav;
+		nav.name = "Rally Point";
+		nav.flags = 0x0004;
+		nav.waypoint_list = "Waypoint path 1";
+		nav.waypoint_num = 3;
+		data.navs.push_back(nav);
+
+		checkpoint::nav_state nav2;
+		nav2.name = "Escort";
+		nav2.flags = 0x0008;
+		nav2.target_ship = "Beta 1";
+		data.navs.push_back(nav2);
+
+		data.current_nav = "Escort";
+		data.autopilot_engaged = true;
+		data.soundtrack = "3: Death's Door";
+		data.music_battle_started = true;
+
 		return data;
 	}
 };
@@ -504,4 +534,40 @@ TEST_F(CheckpointRoundTripTest, DocksAndAnimationsSurvive)
 	EXPECT_FLOAT_EQ(ship.animations[0].speed, 2.0f);
 	// Above 32 bits, so this also pins the two-halves encoding.
 	EXPECT_EQ(ship.animations[0].instance_flags, 0x1'0000'0001ULL);
+}
+
+// The world section holds two arrays plus a handful of scalars in one object, so it is the same
+// shape of hazard as the ship section: a key reused between the asteroid list and the nav list
+// would silently drop one of them.
+TEST_F(CheckpointRoundTripTest, WorldStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	ASSERT_EQ(read.asteroids.size(), 1u);
+	EXPECT_EQ(read.asteroids[0].type_name, SCP_string("Brown"));
+	EXPECT_EQ(read.asteroids[0].subtype, 2);
+	EXPECT_FLOAT_EQ(read.asteroids[0].pos.xyz.y, 20.0f);
+	EXPECT_FLOAT_EQ(read.asteroids[0].vel.xyz.z, 3.0f);
+	EXPECT_FLOAT_EQ(read.asteroids[0].hull, 15.5f);
+	EXPECT_EQ(read.asteroids[0].target_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(read.asteroids[0].final_death_time, 4321);
+	EXPECT_TRUE(read.asteroids_enabled);
+
+	// Navs bind to either a waypoint path or a ship, and each is stored under its own key.
+	ASSERT_EQ(read.navs.size(), 2u);
+	EXPECT_EQ(read.navs[0].name, SCP_string("Rally Point"));
+	EXPECT_EQ(read.navs[0].waypoint_list, SCP_string("Waypoint path 1"));
+	EXPECT_EQ(read.navs[0].waypoint_num, 3);
+	EXPECT_TRUE(read.navs[0].target_ship.empty());
+	EXPECT_EQ(read.navs[1].name, SCP_string("Escort"));
+	EXPECT_EQ(read.navs[1].target_ship, SCP_string("Beta 1"));
+	EXPECT_TRUE(read.navs[1].waypoint_list.empty());
+
+	EXPECT_EQ(read.current_nav, SCP_string("Escort"));
+	EXPECT_TRUE(read.autopilot_engaged);
+	EXPECT_EQ(read.soundtrack, SCP_string("3: Death's Door"));
+	EXPECT_TRUE(read.music_battle_started);
 }
