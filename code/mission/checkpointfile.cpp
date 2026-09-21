@@ -87,6 +87,32 @@ void read_string_list(pilot::FileHandler* handler, const char* name, SCP_vector<
 	handler->endArrayRead();
 }
 
+void write_int_list(pilot::FileHandler* handler, const char* name, const SCP_vector<int>& values)
+{
+	handler->startArrayWrite(name, values.size());
+	for (int value : values) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeInt("v", value);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_int_list(pilot::FileHandler* handler, const char* name, SCP_vector<int>& values)
+{
+	values.clear();
+
+	if (!handler->hasField(name)) {
+		return;
+	}
+
+	auto count = handler->startArrayRead(name);
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		values.push_back(handler->readIntOr("v", 0));
+	}
+	handler->endArrayRead();
+}
+
 // Name/value maps go out as an array of {k, v} objects.  An array rather than a JSON object
 // keyed by the field name because the handler's read side iterates arrays but cannot enumerate
 // the keys of an arbitrary object.
@@ -356,6 +382,50 @@ void read_clock(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	data.saved_timestamp_ms = handler->readIntOr("saved_timestamp_ms", 0);
 }
 
+void write_parse_subsystems(pilot::FileHandler* handler, const SCP_vector<checkpoint::parse_subsys_state>& subsystems)
+{
+	handler->startArrayWrite("parse_subsystems", subsystems.size());
+	for (const auto& sub : subsystems) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", sub.name.c_str());
+		handler->writeFloat("percent", sub.percent);
+		handler->writeInt("ai_class", sub.ai_class);
+		handler->writeString("cargo", sub.cargo.c_str());
+		handler->writeString("cargo_title", sub.cargo_title.c_str());
+		write_string_list(handler, "primary_banks", sub.primary_banks);
+		write_int_list(handler, "primary_ammo", sub.primary_ammo);
+		write_string_list(handler, "secondary_banks", sub.secondary_banks);
+		write_int_list(handler, "secondary_ammo", sub.secondary_ammo);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_parse_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::parse_subsys_state>& subsystems)
+{
+	subsystems.clear();
+
+	if (!handler->hasField("parse_subsystems")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("parse_subsystems");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::parse_subsys_state sub;
+		sub.name = handler->readStringOr("name", "");
+		sub.percent = handler->readFloatOr("percent", 0.0f);
+		sub.ai_class = handler->readIntOr("ai_class", -1);
+		sub.cargo = handler->readStringOr("cargo", "");
+		sub.cargo_title = handler->readStringOr("cargo_title", "");
+		read_string_list(handler, "primary_banks", sub.primary_banks);
+		read_int_list(handler, "primary_ammo", sub.primary_ammo);
+		read_string_list(handler, "secondary_banks", sub.secondary_banks);
+		read_int_list(handler, "secondary_ammo", sub.secondary_ammo);
+		subsystems.push_back(std::move(sub));
+	}
+	handler->endArrayRead();
+}
+
 void write_docks(pilot::FileHandler* handler, const SCP_vector<checkpoint::dock_link_state>& docks)
 {
 	handler->startArrayWrite("docks", docks.size());
@@ -589,6 +659,7 @@ void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoi
 		handler->writeBool("cargo_no_deplete", p_obj.cargo_no_deplete);
 
 		write_string_list(handler, "flags", p_obj.flags);
+		write_parse_subsystems(handler, p_obj.subsystems);
 
 		handler->endSectionWrite();
 	}
@@ -631,6 +702,7 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 		p_obj.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 
 		read_string_list(handler, "flags", p_obj.flags);
+		read_parse_subsystems(handler, p_obj.subsystems);
 
 		if (!p_obj.name.empty()) {
 			data.parse_objects.push_back(std::move(p_obj));
@@ -836,6 +908,7 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->writeInt("time_gone", static_cast<std::int32_t>(wing_data.time_gone));
 		handler->writeInt("wave_delay_timestamp", wing_data.wave_delay_timestamp);
 		write_int_map(handler, "ints", wing_data.ints);
+		write_string_list(handler, "flags", wing_data.flags);
 		write_string_list(handler, "ships", wing_data.ship_names);
 
 		handler->endSectionWrite();
@@ -871,6 +944,7 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			wing_data.time_gone = static_cast<fix>(handler->readIntOr("time_gone", 0));
 			wing_data.wave_delay_timestamp = handler->readIntOr("wave_delay_timestamp", 0);
 			read_int_map(handler, "ints", wing_data.ints);
+			read_string_list(handler, "flags", wing_data.flags);
 			read_string_list(handler, "ships", wing_data.ship_names);
 
 			data.wings.push_back(std::move(wing_data));
