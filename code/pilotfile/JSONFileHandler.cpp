@@ -156,6 +156,7 @@ void pilot::JSONFileHandler::startSectionWrite(Section id) {
 		json_array_append_new(_currentEl, obj);
 	} else {
 		Assertion(key_name != nullptr, "Section outside of arrays must be named!");
+		ensureNotExists(key_name);
 		json_object_set_new(_currentEl, key_name, obj);
 	}
 	pushElement(obj);
@@ -179,6 +180,10 @@ void pilot::JSONFileHandler::startArrayWrite(const char* name, size_t, bool) {
 		json_array_append_new(_currentEl, array);
 	} else {
 		Assertion(name != nullptr, "Section outside of arrays must be named!");
+		// Same guard the scalar writes have.  JSON object keys are unique, so writing a second
+		// array under a name already used silently discards the first one -- which is exactly
+		// how a weapon flag list came to overwrite the ship flag list that shared its key.
+		ensureNotExists(name);
 		json_object_set_new(_currentEl, name, array);
 	}
 	pushElement(array);
