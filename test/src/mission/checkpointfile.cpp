@@ -22,6 +22,7 @@
  */
 
 #include "cfile/cfile.h"
+#include "mission/checkpointfile.h"
 #include "mission/missioncheckpoint.h"
 #include "pilotfile/JSONFileHandler.h"
 #include "util/FSTestFixture.h"
@@ -305,4 +306,202 @@ TEST(CheckpointStampTest, ElapsedStampsCannotBecomeSentinels)
 	// Just above the clamp, the arithmetic stands on its own.
 	EXPECT_EQ(mission_checkpoint_translate_stamp(500000, -499998), 2);
 	EXPECT_EQ(mission_checkpoint_translate_stamp(500000, -499997), 3);
+}
+
+// ------------------------------------------------------------------
+// Whole-checkpoint round trip
+// ------------------------------------------------------------------
+//
+// The tests above cover the handler's guarantees in isolation.  These cover the layer above:
+// that a populated checkpoint_data survives being written and read back.
+//
+// This is the shape of test that would have caught the bug where write_weapon_state() wrote its
+// flag list under the key "flags", which the ship and each turret subsystem also used -- JSON
+// object keys being unique, the weapon list won and every ship and turret flag list in the file
+// came back empty.  Nothing in the format tests could see that, because each piece was correct
+// on its own; only writing a ship WITH flags and reading it back shows it.
+
+class CheckpointRoundTripTest : public test::FSTestFixture {
+  public:
+	CheckpointRoundTripTest() : test::FSTestFixture(INIT_CFILE) {}
+
+  protected:
+	static const char* Slot() { return "roundtrip"; }
+
+	void TearDown() override
+	{
+		checkpoint::checkpoint_delete_file(Slot());
+
+		FSTestFixture::TearDown();
+	}
+
+	// A checkpoint with something in every container that has ever been written flat into a
+	// shared JSON object, which is where key collisions hide.
+	static checkpoint::checkpoint_data makePopulated()
+	{
+		checkpoint::checkpoint_data data;
+
+		data.version = static_cast<int>(checkpoint::CHECKPOINT_VERSION);
+		data.slot = Slot();
+		data.mission_filename = "roundtrip.fs2";
+		data.mission_fingerprint = 0xABCDEF01;
+		data.campaign = "roundtrip_campaign";
+		data.pilot = "Test Pilot";
+		data.mission_time = 1234;
+		data.saved_timestamp_ms = 56789;
+
+		checkpoint::ship_state ship;
+		ship.name = "Alpha 1";
+		ship.disposition = checkpoint::ShipDisposition::Present;
+		ship.ship_class = "GTF Ulysses";
+		ship.team = "Friendly";
+		ship.hull = 42.5f;
+		ship.flags = {"cargo_revealed", "escort", "no_ets"};
+		ship.object_flags = {"invulnerable", "protected"};
+		ship.ints["escort_priority"] = 7;
+		ship.floats["afterburner_fuel"] = 12.5f;
+
+		// A turret subsystem, which owns a weapon state written into the same object it is.
+		checkpoint::subsystem_state turret;
+		turret.name = "turret01";
+		turret.ordinal = 0;
+		turret.flags = {"has_fired", "untargetable"};
+		turret.floats["current_hits"] = 99.0f;
+		turret.has_weapons = true;
+		turret.weapons.flags = {"beam_free"};
+		turret.weapons.scalars["current_primary_bank"] = 1;
+		ship.subsystems.push_back(turret);
+
+		ship.weapons.flags = {"turret_lock"};
+		ship.weapons.scalars["current_secondary_bank"] = 2;
+
+		checkpoint::weapon_bank bank;
+		bank.weapon_class = "Subach HL-7";
+		bank.ammo = 30;
+		bank.capacity = 60;
+		ship.weapons.primary_banks.push_back(bank);
+
+		ship.ai.present = true;
+		ship.ai.flags = {"kamikaze", "no_dynamic"};
+		ship.ai.target_ship = "Beta 1";
+		ship.ai.ints["mode"] = 3;
+
+		checkpoint::ai_goal_state goal;
+		goal.mode = "Attack ship";
+		goal.type = "event_ship";
+		goal.flags = {"on_hold"};
+		goal.target_name = "Beta 1";
+		goal.priority = 88;
+		ship.ai.goals.push_back(goal);
+		ship.ai.goal_slots.push_back(2);
+
+		checkpoint::dock_link_state dock;
+		dock.other_ship = "Beta 1";
+		dock.my_point = "dockpoint01";
+		dock.their_point = "dockpoint02";
+		ship.docks.push_back(dock);
+
+		checkpoint::animation_state anim;
+		anim.id = 0xDEADBEEF;
+		anim.time = 1.25f;
+		anim.speed = 2.0f;
+		anim.instance_flags = 0x1'0000'0001ULL; // deliberately above 32 bits
+		ship.animations.push_back(anim);
+
+		data.ships.push_back(std::move(ship));
+
+		return data;
+	}
+};
+
+// The headline case: a ship, its turret and its weapons all carry flag lists, and all three have
+// to survive together.
+TEST_F(CheckpointRoundTripTest, FlagListsDoNotCollide)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+	ASSERT_EQ(read.ships.size(), 1u);
+
+	const auto& ship = read.ships[0];
+
+	EXPECT_EQ(ship.flags, SCP_vector<SCP_string>({"cargo_revealed", "escort", "no_ets"}));
+	EXPECT_EQ(ship.object_flags, SCP_vector<SCP_string>({"invulnerable", "protected"}));
+	EXPECT_EQ(ship.weapons.flags, SCP_vector<SCP_string>({"turret_lock"}));
+
+	ASSERT_EQ(ship.subsystems.size(), 1u);
+	EXPECT_EQ(ship.subsystems[0].flags, SCP_vector<SCP_string>({"has_fired", "untargetable"}));
+	EXPECT_EQ(ship.subsystems[0].weapons.flags, SCP_vector<SCP_string>({"beam_free"}));
+}
+
+TEST_F(CheckpointRoundTripTest, ShipStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+	ASSERT_EQ(read.ships.size(), 1u);
+
+	const auto& ship = read.ships[0];
+
+	EXPECT_EQ(ship.name, SCP_string("Alpha 1"));
+	EXPECT_EQ(ship.ship_class, SCP_string("GTF Ulysses"));
+	EXPECT_EQ(ship.team, SCP_string("Friendly"));
+	EXPECT_FLOAT_EQ(ship.hull, 42.5f);
+	EXPECT_EQ(ship.ints.at("escort_priority"), 7);
+	EXPECT_FLOAT_EQ(ship.floats.at("afterburner_fuel"), 12.5f);
+
+	ASSERT_EQ(ship.weapons.primary_banks.size(), 1u);
+	EXPECT_EQ(ship.weapons.primary_banks[0].weapon_class, SCP_string("Subach HL-7"));
+	EXPECT_EQ(ship.weapons.primary_banks[0].ammo, 30);
+}
+
+TEST_F(CheckpointRoundTripTest, AiStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+	ASSERT_EQ(read.ships.size(), 1u);
+
+	const auto& ai = read.ships[0].ai;
+
+	EXPECT_TRUE(ai.present);
+	EXPECT_EQ(ai.flags, SCP_vector<SCP_string>({"kamikaze", "no_dynamic"}));
+	EXPECT_EQ(ai.target_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(ai.ints.at("mode"), 3);
+
+	ASSERT_EQ(ai.goals.size(), 1u);
+	EXPECT_EQ(ai.goals[0].mode, SCP_string("Attack ship"));
+	EXPECT_EQ(ai.goals[0].target_name, SCP_string("Beta 1"));
+	EXPECT_EQ(ai.goals[0].priority, 88);
+	EXPECT_EQ(ai.goals[0].flags, SCP_vector<SCP_string>({"on_hold"}));
+
+	// The originating goal slot has to survive, because active_goal indexes that array.
+	ASSERT_EQ(ai.goal_slots.size(), 1u);
+	EXPECT_EQ(ai.goal_slots[0], 2);
+}
+
+TEST_F(CheckpointRoundTripTest, DocksAndAnimationsSurvive)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+	ASSERT_EQ(read.ships.size(), 1u);
+
+	const auto& ship = read.ships[0];
+
+	ASSERT_EQ(ship.docks.size(), 1u);
+	EXPECT_EQ(ship.docks[0].other_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(ship.docks[0].my_point, SCP_string("dockpoint01"));
+	EXPECT_EQ(ship.docks[0].their_point, SCP_string("dockpoint02"));
+
+	ASSERT_EQ(ship.animations.size(), 1u);
+	EXPECT_EQ(ship.animations[0].id, 0xDEADBEEFu);
+	EXPECT_FLOAT_EQ(ship.animations[0].time, 1.25f);
+	EXPECT_FLOAT_EQ(ship.animations[0].speed, 2.0f);
+	// Above 32 bits, so this also pins the two-halves encoding.
+	EXPECT_EQ(ship.animations[0].instance_flags, 0x1'0000'0001ULL);
 }
