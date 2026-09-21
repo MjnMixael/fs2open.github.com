@@ -13,6 +13,8 @@
 #include "globalincs/vmallocator.h"
 #include "math/vecmat.h"
 
+#include <cstdint>
+
 /*
  * Mission checkpoints: save the state of a mission in progress and restore it later.
  *
@@ -141,6 +143,20 @@ enum class ShipDisposition {
 // cannot turn "guard the Orion" into "guard something else".
 // One end of a docking connection, as seen from the ship that holds it.  Both ships record the
 // link, so the restore has to guard against docking the same pair twice.
+// One running model animation, as it stood at the checkpoint.  The id is a hash of the
+// animation's own name and its ship class's name, not a table index, so it survives table
+// reordering and engine updates; the trigger type and name are kept alongside it purely so a
+// human reading the file can tell what it was.
+struct animation_state {
+	unsigned int id = 0;
+	int state = 0;              // ModelAnimationState
+	int direction = 0;          // ModelAnimationDirection
+	float time = 0.0f;
+	float duration = 0.0f;
+	float speed = 1.0f;
+	std::uint64_t instance_flags = 0;
+};
+
 struct dock_link_state {
 	SCP_string other_ship;
 	SCP_string my_point;      // dock point name on this ship
@@ -239,6 +255,7 @@ struct ship_state {
 	weapon_state weapons;
 	ai_state ai;
 	SCP_vector<dock_link_state> docks;
+	SCP_vector<animation_state> animations;
 
 	// --- only meaningful when the ship had already left ---
 	fix exit_time = 0;
