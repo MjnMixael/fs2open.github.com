@@ -420,6 +420,32 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 
 		data.ships.push_back(std::move(ship));
 
+		// A wing carries arrival and departure info that a SEXP can rewrite, plus its own goal
+		// list handed to each ship as it arrives.
+		checkpoint::wing_state wing;
+		wing.name = "Alpha";
+		wing.flags = {"gone", "departing"};
+		wing.ints["current_wave"] = 2;
+		wing.ship_names = {"Alpha 1", "Alpha 2"};
+		wing.time_gone = 98765;
+		wing.wave_delay_timestamp = 33000;
+		wing.display_name = "The Vanguard";
+		wing.arrival_anchor = "Beta 1";
+		wing.departure_anchor = "<any hostile>";
+		wing.arrival_location = 3;
+		wing.departure_location = 1;
+		wing.arrival_path_mask = 0x0A;
+		wing.departure_path_mask = 0x05;
+
+		checkpoint::ai_goal_state wing_goal;
+		wing_goal.mode = "Guard ship";
+		wing_goal.type = "event_wing";
+		wing_goal.target_name = "Beta 1";
+		wing_goal.priority = 50;
+		wing.goals.push_back(wing_goal);
+
+		data.wings.push_back(std::move(wing));
+
 		// Things in the air.  Both a weapon and a beam carry a flag list, and both live in the
 		// same section, so this is the same collision hazard the ship section had.
 		checkpoint::projectile_state shot;
@@ -514,8 +540,8 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		env.support_ship_class = "GTS Hygeia";
 		env.support_arrival_location = "Near Ship";
 		env.support_departure_location = "Hyperspace";
-		env.support_arrival_anchor_ship = "Beta 1";
-		env.support_departure_anchor_special = 1 << 30;
+		env.support_arrival_anchor = "Beta 1";
+		env.support_departure_anchor = "<any hostile>";
 		env.support_max_ships = 5;
 		env.support_max_concurrent = 1;
 		env.support_tally = 2;
@@ -856,12 +882,9 @@ TEST_F(CheckpointRoundTripTest, SupportStateSurvives)
 	EXPECT_FLOAT_EQ(env.support_max_subsys_repair, 60.0f);
 	EXPECT_TRUE(env.support_disallow_rearm);
 
-	// A ship anchor travels by name, a special anchor by value, and the two must not be
-	// confused for one another.
-	EXPECT_EQ(env.support_arrival_anchor_ship, SCP_string("Beta 1"));
-	EXPECT_EQ(env.support_arrival_anchor_special, -1);
-	EXPECT_TRUE(env.support_departure_anchor_ship.empty());
-	EXPECT_EQ(env.support_departure_anchor_special, 1 << 30);
+	// Anchors travel by name, whether they name a ship or one of the "<any hostile>" specials.
+	EXPECT_EQ(env.support_arrival_anchor, SCP_string("Beta 1"));
+	EXPECT_EQ(env.support_departure_anchor, SCP_string("<any hostile>"));
 
 	// Per-team pools, including the 0 and -1 that mean "not rearmable" and "unlimited".
 	ASSERT_EQ(env.rearm_pools.size(), 2u);
@@ -918,4 +941,39 @@ TEST_F(CheckpointRoundTripTest, ScriptDataSurvives)
 	ASSERT_EQ(read.script_data.size(), 2u);
 	EXPECT_EQ(read.script_data.at("wave"), SCP_string("3"));
 	EXPECT_EQ(read.script_data.at("last_hint"), SCP_string("watch the flank"));
+}
+
+// A wing's arrival and departure info and its own goal list are rewritten by the same SEXPs that
+// rewrite a not-yet-arrived ship's, so a restart puts the mission file's versions back.
+TEST_F(CheckpointRoundTripTest, WingStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	ASSERT_EQ(read.wings.size(), 1u);
+	const auto& wing = read.wings[0];
+
+	EXPECT_EQ(wing.name, SCP_string("Alpha"));
+	EXPECT_EQ(wing.flags, SCP_vector<SCP_string>({"gone", "departing"}));
+	EXPECT_EQ(wing.ints.at("current_wave"), 2);
+	EXPECT_EQ(wing.ship_names, SCP_vector<SCP_string>({"Alpha 1", "Alpha 2"}));
+	EXPECT_EQ(wing.time_gone, 98765);
+	EXPECT_EQ(wing.wave_delay_timestamp, 33000);
+
+	EXPECT_EQ(wing.display_name, SCP_string("The Vanguard"));
+	EXPECT_EQ(wing.arrival_anchor, SCP_string("Beta 1"));
+	EXPECT_EQ(wing.departure_anchor, SCP_string("<any hostile>"));
+	EXPECT_EQ(wing.arrival_location, 3);
+	EXPECT_EQ(wing.departure_location, 1);
+	EXPECT_EQ(wing.arrival_path_mask, 0x0A);
+	EXPECT_EQ(wing.departure_path_mask, 0x05);
+
+	// The wing's goals share their writer with the per-ship list, which also carries slot
+	// indices; a wing's are a plain list and must not pick those up.
+	ASSERT_EQ(wing.goals.size(), 1u);
+	EXPECT_EQ(wing.goals[0].mode, SCP_string("Guard ship"));
+	EXPECT_EQ(wing.goals[0].target_name, SCP_string("Beta 1"));
+	EXPECT_EQ(wing.goals[0].priority, 50);
 }

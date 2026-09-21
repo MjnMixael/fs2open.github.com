@@ -390,6 +390,25 @@ struct wing_state {
 	SCP_vector<SCP_string> ship_names;   // wing::ship_index, resolved to names
 	fix time_gone = 0;
 	int wave_delay_timestamp = 0;
+
+	// Carried alongside the Has_display_name flag, since restoring one without the other would
+	// leave the wing claiming a display name it does not have.
+	SCP_string display_name;
+
+	// set-arrival-info and set-departure-info rewrite all of this on a wing exactly as they do
+	// on a ship that has not arrived, so it needs the same treatment parse_object_state gets:
+	// anchors by name, everything else verbatim.  arrival_distance and the two delays are
+	// already in the CKPT_WING_INTS and CKPT_WING_STAMPS lists.
+	SCP_string arrival_anchor;
+	SCP_string departure_anchor;
+	int arrival_location = 0;
+	int departure_location = 0;
+	int arrival_path_mask = 0;
+	int departure_path_mask = 0;
+
+	// A wing carries its own ai_goals[], handed to each ship as it arrives, and a SEXP can
+	// rewrite them mid-mission.  Same struct as the per-ship orders.
+	SCP_vector<ai_goal_state> goals;
 };
 
 struct variable_state {
@@ -732,13 +751,11 @@ struct environment_state {
 	SCP_string support_arrival_location;    // by name, from Arrival_location_names
 	SCP_string support_departure_location;  // by name, from Departure_location_names
 
-	// An anchor is either an index into the ship registry or one of the ANCHOR_SPECIAL_* flag
-	// values.  The index is not stable across a reload -- support ships append to that registry
-	// as they are called in -- so a ship anchor goes by name and only the flag values as numbers.
-	SCP_string support_arrival_anchor_ship;
-	int support_arrival_anchor_special = -1;
-	SCP_string support_departure_anchor_ship;
-	int support_departure_anchor_special = -1;
+	// Anchors go by name, the same way the parse objects' do: either a ship, or one of the
+	// "<any hostile>" specials.  At runtime an anchor is a ship registry index, and support ships
+	// append to that registry as they are called in, so the number is not stable across a reload.
+	SCP_string support_arrival_anchor;
+	SCP_string support_departure_anchor;
 
 	int support_max_ships = 0;
 	int support_max_concurrent = 0;
