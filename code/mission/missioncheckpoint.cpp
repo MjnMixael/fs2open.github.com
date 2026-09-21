@@ -16,6 +16,7 @@
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
 #include "hud/hudtarget.h"
+#include "model/animation/modelanimation.h"
 #include "model/model.h"
 #include "species_defs/species_defs.h"
 #include "io/timer.h"
@@ -1191,6 +1192,76 @@ void load_parse_subsystems(p_object* p_objp, const SCP_vector<parse_subsys_state
 	}
 }
 
+// Model animations are runtime state that lives nowhere in the mission file: a Scripted
+// animation set going by a SEXP, a fighter bay left open, a dock arm part-way through its
+// travel.  Without this a restored mission snaps every one of them back to its rest pose,
+// which for a bay door or a dock arm is not merely cosmetic -- the ship is left in a pose its
+// own logic thinks it has already moved out of.
+//
+// The engine already knows how to put an animation at an arbitrary point in its timeline: that
+// is what multiplayer does to sync them, via ModelAnimation::start()'s time override.  This
+// reuses that.
+void store_animations(const object* objp, SCP_vector<animation_state>& out)
+{
+	out.clear();
+
+	int model_instance_num = object_get_model_instance_num(objp);
+	if (model_instance_num < 0) {
+		return;
+	}
+
+	polymodel_instance* pmi = model_get_instance(model_instance_num);
+	if (pmi == nullptr) {
+		return;
+	}
+
+	for (const auto& entry : animation::ModelAnimationSet::getAnimationStates(pmi->id)) {
+		animation_state state;
+		state.id = entry.first;
+		state.state = static_cast<int>(entry.second.state);
+		state.direction = static_cast<int>(entry.second.canonicalDirection);
+		state.time = entry.second.time;
+		state.duration = entry.second.duration;
+		state.speed = entry.second.speed;
+		state.instance_flags = entry.second.instance_flags.to_u64();
+
+		out.push_back(std::move(state));
+	}
+}
+
+void restore_animations(const object* objp, const SCP_vector<animation_state>& in)
+{
+	if (in.empty()) {
+		return;
+	}
+
+	int model_instance_num = object_get_model_instance_num(objp);
+	if (model_instance_num < 0) {
+		return;
+	}
+
+	polymodel_instance* pmi = model_get_instance(model_instance_num);
+	if (pmi == nullptr) {
+		return;
+	}
+
+	for (const auto& state : in) {
+		animation::ModelAnimation::instance_data data;
+		data.state = static_cast<animation::ModelAnimationState>(state.state);
+		data.canonicalDirection = static_cast<animation::ModelAnimationDirection>(state.direction);
+		data.time = state.time;
+		data.duration = state.duration;
+		data.speed = state.speed;
+		data.instance_flags.from_u64(state.instance_flags);
+
+		// A miss means the animation was renamed or removed from the table since the checkpoint
+		// was written, which is a mod change rather than an error.
+		if (!animation::ModelAnimationSet::applyAnimationState(pmi, state.id, data)) {
+			mprintf(("CHECKPOINT => Animation %u is no longer present; leaving it at rest.\n", state.id));
+		}
+	}
+}
+
 // A dock point index resolved against the model it belongs to.  Same reasoning as everywhere
 // else: an index is only meaningful for the exact model that produced it.
 SCP_string dock_point_name(const ship* shipp, int dockpoint)
@@ -1777,6 +1848,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		store_weapons(shipp->weapons, state.weapons);
 		store_ai(shipp, state.ai);
 		store_docks(shipp, objp, state.docks);
+		store_animations(objp, state.animations);
 
 		data.ships.push_back(std::move(state));
 	}
@@ -2465,6 +2537,7 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 
 	load_subsystems(shipp, state.subsystems);
 	load_ai(shipp, state.ai);
+	restore_animations(objp, state.animations);
 	load_weapons(shipp->weapons, state.weapons, !skip_loadout);
 }
 
