@@ -2479,7 +2479,12 @@ void checkpoint_delete_file(const SCP_string& slot)
 {
 	auto filename = checkpoint_filename(slot);
 
-	cf_delete(filename.c_str(), CF_TYPE_CHECKPOINTS, CF_LOCATION_ROOT_USER | CF_LOCATION_TYPE_ROOT);
+	// The same locations checkpoint_write() opens for writing.  Scoping the delete to the user
+	// root alone would leave a checkpoint that had landed in the game root on disk, and
+	// checkpoint_exists() would go on finding it after delete-checkpoint said it was gone.
+	cf_delete(filename.c_str(),
+		CF_TYPE_CHECKPOINTS,
+		CF_LOCATION_ROOT_USER | CF_LOCATION_ROOT_GAME | CF_LOCATION_TYPE_ROOT);
 }
 
 } // namespace checkpoint

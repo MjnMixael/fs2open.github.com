@@ -267,3 +267,7 @@ CMakeCache.txt
 test/test_data/**/*_settings.ini
 test/test_data/data/players/presets/asdf.json
 test/test_data/pilotfile/data/asdf.hdp
+
+# Checkpoint files written by the checkpoint round-trip tests.  The fixture deletes the slot it
+# creates, but a run that aborts part-way leaves one behind, and they are regenerated every run.
+test/test_data/data/players/checkpoints/
