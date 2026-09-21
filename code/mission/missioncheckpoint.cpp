@@ -18,6 +18,7 @@
 #include "gamesequence/gamesequence.h"
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
+#include "hud/hudwingmanstatus.h"
 #include "hud/hudtarget.h"
 #include "model/animation/modelanimation.h"
 #include "model/model.h"
@@ -45,6 +46,7 @@
 #include "weapon/weapon.h"
 
 #include <algorithm>
+#include <array>
 
 extern char Game_current_mission_filename[];
 
@@ -1225,6 +1227,10 @@ void store_world(checkpoint_data& data)
 {
 	data.autopilot_engaged = AutoPilotEngaged;
 
+	for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
+		data.squadron_wings.emplace_back(Squadron_wings[i] >= 0 ? Wings[Squadron_wings[i]].name : "");
+	}
+
 	for (int i = 0; i < MAX_NAVPOINTS; i++) {
 		const NavPoint* nav = &Navs[i];
 		if (nav->m_NavName[0] == '\0') {
@@ -1260,6 +1266,29 @@ void store_world(checkpoint_data& data)
 void apply_world(const checkpoint_data& data)
 {
 	AutoPilotEngaged = data.autopilot_engaged;
+
+	// Go through the same call the set-squadron-wings SEXP makes rather than assigning
+	// Squadron_wings directly: it also moves each ship's wing_status_wing_index and carries the
+	// per-slot gauge state across to the slot its wing has moved to.  Skipped when the
+	// checkpoint has no squadron list -- written by an older build -- and when nothing has
+	// changed, so a mission that never touched its squadron wings pays nothing here.
+	if (!data.squadron_wings.empty()) {
+		std::array<int, MAX_SQUADRON_WINGS> wingnums;
+		bool changed = false;
+
+		for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
+			const char* name = i < static_cast<int>(data.squadron_wings.size()) ? data.squadron_wings[i].c_str() : "";
+			wingnums[i] = (*name == '\0') ? -1 : wing_name_lookup(name);
+
+			if (wingnums[i] != Squadron_wings[i]) {
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			hud_set_new_squadron_wings(wingnums);
+		}
+	}
 
 	CurrentNav = -1;
 	for (const auto& state : data.navs) {
