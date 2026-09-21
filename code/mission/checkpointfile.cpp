@@ -454,6 +454,8 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	}
 	handler->endArrayWrite();
 
+	write_string_list(handler, "squadron_wings", data.squadron_wings);
+
 	handler->writeBool("autopilot_engaged", data.autopilot_engaged);
 	handler->writeString("current_nav", data.current_nav.c_str());
 	handler->writeString("soundtrack", data.soundtrack.c_str());
@@ -478,6 +480,7 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 {
 	data.asteroids.clear();
 	data.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
+	read_string_list(handler, "squadron_wings", data.squadron_wings);
 	data.autopilot_engaged = handler->readBoolOr("autopilot_engaged", false);
 	data.current_nav = handler->readStringOr("current_nav", "");
 	data.soundtrack = handler->readStringOr("soundtrack", "");
