@@ -2599,8 +2599,7 @@ int Fred_mission_save::save_mission_info()
 		if (optional_string_fred("+Flags:")) {
 			parse_comments(1);
 		} else {
-			fout("
-+Flags:");
+			fout("\n+Flags:");
 		}
 
 		// UINT64_T_ARG, not PRIu64: upstream standardised on the macro while this branch was out.

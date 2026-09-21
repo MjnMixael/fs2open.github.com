@@ -1136,7 +1136,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 		// Per-class kills go out by class name so that a table change cannot silently
 		// reattribute them to a different ship.
-		for (int i = 0; i < static_cast<int>(Ship_info.size()) && i < MAX_SHIP_CLASSES; i++) {
+		for (int i = 0; i < static_cast<int>(Player->stats.m_okKills.size()) && i < static_cast<int>(Ship_info.size());
+		     i++) {
 			if (Player->stats.m_okKills[i] != 0) {
 				data.scoring.class_kills[Ship_info[i].name] = Player->stats.m_okKills[i];
 			}
@@ -1831,14 +1832,18 @@ void apply_scoring(const checkpoint_data& data)
 
 	load_scoring_scalars(Player->stats, data.scoring.ints);
 
-	for (int i = 0; i < MAX_SHIP_CLASSES; i++) {
-		Player->stats.m_okKills[i] = 0;
-	}
+	// m_okKills is sized to ship_info_size() rather than a fixed maximum, so clear and index it
+	// through its own size -- a mod with fewer classes than the one that wrote the checkpoint
+	// would otherwise be written past the end.
+	std::fill(Player->stats.m_okKills.begin(), Player->stats.m_okKills.end(), 0);
 
 	for (const auto& entry : data.scoring.class_kills) {
 		int ship_class = ship_info_lookup(entry.first.c_str());
 		if (ship_class < 0) {
 			mprintf(("CHECKPOINT => Dropping kills for retired ship class '%s'.\n", entry.first.c_str()));
+			continue;
+		}
+		if (ship_class >= static_cast<int>(Player->stats.m_okKills.size())) {
 			continue;
 		}
 		Player->stats.m_okKills[ship_class] = entry.second;
