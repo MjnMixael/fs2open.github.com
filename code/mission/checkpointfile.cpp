@@ -1764,6 +1764,67 @@ void read_beam_list(pilot::FileHandler* handler, SCP_vector<checkpoint::beam_sho
 
 // Everything that is currently in the air: individual weapons, and the beams being fired at
 // them.  Two arrays under distinct names in one section.
+// Mission state that belongs to no ship: the built-in message budget, the personas already spoken
+// for, the mission mood, the training context and the reinforcement allowances.
+void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	const auto& state = data.mission;
+
+	handler->startSectionWrite(Section::CheckpointMission);
+
+	handler->writeBool("present", state.present);
+
+	write_int_map(handler, "player_ints", state.player_ints);
+	write_int_map(handler, "training_ints", state.training_ints);
+	handler->writeInt("training_speed_stamp", state.training_context_speed_timestamp);
+
+	write_string_list(handler, "used_personas", state.used_personas);
+	handler->writeInt("mission_mood", state.mission_mood);
+	handler->writeBool("no_builtin_msgs", state.no_builtin_msgs);
+	handler->writeBool("no_builtin_command", state.no_builtin_command);
+
+	handler->startArrayWrite("reinforcements", state.reinforcements.size());
+	for (const auto& reinforcement : state.reinforcements) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", reinforcement.name.c_str());
+		handler->writeInt("num_uses", reinforcement.num_uses);
+		handler->writeBool("available", reinforcement.available);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	auto& state = data.mission;
+
+	state.present = handler->readBoolOr("present", false);
+
+	read_int_map(handler, "player_ints", state.player_ints);
+	read_int_map(handler, "training_ints", state.training_ints);
+	state.training_context_speed_timestamp = handler->readIntOr("training_speed_stamp", 0);
+
+	read_string_list(handler, "used_personas", state.used_personas);
+	state.mission_mood = handler->readIntOr("mission_mood", 0);
+	state.no_builtin_msgs = handler->readBoolOr("no_builtin_msgs", false);
+	state.no_builtin_command = handler->readBoolOr("no_builtin_command", false);
+
+	state.reinforcements.clear();
+	if (handler->hasField("reinforcements")) {
+		auto count = handler->startArrayRead("reinforcements");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::reinforcement_state reinforcement;
+			reinforcement.name = handler->readStringOr("name", "");
+			reinforcement.num_uses = handler->readIntOr("num_uses", 0);
+			reinforcement.available = handler->readBoolOr("available", false);
+			state.reinforcements.push_back(std::move(reinforcement));
+		}
+		handler->endArrayRead();
+	}
+}
+
 void write_projectiles(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointProjectiles);
@@ -2136,6 +2197,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_debris(handler.get(), data);
 	write_world(handler.get(), data);
 	write_projectiles(handler.get(), data);
+	write_mission_extras(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -2244,6 +2306,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointProjectiles:
 			read_projectiles(handler.get(), data);
+			break;
+
+		case Section::CheckpointMission:
+			read_mission_extras(handler.get(), data);
 			break;
 
 		default:
