@@ -547,6 +547,9 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		node.color[3] = 4;
 		env.jump_nodes.push_back(node);
 
+		data.script_data["wave"] = "3";
+		data.script_data["last_hint"] = "watch the flank";
+
 		auto& mission = data.mission;
 		mission.present = true;
 		mission.player_ints["warn_count"] = 3;
@@ -877,4 +880,18 @@ TEST_F(CheckpointRoundTripTest, MissionStateSurvives)
 	EXPECT_EQ(mission.reinforcements[1].name, SCP_string("Epsilon"));
 	EXPECT_EQ(mission.reinforcements[1].num_uses, 0);
 	EXPECT_FALSE(mission.reinforcements[1].available);
+}
+
+// Whatever a script asked to have remembered, which is the only part of a checkpoint the engine
+// does not understand and so cannot sanity-check for itself.
+TEST_F(CheckpointRoundTripTest, ScriptDataSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	ASSERT_EQ(read.script_data.size(), 2u);
+	EXPECT_EQ(read.script_data.at("wave"), SCP_string("3"));
+	EXPECT_EQ(read.script_data.at("last_hint"), SCP_string("watch the flank"));
 }

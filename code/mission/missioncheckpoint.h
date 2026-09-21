@@ -820,6 +820,11 @@ struct checkpoint_data {
 	environment_state environment;
 	mission_extra_state mission;
 
+	// Whatever scripts asked to have remembered.  Strings only, deliberately: serialising
+	// arbitrary Lua values is a different problem, and a script that needs structure can encode
+	// it itself.  See mission.setCheckpointData() and the two checkpoint hooks.
+	SCP_map<SCP_string, SCP_string> script_data;
+
 	// Which hotkey set the player currently has selected, -1 for none.  Separate from the sets
 	// themselves: restoring the contents but not the selection drops the player back to no
 	// selection mid-mission.
@@ -901,6 +906,16 @@ const SCP_vector<SCP_string>& mission_checkpoint_get_load_flag_names();
 // clamping rules can be unit tested; the restore calls it with the delta it worked out from the
 // checkpoint's own clock.  See the note above translate_stamp() in missioncheckpoint.cpp.
 int mission_checkpoint_translate_stamp(int saved, int delta);
+
+// Script data: a string-to-string map that rides along in the checkpoint file, so a script can
+// remember state the engine knows nothing about.
+//
+// A script stages values from the On Checkpoint Save hook and reads them back from On Checkpoint
+// Restore, but neither is enforced: a write outside a save goes into the live map and is picked up
+// by the next store, and a read outside a restore returns whatever the last restore loaded.  Both
+// are cleared when the level is torn down, so one mission's script data cannot reach another.
+void mission_checkpoint_set_script_data(const SCP_string& key, const SCP_string& value);
+bool mission_checkpoint_get_script_data(const SCP_string& key, SCP_string& out_value);
 
 // Drop everything cached about the mission that was loaded.  Called from game_level_init(), so a
 // mission edited and reloaded within one run of the game is looked at afresh rather than still
