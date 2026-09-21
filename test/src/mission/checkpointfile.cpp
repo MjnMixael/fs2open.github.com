@@ -547,6 +547,20 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		node.color[3] = 4;
 		env.jump_nodes.push_back(node);
 
+		auto& mission = data.mission;
+		mission.present = true;
+		mission.player_ints["warn_count"] = 3;
+		mission.player_ints["allow_praise_timestamp"] = 45000;
+		mission.training_ints["Training_context"] = 2;
+		mission.training_ints["Training_failure"] = 1;
+		mission.training_context_speed_timestamp = 7000;
+		mission.used_personas = {"Alpha Wingman", "Command"};
+		mission.mission_mood = 2;
+		mission.no_builtin_msgs = true;
+		mission.no_builtin_command = false;
+		mission.reinforcements.push_back({"Delta", 2, true});
+		mission.reinforcements.push_back({"Epsilon", 0, false});
+
 		checkpoint::asteroid_state ast;
 		ast.type_name = "Brown";
 		ast.subtype = 2;
@@ -828,4 +842,39 @@ TEST_F(CheckpointRoundTripTest, SupportStateSurvives)
 	EXPECT_EQ(env.rearm_pools[0].at("Harpoon"), -1);
 	EXPECT_EQ(env.rearm_pools[1].at("Harpoon"), 0);
 	EXPECT_EQ(env.rearm_pools[1].count("Subach HL-7"), 0u);
+}
+
+// The built-in message budget, the training context and the reinforcement allowances all move as
+// the mission runs, and all of them are reset by the reload.
+TEST_F(CheckpointRoundTripTest, MissionStateSurvives)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	const auto& mission = read.mission;
+
+	EXPECT_TRUE(mission.present);
+
+	EXPECT_EQ(mission.player_ints.at("warn_count"), 3);
+	EXPECT_EQ(mission.player_ints.at("allow_praise_timestamp"), 45000);
+	EXPECT_EQ(mission.training_ints.at("Training_context"), 2);
+	EXPECT_EQ(mission.training_ints.at("Training_failure"), 1);
+	EXPECT_EQ(mission.training_context_speed_timestamp, 7000);
+
+	EXPECT_EQ(mission.used_personas, SCP_vector<SCP_string>({"Alpha Wingman", "Command"}));
+	EXPECT_EQ(mission.mission_mood, 2);
+	EXPECT_TRUE(mission.no_builtin_msgs);
+	EXPECT_FALSE(mission.no_builtin_command);
+
+	// A reinforcement with no uses left and one that is not yet available are both real states,
+	// so neither may be dropped for looking like a default.
+	ASSERT_EQ(mission.reinforcements.size(), 2u);
+	EXPECT_EQ(mission.reinforcements[0].name, SCP_string("Delta"));
+	EXPECT_EQ(mission.reinforcements[0].num_uses, 2);
+	EXPECT_TRUE(mission.reinforcements[0].available);
+	EXPECT_EQ(mission.reinforcements[1].name, SCP_string("Epsilon"));
+	EXPECT_EQ(mission.reinforcements[1].num_uses, 0);
+	EXPECT_FALSE(mission.reinforcements[1].available);
 }
