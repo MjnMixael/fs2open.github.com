@@ -86,6 +86,17 @@ const std::shared_ptr<Hook<>> OnGameplayStart = Hook<>::Factory("On Gameplay Sta
 	"Invoked when the gameplay portion of a mission starts.",
 	{ {"Player", "object", "The player object."} });
 
+const std::shared_ptr<Hook<>> OnCheckpointSave = Hook<>::Factory("On Checkpoint Save",
+	"Invoked just before a mission checkpoint is written, so that a script can stage anything it "
+	"wants the checkpoint to remember with mission.setCheckpointData().",
+	{ {"Slot", "string", "The name of the checkpoint slot being written."} });
+
+const std::shared_ptr<Hook<>> OnCheckpointRestore = Hook<>::Factory("On Checkpoint Restore",
+	"Invoked once a mission checkpoint has been fully restored, so that a script can read back "
+	"what it stored with mission.getCheckpointData().  The mission is in its final restored state "
+	"by this point.",
+	{ {"Slot", "string", "The name of the checkpoint slot that was restored."} });
+
 const std::shared_ptr<Hook<>> OnPhotoModeStarted = Hook<>::Factory("On Photo Mode Started",
 	"Invoked when Photo Mode is enabled.",
 	{});

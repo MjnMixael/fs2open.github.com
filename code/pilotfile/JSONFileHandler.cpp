@@ -35,7 +35,8 @@ const SCP_vector<std::pair<Section, const char*>> SectionMapping {
 	std::pair<Section, const char*>(Section::CheckpointDebris, "checkpoint_debris"),
 	std::pair<Section, const char*>(Section::CheckpointWorld, "checkpoint_world"),
 	std::pair<Section, const char*>(Section::CheckpointProjectiles, "checkpoint_projectiles"),
-	std::pair<Section, const char*>(Section::CheckpointMission, "checkpoint_mission")
+	std::pair<Section, const char*>(Section::CheckpointMission, "checkpoint_mission"),
+	std::pair<Section, const char*>(Section::CheckpointScriptData, "checkpoint_script_data")
 };
 
 const char* lookupSectionName(Section s) {
