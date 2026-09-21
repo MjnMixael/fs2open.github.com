@@ -55,6 +55,12 @@
  *   debris, because it had not produced any yet.  There is no way to resume a death roll on a
  *   fresh load.
  *
+ *   A ship caught part-way through warping in or out.  The Arriving_stage and Depart_warp flags
+ *   are not stored, so such a ship comes back simply present: the warp effect it was inside is a
+ *   fireball object that does not survive either, and resuming the animation without it would
+ *   leave a ship sliding out of nothing.  A ship that had begun to depart will be told to depart
+ *   again by whatever ordered it the first time.
+ *
  *   Autopilot engagement.  Half of what the autopilot needs is the flight path it had worked out,
  *   which is not stored; dropping the player into a half-engaged autopilot flying nowhere is
  *   worse than handing the controls back.  The nav points themselves are captured.

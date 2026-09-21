@@ -142,6 +142,13 @@ const ship_flag_entry Ship_flag_table[] = {
 	{Ship::Ship_Flags::Render_without_light, "render_without_light"},
 	{Ship::Ship_Flags::Render_without_weapons, "render_without_weapons"},
 	{Ship::Ship_Flags::Render_with_alpha_mult, "render_with_alpha_mult"},
+	// Has_display_name has to travel with ship_state::display_name.  set-display-name and the
+	// Lua setter move the two together, so restoring the string without the flag leaves the name
+	// set but unused, and restoring neither leaves a name the mission had cleared still showing.
+	{Ship::Ship_Flags::Has_display_name, "has_display_name"},
+	// Set the first time a ship screams, so it does not scream again.  Same class of state as the
+	// player's built-in message budget, which is restored for the same reason.
+	{Ship::Ship_Flags::Ship_has_screamed, "ship_has_screamed"},
 };
 
 // Several things a designer thinks of as ship state -- invulnerability, weapon protection,
@@ -3758,9 +3765,6 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 		shipp->team = team;
 	}
 
-	if (!state.display_name.empty()) {
-		shipp->display_name = state.display_name;
-	}
 	if (!state.cargo_title.empty()) {
 		strcpy_s(shipp->cargo_title, state.cargo_title.c_str());
 	}
@@ -3779,6 +3783,12 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 
 	apply_flags(state.flags, Ship_flag_table, shipp->flags);
 	apply_flags(state.object_flags, Object_flag_table, objp->flags);
+
+	// After the flags, because Has_display_name decides whether the name is used at all: a ship
+	// the mission had cleared the display name on has to come back cleared, not with whatever
+	// the mission file gave it.
+	shipp->display_name = shipp->flags[Ship::Ship_Flags::Has_display_name] ? state.display_name : SCP_string();
+
 	load_ship_scalars(*shipp, state.floats, state.ints);
 	load_physics(objp->phys_info, state.physics_floats, state.physics_vecs);
 
