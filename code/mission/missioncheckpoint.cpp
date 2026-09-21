@@ -1048,6 +1048,21 @@ void store_ai_scalars(const ai_info& obj, ai_state& state)
 		auto& out = state.stamps;
 		CKPT_AI_STAMPS(CKPT_STORE_INT)
 	}
+	{
+		auto& out = state.vecs;
+		CKPT_AI_VECS(CKPT_STORE_VEC)
+	}
+}
+
+// ai_override_ci is a control_info rather than part of ai_info, so it gets its own pair.
+void store_ai_override(const control_info& obj, SCP_map<SCP_string, float>& out)
+{
+	CKPT_AI_OVERRIDE_FLOATS(CKPT_STORE_FLOAT)
+}
+
+void load_ai_override(control_info& obj, const SCP_map<SCP_string, float>& in)
+{
+	CKPT_AI_OVERRIDE_FLOATS(CKPT_LOAD_FLOAT)
 }
 
 void load_ai_scalars(ai_info& obj, const ai_state& state)
@@ -1067,6 +1082,10 @@ void load_ai_scalars(ai_info& obj, const ai_state& state)
 	{
 		const auto& in = state.stamps;
 		CKPT_AI_STAMPS(CKPT_LOAD_STAMP)
+	}
+	{
+		const auto& in = state.vecs;
+		CKPT_AI_VECS(CKPT_LOAD_VEC)
 	}
 }
 
@@ -2558,15 +2577,29 @@ void store_ai(const ship* shipp, ai_state& out)
 	collect_flags(aip->ai_flags, Ai_flag_table, out.flags);
 	collect_flags(aip->ai_override_flags, Ai_override_flag_table, out.override_flags);
 	store_ai_scalars(*aip, out);
+	store_ai_override(aip->ai_override_ci, out.override_floats);
+
+	// ai_class is an index into Ai_classes, which comes from ai.tbl, so it goes by name like
+	// every other table index.
+	if (aip->ai_class >= 0 && aip->ai_class < static_cast<int>(Ai_class_names.size())) {
+		out.ai_class = Ai_class_names[aip->ai_class];
+	}
 
 	out.target_ship = ship_name_for_objnum(aip->target_objnum);
+	out.previous_target_ship = ship_name_for_objnum(aip->previous_target_objnum);
 	out.goal_ship = ship_name_for_objnum(aip->goal_objnum);
 	out.guard_ship = ship_name_for_objnum(aip->guard_objnum);
 	out.guard_wing = wing_name_for_wingnum(aip->guard_wingnum);
 	out.support_ship = ship_name_for_objnum(aip->support_ship_objnum);
 	out.hitter_ship = ship_name_for_objnum(aip->hitter_objnum);
+	out.attacker_ship = ship_name_for_objnum(aip->attacker_objnum);
 	out.artillery_ship = ship_name_for_objnum(aip->artillery_objnum);
 	out.waypoint_list = waypoint_list_name(aip->wp_list_index);
+
+	// Fixed length, so it goes out whole; an empty entry is a slot with nothing in it.
+	for (int i = 0; i < MAX_IGNORE_NEW_OBJECTS; i++) {
+		out.ignore_new.push_back(ship_name_for_objnum(aip->ignore_new_objnums[i]));
+	}
 
 	// ignore_objnum doubles as a wing reference: -(wingnum + 1) means "ignore this whole wing".
 	if (aip->ignore_objnum < -1) {
@@ -2580,16 +2613,18 @@ void store_ai(const ship* shipp, ai_state& out)
 	if (aip->targeted_subsys != nullptr && aip->target_objnum >= 0 && aip->target_objnum < MAX_OBJECTS) {
 		const object* target = &Objects[aip->target_objnum];
 		if (target->type == OBJ_SHIP && target->instance >= 0) {
-			const ship* target_shipp = &Ships[target->instance];
-			SCP_map<SCP_string, int> ordinals;
-			for (auto subsys = GET_FIRST(&target_shipp->subsys_list); subsys != END_OF_LIST(&target_shipp->subsys_list);
-			     subsys = GET_NEXT(subsys)) {
-				SCP_string name = subsys_key(subsys);
-				int ordinal = ordinals[name]++;
-				if (subsys == aip->targeted_subsys) {
-					out.target_subsystem = subsys_lookup_key(name, ordinal);
-					break;
-				}
+			out.target_subsystem = subsys_key_for(&Ships[target->instance], aip->targeted_subsys);
+		}
+	}
+
+	// last_subsys_target carries no parent of its own, so it is looked for on the current target,
+	// which is where the AI put it.
+	if (aip->last_subsys_target != nullptr && !out.target_ship.empty()) {
+		auto target_entry = ship_registry_get(out.target_ship);
+		if (target_entry != nullptr && target_entry->has_shipp()) {
+			out.last_subsys_target = subsys_key_for(target_entry->shipp(), aip->last_subsys_target);
+			if (!out.last_subsys_target.empty()) {
+				out.last_subsys_target_ship = out.target_ship;
 			}
 		}
 	}
@@ -2669,6 +2704,16 @@ void load_ai(ship* shipp, const ai_state& in)
 	apply_flags(in.flags, Ai_flag_table, aip->ai_flags);
 	apply_flags(in.override_flags, Ai_override_flag_table, aip->ai_override_flags);
 	load_ai_scalars(*aip, in);
+	load_ai_override(aip->ai_override_ci, in.override_floats);
+
+	if (!in.ai_class.empty()) {
+		for (size_t i = 0; i < Ai_class_names.size(); i++) {
+			if (!stricmp(Ai_class_names[i], in.ai_class.c_str())) {
+				aip->ai_class = static_cast<int>(i);
+				break;
+			}
+		}
+	}
 
 	// Object references are resolved in a second pass, once every ship exists -- see
 	// resolve_ai_references().  Only the goals, which carry names rather than objnums, can be
@@ -2701,6 +2746,8 @@ void resolve_ai_references(ship* shipp, const ai_state& in)
 	ai_info* aip = &Ai_info[shipp->ai_index];
 
 	aip->target_objnum = objnum_for_ship_name(in.target_ship);
+	aip->previous_target_objnum = objnum_for_ship_name(in.previous_target_ship);
+	aip->attacker_objnum = objnum_for_ship_name(in.attacker_ship);
 	aip->goal_objnum = objnum_for_ship_name(in.goal_ship);
 	aip->guard_objnum = objnum_for_ship_name(in.guard_ship);
 	aip->support_ship_objnum = objnum_for_ship_name(in.support_ship);
@@ -2718,6 +2765,13 @@ void resolve_ai_references(ship* shipp, const ai_state& in)
 	aip->artillery_sig = (aip->artillery_objnum >= 0) ? Objects[aip->artillery_objnum].signature : -1;
 
 	aip->guard_wingnum = in.guard_wing.empty() ? -1 : wing_lookup(in.guard_wing.c_str());
+
+	// Fixed-length array, restored by slot; a name that no longer resolves leaves its slot empty.
+	for (int i = 0; i < MAX_IGNORE_NEW_OBJECTS; i++) {
+		int objnum = (i < static_cast<int>(in.ignore_new.size())) ? objnum_for_ship_name(in.ignore_new[i]) : -1;
+		aip->ignore_new_objnums[i] = (objnum >= 0) ? objnum : UNUSED_OBJNUM;
+		aip->ignore_new_signatures[i] = (objnum >= 0) ? Objects[objnum].signature : -1;
+	}
 
 	if (!in.ignore_wing.empty()) {
 		int wingnum = wing_lookup(in.ignore_wing.c_str());
@@ -2745,6 +2799,8 @@ void resolve_ai_references(ship* shipp, const ai_state& in)
 			}
 		}
 	}
+
+	aip->last_subsys_target = find_subsys_by_key(in.last_subsys_target_ship, in.last_subsys_target);
 }
 
 void store_subsystems(const ship* shipp, SCP_vector<subsystem_state>& out)
