@@ -246,6 +246,7 @@ struct ship_state {
 
 struct wing_state {
 	SCP_string name;
+	SCP_vector<SCP_string> flags;
 	SCP_map<SCP_string, int> ints;
 	SCP_vector<SCP_string> ship_names;   // wing::ship_index, resolved to names
 	fix time_gone = 0;
@@ -345,8 +346,25 @@ struct hotkey_state {
 // shield bashing, flag changes -- and a fresh mission load puts all of that back the way the file
 // had it.  Only the fields a SEXP can actually reach are captured; the rest is reproduced by the
 // parse.
+// One entry of a not-yet-arrived ship's subsys_status list.  This is where a loadout change
+// made by SEXP before a wing arrives actually lives, so losing it means a later wave arrives
+// with the mission file's loadout rather than the one the mission gave it.
+struct parse_subsys_state {
+	SCP_string name;               // subsystem name, or the "Pilot" pseudo-subsystem
+	float percent = 0.0f;
+	int ai_class = -1;
+	SCP_string cargo;
+	SCP_string cargo_title;
+	// Bank contents by weapon class name; ammo runs in parallel.  An empty name is an empty bank.
+	SCP_vector<SCP_string> primary_banks;
+	SCP_vector<int> primary_ammo;
+	SCP_vector<SCP_string> secondary_banks;
+	SCP_vector<int> secondary_ammo;
+};
+
 struct parse_object_state {
 	SCP_string name;
+	SCP_vector<parse_subsys_state> subsystems;
 	SCP_string ship_class;
 	SCP_string team;
 
