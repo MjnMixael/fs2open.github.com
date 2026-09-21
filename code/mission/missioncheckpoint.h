@@ -27,6 +27,45 @@
  * Everything that crosses the file is keyed by name -- ship names, class names, subsystem
  * names -- never by a runtime index, so a checkpoint survives table changes and engine
  * updates.  See checkpointfields.h for how the per-struct field lists work.
+ *
+ * WHAT IS DELIBERATELY NOT CAPTURED
+ *
+ * These are decisions rather than omissions, and they are written down here so that the next
+ * reader does not spend an afternoon working out whether each one was forgotten.  Individual
+ * structs below carry their own narrower notes; this is the list of whole categories.
+ *
+ *   Shockwaves.  shockwave::obj_sig_hitlist holds object signatures, which are regenerated on
+ *   every load and can name weapons or debris that do not survive at all; a bad remap double-
+ *   damages a ship.  total_time is about a second, so a checkpoint almost never lands inside one.
+ *
+ *   Small debris.  It expires in seconds, it is pure decoration, and debris_create_only() culls
+ *   it by distance anyway.  Hull debris is captured, because a capital ship wreck is permanent,
+ *   collidable and targetable -- battlefield terrain rather than an effect.
+ *
+ *   Particles, decals, trails, sparks, sound handles and RNG state.  None of these are ever worth
+ *   doing: they are either regenerated within a frame or two of the restore, or they are handles
+ *   into subsystems that were torn down with the level.
+ *
+ *   The camera, cutscene bars, fades and subtitles.  A checkpoint taken mid-cutscene is
+ *   pathological, the state lasts seconds, and a half-restored camera is worse than none.  The
+ *   bars and the fade are force-cleared on restore so a checkpoint taken mid-fade cannot resume
+ *   into a black screen.
+ *
+ *   A ship in the middle of its death roll is recorded as already destroyed, and contributes no
+ *   debris, because it had not produced any yet.  There is no way to resume a death roll on a
+ *   fresh load.
+ *
+ *   Autopilot engagement.  Half of what the autopilot needs is the flight path it had worked out,
+ *   which is not stored; dropping the player into a half-engaged autopilot flying nowhere is
+ *   worse than handing the controls back.  The nav points themselves are captured.
+ *
+ * Two of these used to be longer.  Weapons in flight and beams are now captured -- see
+ * projectile_state and beam_shot_state -- as is the asteroid field.  What made those tractable
+ * was that each is recreated through the engine's own entry point (weapon_create(), beam_fire(),
+ * asteroid_create()) rather than being reconstructed field by field, so the caches, trails and
+ * sound handles that made them look impossible are built by the engine as it would for a live
+ * shot, and only the state that describes where the thing is and what it is doing comes from the
+ * file.
  */
 
 class object;
@@ -652,10 +691,10 @@ struct environment_state {
 
 	bool subspace = false;
 
-	// Background: which set is live, and then the live sun and bitmap instances, which are not
-	// the same thing as that set's definition once a SEXP has been at them.  The index is allowed
-	// to be an index because Backgrounds[] is built solely by the mission parse, which the
-	// fingerprint check makes identical across runs.
+	// Background: which set is live, and then the live sun and bitmap instances, which are not the
+	// same thing as that set's definition once a SEXP has been at them.  The index is allowed to
+	// be an index because Backgrounds[] is built solely by the mission parse, which the fingerprint
+	// check makes identical across runs.
 	int background_index = -1;
 	SCP_vector<starfield_entry_state> starfield;
 
