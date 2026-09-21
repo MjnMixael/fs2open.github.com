@@ -467,6 +467,108 @@ struct debris_state {
 	bool do_not_expire = false;
 };
 
+// A weapon in flight.  Note the name: `weapon_state` above is a ship's weapon banks, which is a
+// different thing entirely.
+//
+// A missile already halfway to its target is part of the tactical picture the checkpoint is
+// meant to preserve, so these are recreated rather than dropped.  Everything that points at
+// another object -- the ship that fired it, the turret that fired it, what it is homing on -- is
+// stored by name for the usual reason: object numbers are handed out in creation order and mean
+// something different in the next run.
+struct projectile_state {
+	SCP_string weapon_class;
+
+	vec3d pos = vmd_zero_vector;
+	matrix orient = vmd_identity_matrix;
+	vec3d velocity = vmd_zero_vector;
+	vec3d desired_velocity = vmd_zero_vector;
+	vec3d start_pos = vmd_zero_vector;
+
+	float hull = 0.0f;
+	float lifeleft = 0.0f;
+	fix creation_time = 0;      // mission time, restored as-is like the log timestamps
+	int group_id = -1;          // remapped on apply; the saved numbers mean nothing in a new run
+
+	SCP_string team;
+	SCP_string species;
+	SCP_vector<SCP_string> flags;
+	SCP_string weapon_state;    // WeaponState, by name
+
+	// Who fired it.  A weapon whose parent is gone keeps flying, just without a parent -- which
+	// is already a state the engine handles, since parents die all the time.
+	SCP_string parent_ship;
+	SCP_string parent_turret;   // subsystem lookup key, empty when not turret-fired
+
+	// What it is homing on.  Only ship targets survive: a weapon homing on debris, an asteroid
+	// or another weapon has nothing to find its target by, and loses the lock.
+	SCP_string homing_ship;
+	SCP_string homing_subsys;   // subsystem lookup key
+	vec3d homing_pos = vmd_zero_vector;
+	bool has_homing_pos = false;
+
+	float det_range = 0.0f;
+	float weapon_max_vel = 0.0f;
+	float launch_speed = 0.0f;
+	float alpha_current = 1.0f;
+	bool alpha_backward = false;
+
+	// Local SSM: the missile is mid-jump, and the stage decides whether it is here at all.
+	int lssm_stage = -1;
+	fix lssm_warpout_time = 0;
+	fix lssm_warpin_time = 0;
+	vec3d lssm_target_pos = vmd_zero_vector;
+
+	int cmeasure_timer = 0;     // engine timestamp, shifted on restore
+};
+
+// A beam that is mid-fire.
+//
+// Unlike a weapon, a beam is anchored to the turret firing it and the thing it is firing at, so
+// it is put back by re-firing it through beam_fire() with the saved aim data and then winding it
+// forward to where it was.  Everything beam_fire() derives from the weapon table -- the beam
+// type, its range, its widths, its total life -- is deliberately not stored: it is reproduced by
+// the same derivation, and storing it would only create a way for the two to disagree.
+struct beam_shot_state {
+	SCP_string weapon_class;
+
+	SCP_string shooter_ship;    // by name; a beam whose shooter is gone is not restored
+	SCP_string turret;          // subsystem lookup key
+	SCP_string target_ship;     // by name; only ship targets survive
+	SCP_string target_subsys;   // subsystem lookup key
+	SCP_string team;
+	SCP_string weapon_state;    // WeaponState, by name: warmup, firing, paused or warmdown
+
+	// BF_* bits, by name.  These are plain #defines rather than a flagset, so they get their own
+	// small table instead of going through collect_flags().
+	SCP_vector<SCP_string> flags;
+
+	vec3d target_pos1 = vmd_zero_vector;
+	vec3d target_pos2 = vmd_zero_vector;
+	vec3d last_start = vmd_zero_vector;
+	vec3d last_shot = vmd_zero_vector;
+	vec3d local_fire_position = vmd_zero_vector;
+
+	float life_left = 0.0f;
+	float current_width_factor = 1.0f;
+	float u_offset_local = 0.0f;
+	float beam_glow_frame = 0.0f;
+	int framecount = 0;
+	int shot_index = 0;
+	int bank = -1;
+	int firingpoint = -1;
+	int warmup_stamp = -1;
+	int warmdown_stamp = -1;
+
+	// beam_info: the aim vectors that decide exactly how the beam sweeps over its life.  The
+	// multiplayer path hands these from server to client wholesale so that every machine sees
+	// the same beam; a restore needs them for the same reason.
+	vec3d dir_a = vmd_zero_vector;
+	vec3d dir_b = vmd_zero_vector;
+	vec3d rot_axis = vmd_zero_vector;
+	int shot_count = 0;
+	SCP_vector<float> shot_aim;
+};
+
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
 // timestamp, so it is restored as-is rather than shifted.
 struct log_entry_state {
@@ -529,6 +631,9 @@ struct checkpoint_data {
 	// with an empty string for an unused slot.  The set-squadron-wings SEXP can change this
 	// mid-mission, and a restart puts the mission's original wings back.
 	SCP_vector<SCP_string> squadron_wings;
+
+	SCP_vector<projectile_state> projectiles;
+	SCP_vector<beam_shot_state> beams;
 
 	SCP_vector<nav_state> navs;
 	SCP_string current_nav;          // by name, empty for none
