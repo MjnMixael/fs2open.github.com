@@ -139,17 +139,54 @@ enum class ShipDisposition {
 
 // A nav point's mutable state.  Nav points themselves are created by the mission, but whether
 // one has been visited, hidden or locked is all SEXP-driven and changes during play.
-struct nav_state {
-	SCP_string name;
+// One autopilot navpoint.
+//
+// A whole family of operators adds, deletes, hides, restricts and marks these visited while the
+// mission runs, so the array is runtime state rather than mission-file state.  The array goes out
+// whole, unused slots included, because a nav is identified by its slot.  target_index is an
+// object index unless the nav is bound to a waypoint, so it goes out as a ship name, or as a
+// waypoint list name plus the node within it.
+struct navpoint_state {
+	SCP_string name;               // empty for an unused slot
 	int flags = 0;
-	SCP_string target_ship;     // when the nav is bound to a ship, by name
-	SCP_string waypoint_list;   // when it is bound to a waypoint path, by name
+
+	SCP_string target;             // ship name, or waypoint list name for a waypoint nav
 	int waypoint_num = -1;
+
+	int normal_color[3] = {0, 0, 0};
+	int visited_color[3] = {0, 0, 0};
 };
 
-// One live asteroid.  The field regenerates from the mission file on every load, at random
-// positions and always at full strength, so without this a restored mission has a differently
-// shaped field with every asteroid the player already destroyed back in it.
+// One jump node, as the mission has left it.
+//
+// Identified by its position in Jump_nodes rather than by name, because set-jumpnode-name renames
+// the thing that would otherwise be the key.  That list is built solely by the mission parse,
+// which the fingerprint check makes identical across runs -- the same reasoning that lets
+// alt_type_index stay an index.
+struct jump_node_state {
+	int index = 0;
+
+	SCP_string name;
+	SCP_string display_name;
+	SCP_string model;              // filename; empty means the default model
+	bool hidden = false;
+	bool colored = false;
+	int color[4] = {0, 0, 0, 0};
+};
+
+// One live sun or background bitmap.  These are instances rather than the definition of the
+// background set they came from, and once a SEXP has been at them the two are no longer the same.
+struct starfield_entry_state {
+	SCP_string name;
+	bool is_sun = false;
+
+	float scale_x = 1.0f;
+	float scale_y = 1.0f;
+	int div_x = 1;
+	int div_y = 1;
+	angles ang = {0.0f, 0.0f, 0.0f};
+};
+
 struct asteroid_state {
 	SCP_string type_name;      // Asteroid_info entry, by name
 	int subtype = 0;
@@ -575,29 +612,149 @@ struct beam_shot_state {
 	SCP_vector<float> shot_aim;
 };
 
-// Mission-level support ship state.  The parse sets this up, but between the set-support-ship
-// SEXPs, the rearm code draining the weapon pools and each call incrementing the tally, most of
-// it moves during a mission -- and a restart puts the parsed values back.
-struct support_state {
-	int tally = 0;
-	SCP_string ship_class;          // by name; empty means "work it out from the requester's species"
-	int max_support_ships = 0;
-	int max_concurrent_ships = 0;
+// The world that is not made of ships.
+//
+// Almost none of this lives in The_mission -- it lives in module-level globals whose only reset is
+// that module's level_init, which a restore runs.  So every SEXP that dresses the mission
+// (change-background, set-skybox-model, nebula-change-pattern, change-soundtrack, the
+// set-support-ship family, the nav operators) is undone by a reload unless it is written down
+// here.
+//
+// Deliberately absent, and each worth naming: the camera, cutscene bars, fades and subtitles,
+// which last seconds and are worse half-restored than not restored; the per-gauge HUD text,
+// coordinates and frames, which mutate table data in Ship_info; post-processing effects, which
+// live only in graphics state; and the subspace ambient sound, since sound handles are never
+// restored.
+struct environment_state {
+	// False in a checkpoint written before this section existed, in which case none of it is
+	// applied -- otherwise an absent section would blank the sky rather than leave it alone.
+	bool present = false;
 
-	SCP_string arrival_location;    // by name, from Arrival_location_names
-	SCP_string departure_location;  // by name, from Departure_location_names
+	// Skybox.  The model and its texture by filename; stars_set_background_model() reloads both.
+	SCP_string skybox_model;
+	SCP_string skybox_texture;
+	uint skybox_flags_hi = 0;   // Nmodel_flags is 64-bit, and the file writes 32 at a time
+	uint skybox_flags_lo = 0;
+	float skybox_alpha = 1.0f;
+	matrix skybox_orient = vmd_identity_matrix;
+
+	int ambient_light = 0;
+
+	// Nebula.  fullneb and the range go back through stars_set_nebula(), which owns all the
+	// derived state; the pattern and fog colour go through neb2_post_level_init().
+	bool fullneb = false;
+	float neb_range = 0.0f;
+	SCP_string neb_pattern;
+	bool neb_fog_color_override = false;
+	int neb_fog_r = 0;
+	int neb_fog_g = 0;
+	int neb_fog_b = 0;
+
+	bool subspace = false;
+
+	// Background: which set is live, and then the live sun and bitmap instances, which are not
+	// the same thing as that set's definition once a SEXP has been at them.  The index is allowed
+	// to be an index because Backgrounds[] is built solely by the mission parse, which the
+	// fingerprint check makes identical across runs.
+	int background_index = -1;
+	SCP_vector<starfield_entry_state> starfield;
+
+	bool motion_debris_override = false;
+	SCP_string motion_debris_type;
+
+	// Which soundtrack the mission is on and whether combat music has already kicked in.  By
+	// name, because the index is into music.tbl and is not stable across builds or mod loads.
+	SCP_string soundtrack;
+	bool music_battle_started = false;
+
+	// HUD.  display_warpout is dual-purpose: 0 and 1 are off and on, anything larger is a
+	// timestamp saying when to stop, so it goes in the translated set.
+	bool hud_draw = true;
+	bool hud_disable_except_messages = false;
+	int hud_max_targeting_range = 0;
+	int hud_display_warpout = 0;
+
+	// Support ships.  Everything a SEXP or the mission itself can move: which class turns up,
+	// how many are left, and the rearm stockpile, which is genuinely spent as the mission runs
+	// and would otherwise refill on a restore.
+	SCP_string support_ship_class;     // empty means "work it out from the requester's species"
+	SCP_string support_arrival_location;    // by name, from Arrival_location_names
+	SCP_string support_departure_location;  // by name, from Departure_location_names
 
 	// An anchor is either an index into the ship registry or one of the ANCHOR_SPECIAL_* flag
-	// values.  The index is not stable across a reload, so a ship anchor is stored by name and
-	// only the flag values are stored as numbers.
-	SCP_string arrival_anchor_ship;
-	int arrival_anchor_special = -1;
-	SCP_string departure_anchor_ship;
-	int departure_anchor_special = -1;
+	// values.  The index is not stable across a reload -- support ships append to that registry
+	// as they are called in -- so a ship anchor goes by name and only the flag values as numbers.
+	SCP_string support_arrival_anchor_ship;
+	int support_arrival_anchor_special = -1;
+	SCP_string support_departure_anchor_ship;
+	int support_departure_anchor_special = -1;
 
-	// Per team, weapon class name -> rounds left in the pool.  An absent entry means the
-	// mission default, so only what the map actually holds is stored.
+	int support_max_ships = 0;
+	int support_max_concurrent = 0;
+	int support_tally = 0;
+	int support_available_for_species = 0;
+	float support_max_hull_repair = 0.0f;
+	float support_max_subsys_repair = 0.0f;
+	bool support_disallow_rearm = false;
+
+	// Per team, weapon class name -> rounds left in the pool.  An absent entry means the mission
+	// default, so only what the map actually holds is stored.
 	SCP_vector<SCP_map<SCP_string, int>> rearm_pools;
+
+	bool no_traitor = false;
+	SCP_string traitor_override;   // by name; empty means none
+	SCP_string debriefing_persona; // by name, the persona_index precedent
+
+	bool asteroids_enabled = true;
+
+	SCP_vector<navpoint_state> navpoints;
+	int current_nav = -1;
+
+	SCP_vector<jump_node_state> jump_nodes;
+
+	// Which wings the wingman-status gauge is showing, by name, one entry per squadron slot with
+	// an empty string for an unused slot.  The set-squadron-wings SEXP can change this
+	// mid-mission, and a restart puts the mission's original wings back.
+	SCP_vector<SCP_string> squadron_wings;
+};
+
+// One reinforcement's remaining allowance.
+//
+// num_uses counts up as the player calls them in and the availability bit is set when the mission
+// makes one callable, so both move as the mission runs.  Everything else about a reinforcement --
+// how many uses it started with, its type, its acknowledgement messages -- comes from the mission
+// file and is reproduced by the load.  Without this a player who has spent two of their three
+// support calls gets them back.
+struct reinforcement_state {
+	SCP_string name;
+	int num_uses = 0;
+	bool available = false;
+};
+
+// Mission state that belongs to no ship: the built-in message budget, the personas already spoken
+// for, the mission mood, the training context and the reinforcement allowances.
+//
+// Deliberately absent, and each worth naming: the mission message queue and the training message
+// queue, both of which live in file statics in their own modules and hold at most a few seconds
+// of text that has not been said yet; Squadmsg_history, which is a log of orders given rather
+// than state that affects play, and whose four ship references each have their own encoding;
+// Players_target and the lock tracking beside it, which the training update recomputes every
+// frame.
+struct mission_extra_state {
+	// As with the environment, an absent section has to mean "says nothing" rather than "all
+	// zeroes" -- zero built-in messages used is a real value.
+	bool present = false;
+
+	SCP_map<SCP_string, int> player_ints;
+	SCP_map<SCP_string, int> training_ints;
+	int training_context_speed_timestamp = 0;
+
+	SCP_vector<SCP_string> used_personas;   // by name; Personas comes from messages.tbl
+	int mission_mood = 0;
+	bool no_builtin_msgs = false;
+	bool no_builtin_command = false;
+
+	SCP_vector<reinforcement_state> reinforcements;
 };
 
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
@@ -656,27 +813,13 @@ struct checkpoint_data {
 	SCP_vector<parse_object_state> parse_objects;
 	SCP_vector<hotkey_state> hotkeys;
 	SCP_vector<asteroid_state> asteroids;
-	bool asteroids_enabled = true;
-
-	// Which wings the wingman-status gauge is showing, by name, one entry per squadron slot
-	// with an empty string for an unused slot.  The set-squadron-wings SEXP can change this
-	// mid-mission, and a restart puts the mission's original wings back.
-	SCP_vector<SCP_string> squadron_wings;
-
-	support_state support;
 
 	SCP_vector<projectile_state> projectiles;
 	SCP_vector<beam_shot_state> beams;
 
-	SCP_vector<nav_state> navs;
-	SCP_string current_nav;          // by name, empty for none
-	bool autopilot_engaged = false;
+	environment_state environment;
+	mission_extra_state mission;
 
-	// Which soundtrack the mission is on and whether combat music has already kicked in; a
-	// restore that drops these starts the mission's opening track over a battle in progress.
-	// By name, because the index is into music.tbl and not stable across builds or mod loads.
-	SCP_string soundtrack;
-	bool music_battle_started = false;
 	// Which hotkey set the player currently has selected, -1 for none.  Separate from the sets
 	// themselves: restoring the contents but not the selection drops the player back to no
 	// selection mid-mission.
