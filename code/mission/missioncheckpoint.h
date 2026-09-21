@@ -494,6 +494,10 @@ struct checkpoint_data {
 	SCP_vector<debris_state> debris;
 	SCP_vector<parse_object_state> parse_objects;
 	SCP_vector<hotkey_state> hotkeys;
+	// Which hotkey set the player currently has selected, -1 for none.  Separate from the sets
+	// themselves: restoring the contents but not the selection drops the player back to no
+	// selection mid-mission.
+	int current_hotkey_set = -1;
 	int goal_timestamp = 0;
 
 	bool loaded = false;
