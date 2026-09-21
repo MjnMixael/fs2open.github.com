@@ -238,6 +238,13 @@ extern int Beam_count;
 // fire a beam, returns objnum on success. the innards of the code handle all the rest, foo
 int beam_fire(beam_fire_info *fire_info);
 
+// Move a beam on from the warmup phase beam_fire() leaves it in.  Normally only
+// beam_move_all_post() needs these, when a phase's timestamp runs out; the checkpoint restore
+// needs them too, to wind a re-fired beam forward to the phase it was saved in.
+// beam_start_firing() returns 0 if the beam cannot legally fire and should be deleted.
+int beam_start_firing(beam *b);
+void beam_start_warmdown(beam *b);
+
 // fire a targeting beam, returns objnum on success. a much much simplified version of a beam weapon
 // targeting lasers last _one_ frame. For a continuous stream - they must be created every frame.
 // this allows it to work smoothly in multiplayer (detect "trigger down". every frame just create a targeting laser firing straight out of the
