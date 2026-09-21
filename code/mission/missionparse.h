@@ -559,6 +559,10 @@ extern SCP_vector<p_object> Parse_objects;
 #define POBJ_INDEX(pobjp) (static_cast<int>((pobjp)-Parse_objects.data()))
 
 extern p_object Support_ship_pobj, *Arriving_support_ship;
+// The ships an arriving support ship has been asked to repair.  Filled in by
+// mission_bring_in_support_ship() and consumed by mission_parse_support_arrived().
+extern char Arriving_repair_targets[MAX_AI_GOALS][NAME_LENGTH];
+extern int Num_arriving_repair_targets;
 extern p_object Ship_arrival_list;
 
 // one line of a team loadout: a ship or weapon class (given literally or via a sexp variable)
