@@ -889,6 +889,13 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in)
 
 		// Turret targets are resolved in a second pass, once every ship exists.
 	}
+
+	// The per-subsystem hits above are only half the picture.  ship_get_subsystem_strength(),
+	// which is what engine speed, sensor range, weapon function and comms all actually read,
+	// works off ship::subsys_info[].aggregate_current_hits -- and nothing above touches those,
+	// so without this a restored ship shows its damage on the HUD while flying, targeting and
+	// shooting as though it were untouched.
+	ship_recalc_subsys_strength(shipp);
 }
 
 void resolve_turret_targets(ship* shipp, const SCP_vector<subsystem_state>& in)
@@ -1391,6 +1398,26 @@ void mission_checkpoint_delete(const SCP_string& slot)
 // Load request handling
 // ------------------------------------------------------------------
 
+// The loadout choices a mission makes in its settings.  These apply to every load of this
+// mission, however it was triggered -- a designer who ticks "keep player loadout" in FRED means
+// it for load-checkpoint just as much as for the automatic entry prompt, and having it silently
+// apply to only one of them is a trap.  Operator options are added on top of these, never
+// subtracted, so a SEXP can ask for more than the mission settings but the mission's own choice
+// always holds.
+static LoadFlags mission_load_flag_defaults()
+{
+	LoadFlags flags = LoadFlags::None;
+
+	if (The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_player_loadout]) {
+		flags |= LoadFlags::KeepPlayerLoadout;
+	}
+	if (The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_wing_loadout]) {
+		flags |= LoadFlags::KeepWingLoadout;
+	}
+
+	return flags;
+}
+
 void mission_checkpoint_request_load(const SCP_string& slot, LoadFlags flags)
 {
 	if (!mission_checkpoint_allowed()) {
@@ -1400,7 +1427,7 @@ void mission_checkpoint_request_load(const SCP_string& slot, LoadFlags flags)
 
 	Pending_load.queued = true;
 	Pending_load.slot = slot;
-	Pending_load.flags = flags;
+	Pending_load.flags = flags | mission_load_flag_defaults();
 }
 
 bool mission_checkpoint_load_pending()
@@ -1940,18 +1967,9 @@ void apply_hud_state(const checkpoint_data& data)
 	// ship, which the toggle treats as an add because the list is empty by then.
 	hud_escort_clear_all(false);
 
-	int escorts = 0;
-	int flagged_in_file = 0;
-
 	for (const auto& state : data.ships) {
 		if (state.disposition != ShipDisposition::Present) {
 			continue;
-		}
-
-		// What the file says, so a mismatch between this and the live flag points straight at the
-		// ship restore rather than at the rebuild below.
-		if (std::find(state.flags.begin(), state.flags.end(), SCP_string("escort")) != state.flags.end()) {
-			flagged_in_file++;
 		}
 
 		auto entry = ship_registry_get(state.name);
@@ -1961,19 +1979,8 @@ void apply_hud_state(const checkpoint_data& data)
 
 		if (Ships[entry->shipnum].flags[Ship::Ship_Flags::Escort]) {
 			hud_add_remove_ship_escort(entry->objnum, 1);
-			escorts++;
-		} else if (std::find(state.flags.begin(), state.flags.end(), SCP_string("escort")) != state.flags.end()) {
-			// The file says escort but the live ship does not, which means the flag did not survive
-			// apply_ship() -- a different problem from the rebuild failing.
-			mprintf(("CHECKPOINT => '%s' is an escort in the checkpoint but lost the flag on restore.\n",
-			         state.name.c_str()));
 		}
 	}
-
-	mprintf(("CHECKPOINT => Escort list: %d ship(s) flagged in the checkpoint, %d re-added, %d now on the list.\n",
-	         flagged_in_file,
-	         escorts,
-	         hud_escort_num_ships_on_list()));
 
 	if (Player == nullptr) {
 		return;
@@ -2277,15 +2284,9 @@ void mission_checkpoint_maybe_offer_resume()
 	}
 
 	// The entry prompt has no arguments to take options from, so the loadout choices come from
-	// the mission instead.  "Reopen loadout" is deliberately not available here: the player has
+	// the mission alone.  "Reopen loadout" is deliberately not available here: the player has
 	// only just come through the loadout screen.
-	LoadFlags flags = LoadFlags::None;
-	if (The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_player_loadout]) {
-		flags |= LoadFlags::KeepPlayerLoadout;
-	}
-	if (The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_wing_loadout]) {
-		flags |= LoadFlags::KeepWingLoadout;
-	}
+	LoadFlags flags = mission_load_flag_defaults();
 
 	// No mission reload needed.  The reload the SEXP path performs exists only to get back to
 	// a freshly parsed mission, and entering a mission is already exactly that -- so all that
