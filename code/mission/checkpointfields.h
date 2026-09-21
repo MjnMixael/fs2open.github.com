@@ -242,6 +242,15 @@
 // Object references (target, goal, guard, ignore, support ship, hitter) are NOT here: an objnum
 // means nothing after a reload, so those are stored by ship name in ai_state.
 
+// enemy_wing and guard_wingnum index Wings[], which only the mission parse ever builds -- the same
+// reasoning that lets alt_type_index and callsign_index stay as indices.  wp_list_index and
+// wp_index are positions in a waypoint list, and waypoint lists likewise come only from the
+// mission file.
+//
+// mode, previous_mode, submode and previous_submode are AIM_ and AIS_ values.  Unlike the goal
+// modes, which go by name, these stay as numbers: they are #defines with explicit values rather
+// than an enum, so inserting one does not renumber the rest, and there are several dozen submodes
+// per mode whose names would be a large table earning very little.
 #define CKPT_AI_INTS(F)                                                                        \
 	F(mode)                                                                                    \
 	F(previous_mode)                                                                           \
