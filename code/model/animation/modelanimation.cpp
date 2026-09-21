@@ -363,6 +363,61 @@ namespace animation {
 		return 0.0f;
 	}
 
+	bool ModelAnimation::getInstanceData(int pmi_id, instance_data& out) const {
+		auto instance = m_instances.find(pmi_id);
+		if (instance == m_instances.end())
+			return false;
+
+		out = instance->second;
+		return true;
+	}
+
+	void ModelAnimation::setInstanceData(int pmi_id, const instance_data& in) {
+		m_instances[pmi_id] = in;
+	}
+
+	SCP_vector<std::pair<unsigned int, ModelAnimation::instance_data>> ModelAnimationSet::getAnimationStates(int pmi_id) {
+		SCP_vector<std::pair<unsigned int, ModelAnimation::instance_data>> states;
+
+		auto running = s_runningAnimations.find(pmi_id);
+		if (running == s_runningAnimations.end())
+			return states;
+
+		for (const auto& animation : running->second.animationList) {
+			// id 0 means the animation was never given a stable identifier, so there would be no
+			// way to find it again on the other side of a reload.
+			if (animation->id == 0)
+				continue;
+
+			ModelAnimation::instance_data data;
+			if (animation->getInstanceData(pmi_id, data))
+				states.emplace_back(animation->id, data);
+		}
+
+		return states;
+	}
+
+	bool ModelAnimationSet::applyAnimationState(polymodel_instance* pmi, unsigned int id, const ModelAnimation::instance_data& state) {
+		if (pmi == nullptr)
+			return false;
+
+		auto found = s_animationById.find(id);
+		if (found == s_animationById.end())
+			return false;
+
+		const auto& animation = found->second;
+
+		// Start it first so that it joins the running list and the submodels it drives are
+		// claimed, then overwrite the instance wholesale -- start() only takes a time, and the
+		// rest of the state (paused vs running, direction, speed, instance flags) matters just
+		// as much for putting an animation back where it was.
+		float time = state.time;
+		animation->start(pmi, state.canonicalDirection, true, false, false, &time);
+		animation->setInstanceData(pmi->id, state);
+
+		return true;
+	}
+
 	void ModelAnimation::stepAnimations(float frametime, polymodel_instance* pmi) {
 		auto animListIt = ModelAnimationSet::s_runningAnimations.find(pmi->id);
 

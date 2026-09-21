@@ -426,6 +426,52 @@ void read_parse_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::p
 	handler->endArrayRead();
 }
 
+void write_animations(pilot::FileHandler* handler, const SCP_vector<checkpoint::animation_state>& animations)
+{
+	handler->startArrayWrite("animations", animations.size());
+	for (const auto& anim : animations) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeUInt("id", anim.id);
+		handler->writeInt("state", anim.state);
+		handler->writeInt("direction", anim.direction);
+		handler->writeFloat("time", anim.time);
+		handler->writeFloat("duration", anim.duration);
+		handler->writeFloat("speed", anim.speed);
+		// Split in two because the handler has no 64-bit write and instance flags can exceed 32.
+		handler->writeUInt("flags_hi", static_cast<std::uint32_t>(anim.instance_flags >> 32));
+		handler->writeUInt("flags_lo", static_cast<std::uint32_t>(anim.instance_flags & 0xFFFFFFFFu));
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_animations(pilot::FileHandler* handler, SCP_vector<checkpoint::animation_state>& animations)
+{
+	animations.clear();
+
+	if (!handler->hasField("animations")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("animations");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::animation_state anim;
+		anim.id = handler->readUIntOr("id", 0);
+		anim.state = handler->readIntOr("state", 0);
+		anim.direction = handler->readIntOr("direction", 0);
+		anim.time = handler->readFloatOr("time", 0.0f);
+		anim.duration = handler->readFloatOr("duration", 0.0f);
+		anim.speed = handler->readFloatOr("speed", 1.0f);
+
+		std::uint64_t hi = handler->readUIntOr("flags_hi", 0);
+		std::uint64_t lo = handler->readUIntOr("flags_lo", 0);
+		anim.instance_flags = (hi << 32) | lo;
+
+		animations.push_back(std::move(anim));
+	}
+	handler->endArrayRead();
+}
+
 void write_docks(pilot::FileHandler* handler, const SCP_vector<checkpoint::dock_link_state>& docks)
 {
 	handler->startArrayWrite("docks", docks.size());
@@ -812,6 +858,7 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			write_weapon_state(handler, ship_data.weapons);
 			write_ai(handler, ship_data.ai);
 			write_docks(handler, ship_data.docks);
+			write_animations(handler, ship_data.animations);
 		} else {
 			handler->writeInt("exit_time", static_cast<std::int32_t>(ship_data.exit_time));
 		}
@@ -884,6 +931,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_weapon_state(handler, ship_data.weapons);
 			read_ai(handler, ship_data.ai);
 			read_docks(handler, ship_data.docks);
+			read_animations(handler, ship_data.animations);
 		} else {
 			ship_data.exit_time = static_cast<fix>(handler->readIntOr("exit_time", 0));
 		}
