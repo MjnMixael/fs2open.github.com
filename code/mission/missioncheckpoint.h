@@ -296,23 +296,35 @@ struct ai_state {
 	SCP_vector<SCP_string> flags;          // AI::AI_Flags
 	SCP_vector<SCP_string> override_flags; // AI::Maneuver_Override_Flags
 
+	SCP_string ai_class;           // an index into Ai_classes, which comes from ai.tbl, so by name
+
 	SCP_map<SCP_string, int> ints;
 	SCP_map<SCP_string, float> floats;
 	SCP_map<SCP_string, int> mission_times;
 	SCP_map<SCP_string, int> stamps;
+	SCP_map<SCP_string, vec3d> vecs;
+	SCP_map<SCP_string, float> override_floats;   // ai_info::ai_override_ci
 
 	// Everything the AI points at, by name.  Empty means "nothing".
 	SCP_string target_ship;
+	SCP_string previous_target_ship;
 	SCP_string target_subsystem;   // name + ordinal key, as elsewhere
 	SCP_string goal_ship;
 	SCP_string guard_ship;
 	SCP_string guard_wing;
 	SCP_string ignore_ship;
 	SCP_string ignore_wing;
+	SCP_vector<SCP_string> ignore_new;   // the fixed-length ignore_new_objnums array, by slot
 	SCP_string support_ship;
 	SCP_string hitter_ship;
+	SCP_string attacker_ship;
 	SCP_string waypoint_list;      // wp_list_index resolved to a name
 	SCP_string artillery_ship;
+
+	// last_subsys_target carries no parent of its own at runtime, so it is looked for on the
+	// current target, which is where the AI put it.
+	SCP_string last_subsys_target_ship;
+	SCP_string last_subsys_target;
 
 	SCP_vector<ai_goal_state> goals;
 	// Which ai_info::goals slot each entry came from.  active_goal is an index into that array,
