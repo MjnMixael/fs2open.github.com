@@ -454,6 +454,23 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	}
 	handler->endArrayWrite();
 
+	handler->writeBool("autopilot_engaged", data.autopilot_engaged);
+	handler->writeString("current_nav", data.current_nav.c_str());
+	handler->writeString("soundtrack", data.soundtrack.c_str());
+	handler->writeBool("music_battle_started", data.music_battle_started);
+
+	handler->startArrayWrite("navs", data.navs.size());
+	for (const auto& nav : data.navs) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", nav.name.c_str());
+		handler->writeInt("flags", nav.flags);
+		handler->writeString("target_ship", nav.target_ship.c_str());
+		handler->writeString("waypoint_list", nav.waypoint_list.c_str());
+		handler->writeInt("waypoint_num", nav.waypoint_num);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
 	handler->endSectionWrite();
 }
 
@@ -461,29 +478,48 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 {
 	data.asteroids.clear();
 	data.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
+	data.autopilot_engaged = handler->readBoolOr("autopilot_engaged", false);
+	data.current_nav = handler->readStringOr("current_nav", "");
+	data.soundtrack = handler->readStringOr("soundtrack", "");
+	data.music_battle_started = handler->readBoolOr("music_battle_started", false);
 
-	if (!handler->hasField("asteroids")) {
+	if (handler->hasField("asteroids")) {
+		auto count = handler->startArrayRead("asteroids");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::asteroid_state ast;
+			ast.type_name = handler->readStringOr("type", "");
+			ast.subtype = handler->readIntOr("subtype", 0);
+			read_vector(handler, "pos_x", "pos_y", "pos_z", ast.pos);
+			read_vector(handler, "fvec_x", "fvec_y", "fvec_z", ast.orient.vec.fvec);
+			read_vector(handler, "uvec_x", "uvec_y", "uvec_z", ast.orient.vec.uvec);
+			read_vector(handler, "rvec_x", "rvec_y", "rvec_z", ast.orient.vec.rvec);
+			read_vector(handler, "vel_x", "vel_y", "vel_z", ast.vel);
+			read_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", ast.rotvel);
+			ast.hull = handler->readFloatOr("hull", 0.0f);
+			ast.flags = handler->readIntOr("flags", 0);
+			ast.target_ship = handler->readStringOr("target", "");
+			ast.check_for_wrap = handler->readIntOr("check_for_wrap", 0);
+			ast.check_for_collide = handler->readIntOr("check_for_collide", 0);
+			ast.final_death_time = handler->readIntOr("final_death_time", 0);
+			data.asteroids.push_back(std::move(ast));
+		}
+		handler->endArrayRead();
+	}
+
+	data.navs.clear();
+	if (!handler->hasField("navs")) {
 		return;
 	}
 
-	auto count = handler->startArrayRead("asteroids");
-	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
-		checkpoint::asteroid_state ast;
-		ast.type_name = handler->readStringOr("type", "");
-		ast.subtype = handler->readIntOr("subtype", 0);
-		read_vector(handler, "pos_x", "pos_y", "pos_z", ast.pos);
-		read_vector(handler, "fvec_x", "fvec_y", "fvec_z", ast.orient.vec.fvec);
-		read_vector(handler, "uvec_x", "uvec_y", "uvec_z", ast.orient.vec.uvec);
-		read_vector(handler, "rvec_x", "rvec_y", "rvec_z", ast.orient.vec.rvec);
-		read_vector(handler, "vel_x", "vel_y", "vel_z", ast.vel);
-		read_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", ast.rotvel);
-		ast.hull = handler->readFloatOr("hull", 0.0f);
-		ast.flags = handler->readIntOr("flags", 0);
-		ast.target_ship = handler->readStringOr("target", "");
-		ast.check_for_wrap = handler->readIntOr("check_for_wrap", 0);
-		ast.check_for_collide = handler->readIntOr("check_for_collide", 0);
-		ast.final_death_time = handler->readIntOr("final_death_time", 0);
-		data.asteroids.push_back(std::move(ast));
+	auto nav_count = handler->startArrayRead("navs");
+	for (size_t i = 0; i < nav_count; i++, handler->nextArraySection()) {
+		checkpoint::nav_state nav;
+		nav.name = handler->readStringOr("name", "");
+		nav.flags = handler->readIntOr("flags", 0);
+		nav.target_ship = handler->readStringOr("target_ship", "");
+		nav.waypoint_list = handler->readStringOr("waypoint_list", "");
+		nav.waypoint_num = handler->readIntOr("waypoint_num", -1);
+		data.navs.push_back(std::move(nav));
 	}
 	handler->endArrayRead();
 }
