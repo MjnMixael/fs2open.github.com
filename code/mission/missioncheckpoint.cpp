@@ -33,6 +33,7 @@
 #include "mission/missionmessage.h"
 #include "mission/missionparse.h"
 #include "mod_table/mod_table.h"
+#include "network/multiutil.h"
 #include "object/object.h"
 #include "object/objectdock.h"
 #include "parse/parselo.h"
@@ -1340,6 +1341,244 @@ void apply_world(const checkpoint_data& data)
 }
 
 // ------------------------------------------------------------------
+// Support ships
+// ------------------------------------------------------------------
+
+// An anchor is either an index into the ship registry or one of the ANCHOR_SPECIAL_* flag
+// values.  The index is not stable across a reload -- support ships append to the registry as
+// they are called in -- so a ship anchor is stored by name and only the flag values as numbers.
+void store_anchor(anchor_t anchor, SCP_string& out_ship, int& out_special)
+{
+	out_ship.clear();
+	out_special = -1;
+
+	if (!anchor.isValid()) {
+		return;
+	}
+
+	int value = anchor.value();
+	if (value & (ANCHOR_SPECIAL_ARRIVAL | ANCHOR_SPECIAL_ARRIVAL_PLAYER | ANCHOR_IS_PARSE_NAMES_INDEX)) {
+		out_special = value;
+		return;
+	}
+
+	if (value >= 0 && value < static_cast<int>(Ship_registry.size())) {
+		out_ship = Ship_registry[value].name;
+	}
+}
+
+anchor_t load_anchor(const SCP_string& ship, int special)
+{
+	if (special != -1) {
+		return anchor_t(special);
+	}
+	if (ship.empty()) {
+		return anchor_t::invalid();
+	}
+
+	int index = ship_registry_get_index(ship.c_str());
+	return (index < 0) ? anchor_t::invalid() : anchor_t(index);
+}
+
+SCP_string arrival_location_name(ArrivalLocation location)
+{
+	int index = static_cast<int>(location);
+	if (index < 0 || index >= MAX_ARRIVAL_NAMES) {
+		return SCP_string();
+	}
+	return SCP_string(Arrival_location_names[index]);
+}
+
+SCP_string departure_location_name(DepartureLocation location)
+{
+	int index = static_cast<int>(location);
+	if (index < 0 || index >= MAX_DEPARTURE_NAMES) {
+		return SCP_string();
+	}
+	return SCP_string(Departure_location_names[index]);
+}
+
+void store_support(checkpoint_data& data)
+{
+	const auto& support = The_mission.support_ships;
+	auto& out = data.support;
+
+	out.tally = support.tally;
+	out.ship_class = ship_class_name(support.ship_class);
+	out.max_support_ships = support.max_support_ships;
+	out.max_concurrent_ships = support.max_concurrent_ships;
+
+	out.arrival_location = arrival_location_name(support.arrival_location);
+	out.departure_location = departure_location_name(support.departure_location);
+	store_anchor(support.arrival_anchor, out.arrival_anchor_ship, out.arrival_anchor_special);
+	store_anchor(support.departure_anchor, out.departure_anchor_ship, out.departure_anchor_special);
+
+	for (const auto& pool : support.rearm_weapon_pool) {
+		SCP_map<SCP_string, int> named;
+		for (const auto& item : pool) {
+			SCP_string name = weapon_class_name(item.first);
+			if (!name.empty()) {
+				named[name] = item.second;
+			}
+		}
+		out.rearm_pools.push_back(std::move(named));
+	}
+}
+
+void apply_support(const checkpoint_data& data)
+{
+	auto& support = The_mission.support_ships;
+	const auto& in = data.support;
+
+	support.tally = in.tally;
+	support.max_support_ships = in.max_support_ships;
+	support.max_concurrent_ships = in.max_concurrent_ships;
+
+	// An empty class name means "work it out from the requester's species", which is what -1
+	// spells; that is also what a class the mod no longer has should fall back to.
+	support.ship_class = in.ship_class.empty() ? -1 : lookup_ship_class(in.ship_class);
+
+	for (int i = 0; i < MAX_ARRIVAL_NAMES; i++) {
+		if (in.arrival_location == Arrival_location_names[i]) {
+			support.arrival_location = static_cast<ArrivalLocation>(i);
+			break;
+		}
+	}
+	for (int i = 0; i < MAX_DEPARTURE_NAMES; i++) {
+		if (in.departure_location == Departure_location_names[i]) {
+			support.departure_location = static_cast<DepartureLocation>(i);
+			break;
+		}
+	}
+
+	support.arrival_anchor = load_anchor(in.arrival_anchor_ship, in.arrival_anchor_special);
+	support.departure_anchor = load_anchor(in.departure_anchor_ship, in.departure_anchor_special);
+
+	// Only overwrite a team's pool if the checkpoint has one for it, so that a file written
+	// before the pools were stored leaves the mission's own pools alone.
+	for (size_t team = 0; team < in.rearm_pools.size() && team < support.rearm_weapon_pool.size(); team++) {
+		auto& pool = support.rearm_weapon_pool[team];
+		pool.clear();
+
+		for (const auto& item : in.rearm_pools[team]) {
+			int weapon_class = lookup_weapon_class(item.first);
+			if (weapon_class >= 0) {
+				pool[weapon_class] = item.second;
+			}
+		}
+	}
+}
+
+// Create the ships that the mission file will not recreate for us.
+//
+// A support ship is not parsed: mission_bring_in_support_ship() builds a p_object on the fly,
+// hands it to the arrival code and throws it away afterwards.  After a restart there is no parse
+// object for it, no arrival cue that will ever come true and no registry entry -- so a support
+// ship the player had called in simply would not be there, and every reference to it by name,
+// including the rearm goal of the ship it was repairing, would come up empty.
+//
+// So the p_object is built here the same way mission_bring_in_support_ship() builds it, but with
+// the saved name and the saved position instead of a generated name and a warp-in point, and
+// handed straight to parse_create_object().  Support_ship_pobj and Arriving_support_ship are the
+// globals the engine itself uses for this, and parse_create_object_sub() recognises that pairing
+// as the one case where a ship legitimately has no entry in Parse_objects.
+//
+// parse_create_object() skips the warp-in effect while Game_restoring is set, which is what we
+// want: the ship was already in the mission when the checkpoint was taken.
+//
+// A support ship that had already been destroyed or had departed is not recreated.  There is
+// nothing left of it to restore onto, and what the mission can still ask about it -- the log,
+// and any event that keyed off it -- is restored in its own right.
+void restore_dynamic_ships(const checkpoint_data& data)
+{
+	int created = 0;
+
+	for (const auto& state : data.ships) {
+		if (!state.no_parse_object || state.disposition != ShipDisposition::Present) {
+			continue;
+		}
+		if (ship_registry_get(state.name) != nullptr) {
+			// Already here, which should not happen for a ship with no parse object, but if it
+			// is then apply_ship() will handle it like any other.
+			continue;
+		}
+
+		int ship_class = lookup_ship_class(state.ship_class);
+		if (ship_class < 0) {
+			mprintf(("CHECKPOINT => No ship class '%s' any more; cannot recreate '%s'.\n",
+			         state.ship_class.c_str(),
+			         state.name.c_str()));
+			continue;
+		}
+
+		auto sip = &Ship_info[ship_class];
+
+		Support_ship_pobj = p_object();
+		Arriving_support_ship = &Support_ship_pobj;
+		Num_arriving_repair_targets = 0;
+
+		p_object* pobj = Arriving_support_ship;
+		strcpy_s(pobj->name, state.name.c_str());
+		pobj->ship_class = ship_class;
+		pobj->ai_class = sip->ai_class;
+		pobj->warpin_params_index = sip->warpin_params_index;
+		pobj->warpout_params_index = sip->warpout_params_index;
+		pobj->ship_max_shield_strength = sip->max_shield_strength;
+		pobj->ship_max_hull_strength = sip->max_hull_strength;
+		pobj->max_shield_recharge = sip->max_shield_recharge;
+		pobj->replacement_textures = sip->replacement_textures;
+		pobj->score = sip->score;
+
+		pobj->pos = state.pos;
+		pobj->orient = state.orient;
+
+		int team = lookup_team(state.team);
+		pobj->team = (team >= 0) ? team : 0;
+
+		pobj->arrival_location = The_mission.support_ships.arrival_location;
+		pobj->arrival_anchor = The_mission.support_ships.arrival_anchor;
+		pobj->departure_location = The_mission.support_ships.departure_location;
+		pobj->departure_anchor = The_mission.support_ships.departure_anchor;
+		pobj->arrival_delay = 0;
+		pobj->arrival_cue = Locked_sexp_true;
+		pobj->departure_cue = Locked_sexp_false;
+		pobj->initial_velocity = 100;
+		pobj->net_signature = multi_assign_network_signature(MULTI_SIG_SHIP);
+
+		if (Player_obj != nullptr && Player_obj->flags[Object::Object_Flags::No_shields]) {
+			pobj->flags.set(Mission::Parse_Object_Flags::OF_No_shields);
+		}
+
+		{
+			ship_registry_entry entry(pobj->name);
+			entry.status = ShipStatus::NOT_YET_PRESENT;
+			entry.pobj_num = -1; // not in Parse_objects, which is the whole point
+
+			Ship_registry.push_back(entry);
+			Ship_registry_map[pobj->name] = static_cast<int>(Ship_registry.size() - 1);
+		}
+
+		int objnum = parse_create_object(pobj);
+		if (objnum < 0) {
+			mprintf(("CHECKPOINT => Could not recreate support ship '%s'.\n", state.name.c_str()));
+			Arriving_support_ship = nullptr;
+			continue;
+		}
+
+		// The engine's own tidy-up: it sets Warped_support and clears the arriving-support
+		// globals.  The repair goals it would normally issue here are left to the AI restore,
+		// which has the real ones, hence the empty target list above.
+		mission_parse_support_arrived(objnum);
+
+		created++;
+	}
+
+	if (created > 0) {
+		mprintf(("CHECKPOINT => Recreated %d support ship(s).\n", created));
+	}
+}
+
+// ------------------------------------------------------------------
 // Weapons in flight
 // ------------------------------------------------------------------
 
@@ -2357,6 +2596,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		}
 
 		state.disposition = ShipDisposition::Present;
+
+		// Nothing in the mission file will bring this one back, so the restore has to create it
+		// itself.  See restore_dynamic_ships().
+		state.no_parse_object = (entry.pobj_num < 0);
 		state.ship_class = ship_class_name(shipp->ship_info_index);
 		state.team = team_name(shipp->team);
 		state.display_name = shipp->display_name;
@@ -2611,6 +2854,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	store_asteroids(data);
 	store_world(data);
+	store_support(data);
 	store_projectiles(data);
 	store_beams(data);
 
@@ -3016,6 +3260,7 @@ void reconcile_ship_existence(const checkpoint_data& data)
 {
 	restore_wing_arrivals(data);
 	restore_loose_arrivals(data);
+	restore_dynamic_ships(data);
 	remove_gone_ships(data);
 	block_gone_arrivals(data);
 }
@@ -3962,6 +4207,10 @@ void mission_checkpoint_apply()
 	apply_parse_objects(data);
 
 	// Then decide which ships should exist at all, before bashing state onto the ones that do.
+	// Before the ships, because restore_dynamic_ships() builds a support ship's parse object
+	// out of the mission's support settings and those are restored here.
+	apply_support(data);
+
 	reconcile_ship_existence(data);
 
 	for (const auto& state : data.ships) {
