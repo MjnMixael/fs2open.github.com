@@ -1118,7 +1118,9 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 	// depending on the goal flags.  Write the name either way, so the restore never has to trust
 	// an index into a model that may have changed underneath it.  The docker index indexes the
 	// model of the ship holding the goal; the dockee index indexes the target's model.
-	if (goal.flags[AI::Goal_Flags::Docker_index_valid]) {
+	// shipp is null for a wing's goals, which belong to no ship yet; a docker index needs that
+	// ship's model to resolve, so in that case only a name can be written.
+	if (goal.flags[AI::Goal_Flags::Docker_index_valid] && shipp != nullptr) {
 		int modelnum = Ship_info[shipp->ship_info_index].model_num;
 		const char* name = (modelnum >= 0) ? model_get_dock_name(modelnum, goal.docker.index) : nullptr;
 		if (name != nullptr) {
@@ -1254,42 +1256,6 @@ int lookup_asteroid_type(const SCP_string& name)
 // ------------------------------------------------------------------
 // Support ships
 // ------------------------------------------------------------------
-
-// An anchor is either an index into the ship registry or one of the ANCHOR_SPECIAL_* flag
-// values.  The index is not stable across a reload -- support ships append to the registry as
-// they are called in -- so a ship anchor is stored by name and only the flag values as numbers.
-void store_anchor(anchor_t anchor, SCP_string& out_ship, int& out_special)
-{
-	out_ship.clear();
-	out_special = -1;
-
-	if (!anchor.isValid()) {
-		return;
-	}
-
-	int value = anchor.value();
-	if (value & (ANCHOR_SPECIAL_ARRIVAL | ANCHOR_SPECIAL_ARRIVAL_PLAYER | ANCHOR_IS_PARSE_NAMES_INDEX)) {
-		out_special = value;
-		return;
-	}
-
-	if (value >= 0 && value < static_cast<int>(Ship_registry.size())) {
-		out_ship = Ship_registry[value].name;
-	}
-}
-
-anchor_t load_anchor(const SCP_string& ship, int special)
-{
-	if (special != -1) {
-		return anchor_t(special);
-	}
-	if (ship.empty()) {
-		return anchor_t::invalid();
-	}
-
-	int index = ship_registry_get_index(ship.c_str());
-	return (index < 0) ? anchor_t::invalid() : anchor_t(index);
-}
 
 SCP_string arrival_location_name(ArrivalLocation location)
 {
@@ -1457,8 +1423,8 @@ void store_support(environment_state& out)
 	out.support_ship_class = ship_class_name(support.ship_class);
 	out.support_arrival_location = arrival_location_name(support.arrival_location);
 	out.support_departure_location = departure_location_name(support.departure_location);
-	store_anchor(support.arrival_anchor, out.support_arrival_anchor_ship, out.support_arrival_anchor_special);
-	store_anchor(support.departure_anchor, out.support_departure_anchor_ship, out.support_departure_anchor_special);
+	out.support_arrival_anchor = anchor_name(support.arrival_anchor);
+	out.support_departure_anchor = anchor_name(support.departure_anchor);
 
 	out.support_max_ships = support.max_support_ships;
 	out.support_max_concurrent = support.max_concurrent_ships;
@@ -1501,8 +1467,16 @@ void apply_support(const environment_state& in)
 		}
 	}
 
-	support.arrival_anchor = load_anchor(in.support_arrival_anchor_ship, in.support_arrival_anchor_special);
-	support.departure_anchor = load_anchor(in.support_departure_anchor_ship, in.support_departure_anchor_special);
+	// Only overwrite an anchor the checkpoint actually resolved; a name that no longer names
+	// anything leaves the mission's own anchor in place rather than clearing it.
+	auto support_arrival = lookup_anchor(in.support_arrival_anchor);
+	if (support_arrival.isValid()) {
+		support.arrival_anchor = support_arrival;
+	}
+	auto support_departure = lookup_anchor(in.support_departure_anchor);
+	if (support_departure.isValid()) {
+		support.departure_anchor = support_departure;
+	}
 
 	support.max_support_ships = in.support_max_ships;
 	support.max_concurrent_ships = in.support_max_concurrent;
@@ -3121,6 +3095,30 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		collect_flags(wingp->flags, Wing_flag_table, state.flags);
 		store_wing_scalars(*wingp, state.ints);
 
+		if (wingp->has_display_name()) {
+			state.display_name = wingp->display_name;
+		}
+
+		// set-arrival-info and set-departure-info rewrite all of this on a wing exactly as they
+		// do on a ship that has not arrived.
+		state.arrival_anchor = anchor_name(wingp->arrival_anchor);
+		state.departure_anchor = anchor_name(wingp->departure_anchor);
+		state.arrival_location = static_cast<int>(wingp->arrival_location);
+		state.departure_location = static_cast<int>(wingp->departure_location);
+		state.arrival_path_mask = wingp->arrival_path_mask;
+		state.departure_path_mask = wingp->departure_path_mask;
+
+		// The wing's own goal list, handed to each ship as it arrives.  No ship owns these yet,
+		// hence the null.
+		for (const auto& goal : wingp->ai_goals) {
+			if (goal.ai_mode == AI_GOAL_NONE) {
+				continue;
+			}
+			ai_goal_state goal_state;
+			store_ai_goal(nullptr, goal, goal_state);
+			state.goals.push_back(std::move(goal_state));
+		}
+
 		for (int j = 0; j < wingp->current_count && j < MAX_SHIPS_PER_WING; j++) {
 			int shipnum = wingp->ship_index[j];
 			if (shipnum >= 0 && shipnum < MAX_SHIPS) {
@@ -3834,6 +3832,35 @@ void apply_wings(const checkpoint_data& data)
 		apply_flags(state.flags, Wing_flag_table, wingp->flags);
 		wingp->time_gone = state.time_gone;
 		wingp->wave_delay_timestamp = TIMESTAMP(translate_stamp(state.wave_delay_timestamp));
+
+		// The flag was restored above; the string has to follow it or the wing claims a display
+		// name it does not have.
+		if (wingp->flags[Ship::Wing_Flags::Has_display_name]) {
+			wingp->display_name = state.display_name;
+		}
+
+		wingp->arrival_location = static_cast<ArrivalLocation>(state.arrival_location);
+		wingp->departure_location = static_cast<DepartureLocation>(state.departure_location);
+		wingp->arrival_path_mask = state.arrival_path_mask;
+		wingp->departure_path_mask = state.departure_path_mask;
+
+		// A name that no longer names anything leaves the mission's own anchor in place rather
+		// than clearing it.
+		auto arrival_anchor = lookup_anchor(state.arrival_anchor);
+		if (arrival_anchor.isValid()) {
+			wingp->arrival_anchor = arrival_anchor;
+		}
+		auto departure_anchor = lookup_anchor(state.departure_anchor);
+		if (departure_anchor.isValid()) {
+			wingp->departure_anchor = departure_anchor;
+		}
+
+		for (auto& goal : wingp->ai_goals) {
+			ai_goal_reset(&goal);
+		}
+		for (size_t i = 0; i < state.goals.size() && i < MAX_AI_GOALS; i++) {
+			load_ai_goal(state.goals[i], wingp->ai_goals[i]);
+		}
 
 		// Rebuild ship_index from names.  current_count is corrected to whatever we could
 		// actually resolve, so a ship the mod no longer has cannot leave a dangling index.
