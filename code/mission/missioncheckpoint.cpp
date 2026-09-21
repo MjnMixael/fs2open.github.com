@@ -43,6 +43,7 @@
 #include "ship/ship.h"
 #include "ship/shipfx.h"
 #include "stats/scoring.h"
+#include "weapon/beam.h"
 #include "weapon/weapon.h"
 
 #include <algorithm>
@@ -1338,6 +1339,316 @@ void apply_world(const checkpoint_data& data)
 	}
 }
 
+// ------------------------------------------------------------------
+// Weapons in flight
+// ------------------------------------------------------------------
+
+struct weapon_in_flight_flag_entry {
+	Weapon::Weapon_Flags flag;
+	const char* name;
+};
+
+// Only the flags that say something durable about a weapon already in the air.  The render
+// overrides are here because scripts set them per weapon instance and nothing else would put
+// them back; the multiplayer bookkeeping flags are deliberately absent, since a restored
+// mission is single player and those describe packets that were sent in another run.
+const weapon_in_flight_flag_entry Weapon_in_flight_flag_table[] = {
+	{Weapon::Weapon_Flags::Lock_warning_played,       "lock_warning_played"},
+	{Weapon::Weapon_Flags::Played_flyby_sound,        "played_flyby_sound"},
+	{Weapon::Weapon_Flags::Consider_for_flyby_sound,  "consider_for_flyby_sound"},
+	{Weapon::Weapon_Flags::Dead_in_water,             "dead_in_water"},
+	{Weapon::Weapon_Flags::Locked_when_fired,         "locked_when_fired"},
+	{Weapon::Weapon_Flags::Spawned,                   "spawned"},
+	{Weapon::Weapon_Flags::No_homing,                 "no_homing"},
+	{Weapon::Weapon_Flags::Overridden_homing,         "overridden_homing"},
+	{Weapon::Weapon_Flags::Begun_detonation,          "begun_detonation"},
+	{Weapon::Weapon_Flags::No_thruster,               "no_thruster"},
+	{Weapon::Weapon_Flags::Glowmaps_disabled,         "glowmaps_disabled"},
+	{Weapon::Weapon_Flags::Draw_as_wireframe,         "draw_as_wireframe"},
+	{Weapon::Weapon_Flags::Render_full_detail,        "render_full_detail"},
+	{Weapon::Weapon_Flags::Render_without_light,      "render_without_light"},
+	{Weapon::Weapon_Flags::Render_without_diffuse,    "render_without_diffuse"},
+	{Weapon::Weapon_Flags::Render_without_glowmap,    "render_without_glowmap"},
+	{Weapon::Weapon_Flags::Render_without_normalmap,  "render_without_normalmap"},
+	{Weapon::Weapon_Flags::Render_without_heightmap,  "render_without_heightmap"},
+	{Weapon::Weapon_Flags::Render_without_ambientmap, "render_without_ambientmap"},
+	{Weapon::Weapon_Flags::Render_without_specmap,    "render_without_specmap"},
+	{Weapon::Weapon_Flags::Render_without_reflectmap, "render_without_reflectmap"},
+};
+
+struct weapon_state_entry {
+	WeaponState state;
+	const char* name;
+};
+
+const weapon_state_entry Weapon_state_table[] = {
+	{WeaponState::INVALID,        "invalid"},
+	{WeaponState::NORMAL,         "normal"},
+	{WeaponState::FREEFLIGHT,     "freeflight"},
+	{WeaponState::IGNITION,       "ignition"},
+	{WeaponState::HOMED_FLIGHT,   "homed_flight"},
+	{WeaponState::UNHOMED_FLIGHT, "unhomed_flight"},
+	{WeaponState::WARMUP,         "warmup"},
+	{WeaponState::FIRING,         "firing"},
+	{WeaponState::PAUSED,         "paused"},
+	{WeaponState::WARMDOWN,       "warmdown"},
+};
+
+SCP_string weapon_state_name(WeaponState state)
+{
+	for (const auto& entry : Weapon_state_table) {
+		if (entry.state == state) {
+			return SCP_string(entry.name);
+		}
+	}
+	return SCP_string("invalid");
+}
+
+WeaponState lookup_weapon_state(const SCP_string& name)
+{
+	for (const auto& entry : Weapon_state_table) {
+		if (name == entry.name) {
+			return entry.state;
+		}
+	}
+	return WeaponState::INVALID;
+}
+
+// A subsystem pointer turned into the name+ordinal key everything else in here uses.  Empty when
+// the subsystem does not belong to that ship, which is how a stale pointer shows up.
+SCP_string subsys_key_for(const ship* shipp, const ship_subsys* target)
+{
+	if (shipp == nullptr || target == nullptr) {
+		return SCP_string();
+	}
+
+	SCP_map<SCP_string, int> ordinals;
+	for (auto subsys = GET_FIRST(&shipp->subsys_list); subsys != END_OF_LIST(&shipp->subsys_list);
+	     subsys = GET_NEXT(subsys)) {
+		SCP_string name = subsys_key(subsys);
+		int ordinal = ordinals[name]++;
+		if (subsys == target) {
+			return subsys_lookup_key(name, ordinal);
+		}
+	}
+
+	return SCP_string();
+}
+
+// The same key resolved against whatever ship now carries that name.
+ship_subsys* find_subsys_by_key(const SCP_string& ship_name, const SCP_string& key)
+{
+	if (ship_name.empty() || key.empty()) {
+		return nullptr;
+	}
+
+	auto entry = ship_registry_get(ship_name);
+	if (entry == nullptr || !entry->has_shipp()) {
+		return nullptr;
+	}
+
+	auto live = index_subsystems(entry->shipp());
+	auto it = live.find(key);
+	return (it == live.end()) ? nullptr : it->second;
+}
+
+// Every weapon currently in the air.  Beams are objects of their own type and are not here.
+void store_projectiles(checkpoint_data& data)
+{
+	for (int i = 0; i < MAX_WEAPONS; i++) {
+		const weapon* wp = &Weapons[i];
+		if (wp->weapon_info_index < 0 || wp->objnum < 0 || wp->objnum >= MAX_OBJECTS) {
+			continue;
+		}
+
+		const object* objp = &Objects[wp->objnum];
+		if (objp->type != OBJ_WEAPON || objp->flags[Object::Object_Flags::Should_be_dead]) {
+			continue;
+		}
+
+		projectile_state state;
+		state.weapon_class = weapon_class_name(wp->weapon_info_index);
+		if (state.weapon_class.empty()) {
+			continue;
+		}
+
+		state.pos = objp->pos;
+		state.orient = objp->orient;
+		state.velocity = objp->phys_info.vel;
+		state.desired_velocity = objp->phys_info.desired_vel;
+		state.start_pos = wp->start_pos;
+		state.hull = objp->hull_strength;
+
+		state.lifeleft = wp->lifeleft;
+		state.creation_time = wp->creation_time;
+		state.group_id = wp->group_id;
+
+		state.team = team_name(wp->team);
+		if (wp->species >= 0 && wp->species < static_cast<int>(Species_info.size())) {
+			state.species = Species_info[wp->species].species_name;
+		}
+		collect_flags(wp->weapon_flags, Weapon_in_flight_flag_table, state.flags);
+		state.weapon_state = weapon_state_name(wp->weapon_state);
+
+		state.parent_ship = ship_name_for_objnum(objp->parent);
+		if (wp->turret_subsys != nullptr && !state.parent_ship.empty()) {
+			auto parent_entry = ship_registry_get(state.parent_ship);
+			if (parent_entry != nullptr && parent_entry->has_shipp()) {
+				state.parent_turret = subsys_key_for(parent_entry->shipp(), wp->turret_subsys);
+			}
+		}
+
+		// homing_object is set to &obj_used_list -- the list head, not a real object -- to mean
+		// "not homing", so it has to be range-checked rather than null-checked.
+		if (wp->homing_object != nullptr && wp->homing_object != &obj_used_list) {
+			int homing_objnum = OBJ_INDEX(wp->homing_object);
+			state.homing_ship = ship_name_for_objnum(homing_objnum);
+			if (!state.homing_ship.empty() && wp->homing_subsys != nullptr) {
+				state.homing_subsys = subsys_key_for(&Ships[wp->homing_object->instance], wp->homing_subsys);
+			}
+		}
+		if (!IS_VEC_NULL(&wp->homing_pos)) {
+			state.homing_pos = wp->homing_pos;
+			state.has_homing_pos = true;
+		}
+
+		state.det_range = wp->det_range;
+		state.weapon_max_vel = wp->weapon_max_vel;
+		state.launch_speed = wp->launch_speed;
+		state.alpha_current = wp->alpha_current;
+		state.alpha_backward = (wp->alpha_backward != 0);
+
+		state.lssm_stage = wp->lssm_stage;
+		state.lssm_warpout_time = wp->lssm_warpout_time;
+		state.lssm_warpin_time = wp->lssm_warpin_time;
+		state.lssm_target_pos = wp->lssm_target_pos;
+
+		state.cmeasure_timer = wp->cmeasure_timer;
+
+		data.projectiles.push_back(std::move(state));
+	}
+}
+
+// ------------------------------------------------------------------
+// Beams
+// ------------------------------------------------------------------
+
+struct beam_flag_entry {
+	int flag;
+	const char* name;
+};
+
+// beam::flags is a plain int of BF_* bits rather than a flagset, so it needs its own table.
+// BF_SAFETY is per-frame and is recomputed before it is next read, so it is not here.
+const beam_flag_entry Beam_flag_table[] = {
+	{BF_SHRINK,           "shrink"},
+	{BF_FORCE_FIRING,     "force_firing"},
+	{BF_IS_FIGHTER_BEAM,  "fighter_beam"},
+	{BF_TARGETING_COORDS, "targeting_coords"},
+	{BF_FLOATING_BEAM,    "floating_beam"},
+	{BF_GROW,             "grow"},
+	{BF_FINISHED_GROWING, "finished_growing"},
+};
+
+void collect_beam_flags(int flags, SCP_vector<SCP_string>& out)
+{
+	out.clear();
+	for (const auto& entry : Beam_flag_table) {
+		if (flags & entry.flag) {
+			out.emplace_back(entry.name);
+		}
+	}
+}
+
+int lookup_beam_flags(const SCP_vector<SCP_string>& names)
+{
+	int flags = 0;
+	for (const auto& name : names) {
+		for (const auto& entry : Beam_flag_table) {
+			if (name == entry.name) {
+				flags |= entry.flag;
+				break;
+			}
+		}
+	}
+	return flags;
+}
+
+bool has_flag_name(const SCP_vector<SCP_string>& names, const char* name)
+{
+	return std::find(names.begin(), names.end(), name) != names.end();
+}
+
+void store_beams(checkpoint_data& data)
+{
+	// Walked through the object list rather than the beam free/used lists, which beam.cpp keeps
+	// to itself.
+	for (auto objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
+		if (objp->type != OBJ_BEAM || objp->instance < 0 || objp->instance >= MAX_BEAMS) {
+			continue;
+		}
+		if (objp->flags[Object::Object_Flags::Should_be_dead]) {
+			continue;
+		}
+
+		const beam* b = &Beams[objp->instance];
+		if (b->weapon_info_index < 0 || b->objnum < 0) {
+			continue;
+		}
+
+		beam_shot_state state;
+		state.weapon_class = weapon_class_name(b->weapon_info_index);
+		if (state.weapon_class.empty()) {
+			continue;
+		}
+
+		if (b->objp != nullptr) {
+			state.shooter_ship = ship_name_for_objnum(OBJ_INDEX(b->objp));
+			if (b->subsys != nullptr && !state.shooter_ship.empty()) {
+				state.turret = subsys_key_for(&Ships[b->objp->instance], b->subsys);
+			}
+		}
+
+		if (b->target != nullptr) {
+			state.target_ship = ship_name_for_objnum(OBJ_INDEX(b->target));
+			if (!state.target_ship.empty() && b->target_subsys != nullptr) {
+				state.target_subsys = subsys_key_for(&Ships[b->target->instance], b->target_subsys);
+			}
+		}
+
+		state.team = team_name(b->team);
+		state.weapon_state = weapon_state_name(b->weapon_state);
+		collect_beam_flags(b->flags, state.flags);
+
+		state.target_pos1 = b->target_pos1;
+		state.target_pos2 = b->target_pos2;
+		state.last_start = b->last_start;
+		state.last_shot = b->last_shot;
+		state.local_fire_position = b->local_fire_postion;
+
+		state.life_left = b->life_left;
+		state.current_width_factor = b->current_width_factor;
+		state.u_offset_local = b->u_offset_local;
+		state.beam_glow_frame = b->beam_glow_frame;
+		state.framecount = b->framecount;
+		state.shot_index = b->shot_index;
+		state.bank = b->bank;
+		state.firingpoint = b->firingpoint;
+		state.warmup_stamp = b->warmup_stamp;
+		state.warmdown_stamp = b->warmdown_stamp;
+
+		state.dir_a = b->binfo.dir_a;
+		state.dir_b = b->binfo.dir_b;
+		state.rot_axis = b->binfo.rot_axis;
+		state.shot_count = b->binfo.shot_count;
+		for (int i = 0; i < b->binfo.shot_count && i < MAX_BEAM_SHOTS; i++) {
+			state.shot_aim.push_back(b->binfo.shot_aim[i]);
+		}
+
+		data.beams.push_back(std::move(state));
+	}
+}
+
 void store_asteroids(checkpoint_data& data)
 {
 	data.asteroids_enabled = (Asteroids_enabled != 0);
@@ -2300,6 +2611,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	store_asteroids(data);
 	store_world(data);
+	store_projectiles(data);
+	store_beams(data);
 
 	// Hull debris only -- see the note on debris_state.
 	for (const auto& db : Debris) {
@@ -3006,6 +3319,301 @@ void apply_hud_state(const checkpoint_data& data)
 	}
 }
 
+// Put the weapons that were in the air back in the air.
+//
+// weapon_create() is the only sane way in -- it does the model loading, the trail, the swarm and
+// corkscrew setup, the missile list and a dozen other things -- but it is built for firing a
+// weapon, not for reinstating one, so two of the things it does for a live shot have to be
+// worked around.
+//
+// It applies the weapon's field of fire, which randomises the orientation.  Since the saved
+// orientation is overwritten immediately afterwards, that costs nothing but a wasted random
+// draw.
+//
+// It also applies substitution patterns and the failure rate, either of which can hand back a
+// different weapon class or none at all.  Both only happen when the shot has a parent, so the
+// weapon is created parentless and the parent is attached afterwards; the class is still
+// checked, because failure_sub can fire without one.
+void apply_projectiles(const checkpoint_data& data)
+{
+	int created = 0;
+
+	// Saved group ids are indices handed out by weapon_create_group_id() in the run that was
+	// saved, so they mean nothing here.  Weapons that shared one still have to share one,
+	// though -- that is what makes a linked volley behave as a volley -- so each distinct saved
+	// id is mapped to one freshly allocated id.
+	SCP_map<int, int> group_ids;
+
+	for (const auto& state : data.projectiles) {
+		int weapon_class = lookup_weapon_class(state.weapon_class);
+		if (weapon_class < 0) {
+			mprintf(("CHECKPOINT => No weapon class '%s' any more; dropping that shot.\n",
+			         state.weapon_class.c_str()));
+			continue;
+		}
+
+		int group_id = -1;
+		if (state.group_id >= 0) {
+			auto it = group_ids.find(state.group_id);
+			if (it == group_ids.end()) {
+				group_id = weapon_create_group_id();
+				group_ids[state.group_id] = group_id;
+			} else {
+				group_id = it->second;
+			}
+		}
+
+		bool locked = std::find(state.flags.begin(), state.flags.end(), "locked_when_fired") != state.flags.end();
+		bool spawned = std::find(state.flags.begin(), state.flags.end(), "spawned") != state.flags.end();
+
+		int objnum = weapon_create(&state.pos, &state.orient, weapon_class, -1, group_id, locked, spawned);
+		if (objnum < 0) {
+			continue;
+		}
+
+		object* objp = &Objects[objnum];
+		weapon* wp = &Weapons[objp->instance];
+
+		if (wp->weapon_info_index != weapon_class) {
+			// Substitution or a failure_sub gave us something else; a wrong weapon in the air is
+			// worse than a missing one.
+			objp->flags.set(Object::Object_Flags::Should_be_dead);
+			continue;
+		}
+
+		// The parent, attached by hand because passing it to weapon_create() would have opened
+		// the door to substitution.  A weapon whose parent has since been destroyed simply has
+		// none, which the engine already copes with.
+		int parent_objnum = objnum_for_ship_name(state.parent_ship);
+		if (parent_objnum >= 0) {
+			objp->parent = parent_objnum;
+			objp->parent_sig = Objects[parent_objnum].signature;
+			wp->turret_subsys = find_subsys_by_key(state.parent_ship, state.parent_turret);
+		} else {
+			objp->parent = -1;
+			objp->parent_sig = -1;
+			wp->turret_subsys = nullptr;
+		}
+
+		objp->orient = state.orient;
+		objp->phys_info.vel = state.velocity;
+		objp->phys_info.desired_vel = state.desired_velocity;
+		objp->phys_info.speed = vm_vec_mag(&state.velocity);
+		objp->hull_strength = state.hull;
+
+		wp->start_pos = state.start_pos;
+		wp->lifeleft = state.lifeleft;
+		wp->creation_time = state.creation_time;
+		wp->det_range = state.det_range;
+		wp->weapon_max_vel = state.weapon_max_vel;
+		wp->launch_speed = state.launch_speed;
+		wp->alpha_current = state.alpha_current;
+		wp->alpha_backward = state.alpha_backward ? (ubyte)1 : (ubyte)0;
+		wp->weapon_state = lookup_weapon_state(state.weapon_state);
+
+		wp->lssm_stage = state.lssm_stage;
+		wp->lssm_warpout_time = translate_stamp(static_cast<int>(state.lssm_warpout_time));
+		wp->lssm_warpin_time = translate_stamp(static_cast<int>(state.lssm_warpin_time));
+		wp->lssm_target_pos = state.lssm_target_pos;
+
+		wp->cmeasure_timer = translate_stamp(state.cmeasure_timer);
+
+		// Set after weapon_create(), which resets the flagset and then sets Played_flyby_sound
+		// itself for player shots.
+		apply_flags(state.flags, Weapon_in_flight_flag_table, wp->weapon_flags);
+
+		int team = lookup_team(state.team);
+		if (team >= 0) {
+			wp->team = team;
+		}
+		if (!state.species.empty()) {
+			int species = species_info_lookup(state.species.c_str());
+			if (species >= 0) {
+				wp->species = species;
+			}
+		}
+
+		// Homing.  target_num and target_sig are what the homing code checks each frame to see
+		// whether its target is still the one it locked onto, so both have to agree with the
+		// object we are pointing it at.
+		int homing_objnum = objnum_for_ship_name(state.homing_ship);
+		if (homing_objnum >= 0) {
+			wp->homing_object = &Objects[homing_objnum];
+			wp->target_num = homing_objnum;
+			wp->target_sig = Objects[homing_objnum].signature;
+			wp->homing_subsys = find_subsys_by_key(state.homing_ship, state.homing_subsys);
+		} else {
+			// The list head, which is how weapon_create() spells "homing on nothing".
+			wp->homing_object = &obj_used_list;
+			wp->homing_subsys = nullptr;
+			wp->target_num = -1;
+			wp->target_sig = -1;
+		}
+		if (state.has_homing_pos) {
+			wp->homing_pos = state.homing_pos;
+		}
+
+		created++;
+	}
+
+	if (created > 0) {
+		mprintf(("CHECKPOINT => Restored %d weapon(s) in flight.\n", created));
+	}
+}
+
+// Put the beams that were mid-fire back.
+//
+// A beam is re-fired through beam_fire() and then wound forward to where it was.  beam_fire() is
+// the only way in -- it allocates the beam, creates the object, derives the beam type and the
+// widths from the weapon table and runs beam_aim() -- and it takes the saved aim vectors
+// directly through beam_info_override, the same door multiplayer uses to make every machine see
+// the same beam.
+//
+// beam_fire() ends in the warmup phase, so a beam that was past warmup is moved on with
+// beam_start_firing() and, if it was warming down, beam_start_warmdown().  Those calls would
+// ordinarily fire the beam's launch sound, the On Beam Warmup and On Beam Fired hooks, and
+// deduct a round from a ballistic fighter beam; all four are suppressed while Game_restoring is
+// set (beam.cpp), since they belong to the shot that was fired in the run that was saved.
+void apply_beams(const checkpoint_data& data)
+{
+	int created = 0;
+
+	for (const auto& state : data.beams) {
+		int weapon_class = lookup_weapon_class(state.weapon_class);
+		if (weapon_class < 0) {
+			mprintf(("CHECKPOINT => No weapon class '%s' any more; dropping that beam.\n",
+			         state.weapon_class.c_str()));
+			continue;
+		}
+
+		bool floating = has_flag_name(state.flags, "floating_beam");
+		bool targeting_coords = has_flag_name(state.flags, "targeting_coords");
+
+		int shooter_objnum = objnum_for_ship_name(state.shooter_ship);
+		ship_subsys* turret = find_subsys_by_key(state.shooter_ship, state.turret);
+
+		// A beam is anchored to the turret that is firing it, so if either the shooter or its
+		// turret is gone there is nothing to re-fire.  The turret will simply acquire and fire
+		// again on its own within a second or two, which is what happens anyway.
+		if (!floating && (shooter_objnum < 0 || turret == nullptr)) {
+			continue;
+		}
+
+		int target_objnum = objnum_for_ship_name(state.target_ship);
+		if (target_objnum < 0 && !targeting_coords) {
+			// The target was a non-ship -- an asteroid, a chunk of debris, another weapon --
+			// and none of those has a name to find it by again.
+			continue;
+		}
+
+		beam_fire_info info;
+		memset(&info, 0, sizeof(info));
+
+		info.beam_info_index = weapon_class;
+		info.shooter = (shooter_objnum >= 0) ? &Objects[shooter_objnum] : nullptr;
+		info.turret = turret;
+		info.target = (target_objnum >= 0) ? &Objects[target_objnum] : nullptr;
+		info.target_subsys = find_subsys_by_key(state.target_ship, state.target_subsys);
+		info.target_pos1 = state.target_pos1;
+		info.target_pos2 = state.target_pos2;
+		info.starting_pos = state.last_start;
+		info.local_fire_postion = state.local_fire_position;
+		info.accuracy = 1.0f;
+		info.num_shots = state.shot_count;
+		info.bank = state.bank;
+		info.point = state.firingpoint;
+		info.team = static_cast<char>(lookup_team(state.team));
+		info.burst_seed = 0;
+		info.per_burst_rotation = 0.0f;
+		info.burst_index = 0;
+
+		info.bfi_flags = lookup_beam_flags(state.flags) &
+		                 (BF_FORCE_FIRING | BF_IS_FIGHTER_BEAM | BF_TARGETING_COORDS | BF_FLOATING_BEAM);
+
+		// The fire method is not kept on the beam, but it is fully determined by the flags that
+		// are, and all beam_has_valid_params() does with it is decide which of shooter, turret
+		// and target must be present.
+		if (floating) {
+			info.fire_method = BFM_SEXP_FLOATING_FIRED;
+		} else if (has_flag_name(state.flags, "fighter_beam")) {
+			info.fire_method = BFM_FIGHTER_FIRED;
+		} else if (has_flag_name(state.flags, "force_firing")) {
+			info.fire_method = BFM_TURRET_FORCE_FIRED;
+		} else {
+			info.fire_method = BFM_TURRET_FIRED;
+		}
+
+		// The aim vectors, so the restored beam sweeps exactly where the saved one was sweeping
+		// rather than picking a fresh random spread.
+		beam_info binfo;
+		memset(&binfo, 0, sizeof(binfo));
+		binfo.dir_a = state.dir_a;
+		binfo.dir_b = state.dir_b;
+		binfo.rot_axis = state.rot_axis;
+		binfo.shot_count = static_cast<ubyte>(state.shot_count);
+		for (int i = 0; i < state.shot_count && i < MAX_BEAM_SHOTS; i++) {
+			binfo.shot_aim[i] = (i < static_cast<int>(state.shot_aim.size())) ? state.shot_aim[i] : 1.0f;
+		}
+		info.beam_info_override = &binfo;
+
+		int objnum = beam_fire(&info);
+		if (objnum < 0) {
+			// beam_fire() turns down a shot it considers illegal -- the turret can no longer
+			// see the target, say.  That is the same answer it would give the turret code, so
+			// there is nothing to correct.
+			continue;
+		}
+
+		beam* b = &Beams[Objects[objnum].instance];
+
+		b->flags = lookup_beam_flags(state.flags);
+		b->life_left = state.life_left;
+		b->current_width_factor = state.current_width_factor;
+		b->u_offset_local = state.u_offset_local;
+		b->beam_glow_frame = state.beam_glow_frame;
+		b->framecount = state.framecount;
+		b->shot_index = state.shot_index;
+		b->last_start = state.last_start;
+		b->last_shot = state.last_shot;
+
+		auto saved_state = lookup_weapon_state(state.weapon_state);
+
+		if (saved_state == WeaponState::WARMUP) {
+			b->warmup_stamp = translate_stamp(state.warmup_stamp);
+			b->warmdown_stamp = -1;
+			created++;
+			continue;
+		}
+
+		// Past warmup.  beam_start_firing() clears the warmup stamp itself, and can still
+		// refuse, in which case the beam is dropped the same way beam_move_all_post() would.
+		if (!beam_start_firing(b)) {
+			Objects[objnum].flags.set(Object::Object_Flags::Should_be_dead);
+			continue;
+		}
+
+		// beam_start_firing() may have gone straight to warmdown on its own if the shot is no
+		// longer legal; in that case leave it there rather than dragging it back.
+		if (b->warmdown_stamp == -1 && saved_state == WeaponState::WARMDOWN) {
+			beam_start_warmdown(b);
+		}
+		if (b->warmdown_stamp != -1) {
+			b->warmdown_stamp = translate_stamp(state.warmdown_stamp >= 0 ? state.warmdown_stamp : b->warmdown_stamp);
+		}
+
+		// Re-assert what beam_start_firing() overwrote.
+		b->life_left = state.life_left;
+		b->framecount = state.framecount;
+		b->shot_index = state.shot_index;
+
+		created++;
+	}
+
+	if (created > 0) {
+		mprintf(("CHECKPOINT => Restored %d beam(s).\n", created));
+	}
+}
+
 // Put back the hull debris that was floating around.
 //
 // The ships these came off are destroyed and gone, so there is no source object to create them
@@ -3402,6 +4010,8 @@ void mission_checkpoint_apply()
 	// Debris is independent of everything else; it just needs the ship classes paged in, which the
 	// mission load has already done.
 	apply_debris(data);
+	apply_projectiles(data);
+	apply_beams(data);
 
 	// After the world, because a restored event's state describes ships that now exist.
 	apply_mission_logic(data);

@@ -19,6 +19,7 @@
 #include "freespace.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/linklist.h"
+#include "globalincs/systemvars.h"
 #include "graphics/color.h"
 #include "hud/hudets.h"
 #include "hud/hudmessage.h"
@@ -2219,13 +2220,16 @@ void beam_start_warmup(beam *b)
 	b->warmup_stamp = timestamp(wip->b_info.beam_warmup);
 
 	// start playing warmup sound
-	if(!(Game_mode & GM_STANDALONE_SERVER) && (wip->b_info.beam_warmup_sound.isValid())){
+	// (not while restoring a checkpoint: the beam is being reinstated part-way through its life,
+	// and the listener position this would be mixed against is whatever the mission load left)
+	if(!(Game_mode & GM_STANDALONE_SERVER) && !Game_restoring && (wip->b_info.beam_warmup_sound.isValid())){
 		snd_play_3d(gamesnd_get_game_sound(wip->b_info.beam_warmup_sound), &b->last_start, &View_position);
 	}
 
 	beam_set_state(wip, b, WeaponState::WARMUP);
 
-	if (scripting::hooks::OnBeamWarmup->isActive()) {
+	// (not while restoring: the script already saw this beam warm up in the run that was saved)
+	if (!Game_restoring && scripting::hooks::OnBeamWarmup->isActive()) {
 		scripting::hooks::OnBeamWarmup->run(scripting::hooks::WeaponUsedConditions{ b->objp == nullptr ? nullptr : &Ships[b->objp->instance], b->target, SCP_vector<int>{ b->weapon_info_index }, true },
 			scripting::hook_param_list(
 				scripting::hook_param("Beam", 'o', &Objects[b->objnum]),
@@ -2285,18 +2289,25 @@ int beam_start_firing(beam *b)
 	}	
 
 	// "shot" sound
-	if (b->objp == Player_obj && b->flags & BF_IS_FIGHTER_BEAM && Weapon_info[b->weapon_info_index].cockpit_launch_snd.isValid())
+	// (not while restoring a checkpoint: the shot was fired in the run that was saved, and this
+	// beam is only being put back part-way through its life)
+	if (Game_restoring) {
+		// nothing
+	} else if (b->objp == Player_obj && b->flags & BF_IS_FIGHTER_BEAM && Weapon_info[b->weapon_info_index].cockpit_launch_snd.isValid())
 		snd_play(gamesnd_get_game_sound(Weapon_info[b->weapon_info_index].cockpit_launch_snd), 0.0f, 1.0f, SND_PRIORITY_MUST_PLAY);
 	else if (Weapon_info[b->weapon_info_index].launch_snd.isValid())
 		snd_play_3d(gamesnd_get_game_sound(Weapon_info[b->weapon_info_index].launch_snd), &b->last_start, &View_position);
 
 	// if this is a fighter ballistic beam, always take at least one ammo to start with
-	if (b->flags & BF_IS_FIGHTER_BEAM && wip->wi_flags[Weapon::Info_Flags::Ballistic])
+	// (not while restoring: the ammo count has just been put back from the checkpoint, and it
+	// already accounts for this shot)
+	if (!Game_restoring && b->flags & BF_IS_FIGHTER_BEAM && wip->wi_flags[Weapon::Info_Flags::Ballistic])
 		Ships[b->objp->instance].weapons.primary_bank_ammo[b->bank]--;
 
 	beam_set_state(wip, b, WeaponState::FIRING);
 
-	if (scripting::hooks::OnBeamFired->isActive()) {
+	// (not while restoring: the script already saw this beam fire in the run that was saved)
+	if (!Game_restoring && scripting::hooks::OnBeamFired->isActive()) {
 		scripting::hooks::OnBeamFired->run(scripting::hooks::WeaponUsedConditions{ b->objp == nullptr ? nullptr : &Ships[b->objp->instance], b->target, SCP_vector<int>{ b->weapon_info_index }, true },
 			scripting::hook_param_list(
 				scripting::hook_param("Beam", 'o', &Objects[b->objnum]),
