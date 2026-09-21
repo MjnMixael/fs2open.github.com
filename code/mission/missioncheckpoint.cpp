@@ -8,7 +8,13 @@
 
 #include "mission/missioncheckpoint.h"
 
+#include "bmpman/bmpman.h"
 #include "debris/debris.h"
+#include "graphics/light.h"
+#include "hud/hud.h"
+#include "jumpnode/jumpnode.h"
+#include "nebula/neb.h"
+#include "starfield/starfield.h"
 #include "ai/ai.h"
 #include "asteroid/asteroid.h"
 #include "gamesnd/eventmusic.h"
@@ -51,6 +57,8 @@
 #include <array>
 
 extern char Game_current_mission_filename[];
+// Lives in freespace.cpp with no header of its own; the graphics back ends declare it the same way.
+extern int Game_subspace_effect;
 
 using namespace checkpoint;
 
@@ -1221,125 +1229,6 @@ int lookup_asteroid_type(const SCP_string& name)
 	return -1;
 }
 
-// Nav points, autopilot and event music: all SEXP-driven world state that the mission load
-// resets to its opening values.  Without these a restore re-locks nav points the player had
-// unlocked, forgets which one was selected, and starts the mission's opening music track over a
-// battle already in progress.
-void store_world(checkpoint_data& data)
-{
-	data.autopilot_engaged = AutoPilotEngaged;
-
-	for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
-		data.squadron_wings.emplace_back(Squadron_wings[i] >= 0 ? Wings[Squadron_wings[i]].name : "");
-	}
-
-	for (int i = 0; i < MAX_NAVPOINTS; i++) {
-		const NavPoint* nav = &Navs[i];
-		if (nav->m_NavName[0] == '\0') {
-			continue;
-		}
-
-		nav_state state;
-		state.name = nav->m_NavName;
-		state.flags = nav->flags;
-		state.waypoint_num = nav->waypoint_num;
-
-		// target_index means different things depending on the type, and neither meaning
-		// survives a reload as a number.
-		if (nav->flags & NP_WAYPOINT) {
-			state.waypoint_list = waypoint_list_name(nav->target_index);
-		} else if (nav->flags & NP_SHIP) {
-			state.target_ship = ship_name_for_objnum(nav->target_index);
-		}
-
-		if (i == CurrentNav) {
-			data.current_nav = state.name;
-		}
-
-		data.navs.push_back(std::move(state));
-	}
-
-	if (Current_soundtrack_num >= 0 && Current_soundtrack_num < static_cast<int>(Soundtracks.size())) {
-		data.soundtrack = Soundtracks[Current_soundtrack_num].name;
-	}
-	data.music_battle_started = (Event_Music_battle_started != 0);
-}
-
-void apply_world(const checkpoint_data& data)
-{
-	AutoPilotEngaged = data.autopilot_engaged;
-
-	// Go through the same call the set-squadron-wings SEXP makes rather than assigning
-	// Squadron_wings directly: it also moves each ship's wing_status_wing_index and carries the
-	// per-slot gauge state across to the slot its wing has moved to.  Skipped when the
-	// checkpoint has no squadron list -- written by an older build -- and when nothing has
-	// changed, so a mission that never touched its squadron wings pays nothing here.
-	if (!data.squadron_wings.empty()) {
-		std::array<int, MAX_SQUADRON_WINGS> wingnums;
-		bool changed = false;
-
-		for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
-			const char* name = i < static_cast<int>(data.squadron_wings.size()) ? data.squadron_wings[i].c_str() : "";
-			wingnums[i] = (*name == '\0') ? -1 : wing_name_lookup(name);
-
-			if (wingnums[i] != Squadron_wings[i]) {
-				changed = true;
-			}
-		}
-
-		if (changed) {
-			hud_set_new_squadron_wings(wingnums);
-		}
-	}
-
-	CurrentNav = -1;
-	for (const auto& state : data.navs) {
-		// Match the nav the mission load created, by name -- the slot it lands in is not
-		// guaranteed to be the one it occupied before.
-		for (int i = 0; i < MAX_NAVPOINTS; i++) {
-			NavPoint* nav = &Navs[i];
-			if (stricmp(nav->m_NavName, state.name.c_str()) != 0) {
-				continue;
-			}
-
-			nav->flags = state.flags;
-			nav->waypoint_num = state.waypoint_num;
-
-			if (!state.waypoint_list.empty()) {
-				nav->target_index = find_matching_waypoint_list_index(state.waypoint_list.c_str());
-			} else if (!state.target_ship.empty()) {
-				nav->target_index = objnum_for_ship_name(state.target_ship);
-			}
-
-			if (state.name == data.current_nav) {
-				CurrentNav = i;
-			}
-			break;
-		}
-	}
-
-	// The mission parse has already put its own soundtrack in place, so there is only work to
-	// do if a SEXP had changed it before the checkpoint.  Go through the same entry point the
-	// change-soundtrack SEXP uses: assigning Current_soundtrack_num by hand would leave the
-	// previous track's patterns open and still playing.
-	int soundtrack_index = data.soundtrack.empty() ? -1 : event_music_get_soundtrack_index(data.soundtrack.c_str());
-	if (soundtrack_index >= 0 && soundtrack_index != Current_soundtrack_num) {
-		event_sexp_change_soundtrack(data.soundtrack.c_str());
-
-		// If the music level was not inited yet, the call above bailed out after clearing the
-		// index.  Put it back so whatever starts the level later picks up the right track.
-		if (Current_soundtrack_num < 0) {
-			Current_soundtrack_num = soundtrack_index;
-		}
-	}
-
-	// Ask for the battle song rather than setting the flag, which only means "already kicked
-	// off": forcing it on over the opening track would keep combat music from ever coming in.
-	if (data.music_battle_started) {
-		event_music_battle_start();
-	}
-}
-
 // ------------------------------------------------------------------
 // Support ships
 // ------------------------------------------------------------------
@@ -1398,20 +1287,40 @@ SCP_string departure_location_name(DepartureLocation location)
 	return SCP_string(Departure_location_names[index]);
 }
 
-void store_support(checkpoint_data& data)
+// Motion_debris_ptr points into one of the Motion_debris_info entries rather than naming it, so
+// the name is recovered by finding the entry it points into.
+SCP_string motion_debris_name()
+{
+	if (Motion_debris_ptr == nullptr) {
+		return SCP_string();
+	}
+
+	for (const auto& info : Motion_debris_info) {
+		if (info.bitmaps == Motion_debris_ptr) {
+			return info.name;
+		}
+	}
+
+	return SCP_string();
+}
+
+void store_support(environment_state& out)
 {
 	const auto& support = The_mission.support_ships;
-	auto& out = data.support;
 
-	out.tally = support.tally;
-	out.ship_class = ship_class_name(support.ship_class);
-	out.max_support_ships = support.max_support_ships;
-	out.max_concurrent_ships = support.max_concurrent_ships;
+	out.support_ship_class = ship_class_name(support.ship_class);
+	out.support_arrival_location = arrival_location_name(support.arrival_location);
+	out.support_departure_location = departure_location_name(support.departure_location);
+	store_anchor(support.arrival_anchor, out.support_arrival_anchor_ship, out.support_arrival_anchor_special);
+	store_anchor(support.departure_anchor, out.support_departure_anchor_ship, out.support_departure_anchor_special);
 
-	out.arrival_location = arrival_location_name(support.arrival_location);
-	out.departure_location = departure_location_name(support.departure_location);
-	store_anchor(support.arrival_anchor, out.arrival_anchor_ship, out.arrival_anchor_special);
-	store_anchor(support.departure_anchor, out.departure_anchor_ship, out.departure_anchor_special);
+	out.support_max_ships = support.max_support_ships;
+	out.support_max_concurrent = support.max_concurrent_ships;
+	out.support_tally = support.tally;
+	out.support_available_for_species = support.support_available_for_species;
+	out.support_max_hull_repair = support.max_hull_repair_val;
+	out.support_max_subsys_repair = support.max_subsys_repair_val;
+	out.support_disallow_rearm = support.disallow_rearm;
 
 	for (const auto& pool : support.rearm_weapon_pool) {
 		SCP_map<SCP_string, int> named;
@@ -1425,37 +1334,42 @@ void store_support(checkpoint_data& data)
 	}
 }
 
-void apply_support(const checkpoint_data& data)
+void apply_support(const environment_state& in)
 {
 	auto& support = The_mission.support_ships;
-	const auto& in = data.support;
-
-	support.tally = in.tally;
-	support.max_support_ships = in.max_support_ships;
-	support.max_concurrent_ships = in.max_concurrent_ships;
 
 	// An empty class name means "work it out from the requester's species", which is what -1
 	// spells; that is also what a class the mod no longer has should fall back to.
-	support.ship_class = in.ship_class.empty() ? -1 : lookup_ship_class(in.ship_class);
+	support.ship_class = in.support_ship_class.empty() ? -1 : lookup_ship_class(in.support_ship_class);
 
 	for (int i = 0; i < MAX_ARRIVAL_NAMES; i++) {
-		if (in.arrival_location == Arrival_location_names[i]) {
+		if (in.support_arrival_location == Arrival_location_names[i]) {
 			support.arrival_location = static_cast<ArrivalLocation>(i);
 			break;
 		}
 	}
 	for (int i = 0; i < MAX_DEPARTURE_NAMES; i++) {
-		if (in.departure_location == Departure_location_names[i]) {
+		if (in.support_departure_location == Departure_location_names[i]) {
 			support.departure_location = static_cast<DepartureLocation>(i);
 			break;
 		}
 	}
 
-	support.arrival_anchor = load_anchor(in.arrival_anchor_ship, in.arrival_anchor_special);
-	support.departure_anchor = load_anchor(in.departure_anchor_ship, in.departure_anchor_special);
+	support.arrival_anchor = load_anchor(in.support_arrival_anchor_ship, in.support_arrival_anchor_special);
+	support.departure_anchor = load_anchor(in.support_departure_anchor_ship, in.support_departure_anchor_special);
 
-	// Only overwrite a team's pool if the checkpoint has one for it, so that a file written
-	// before the pools were stored leaves the mission's own pools alone.
+	support.max_support_ships = in.support_max_ships;
+	support.max_concurrent_ships = in.support_max_concurrent;
+	support.tally = in.support_tally;
+	support.support_available_for_species = in.support_available_for_species;
+	support.max_hull_repair_val = in.support_max_hull_repair;
+	support.max_subsys_repair_val = in.support_max_subsys_repair;
+	support.disallow_rearm = in.support_disallow_rearm;
+
+	// Rebuilt rather than merged, because the file lists everything that was left in the pool:
+	// a weapon that has been spent to nothing has to come back spent rather than keeping
+	// whatever the mission file stocked.  Only teams the checkpoint actually has are touched, so
+	// a file written before the pools were stored leaves the mission's own pools alone.
 	for (size_t team = 0; team < in.rearm_pools.size() && team < support.rearm_weapon_pool.size(); team++) {
 		auto& pool = support.rearm_weapon_pool[team];
 		pool.clear();
@@ -1465,6 +1379,373 @@ void apply_support(const checkpoint_data& data)
 			if (weapon_class >= 0) {
 				pool[weapon_class] = item.second;
 			}
+		}
+	}
+}
+
+// The world that is not made of ships: the sky, the nebula, the music, the HUD toggles, the
+// support ship settings, the nav points and the jump nodes.
+//
+// Almost none of this lives in The_mission.  It lives in module-level globals whose only reset is
+// that module's level_init, which a restore runs -- so every SEXP that dresses the mission is
+// undone by the reload unless it is written down here.
+void store_environment(environment_state& out)
+{
+	out.present = true;
+
+	if (Nmodel_num >= 0) {
+		auto pm = model_get(Nmodel_num);
+		if (pm != nullptr) {
+			out.skybox_model = pm->filename;
+		}
+	}
+	if (Nmodel_bitmap >= 0) {
+		const char* texture = bm_get_filename(Nmodel_bitmap);
+		if (texture != nullptr) {
+			out.skybox_texture = texture;
+		}
+	}
+	// Nmodel_flags is 64-bit and the handler writes 32 at a time.
+	out.skybox_flags_hi = static_cast<uint>(Nmodel_flags >> 32);
+	out.skybox_flags_lo = static_cast<uint>(Nmodel_flags & 0xffffffffu);
+	out.skybox_alpha = Nmodel_alpha;
+	out.skybox_orient = Nmodel_orient;
+
+	out.ambient_light = The_mission.ambient_light_level;
+
+	out.fullneb = The_mission.flags[Mission::Mission_Flags::Fullneb];
+	out.neb_range = Neb2_awacs;
+	out.neb_pattern = Neb2_texture_name;
+	out.neb_fog_color_override = The_mission.flags[Mission::Mission_Flags::Neb2_fog_color_override];
+	out.neb_fog_r = Neb2_fog_color[0];
+	out.neb_fog_g = Neb2_fog_color[1];
+	out.neb_fog_b = Neb2_fog_color[2];
+
+	out.subspace = The_mission.flags[Mission::Mission_Flags::Subspace];
+
+	out.background_index = Cur_background;
+
+	// Suns first, then bitmaps, which is the order stars_load_background() adds them in and so
+	// the order the restore puts them back in.
+	for (int pass = 0; pass < 2; pass++) {
+		bool is_sun = (pass == 0);
+		int count = stars_get_num_entries(is_sun, false);
+
+		for (int i = 0; i < count; i++) {
+			const char* name = stars_get_name_from_instance(i, is_sun);
+			if (name == nullptr || *name == '\0') {
+				// An instance marked unused keeps its slot but loses its name; it is not in the
+				// sky any more, so it does not go in the file either.
+				continue;
+			}
+
+			starfield_list_entry sle;
+			stars_get_data(is_sun, i, sle);
+
+			starfield_entry_state entry;
+			entry.name = name;
+			entry.is_sun = is_sun;
+			entry.scale_x = sle.scale_x;
+			entry.scale_y = sle.scale_y;
+			entry.div_x = sle.div_x;
+			entry.div_y = sle.div_y;
+			entry.ang = sle.ang;
+
+			out.starfield.push_back(std::move(entry));
+		}
+	}
+
+	out.motion_debris_override = Motion_debris_override;
+	out.motion_debris_type = motion_debris_name();
+
+	if (Current_soundtrack_num >= 0 && Current_soundtrack_num < static_cast<int>(Soundtracks.size())) {
+		out.soundtrack = Soundtracks[Current_soundtrack_num].name;
+	}
+	out.music_battle_started = (Event_Music_battle_started != 0);
+
+	out.hud_draw = (HUD_draw != 0);
+	out.hud_disable_except_messages = (hud_disabled_except_messages() != 0);
+	out.hud_max_targeting_range = Hud_max_targeting_range;
+	out.hud_display_warpout = Sexp_hud_display_warpout;
+
+	store_support(out);
+
+	out.no_traitor = The_mission.flags[Mission::Mission_Flags::No_traitor];
+	if (The_mission.traitor_override != nullptr) {
+		out.traitor_override = The_mission.traitor_override->name;
+	}
+	out.debriefing_persona = persona_name(The_mission.debriefing_persona);
+
+	out.asteroids_enabled = (Asteroids_enabled != 0);
+
+	// Navpoints go out whole, unused slots included, since a nav is identified by its slot.
+	for (int i = 0; i < MAX_NAVPOINTS; i++) {
+		const NavPoint& nav = Navs[i];
+
+		navpoint_state state;
+		state.name = nav.m_NavName;
+		state.flags = nav.flags;
+
+		// target_index means different things depending on the type, and neither meaning
+		// survives a reload as a number.
+		if (nav.flags & NP_WAYPOINT) {
+			auto wp_list = find_waypoint_list_at_index(nav.target_index);
+			if (wp_list != nullptr) {
+				state.target = wp_list->get_name();
+			}
+			state.waypoint_num = nav.waypoint_num;
+		} else if (nav.flags & NP_SHIP) {
+			state.target = ship_name_for_objnum(nav.target_index);
+		}
+
+		for (int c = 0; c < 3; c++) {
+			state.normal_color[c] = nav.normal_color[c];
+			state.visited_color[c] = nav.visited_color[c];
+		}
+
+		out.navpoints.push_back(std::move(state));
+	}
+	out.current_nav = CurrentNav;
+
+	for (size_t i = 0; i < Jump_nodes.size(); i++) {
+		const auto& node = Jump_nodes[i];
+
+		jump_node_state state;
+		state.index = static_cast<int>(i);
+		state.name = node.GetName();
+		state.hidden = node.IsHidden();
+		state.colored = node.IsColored();
+
+		if (node.HasDisplayName()) {
+			state.display_name = node.GetDisplayName();
+		}
+		if (node.IsSpecialModel()) {
+			state.model = node.GetModelFilename();
+		}
+		if (state.colored) {
+			const color& c = node.GetColor();
+			state.color[0] = c.red;
+			state.color[1] = c.green;
+			state.color[2] = c.blue;
+			state.color[3] = c.alpha;
+		}
+
+		out.jump_nodes.push_back(std::move(state));
+	}
+
+	for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
+		out.squadron_wings.emplace_back(Squadron_wings[i] >= 0 ? Wings[Squadron_wings[i]].name : "");
+	}
+}
+
+// Put the sky, the nebula, the music and the rest of the mission's dressing back.
+//
+// Everything here goes through the engine's own setters rather than by bashing the globals,
+// because most of them own derived state: stars_set_background_model() reloads the model and
+// rebuilds the environment map, stars_set_nebula() moves the render mode and the HUD contrast
+// with it, and neb2_post_level_init() rebuilds the fog.
+void apply_environment(const checkpoint_data& data)
+{
+	const auto& env = data.environment;
+
+	// A checkpoint written before this section existed says nothing about the sky, and saying
+	// nothing must leave it alone rather than blank it.
+	if (!env.present) {
+		return;
+	}
+
+	// The nebula first, because turning it on rewrites the render mode and the background model
+	// that the skybox settings below then override.
+	stars_set_nebula(env.fullneb, env.neb_range);
+
+	if (env.fullneb) {
+		strcpy_s(Neb2_texture_name, env.neb_pattern.c_str());
+		The_mission.flags.set(Mission::Mission_Flags::Neb2_fog_color_override, env.neb_fog_color_override);
+		if (env.neb_fog_color_override) {
+			Neb2_fog_color[0] = static_cast<ubyte>(env.neb_fog_r);
+			Neb2_fog_color[1] = static_cast<ubyte>(env.neb_fog_g);
+			Neb2_fog_color[2] = static_cast<ubyte>(env.neb_fog_b);
+		}
+		neb2_post_level_init(env.neb_fog_color_override);
+	}
+
+	// Subspace: the flag and the visual, but not the ambient sound, which is a sound handle and
+	// so on the list of things this system does not carry.
+	Game_subspace_effect = env.subspace ? 1 : 0;
+	The_mission.flags.set(Mission::Mission_Flags::Subspace, env.subspace);
+	stars_set_dynamic_environment(env.subspace);
+
+	std::uint64_t skybox_flags =
+		(static_cast<std::uint64_t>(env.skybox_flags_hi) << 32) | static_cast<std::uint64_t>(env.skybox_flags_lo);
+
+	stars_set_background_model(env.skybox_model.empty() ? nullptr : env.skybox_model.c_str(),
+		env.skybox_texture.empty() ? nullptr : env.skybox_texture.c_str(),
+		skybox_flags,
+		env.skybox_alpha);
+	stars_set_background_orientation(&env.skybox_orient);
+
+	The_mission.ambient_light_level = env.ambient_light;
+	gr_set_ambient_light((env.ambient_light & 0x0000ff),
+		(env.ambient_light & 0x00ff00) >> 8,
+		(env.ambient_light & 0xff0000) >> 16);
+
+	// Clearing and rebuilding, rather than diffing: stars_load_background(-1) is the public way
+	// to empty the live sun and bitmap lists, and every entry that should be in the sky is in
+	// the file.
+	stars_load_background(-1);
+	Cur_background = env.background_index;
+
+	for (const auto& entry : env.starfield) {
+		starfield_list_entry sle;
+		strcpy_s(sle.filename, entry.name.c_str());
+		sle.scale_x = entry.scale_x;
+		sle.scale_y = entry.scale_y;
+		sle.div_x = entry.div_x;
+		sle.div_y = entry.div_y;
+		sle.ang = entry.ang;
+
+		int added = entry.is_sun ? stars_add_sun_entry(&sle) : stars_add_bitmap_entry(&sle);
+		if (added < 0) {
+			mprintf(("CHECKPOINT => The sky had %s '%s', which this build does not have; leaving "
+			         "it out.\n",
+			         entry.is_sun ? "a sun" : "a bitmap",
+			         entry.name.c_str()));
+		}
+	}
+
+	if (!env.motion_debris_type.empty()) {
+		stars_load_debris(The_mission.flags[Mission::Mission_Flags::Fullneb] ? 1 : 0, env.motion_debris_type);
+	}
+	Motion_debris_override = env.motion_debris_override;
+
+	// The mission parse has already put its own soundtrack in place, so there is only work to do
+	// if a SEXP had changed it.  Go through the same entry point the change-soundtrack SEXP uses:
+	// assigning Current_soundtrack_num by hand would leave the previous track's patterns open and
+	// still playing.
+	int soundtrack_index = env.soundtrack.empty() ? -1 : event_music_get_soundtrack_index(env.soundtrack.c_str());
+	if (soundtrack_index >= 0 && soundtrack_index != Current_soundtrack_num) {
+		event_sexp_change_soundtrack(env.soundtrack.c_str());
+
+		// If the music level was not inited yet, the call above bailed out after clearing the
+		// index.  Put it back so whatever starts the level later picks up the right track.
+		if (Current_soundtrack_num < 0) {
+			Current_soundtrack_num = soundtrack_index;
+		}
+	}
+
+	// Ask for the battle song rather than setting the flag, which only means "already kicked
+	// off": forcing it on over the opening track would keep combat music from ever coming in.
+	if (env.music_battle_started) {
+		event_music_battle_start();
+	}
+
+	hud_set_draw(env.hud_draw ? 1 : 0);
+	hud_disable_except_messages(env.hud_disable_except_messages ? 1 : 0);
+	Hud_max_targeting_range = env.hud_max_targeting_range;
+	// Anything above 1 is a stamp saying when the warpout gauge stops being forced on; 0 and 1
+	// are plain off and on, and translate_stamp() leaves them alone.
+	Sexp_hud_display_warpout = translate_stamp(env.hud_display_warpout);
+
+	apply_support(env);
+
+	The_mission.flags.set(Mission::Mission_Flags::No_traitor, env.no_traitor);
+	The_mission.traitor_override =
+		env.traitor_override.empty() ? nullptr : get_traitor_override_pointer(env.traitor_override);
+	int debrief_persona = lookup_persona(env.debriefing_persona);
+	if (debrief_persona >= 0) {
+		The_mission.debriefing_persona = debrief_persona;
+	}
+
+	// Only the toggle.  The rocks themselves are restored separately; see apply_asteroids().
+	Asteroids_enabled = env.asteroids_enabled ? 1 : 0;
+
+	for (size_t i = 0; i < env.navpoints.size() && i < static_cast<size_t>(MAX_NAVPOINTS); i++) {
+		const auto& state = env.navpoints[i];
+		NavPoint& nav = Navs[i];
+
+		if (state.name.empty()) {
+			nav.clear();
+			continue;
+		}
+
+		strcpy_s(nav.m_NavName, state.name.c_str());
+		nav.flags = state.flags;
+		nav.waypoint_num = state.waypoint_num;
+		nav.target_index = -1;
+
+		if (state.flags & NP_WAYPOINT) {
+			nav.target_index = find_matching_waypoint_list_index(state.target.c_str());
+		} else if (state.flags & NP_SHIP) {
+			nav.target_index = objnum_for_ship_name(state.target);
+		}
+
+		// A nav whose target has gone is cleared rather than left pointing at nothing, since the
+		// autopilot code dereferences it.
+		if ((state.flags & NP_VALIDTYPE) && nav.target_index < 0) {
+			mprintf(("CHECKPOINT => Navpoint '%s' has lost what it pointed at; dropping it.\n",
+			         state.name.c_str()));
+			nav.clear();
+			continue;
+		}
+
+		for (int c = 0; c < 3; c++) {
+			nav.normal_color[c] = static_cast<ubyte>(state.normal_color[c]);
+			nav.visited_color[c] = static_cast<ubyte>(state.visited_color[c]);
+		}
+	}
+	// Only point at a nav that survived; the autopilot indexes Navs[CurrentNav] without checking.
+	CurrentNav = -1;
+	if (env.current_nav >= 0 && env.current_nav < MAX_NAVPOINTS && Navs[env.current_nav].m_NavName[0] != '\0') {
+		CurrentNav = env.current_nav;
+	}
+
+	// Autopilot is deliberately not resumed.  Half of what it needs is the flight path it had
+	// worked out, which is not stored, and a restore that drops the player into a half-engaged
+	// autopilot flying nowhere is worse than one that hands the controls back.
+	AutoPilotEngaged = false;
+
+	for (const auto& state : env.jump_nodes) {
+		if (state.index < 0 || state.index >= static_cast<int>(Jump_nodes.size())) {
+			continue;
+		}
+
+		auto& node = Jump_nodes[state.index];
+
+		node.SetName(state.name.c_str());
+		// Passing the node's own name is how the display name is cleared, and an empty string is
+		// not the same thing -- that would leave the node flagged as having a blank display name.
+		node.SetDisplayName(state.display_name.empty() ? state.name.c_str() : state.display_name.c_str());
+		node.SetVisibility(!state.hidden);
+
+		if (state.colored) {
+			node.SetAlphaColor(state.color[0], state.color[1], state.color[2], state.color[3]);
+		}
+
+		if (state.model.empty()) {
+			node.ResetToDefaultModel();
+		} else {
+			node.SetModel(state.model.c_str());
+		}
+	}
+
+	// Go through the same call the set-squadron-wings SEXP makes rather than assigning
+	// Squadron_wings directly: it also moves each ship's wing_status_wing_index and carries the
+	// per-slot gauge state over to the slot its wing has moved to.
+	if (!env.squadron_wings.empty()) {
+		std::array<int, MAX_SQUADRON_WINGS> wingnums;
+		bool changed = false;
+
+		for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
+			const char* name = i < static_cast<int>(env.squadron_wings.size()) ? env.squadron_wings[i].c_str() : "";
+			wingnums[i] = (*name == '\0') ? -1 : wing_name_lookup(name);
+
+			if (wingnums[i] != Squadron_wings[i]) {
+				changed = true;
+			}
+		}
+
+		if (changed) {
+			hud_set_new_squadron_wings(wingnums);
 		}
 	}
 }
@@ -1890,8 +2171,6 @@ void store_beams(checkpoint_data& data)
 
 void store_asteroids(checkpoint_data& data)
 {
-	data.asteroids_enabled = (Asteroids_enabled != 0);
-
 	for (const auto& ast : Asteroids) {
 		if (ast.objnum < 0 || ast.objnum >= MAX_OBJECTS) {
 			continue;
@@ -1922,8 +2201,8 @@ void store_asteroids(checkpoint_data& data)
 
 void apply_asteroids(const checkpoint_data& data)
 {
-	Asteroids_enabled = data.asteroids_enabled ? 1 : 0;
-
+	// Asteroids_enabled itself is restored with the rest of the world; see apply_environment().
+	//
 	// Nothing was captured, which means either the mission has no field or the checkpoint
 	// predates this being saved.  Either way, leave the freshly created field alone rather than
 	// wiping it.
@@ -2853,8 +3132,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	}
 
 	store_asteroids(data);
-	store_world(data);
-	store_support(data);
+	store_environment(data.environment);
 	store_projectiles(data);
 	store_beams(data);
 
@@ -4208,8 +4486,8 @@ void mission_checkpoint_apply()
 
 	// Then decide which ships should exist at all, before bashing state onto the ones that do.
 	// Before the ships, because restore_dynamic_ships() builds a support ship's parse object
-	// out of the mission's support settings and those are restored here.
-	apply_support(data);
+	// out of the mission's support settings, and the environment is where those live.
+	apply_environment(data);
 
 	reconcile_ship_existence(data);
 
@@ -4251,7 +4529,6 @@ void mission_checkpoint_apply()
 	}
 
 	apply_asteroids(data);
-	apply_world(data);
 	apply_wings(data);
 	apply_variables(data);
 	apply_scoring(data);

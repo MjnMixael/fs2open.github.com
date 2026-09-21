@@ -452,13 +452,133 @@ void read_parse_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::p
 	handler->endArrayRead();
 }
 
-// Ambient mission state that belongs to the world rather than to any one ship.
+// The world that is not made of ships: the sky, the nebula, the music, the HUD toggles, the
+// support ship settings, the nav points and the jump nodes.
 void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
+	const auto& env = data.environment;
+
 	handler->startSectionWrite(Section::CheckpointWorld);
 
-	handler->writeBool("asteroids_enabled", data.asteroids_enabled);
+	handler->writeBool("present", env.present);
 
+	handler->writeString("skybox_model", env.skybox_model.c_str());
+	handler->writeString("skybox_texture", env.skybox_texture.c_str());
+	handler->writeUInt("skybox_flags_hi", env.skybox_flags_hi);
+	handler->writeUInt("skybox_flags_lo", env.skybox_flags_lo);
+	handler->writeFloat("skybox_alpha", env.skybox_alpha);
+	write_vector(handler, "sky_fvec_x", "sky_fvec_y", "sky_fvec_z", env.skybox_orient.vec.fvec);
+	write_vector(handler, "sky_uvec_x", "sky_uvec_y", "sky_uvec_z", env.skybox_orient.vec.uvec);
+	write_vector(handler, "sky_rvec_x", "sky_rvec_y", "sky_rvec_z", env.skybox_orient.vec.rvec);
+
+	handler->writeInt("ambient_light", env.ambient_light);
+
+	handler->writeBool("fullneb", env.fullneb);
+	handler->writeFloat("neb_range", env.neb_range);
+	handler->writeString("neb_pattern", env.neb_pattern.c_str());
+	handler->writeBool("neb_fog_override", env.neb_fog_color_override);
+	handler->writeInt("neb_fog_r", env.neb_fog_r);
+	handler->writeInt("neb_fog_g", env.neb_fog_g);
+	handler->writeInt("neb_fog_b", env.neb_fog_b);
+
+	handler->writeBool("subspace", env.subspace);
+
+	handler->writeInt("background_index", env.background_index);
+	handler->startArrayWrite("starfield", env.starfield.size());
+	for (const auto& entry : env.starfield) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", entry.name.c_str());
+		handler->writeBool("is_sun", entry.is_sun);
+		handler->writeFloat("scale_x", entry.scale_x);
+		handler->writeFloat("scale_y", entry.scale_y);
+		handler->writeInt("div_x", entry.div_x);
+		handler->writeInt("div_y", entry.div_y);
+		handler->writeFloat("ang_p", entry.ang.p);
+		handler->writeFloat("ang_b", entry.ang.b);
+		handler->writeFloat("ang_h", entry.ang.h);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->writeBool("motion_debris_override", env.motion_debris_override);
+	handler->writeString("motion_debris_type", env.motion_debris_type.c_str());
+
+	handler->writeString("soundtrack", env.soundtrack.c_str());
+	handler->writeBool("music_battle_started", env.music_battle_started);
+
+	handler->writeBool("hud_draw", env.hud_draw);
+	handler->writeBool("hud_only_messages", env.hud_disable_except_messages);
+	handler->writeInt("hud_max_range", env.hud_max_targeting_range);
+	handler->writeInt("hud_warpout", env.hud_display_warpout);
+
+	handler->writeString("support_class", env.support_ship_class.c_str());
+	handler->writeString("support_arrival", env.support_arrival_location.c_str());
+	handler->writeString("support_departure", env.support_departure_location.c_str());
+	handler->writeString("support_arrival_anchor", env.support_arrival_anchor_ship.c_str());
+	handler->writeInt("support_arrival_anchor_special", env.support_arrival_anchor_special);
+	handler->writeString("support_departure_anchor", env.support_departure_anchor_ship.c_str());
+	handler->writeInt("support_departure_anchor_special", env.support_departure_anchor_special);
+	handler->writeInt("support_max", env.support_max_ships);
+	handler->writeInt("support_max_concurrent", env.support_max_concurrent);
+	handler->writeInt("support_tally", env.support_tally);
+	handler->writeInt("support_species", env.support_available_for_species);
+	handler->writeFloat("support_hull_repair", env.support_max_hull_repair);
+	handler->writeFloat("support_subsys_repair", env.support_max_subsys_repair);
+	handler->writeBool("support_disallow_rearm", env.support_disallow_rearm);
+
+	// One entry per team, each holding that team's weapon class -> rounds left map.
+	handler->startArrayWrite("rearm_pools", env.rearm_pools.size());
+	for (const auto& pool : env.rearm_pools) {
+		handler->startSectionWrite(Section::Unnamed);
+		write_int_map(handler, "pool", pool);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->writeBool("no_traitor", env.no_traitor);
+	handler->writeString("traitor_override", env.traitor_override.c_str());
+	handler->writeString("debriefing_persona", env.debriefing_persona.c_str());
+
+	handler->writeBool("asteroids_enabled", env.asteroids_enabled);
+
+	handler->writeInt("current_nav", env.current_nav);
+	handler->startArrayWrite("navpoints", env.navpoints.size());
+	for (const auto& nav : env.navpoints) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", nav.name.c_str());
+		handler->writeInt("flags", nav.flags);
+		handler->writeString("target", nav.target.c_str());
+		handler->writeInt("waypoint_num", nav.waypoint_num);
+		handler->writeInt("normal_r", nav.normal_color[0]);
+		handler->writeInt("normal_g", nav.normal_color[1]);
+		handler->writeInt("normal_b", nav.normal_color[2]);
+		handler->writeInt("visited_r", nav.visited_color[0]);
+		handler->writeInt("visited_g", nav.visited_color[1]);
+		handler->writeInt("visited_b", nav.visited_color[2]);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("jump_nodes", env.jump_nodes.size());
+	for (const auto& node : env.jump_nodes) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeInt("index", node.index);
+		handler->writeString("name", node.name.c_str());
+		handler->writeString("display_name", node.display_name.c_str());
+		handler->writeString("model", node.model.c_str());
+		handler->writeBool("hidden", node.hidden);
+		handler->writeBool("colored", node.colored);
+		handler->writeInt("color_r", node.color[0]);
+		handler->writeInt("color_g", node.color[1]);
+		handler->writeInt("color_b", node.color[2]);
+		handler->writeInt("color_a", node.color[3]);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	write_string_list(handler, "squadron_wings", env.squadron_wings);
+
+	// The asteroid field itself, which is the one part of the world made of objects.
 	handler->startArrayWrite("asteroids", data.asteroids.size());
 	for (const auto& ast : data.asteroids) {
 		handler->startSectionWrite(Section::Unnamed);
@@ -480,80 +600,143 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	}
 	handler->endArrayWrite();
 
-	write_string_list(handler, "squadron_wings", data.squadron_wings);
-
-	handler->writeInt("support_tally", data.support.tally);
-	handler->writeString("support_class", data.support.ship_class.c_str());
-	handler->writeInt("support_max", data.support.max_support_ships);
-	handler->writeInt("support_max_concurrent", data.support.max_concurrent_ships);
-	handler->writeString("support_arrival", data.support.arrival_location.c_str());
-	handler->writeString("support_departure", data.support.departure_location.c_str());
-	handler->writeString("support_arrival_anchor", data.support.arrival_anchor_ship.c_str());
-	handler->writeInt("support_arrival_anchor_special", data.support.arrival_anchor_special);
-	handler->writeString("support_departure_anchor", data.support.departure_anchor_ship.c_str());
-	handler->writeInt("support_departure_anchor_special", data.support.departure_anchor_special);
-
-	// One entry per team, each holding that team's weapon class -> rounds left map.
-	handler->startArrayWrite("support_rearm_pools", data.support.rearm_pools.size());
-	for (const auto& pool : data.support.rearm_pools) {
-		handler->startSectionWrite(Section::Unnamed);
-		write_int_map(handler, "pool", pool);
-		handler->endSectionWrite();
-	}
-	handler->endArrayWrite();
-
-	handler->writeBool("autopilot_engaged", data.autopilot_engaged);
-	handler->writeString("current_nav", data.current_nav.c_str());
-	handler->writeString("soundtrack", data.soundtrack.c_str());
-	handler->writeBool("music_battle_started", data.music_battle_started);
-
-	handler->startArrayWrite("navs", data.navs.size());
-	for (const auto& nav : data.navs) {
-		handler->startSectionWrite(Section::Unnamed);
-		handler->writeString("name", nav.name.c_str());
-		handler->writeInt("flags", nav.flags);
-		handler->writeString("target_ship", nav.target_ship.c_str());
-		handler->writeString("waypoint_list", nav.waypoint_list.c_str());
-		handler->writeInt("waypoint_num", nav.waypoint_num);
-		handler->endSectionWrite();
-	}
-	handler->endArrayWrite();
-
 	handler->endSectionWrite();
 }
 
 void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 {
-	data.asteroids.clear();
-	data.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
-	read_string_list(handler, "squadron_wings", data.squadron_wings);
+	auto& env = data.environment;
 
-	data.support.tally = handler->readIntOr("support_tally", 0);
-	data.support.ship_class = handler->readStringOr("support_class", "");
-	data.support.max_support_ships = handler->readIntOr("support_max", 0);
-	data.support.max_concurrent_ships = handler->readIntOr("support_max_concurrent", 0);
-	data.support.arrival_location = handler->readStringOr("support_arrival", "");
-	data.support.departure_location = handler->readStringOr("support_departure", "");
-	data.support.arrival_anchor_ship = handler->readStringOr("support_arrival_anchor", "");
-	data.support.arrival_anchor_special = handler->readIntOr("support_arrival_anchor_special", -1);
-	data.support.departure_anchor_ship = handler->readStringOr("support_departure_anchor", "");
-	data.support.departure_anchor_special = handler->readIntOr("support_departure_anchor_special", -1);
+	env.present = handler->readBoolOr("present", false);
 
-	data.support.rearm_pools.clear();
-	if (handler->hasField("support_rearm_pools")) {
-		auto pool_count = handler->startArrayRead("support_rearm_pools");
-		for (size_t i = 0; i < pool_count; i++, handler->nextArraySection()) {
-			SCP_map<SCP_string, int> pool;
-			read_int_map(handler, "pool", pool);
-			data.support.rearm_pools.push_back(std::move(pool));
+	env.skybox_model = handler->readStringOr("skybox_model", "");
+	env.skybox_texture = handler->readStringOr("skybox_texture", "");
+	env.skybox_flags_hi = handler->readUIntOr("skybox_flags_hi", 0);
+	env.skybox_flags_lo = handler->readUIntOr("skybox_flags_lo", 0);
+	env.skybox_alpha = handler->readFloatOr("skybox_alpha", 1.0f);
+	read_vector(handler, "sky_fvec_x", "sky_fvec_y", "sky_fvec_z", env.skybox_orient.vec.fvec);
+	read_vector(handler, "sky_uvec_x", "sky_uvec_y", "sky_uvec_z", env.skybox_orient.vec.uvec);
+	read_vector(handler, "sky_rvec_x", "sky_rvec_y", "sky_rvec_z", env.skybox_orient.vec.rvec);
+
+	env.ambient_light = handler->readIntOr("ambient_light", 0);
+
+	env.fullneb = handler->readBoolOr("fullneb", false);
+	env.neb_range = handler->readFloatOr("neb_range", 0.0f);
+	env.neb_pattern = handler->readStringOr("neb_pattern", "");
+	env.neb_fog_color_override = handler->readBoolOr("neb_fog_override", false);
+	env.neb_fog_r = handler->readIntOr("neb_fog_r", 0);
+	env.neb_fog_g = handler->readIntOr("neb_fog_g", 0);
+	env.neb_fog_b = handler->readIntOr("neb_fog_b", 0);
+
+	env.subspace = handler->readBoolOr("subspace", false);
+
+	env.background_index = handler->readIntOr("background_index", -1);
+	env.starfield.clear();
+	if (handler->hasField("starfield")) {
+		auto count = handler->startArrayRead("starfield");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::starfield_entry_state entry;
+			entry.name = handler->readStringOr("name", "");
+			entry.is_sun = handler->readBoolOr("is_sun", false);
+			entry.scale_x = handler->readFloatOr("scale_x", 1.0f);
+			entry.scale_y = handler->readFloatOr("scale_y", 1.0f);
+			entry.div_x = handler->readIntOr("div_x", 1);
+			entry.div_y = handler->readIntOr("div_y", 1);
+			entry.ang.p = handler->readFloatOr("ang_p", 0.0f);
+			entry.ang.b = handler->readFloatOr("ang_b", 0.0f);
+			entry.ang.h = handler->readFloatOr("ang_h", 0.0f);
+			env.starfield.push_back(std::move(entry));
 		}
 		handler->endArrayRead();
 	}
-	data.autopilot_engaged = handler->readBoolOr("autopilot_engaged", false);
-	data.current_nav = handler->readStringOr("current_nav", "");
-	data.soundtrack = handler->readStringOr("soundtrack", "");
-	data.music_battle_started = handler->readBoolOr("music_battle_started", false);
 
+	env.motion_debris_override = handler->readBoolOr("motion_debris_override", false);
+	env.motion_debris_type = handler->readStringOr("motion_debris_type", "");
+
+	env.soundtrack = handler->readStringOr("soundtrack", "");
+	env.music_battle_started = handler->readBoolOr("music_battle_started", false);
+
+	env.hud_draw = handler->readBoolOr("hud_draw", true);
+	env.hud_disable_except_messages = handler->readBoolOr("hud_only_messages", false);
+	env.hud_max_targeting_range = handler->readIntOr("hud_max_range", 0);
+	env.hud_display_warpout = handler->readIntOr("hud_warpout", 0);
+
+	env.support_ship_class = handler->readStringOr("support_class", "");
+	env.support_arrival_location = handler->readStringOr("support_arrival", "");
+	env.support_departure_location = handler->readStringOr("support_departure", "");
+	env.support_arrival_anchor_ship = handler->readStringOr("support_arrival_anchor", "");
+	env.support_arrival_anchor_special = handler->readIntOr("support_arrival_anchor_special", -1);
+	env.support_departure_anchor_ship = handler->readStringOr("support_departure_anchor", "");
+	env.support_departure_anchor_special = handler->readIntOr("support_departure_anchor_special", -1);
+	env.support_max_ships = handler->readIntOr("support_max", 0);
+	env.support_max_concurrent = handler->readIntOr("support_max_concurrent", 0);
+	env.support_tally = handler->readIntOr("support_tally", 0);
+	env.support_available_for_species = handler->readIntOr("support_species", 0);
+	env.support_max_hull_repair = handler->readFloatOr("support_hull_repair", 0.0f);
+	env.support_max_subsys_repair = handler->readFloatOr("support_subsys_repair", 0.0f);
+	env.support_disallow_rearm = handler->readBoolOr("support_disallow_rearm", false);
+
+	env.rearm_pools.clear();
+	if (handler->hasField("rearm_pools")) {
+		auto count = handler->startArrayRead("rearm_pools");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			SCP_map<SCP_string, int> pool;
+			read_int_map(handler, "pool", pool);
+			env.rearm_pools.push_back(std::move(pool));
+		}
+		handler->endArrayRead();
+	}
+
+	env.no_traitor = handler->readBoolOr("no_traitor", false);
+	env.traitor_override = handler->readStringOr("traitor_override", "");
+	env.debriefing_persona = handler->readStringOr("debriefing_persona", "");
+
+	env.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
+
+	env.current_nav = handler->readIntOr("current_nav", -1);
+	env.navpoints.clear();
+	if (handler->hasField("navpoints")) {
+		auto count = handler->startArrayRead("navpoints");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::navpoint_state nav;
+			nav.name = handler->readStringOr("name", "");
+			nav.flags = handler->readIntOr("flags", 0);
+			nav.target = handler->readStringOr("target", "");
+			nav.waypoint_num = handler->readIntOr("waypoint_num", -1);
+			nav.normal_color[0] = handler->readIntOr("normal_r", 0);
+			nav.normal_color[1] = handler->readIntOr("normal_g", 0);
+			nav.normal_color[2] = handler->readIntOr("normal_b", 0);
+			nav.visited_color[0] = handler->readIntOr("visited_r", 0);
+			nav.visited_color[1] = handler->readIntOr("visited_g", 0);
+			nav.visited_color[2] = handler->readIntOr("visited_b", 0);
+			env.navpoints.push_back(std::move(nav));
+		}
+		handler->endArrayRead();
+	}
+
+	env.jump_nodes.clear();
+	if (handler->hasField("jump_nodes")) {
+		auto count = handler->startArrayRead("jump_nodes");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::jump_node_state node;
+			node.index = handler->readIntOr("index", 0);
+			node.name = handler->readStringOr("name", "");
+			node.display_name = handler->readStringOr("display_name", "");
+			node.model = handler->readStringOr("model", "");
+			node.hidden = handler->readBoolOr("hidden", false);
+			node.colored = handler->readBoolOr("colored", false);
+			node.color[0] = handler->readIntOr("color_r", 0);
+			node.color[1] = handler->readIntOr("color_g", 0);
+			node.color[2] = handler->readIntOr("color_b", 0);
+			node.color[3] = handler->readIntOr("color_a", 0);
+			env.jump_nodes.push_back(std::move(node));
+		}
+		handler->endArrayRead();
+	}
+
+	read_string_list(handler, "squadron_wings", env.squadron_wings);
+
+	data.asteroids.clear();
 	if (handler->hasField("asteroids")) {
 		auto count = handler->startArrayRead("asteroids");
 		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
@@ -576,23 +759,6 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		}
 		handler->endArrayRead();
 	}
-
-	data.navs.clear();
-	if (!handler->hasField("navs")) {
-		return;
-	}
-
-	auto nav_count = handler->startArrayRead("navs");
-	for (size_t i = 0; i < nav_count; i++, handler->nextArraySection()) {
-		checkpoint::nav_state nav;
-		nav.name = handler->readStringOr("name", "");
-		nav.flags = handler->readIntOr("flags", 0);
-		nav.target_ship = handler->readStringOr("target_ship", "");
-		nav.waypoint_list = handler->readStringOr("waypoint_list", "");
-		nav.waypoint_num = handler->readIntOr("waypoint_num", -1);
-		data.navs.push_back(std::move(nav));
-	}
-	handler->endArrayRead();
 }
 
 void write_animations(pilot::FileHandler* handler, const SCP_vector<checkpoint::animation_state>& animations)
