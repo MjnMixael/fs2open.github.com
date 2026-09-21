@@ -393,6 +393,8 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		ship.ai.previous_target_ship = "Gamma 1";
 		ship.ai.attacker_ship = "Delta 1";
 		ship.ai.ignore_new = {"Epsilon 1", "", "Zeta 1"};
+		ship.ai.target_subsystem = "engine02#0";
+		ship.ai.target_subsystem_ship = "Gamma 1";
 		ship.ai.last_subsys_target_ship = "Beta 1";
 		ship.ai.last_subsys_target = "turret03#1";
 
@@ -683,6 +685,10 @@ TEST_F(CheckpointRoundTripTest, AiStateSurvives)
 	EXPECT_EQ(ai.attacker_ship, SCP_string("Delta 1"));
 	// Fixed-length array restored by slot, so the empty middle entry has to survive as empty.
 	EXPECT_EQ(ai.ignore_new, SCP_vector<SCP_string>({"Epsilon 1", "", "Zeta 1"}));
+	// The targeted subsystem and the ship that owns it are two different things: the owner is
+	// its own objnum at runtime and need not be the current target.
+	EXPECT_EQ(ai.target_subsystem, SCP_string("engine02#0"));
+	EXPECT_EQ(ai.target_subsystem_ship, SCP_string("Gamma 1"));
 	EXPECT_EQ(ai.last_subsys_target_ship, SCP_string("Beta 1"));
 	EXPECT_EQ(ai.last_subsys_target, SCP_string("turret03#1"));
 
