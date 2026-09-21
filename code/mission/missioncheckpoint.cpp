@@ -1086,6 +1086,101 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 	}
 }
 
+// A dock point index resolved against the model it belongs to.  Same reasoning as everywhere
+// else: an index is only meaningful for the exact model that produced it.
+SCP_string dock_point_name(const ship* shipp, int dockpoint)
+{
+	if (shipp == nullptr || dockpoint < 0) {
+		return SCP_string();
+	}
+
+	int modelnum = Ship_info[shipp->ship_info_index].model_num;
+	if (modelnum < 0) {
+		return SCP_string();
+	}
+
+	const char* name = model_get_dock_name(modelnum, dockpoint);
+	return (name != nullptr) ? SCP_string(name) : SCP_string();
+}
+
+int dock_point_index(const ship* shipp, const SCP_string& name)
+{
+	if (shipp == nullptr || name.empty()) {
+		return -1;
+	}
+
+	int modelnum = Ship_info[shipp->ship_info_index].model_num;
+	if (modelnum < 0) {
+		return -1;
+	}
+
+	return model_find_dock_name_index(modelnum, name.c_str());
+}
+
+// Docking established during the mission -- by a dock goal, by a support ship, by a SEXP -- is
+// runtime state and lives nowhere in the mission file, so without this a restored mission has
+// only whatever docking the parse data set up at mission start.
+void store_docks(const ship* shipp, const object* objp, SCP_vector<dock_link_state>& out)
+{
+	out.clear();
+
+	for (dock_instance* dock_ptr = objp->dock_list; dock_ptr != nullptr; dock_ptr = dock_ptr->next) {
+		const object* other = dock_ptr->docked_objp;
+		if (other == nullptr || other->type != OBJ_SHIP || other->instance < 0) {
+			continue;
+		}
+
+		const ship* other_shipp = &Ships[other->instance];
+
+		dock_link_state link;
+		link.other_ship = other_shipp->ship_name;
+		link.my_point = dock_point_name(shipp, dock_ptr->dockpoint_used);
+		// dock_find_dockpoint_used_by_object() only reads, but predates const-correctness in this
+		// area and takes object* -- casting here keeps store_docks() honest about not mutating.
+		link.their_point = dock_point_name(other_shipp,
+		                                   dock_find_dockpoint_used_by_object(const_cast<object*>(other),
+		                                                                      const_cast<object*>(objp)));
+
+		out.push_back(std::move(link));
+	}
+}
+
+// Run once every ship exists.  Both ends of a link are stored, so the pair is checked first --
+// docking an already-docked pair a second time would corrupt the dock list.
+void restore_docks(ship* shipp, object* objp, const SCP_vector<dock_link_state>& in)
+{
+	for (const auto& link : in) {
+		auto entry = ship_registry_get(link.other_ship);
+		if (entry == nullptr || !entry->has_objp() || !entry->has_shipp()) {
+			mprintf(("CHECKPOINT => '%s' was docked to '%s', which is not here; leaving it undocked.\n",
+			         shipp->ship_name,
+			         link.other_ship.c_str()));
+			continue;
+		}
+
+		object* other = &Objects[entry->objnum];
+		if (dock_check_find_direct_docked_object(objp, other)) {
+			// The other end of this link already did it.
+			continue;
+		}
+
+		int my_point = dock_point_index(shipp, link.my_point);
+		int their_point = dock_point_index(&Ships[entry->shipnum], link.their_point);
+		if (my_point < 0 || their_point < 0) {
+			mprintf(("CHECKPOINT => Dock point '%s'/'%s' no longer exists on '%s'/'%s'; leaving them undocked.\n",
+			         link.my_point.c_str(),
+			         link.their_point.c_str(),
+			         shipp->ship_name,
+			         link.other_ship.c_str()));
+			continue;
+		}
+
+		// The ai_ version rather than dock_dock_objects() directly, because it also sets the
+		// docked-with bookkeeping the AI reads.
+		ai_do_objects_docked_stuff(objp, my_point, other, their_point, false);
+	}
+}
+
 void store_ai(const ship* shipp, ai_state& out)
 {
 	out = ai_state();
@@ -1576,6 +1671,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		store_subsystems(shipp, state.subsystems);
 		store_weapons(shipp->weapons, state.weapons);
 		store_ai(shipp, state.ai);
+		store_docks(shipp, objp, state.docks);
 
 		data.ships.push_back(std::move(state));
 	}
@@ -2872,6 +2968,7 @@ void mission_checkpoint_apply()
 		auto entry = ship_registry_get(state.name);
 		if (entry != nullptr && entry->has_shipp()) {
 			resolve_turret_targets(&Ships[entry->shipnum], state.subsystems);
+			restore_docks(&Ships[entry->shipnum], &Objects[entry->objnum], state.docks);
 			resolve_ai_references(&Ships[entry->shipnum], state.ai);
 		}
 	}
