@@ -525,6 +525,11 @@ struct checkpoint_data {
 	SCP_vector<asteroid_state> asteroids;
 	bool asteroids_enabled = true;
 
+	// Which wings the wingman-status gauge is showing, by name, one entry per squadron slot
+	// with an empty string for an unused slot.  The set-squadron-wings SEXP can change this
+	// mid-mission, and a restart puts the mission's original wings back.
+	SCP_vector<SCP_string> squadron_wings;
+
 	SCP_vector<nav_state> navs;
 	SCP_string current_nav;          // by name, empty for none
 	bool autopilot_engaged = false;
