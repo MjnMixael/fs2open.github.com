@@ -191,6 +191,29 @@ const weapon_flag_entry Weapon_flag_table[] = {
 	{Ship::Weapon_Flags::Tagged_Only, "tagged_only"},
 };
 
+struct wing_flag_entry {
+	Ship::Wing_Flags flag;
+	const char* name;
+};
+
+// Wing state that changes during the mission.  Gone and Departing are the ones that matter for
+// directives: is-destroyed and friends read them, so a wing that had been wiped out before the
+// checkpoint has to come back still wiped out rather than merely empty.  The parse-time flags
+// (Ignore_count, Reinforcement, the arrival/departure warp options) are reproduced by the
+// mission load and are deliberately absent.
+const wing_flag_entry Wing_flag_table[] = {
+	{Ship::Wing_Flags::Gone, "gone"},
+	{Ship::Wing_Flags::Departing, "departing"},
+	{Ship::Wing_Flags::Departure_ordered, "departure_ordered"},
+	{Ship::Wing_Flags::Never_existed, "never_existed"},
+	{Ship::Wing_Flags::Reset_reinforcement, "reset_reinforcement"},
+	{Ship::Wing_Flags::No_dynamic, "no_dynamic"},
+	{Ship::Wing_Flags::Nav_carry, "nav_carry"},
+	{Ship::Wing_Flags::No_arrival_music, "no_arrival_music"},
+	{Ship::Wing_Flags::No_arrival_message, "no_arrival_message"},
+	{Ship::Wing_Flags::No_first_wave_message, "no_first_wave_message"},
+};
+
 struct ai_flag_entry {
 	AI::AI_Flags flag;
 	const char* name;
@@ -1086,6 +1109,88 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 	}
 }
 
+// The subsys_status list a parse object carries is where a not-yet-arrived ship's per-subsystem
+// damage and weapon loadout live.  wl_update_parse_object_weapons() writes into it when a
+// loadout is committed, and SEXPs that alter an unarrived wing's loadout write into it too, so
+// it is genuine runtime state and not just a copy of the mission file.
+void store_parse_subsystems(const p_object* p_objp, SCP_vector<parse_subsys_state>& out)
+{
+	out.clear();
+
+	if (p_objp->subsys_index < 0 || p_objp->subsys_count <= 0) {
+		return;
+	}
+
+	for (int i = 0; i < p_objp->subsys_count; i++) {
+		const subsys_status* sssp = &Subsys_status[p_objp->subsys_index + i];
+
+		parse_subsys_state state;
+		state.name = sssp->name;
+		state.percent = sssp->percent;
+		state.ai_class = sssp->ai_class;
+		state.cargo = cargo_name(sssp->subsys_cargo_name);
+		state.cargo_title = sssp->subsys_cargo_title;
+
+		for (int j = 0; j < MAX_SHIP_PRIMARY_BANKS; j++) {
+			state.primary_banks.push_back(weapon_class_name(sssp->primary_banks[j]));
+			state.primary_ammo.push_back(sssp->primary_ammo[j]);
+		}
+		for (int j = 0; j < MAX_SHIP_SECONDARY_BANKS; j++) {
+			state.secondary_banks.push_back(weapon_class_name(sssp->secondary_banks[j]));
+			state.secondary_ammo.push_back(sssp->secondary_ammo[j]);
+		}
+
+		out.push_back(std::move(state));
+	}
+}
+
+// Matched by name rather than by position: the fresh load builds its own subsys_status list, and
+// a mod change can alter how many entries a ship gets.
+void load_parse_subsystems(p_object* p_objp, const SCP_vector<parse_subsys_state>& in)
+{
+	if (p_objp->subsys_index < 0 || p_objp->subsys_count <= 0) {
+		return;
+	}
+
+	for (const auto& state : in) {
+		subsys_status* sssp = nullptr;
+		for (int i = 0; i < p_objp->subsys_count; i++) {
+			if (!subsystem_stricmp(Subsys_status[p_objp->subsys_index + i].name, state.name.c_str())) {
+				sssp = &Subsys_status[p_objp->subsys_index + i];
+				break;
+			}
+		}
+
+		if (sssp == nullptr) {
+			mprintf(("CHECKPOINT => '%s' has no parse subsystem '%s' any more; skipping it.\n",
+			         p_objp->name,
+			         state.name.c_str()));
+			continue;
+		}
+
+		sssp->percent = state.percent;
+		sssp->ai_class = state.ai_class;
+		if (!state.cargo.empty()) {
+			sssp->subsys_cargo_name = lookup_cargo(state.cargo);
+		}
+		if (!state.cargo_title.empty()) {
+			strcpy_s(sssp->subsys_cargo_title, state.cargo_title.c_str());
+		}
+
+		for (int j = 0; j < MAX_SHIP_PRIMARY_BANKS && j < static_cast<int>(state.primary_banks.size()); j++) {
+			// An empty name means the bank was empty, which is -1 rather than a lookup failure.
+			sssp->primary_banks[j] =
+				state.primary_banks[j].empty() ? -1 : lookup_weapon_class(state.primary_banks[j]);
+			sssp->primary_ammo[j] = state.primary_ammo[j];
+		}
+		for (int j = 0; j < MAX_SHIP_SECONDARY_BANKS && j < static_cast<int>(state.secondary_banks.size()); j++) {
+			sssp->secondary_banks[j] =
+				state.secondary_banks[j].empty() ? -1 : lookup_weapon_class(state.secondary_banks[j]);
+			sssp->secondary_ammo[j] = state.secondary_ammo[j];
+		}
+	}
+}
+
 // A dock point index resolved against the model it belongs to.  Same reasoning as everywhere
 // else: an index is only meaningful for the exact model that produced it.
 SCP_string dock_point_name(const ship* shipp, int dockpoint)
@@ -1687,6 +1792,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.name = wingp->name;
 		state.time_gone = wingp->time_gone;
 		state.wave_delay_timestamp = wingp->wave_delay_timestamp.value();
+		collect_flags(wingp->flags, Wing_flag_table, state.flags);
 		store_wing_scalars(*wingp, state.ints);
 
 		for (int j = 0; j < wingp->current_count && j < MAX_SHIPS_PER_WING; j++) {
@@ -1857,6 +1963,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.cargo_no_deplete = (p_objp->cargo1 & CARGO_NO_DEPLETE) != 0;
 
 		collect_def_flags(p_objp->flags, Parse_object_flags, Num_parse_object_flags, state.flags);
+		store_parse_subsystems(p_objp, state.subsystems);
 
 		data.parse_objects.push_back(std::move(state));
 	}
@@ -2076,10 +2183,10 @@ namespace {
 // restored from the checkpoint in their own right.  The exited-ship entry it leaves behind says
 // "player deleted", so we correct that afterwards to what actually happened.
 //
-// KNOWN GAP: ship_cleanup() runs the On Ship Depart hook for departing and vanishing ships, so a
-// script will see a departure it already saw in the run that was saved.  Suppressing that needs a
-// general "a restore is in progress" notion, which belongs with the rest of the side-effect
-// handling in milestone 2.
+// ship_cleanup() would ordinarily announce this departure -- mission log entry and the On Ship
+// Depart hook -- but both are suppressed while Game_restoring is set (ship.cpp), because the log
+// is replayed from the saved state and the script already saw the departure in the run that was
+// saved.
 void remove_ship_for_restore(const ship_registry_entry* entry, const ship_state& state)
 {
 	int shipnum = entry->shipnum;
@@ -2372,10 +2479,6 @@ bool is_player_wing_ship(const SCP_string& name)
 	return Ships[entry->shipnum].flags[Ship::Ship_Flags::From_player_wing];
 }
 
-// KNOWN GAP: wing_state carries no flags, so Wing_Flags::Gone and Departing are not restored --
-// they are left at whatever replaying the waves produced.  Directives that key off a wing being
-// wiped out can therefore read wrong.  Belongs with the rest of the mission logic state in
-// milestone 2, alongside the goals and events those directives are made of.
 void apply_wings(const checkpoint_data& data)
 {
 	for (const auto& state : data.wings) {
@@ -2388,6 +2491,7 @@ void apply_wings(const checkpoint_data& data)
 		wing* wingp = &Wings[wingnum];
 
 		load_wing_scalars(*wingp, state.ints);
+		apply_flags(state.flags, Wing_flag_table, wingp->flags);
 		wingp->time_gone = state.time_gone;
 		wingp->wave_delay_timestamp = TIMESTAMP(translate_stamp(state.wave_delay_timestamp));
 
@@ -2533,6 +2637,7 @@ void apply_parse_objects(const checkpoint_data& data)
 		}
 
 		apply_def_flags(state.flags, Parse_object_flags, Num_parse_object_flags, p_objp->flags);
+		load_parse_subsystems(p_objp, state.subsystems);
 	}
 }
 
