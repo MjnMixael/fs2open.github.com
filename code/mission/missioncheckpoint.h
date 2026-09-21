@@ -135,6 +135,63 @@ enum class ShipDisposition {
 	Vanished,
 };
 
+// One entry from ai_info::goals.  Goal modes and flags go out by name, and every reference to
+// something in the mission -- the target, the waypoint list, the dock points -- goes out as the
+// name it was given rather than the index it resolved to, so a mod that reorders its tables
+// cannot turn "guard the Orion" into "guard something else".
+struct ai_goal_state {
+	SCP_string mode;             // from Ai_goal_names
+	SCP_string type;             // ai_goal_type, by name
+	SCP_vector<SCP_string> flags;
+
+	int signature = 0;
+	int submode = 0;
+	int priority = 0;
+	fix time = 0;
+
+	SCP_string target_name;
+	SCP_string waypoint_list;    // wp_list_index resolved to a name
+	SCP_string docker_point;     // always a name, even when the live goal held an index
+	SCP_string dockee_point;
+
+	// For AI_GOAL_CHASE_SHIP_CLASS the submode is a ship class index, which a table change would
+	// otherwise reassign; when that is what the submode means, the class name is authoritative.
+	SCP_string submode_ship_class;
+
+	int int_data = 0;
+	float float_data = 0.0f;
+};
+
+struct ai_state {
+	bool present = false;
+
+	SCP_vector<SCP_string> flags;          // AI::AI_Flags
+	SCP_vector<SCP_string> override_flags; // AI::Maneuver_Override_Flags
+
+	SCP_map<SCP_string, int> ints;
+	SCP_map<SCP_string, float> floats;
+	SCP_map<SCP_string, int> mission_times;
+	SCP_map<SCP_string, int> stamps;
+
+	// Everything the AI points at, by name.  Empty means "nothing".
+	SCP_string target_ship;
+	SCP_string target_subsystem;   // name + ordinal key, as elsewhere
+	SCP_string goal_ship;
+	SCP_string guard_ship;
+	SCP_string guard_wing;
+	SCP_string ignore_ship;
+	SCP_string ignore_wing;
+	SCP_string support_ship;
+	SCP_string hitter_ship;
+	SCP_string waypoint_list;      // wp_list_index resolved to a name
+	SCP_string artillery_ship;
+
+	SCP_vector<ai_goal_state> goals;
+	// Which ai_info::goals slot each entry came from.  active_goal is an index into that array,
+	// so a gap in the middle has to stay a gap.
+	SCP_vector<int> goal_slots;
+};
+
 struct ship_state {
 	SCP_string name;
 	ShipDisposition disposition = ShipDisposition::Present;
@@ -172,6 +229,7 @@ struct ship_state {
 
 	SCP_vector<subsystem_state> subsystems;
 	weapon_state weapons;
+	ai_state ai;
 
 	// --- only meaningful when the ship had already left ---
 	fix exit_time = 0;
