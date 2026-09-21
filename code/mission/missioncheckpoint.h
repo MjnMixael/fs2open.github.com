@@ -137,12 +137,24 @@ enum class ShipDisposition {
 	Vanished,
 };
 
-// One entry from ai_info::goals.  Goal modes and flags go out by name, and every reference to
-// something in the mission -- the target, the waypoint list, the dock points -- goes out as the
-// name it was given rather than the index it resolved to, so a mod that reorders its tables
-// cannot turn "guard the Orion" into "guard something else".
-// One end of a docking connection, as seen from the ship that holds it.  Both ships record the
-// link, so the restore has to guard against docking the same pair twice.
+// One live asteroid.  The field regenerates from the mission file on every load, at random
+// positions and always at full strength, so without this a restored mission has a differently
+// shaped field with every asteroid the player already destroyed back in it.
+struct asteroid_state {
+	SCP_string type_name;      // Asteroid_info entry, by name
+	int subtype = 0;
+	vec3d pos = vmd_zero_vector;
+	matrix orient = vmd_identity_matrix;
+	vec3d vel = vmd_zero_vector;
+	vec3d rotvel = vmd_zero_vector;
+	float hull = 0.0f;
+	int flags = 0;
+	SCP_string target_ship;    // asteroids do have targets
+	int check_for_wrap = 0;
+	int check_for_collide = 0;
+	int final_death_time = 0;
+};
+
 // One running model animation, as it stood at the checkpoint.  The id is a hash of the
 // animation's own name and its ship class's name, not a table index, so it survives table
 // reordering and engine updates; the trigger type and name are kept alongside it purely so a
@@ -157,12 +169,18 @@ struct animation_state {
 	std::uint64_t instance_flags = 0;
 };
 
+// One end of a docking connection, as seen from the ship that holds it.  Both ships record the
+// link, so the restore has to guard against docking the same pair twice.
 struct dock_link_state {
 	SCP_string other_ship;
 	SCP_string my_point;      // dock point name on this ship
 	SCP_string their_point;   // dock point name on the other ship
 };
 
+// One entry from ai_info::goals.  Goal modes and flags go out by name, and every reference to
+// something in the mission -- the target, the waypoint list, the dock points -- goes out as the
+// name it was given rather than the index it resolved to, so a mod that reorders its tables
+// cannot turn "guard the Orion" into "guard something else".
 struct ai_goal_state {
 	SCP_string mode;             // from Ai_goal_names
 	SCP_string type;             // ai_goal_type, by name
@@ -494,6 +512,8 @@ struct checkpoint_data {
 	SCP_vector<debris_state> debris;
 	SCP_vector<parse_object_state> parse_objects;
 	SCP_vector<hotkey_state> hotkeys;
+	SCP_vector<asteroid_state> asteroids;
+	bool asteroids_enabled = true;
 	// Which hotkey set the player currently has selected, -1 for none.  Separate from the sets
 	// themselves: restoring the contents but not the selection drops the player back to no
 	// selection mid-mission.
