@@ -435,6 +435,8 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		nav2.target_ship = "Beta 1";
 		data.navs.push_back(nav2);
 
+		data.squadron_wings = {"Alpha", "Beta", "", "Delta"};
+
 		data.current_nav = "Escort";
 		data.autopilot_engaged = true;
 		data.soundtrack = "3: Death's Door";
@@ -565,6 +567,10 @@ TEST_F(CheckpointRoundTripTest, WorldStateSurvives)
 	EXPECT_EQ(read.navs[1].name, SCP_string("Escort"));
 	EXPECT_EQ(read.navs[1].target_ship, SCP_string("Beta 1"));
 	EXPECT_TRUE(read.navs[1].waypoint_list.empty());
+
+	// Empty slots have to come back as empty rather than being dropped, since the position in
+	// the list is what says which squadron slot a wing occupies.
+	EXPECT_EQ(read.squadron_wings, SCP_vector<SCP_string>({"Alpha", "Beta", "", "Delta"}));
 
 	EXPECT_EQ(read.current_nav, SCP_string("Escort"));
 	EXPECT_TRUE(read.autopilot_engaged);
