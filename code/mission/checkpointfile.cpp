@@ -87,6 +87,32 @@ void read_string_list(pilot::FileHandler* handler, const char* name, SCP_vector<
 	handler->endArrayRead();
 }
 
+void write_float_list(pilot::FileHandler* handler, const char* name, const SCP_vector<float>& values)
+{
+	handler->startArrayWrite(name, values.size());
+	for (float value : values) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeFloat("v", value);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_float_list(pilot::FileHandler* handler, const char* name, SCP_vector<float>& values)
+{
+	values.clear();
+
+	if (!handler->hasField(name)) {
+		return;
+	}
+
+	auto count = handler->startArrayRead(name);
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		values.push_back(handler->readFloatOr("v", 0.0f));
+	}
+	handler->endArrayRead();
+}
+
 void write_int_list(pilot::FileHandler* handler, const char* name, const SCP_vector<int>& values)
 {
 	handler->startArrayWrite(name, values.size());
@@ -1432,6 +1458,220 @@ void read_debris(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	handler->endArrayRead();
 }
 
+void write_beam_list(pilot::FileHandler* handler, const SCP_vector<checkpoint::beam_shot_state>& beams)
+{
+	handler->startArrayWrite("beams", beams.size());
+	for (const auto& b : beams) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("class", b.weapon_class.c_str());
+		handler->writeString("shooter", b.shooter_ship.c_str());
+		handler->writeString("turret", b.turret.c_str());
+		handler->writeString("target", b.target_ship.c_str());
+		handler->writeString("target_subsys", b.target_subsys.c_str());
+		handler->writeString("team", b.team.c_str());
+		handler->writeString("state", b.weapon_state.c_str());
+		write_string_list(handler, "flags", b.flags);
+
+		write_vector(handler, "tpos1_x", "tpos1_y", "tpos1_z", b.target_pos1);
+		write_vector(handler, "tpos2_x", "tpos2_y", "tpos2_z", b.target_pos2);
+		write_vector(handler, "start_x", "start_y", "start_z", b.last_start);
+		write_vector(handler, "shot_x", "shot_y", "shot_z", b.last_shot);
+		write_vector(handler, "local_x", "local_y", "local_z", b.local_fire_position);
+
+		handler->writeFloat("life_left", b.life_left);
+		handler->writeFloat("width_factor", b.current_width_factor);
+		handler->writeFloat("u_offset", b.u_offset_local);
+		handler->writeFloat("glow_frame", b.beam_glow_frame);
+		handler->writeInt("framecount", b.framecount);
+		handler->writeInt("shot_index", b.shot_index);
+		handler->writeInt("bank", b.bank);
+		handler->writeInt("firingpoint", b.firingpoint);
+		handler->writeInt("warmup", b.warmup_stamp);
+		handler->writeInt("warmdown", b.warmdown_stamp);
+
+		write_vector(handler, "dir_a_x", "dir_a_y", "dir_a_z", b.dir_a);
+		write_vector(handler, "dir_b_x", "dir_b_y", "dir_b_z", b.dir_b);
+		write_vector(handler, "rot_x", "rot_y", "rot_z", b.rot_axis);
+		handler->writeInt("shot_count", b.shot_count);
+		write_float_list(handler, "shot_aim", b.shot_aim);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_beam_list(pilot::FileHandler* handler, SCP_vector<checkpoint::beam_shot_state>& beams)
+{
+	beams.clear();
+
+	if (!handler->hasField("beams")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("beams");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::beam_shot_state b;
+
+		b.weapon_class = handler->readStringOr("class", "");
+		b.shooter_ship = handler->readStringOr("shooter", "");
+		b.turret = handler->readStringOr("turret", "");
+		b.target_ship = handler->readStringOr("target", "");
+		b.target_subsys = handler->readStringOr("target_subsys", "");
+		b.team = handler->readStringOr("team", "");
+		b.weapon_state = handler->readStringOr("state", "");
+		read_string_list(handler, "flags", b.flags);
+
+		read_vector(handler, "tpos1_x", "tpos1_y", "tpos1_z", b.target_pos1);
+		read_vector(handler, "tpos2_x", "tpos2_y", "tpos2_z", b.target_pos2);
+		read_vector(handler, "start_x", "start_y", "start_z", b.last_start);
+		read_vector(handler, "shot_x", "shot_y", "shot_z", b.last_shot);
+		read_vector(handler, "local_x", "local_y", "local_z", b.local_fire_position);
+
+		b.life_left = handler->readFloatOr("life_left", 0.0f);
+		b.current_width_factor = handler->readFloatOr("width_factor", 1.0f);
+		b.u_offset_local = handler->readFloatOr("u_offset", 0.0f);
+		b.beam_glow_frame = handler->readFloatOr("glow_frame", 0.0f);
+		b.framecount = handler->readIntOr("framecount", 0);
+		b.shot_index = handler->readIntOr("shot_index", 0);
+		b.bank = handler->readIntOr("bank", -1);
+		b.firingpoint = handler->readIntOr("firingpoint", -1);
+		b.warmup_stamp = handler->readIntOr("warmup", -1);
+		b.warmdown_stamp = handler->readIntOr("warmdown", -1);
+
+		read_vector(handler, "dir_a_x", "dir_a_y", "dir_a_z", b.dir_a);
+		read_vector(handler, "dir_b_x", "dir_b_y", "dir_b_z", b.dir_b);
+		read_vector(handler, "rot_x", "rot_y", "rot_z", b.rot_axis);
+		b.shot_count = handler->readIntOr("shot_count", 0);
+		read_float_list(handler, "shot_aim", b.shot_aim);
+
+		if (!b.weapon_class.empty()) {
+			beams.push_back(std::move(b));
+		}
+	}
+	handler->endArrayRead();
+}
+
+// Everything that is currently in the air: individual weapons, and the beams being fired at
+// them.  Two arrays under distinct names in one section.
+void write_projectiles(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointProjectiles);
+
+	handler->startArrayWrite("projectiles", data.projectiles.size());
+	for (const auto& shot : data.projectiles) {
+		handler->startSectionWrite(Section::Unnamed);
+
+		handler->writeString("class", shot.weapon_class.c_str());
+		handler->writeString("team", shot.team.c_str());
+		handler->writeString("species", shot.species.c_str());
+		handler->writeString("state", shot.weapon_state.c_str());
+		write_string_list(handler, "flags", shot.flags);
+
+		write_vector(handler, "pos_x", "pos_y", "pos_z", shot.pos);
+		write_vector(handler, "fvec_x", "fvec_y", "fvec_z", shot.orient.vec.fvec);
+		write_vector(handler, "uvec_x", "uvec_y", "uvec_z", shot.orient.vec.uvec);
+		write_vector(handler, "rvec_x", "rvec_y", "rvec_z", shot.orient.vec.rvec);
+		write_vector(handler, "vel_x", "vel_y", "vel_z", shot.velocity);
+		write_vector(handler, "dvel_x", "dvel_y", "dvel_z", shot.desired_velocity);
+		write_vector(handler, "start_x", "start_y", "start_z", shot.start_pos);
+
+		handler->writeFloat("hull", shot.hull);
+		handler->writeFloat("lifeleft", shot.lifeleft);
+		handler->writeInt("creation_time", static_cast<int>(shot.creation_time));
+		handler->writeInt("group_id", shot.group_id);
+
+		handler->writeString("parent", shot.parent_ship.c_str());
+		handler->writeString("parent_turret", shot.parent_turret.c_str());
+
+		handler->writeString("homing_ship", shot.homing_ship.c_str());
+		handler->writeString("homing_subsys", shot.homing_subsys.c_str());
+		handler->writeBool("has_homing_pos", shot.has_homing_pos);
+		write_vector(handler, "homing_x", "homing_y", "homing_z", shot.homing_pos);
+
+		handler->writeFloat("det_range", shot.det_range);
+		handler->writeFloat("max_vel", shot.weapon_max_vel);
+		handler->writeFloat("launch_speed", shot.launch_speed);
+		handler->writeFloat("alpha", shot.alpha_current);
+		handler->writeBool("alpha_backward", shot.alpha_backward);
+
+		handler->writeInt("lssm_stage", shot.lssm_stage);
+		handler->writeInt("lssm_warpout", static_cast<int>(shot.lssm_warpout_time));
+		handler->writeInt("lssm_warpin", static_cast<int>(shot.lssm_warpin_time));
+		write_vector(handler, "lssm_x", "lssm_y", "lssm_z", shot.lssm_target_pos);
+
+		handler->writeInt("cmeasure_timer", shot.cmeasure_timer);
+
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	write_beam_list(handler, data.beams);
+
+	handler->endSectionWrite();
+}
+
+void read_projectiles(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	read_beam_list(handler, data.beams);
+
+	data.projectiles.clear();
+
+	if (!handler->hasField("projectiles")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("projectiles");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::projectile_state shot;
+
+		shot.weapon_class = handler->readStringOr("class", "");
+		shot.team = handler->readStringOr("team", "");
+		shot.species = handler->readStringOr("species", "");
+		shot.weapon_state = handler->readStringOr("state", "");
+		read_string_list(handler, "flags", shot.flags);
+
+		read_vector(handler, "pos_x", "pos_y", "pos_z", shot.pos);
+		read_vector(handler, "fvec_x", "fvec_y", "fvec_z", shot.orient.vec.fvec);
+		read_vector(handler, "uvec_x", "uvec_y", "uvec_z", shot.orient.vec.uvec);
+		read_vector(handler, "rvec_x", "rvec_y", "rvec_z", shot.orient.vec.rvec);
+		read_vector(handler, "vel_x", "vel_y", "vel_z", shot.velocity);
+		read_vector(handler, "dvel_x", "dvel_y", "dvel_z", shot.desired_velocity);
+		read_vector(handler, "start_x", "start_y", "start_z", shot.start_pos);
+
+		shot.hull = handler->readFloatOr("hull", 0.0f);
+		shot.lifeleft = handler->readFloatOr("lifeleft", 0.0f);
+		shot.creation_time = handler->readIntOr("creation_time", 0);
+		shot.group_id = handler->readIntOr("group_id", -1);
+
+		shot.parent_ship = handler->readStringOr("parent", "");
+		shot.parent_turret = handler->readStringOr("parent_turret", "");
+
+		shot.homing_ship = handler->readStringOr("homing_ship", "");
+		shot.homing_subsys = handler->readStringOr("homing_subsys", "");
+		shot.has_homing_pos = handler->readBoolOr("has_homing_pos", false);
+		read_vector(handler, "homing_x", "homing_y", "homing_z", shot.homing_pos);
+
+		shot.det_range = handler->readFloatOr("det_range", 0.0f);
+		shot.weapon_max_vel = handler->readFloatOr("max_vel", 0.0f);
+		shot.launch_speed = handler->readFloatOr("launch_speed", 0.0f);
+		shot.alpha_current = handler->readFloatOr("alpha", 1.0f);
+		shot.alpha_backward = handler->readBoolOr("alpha_backward", false);
+
+		shot.lssm_stage = handler->readIntOr("lssm_stage", -1);
+		shot.lssm_warpout_time = handler->readIntOr("lssm_warpout", 0);
+		shot.lssm_warpin_time = handler->readIntOr("lssm_warpin", 0);
+		read_vector(handler, "lssm_x", "lssm_y", "lssm_z", shot.lssm_target_pos);
+
+		shot.cmeasure_timer = handler->readIntOr("cmeasure_timer", 0);
+
+		if (!shot.weapon_class.empty()) {
+			data.projectiles.push_back(std::move(shot));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_scoring(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->startSectionWrite(Section::CheckpointScoring);
@@ -1685,6 +1925,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_sexp(handler.get(), data);
 	write_debris(handler.get(), data);
 	write_world(handler.get(), data);
+	write_projectiles(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -1789,6 +2030,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointWorld:
 			read_world(handler.get(), data);
+			break;
+
+		case Section::CheckpointProjectiles:
+			read_projectiles(handler.get(), data);
 			break;
 
 		default:
