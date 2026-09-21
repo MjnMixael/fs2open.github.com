@@ -426,6 +426,68 @@ void read_parse_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::p
 	handler->endArrayRead();
 }
 
+// Ambient mission state that belongs to the world rather than to any one ship.
+void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
+{
+	handler->startSectionWrite(Section::CheckpointWorld);
+
+	handler->writeBool("asteroids_enabled", data.asteroids_enabled);
+
+	handler->startArrayWrite("asteroids", data.asteroids.size());
+	for (const auto& ast : data.asteroids) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("type", ast.type_name.c_str());
+		handler->writeInt("subtype", ast.subtype);
+		write_vector(handler, "pos_x", "pos_y", "pos_z", ast.pos);
+		write_vector(handler, "fvec_x", "fvec_y", "fvec_z", ast.orient.vec.fvec);
+		write_vector(handler, "uvec_x", "uvec_y", "uvec_z", ast.orient.vec.uvec);
+		write_vector(handler, "rvec_x", "rvec_y", "rvec_z", ast.orient.vec.rvec);
+		write_vector(handler, "vel_x", "vel_y", "vel_z", ast.vel);
+		write_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", ast.rotvel);
+		handler->writeFloat("hull", ast.hull);
+		handler->writeInt("flags", ast.flags);
+		handler->writeString("target", ast.target_ship.c_str());
+		handler->writeInt("check_for_wrap", ast.check_for_wrap);
+		handler->writeInt("check_for_collide", ast.check_for_collide);
+		handler->writeInt("final_death_time", ast.final_death_time);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->endSectionWrite();
+}
+
+void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
+{
+	data.asteroids.clear();
+	data.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
+
+	if (!handler->hasField("asteroids")) {
+		return;
+	}
+
+	auto count = handler->startArrayRead("asteroids");
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::asteroid_state ast;
+		ast.type_name = handler->readStringOr("type", "");
+		ast.subtype = handler->readIntOr("subtype", 0);
+		read_vector(handler, "pos_x", "pos_y", "pos_z", ast.pos);
+		read_vector(handler, "fvec_x", "fvec_y", "fvec_z", ast.orient.vec.fvec);
+		read_vector(handler, "uvec_x", "uvec_y", "uvec_z", ast.orient.vec.uvec);
+		read_vector(handler, "rvec_x", "rvec_y", "rvec_z", ast.orient.vec.rvec);
+		read_vector(handler, "vel_x", "vel_y", "vel_z", ast.vel);
+		read_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", ast.rotvel);
+		ast.hull = handler->readFloatOr("hull", 0.0f);
+		ast.flags = handler->readIntOr("flags", 0);
+		ast.target_ship = handler->readStringOr("target", "");
+		ast.check_for_wrap = handler->readIntOr("check_for_wrap", 0);
+		ast.check_for_collide = handler->readIntOr("check_for_collide", 0);
+		ast.final_death_time = handler->readIntOr("final_death_time", 0);
+		data.asteroids.push_back(std::move(ast));
+	}
+	handler->endArrayRead();
+}
+
 void write_animations(pilot::FileHandler* handler, const SCP_vector<checkpoint::animation_state>& animations)
 {
 	handler->startArrayWrite("animations", animations.size());
@@ -1583,6 +1645,7 @@ bool checkpoint_write(const checkpoint_data& data)
 	write_log(handler.get(), data);
 	write_sexp(handler.get(), data);
 	write_debris(handler.get(), data);
+	write_world(handler.get(), data);
 
 	handler->endWritingSections();
 
@@ -1683,6 +1746,10 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 		case Section::CheckpointDebris:
 			read_debris(handler.get(), data);
+			break;
+
+		case Section::CheckpointWorld:
+			read_world(handler.get(), data);
 			break;
 
 		default:
