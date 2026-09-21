@@ -1,0 +1,307 @@
+{
+    "signature": 1598769219,
+    "version": 2,
+    "sections": {
+        "checkpoint_log": {
+            "entries": []
+        },
+        "checkpoint_sexp": {
+            "nodes": [],
+            "containers": []
+        },
+        "checkpoint_info": {
+            "slot": "roundtrip",
+            "mod_title": "",
+            "mission_filename": "roundtrip.fs2",
+            "mission_modified": "",
+            "pilot": "Test Pilot",
+            "mission_fingerprint": 2882400001,
+            "campaign": "roundtrip_campaign"
+        },
+        "checkpoint_clock": {
+            "mission_time": 1234,
+            "mission_time_us_lo": 0,
+            "mission_time_us_hi": 0,
+            "hud_timer_padding": 0,
+            "saved_timestamp_ms": 56789
+        },
+        "checkpoint_ships": {
+            "ships": [
+                {
+                    "weapon_flags": [
+                        {
+                            "v": "turret_lock"
+                        }
+                    ],
+                    "name": "Alpha 1",
+                    "ai_target_ship": "Beta 1",
+                    "pos_z": 0.0,
+                    "pos_x": 0.0,
+                    "flags": [
+                        {
+                            "v": "cargo_revealed"
+                        },
+                        {
+                            "v": "escort"
+                        },
+                        {
+                            "v": "no_ets"
+                        }
+                    ],
+                    "physics_vecs": [],
+                    "cargo_no_deplete": 0,
+                    "disposition": "present",
+                    "ai_ignore_ship": "",
+                    "tertiary_class": "",
+                    "class": "GTF Ulysses",
+                    "pos_y": 0.0,
+                    "persona": "",
+                    "cargo_title": "",
+                    "ai_mission_times": [],
+                    "team": "Friendly",
+                    "wing": "",
+                    "ai_goal_ship": "",
+                    "ai_ints": [
+                        {
+                            "k": "mode",
+                            "v": 3
+                        }
+                    ],
+                    "fvec_y": 0.0,
+                    "ints": [
+                        {
+                            "k": "escort_priority",
+                            "v": 7
+                        }
+                    ],
+                    "countermeasure_class": "",
+                    "display_name": "",
+                    "cargo": "",
+                    "fvec_x": 0.0,
+                    "max_hull": 0.0,
+                    "ai_floats": [],
+                    "fvec_z": 1.0,
+                    "uvec_x": 0.0,
+                    "ai_artillery_ship": "",
+                    "uvec_y": 1.0,
+                    "floats": [
+                        {
+                            "k": "afterburner_fuel",
+                            "v": 12.5
+                        }
+                    ],
+                    "ai_target_subsystem": "",
+                    "uvec_z": 0.0,
+                    "ai_stamps": [],
+                    "rvec_x": 1.0,
+                    "rvec_y": 0.0,
+                    "rvec_z": 0.0,
+                    "hull": 42.5,
+                    "shields": [],
+                    "ai_support_ship": "",
+                    "primary_banks": [
+                        {
+                            "burst_counter": 0,
+                            "class": "Subach HL-7",
+                            "capacity": 60,
+                            "ammo": 30,
+                            "next_fire_stamp": 0,
+                            "start_ammo": 0,
+                            "next_slot": 0,
+                            "burst_seed": 0,
+                            "last_fire_stamp": 0,
+                            "rearm_time": 0
+                        }
+                    ],
+                    "object_flags": [
+                        {
+                            "v": "invulnerable"
+                        },
+                        {
+                            "v": "protected"
+                        }
+                    ],
+                    "physics_floats": [],
+                    "subsystems": [
+                        {
+                            "weapon_flags": [
+                                {
+                                    "v": "beam_free"
+                                }
+                            ],
+                            "primary_banks": [],
+                            "name": "turret01",
+                            "ints": [],
+                            "ordinal": 0,
+                            "tertiary_class": "",
+                            "sub_name": "",
+                            "cargo_title": "",
+                            "cargo": "",
+                            "cargo_no_deplete": 0,
+                            "flags": [
+                                {
+                                    "v": "has_fired"
+                                },
+                                {
+                                    "v": "untargetable"
+                                }
+                            ],
+                            "turret_target": "",
+                            "floats": [
+                                {
+                                    "k": "current_hits",
+                                    "v": 99.0
+                                }
+                            ],
+                            "has_weapons": 1,
+                            "secondary_banks": [],
+                            "scalars": [
+                                {
+                                    "k": "current_primary_bank",
+                                    "v": 1
+                                }
+                            ]
+                        }
+                    ],
+                    "secondary_banks": [],
+                    "ai_waypoint_list": "",
+                    "scalars": [
+                        {
+                            "k": "current_secondary_bank",
+                            "v": 2
+                        }
+                    ],
+                    "ai_present": 1,
+                    "ai_guard_ship": "",
+                    "ai_flags": [
+                        {
+                            "v": "kamikaze"
+                        },
+                        {
+                            "v": "no_dynamic"
+                        }
+                    ],
+                    "ai_guard_wing": "",
+                    "ai_override_flags": [],
+                    "ai_ignore_wing": "",
+                    "ai_hitter_ship": "",
+                    "ai_goals": [
+                        {
+                            "mode": "Attack ship",
+                            "dockee_point": "",
+                            "slot": 2,
+                            "flags": [
+                                {
+                                    "v": "on_hold"
+                                }
+                            ],
+                            "type": "event_ship",
+                            "priority": 88,
+                            "signature": 0,
+                            "submode_ship_class": "",
+                            "submode": 0,
+                            "float_data": 0.0,
+                            "time": 0,
+                            "waypoint_list": "",
+                            "target_name": "Beta 1",
+                            "docker_point": "",
+                            "int_data": 0
+                        }
+                    ],
+                    "docks": [
+                        {
+                            "my_point": "dockpoint01",
+                            "other": "Beta 1",
+                            "their_point": "dockpoint02"
+                        }
+                    ],
+                    "animations": [
+                        {
+                            "direction": 0,
+                            "state": 0,
+                            "id": 3735928559,
+                            "time": 1.25,
+                            "duration": 0.0,
+                            "speed": 2.0,
+                            "flags_hi": 1,
+                            "flags_lo": 1
+                        }
+                    ]
+                }
+            ],
+            "parse_objects": [],
+            "hotkeys": []
+        },
+        "checkpoint_goals": {
+            "goals": []
+        },
+        "checkpoint_wings": {
+            "wings": [],
+            "variables": []
+        },
+        "checkpoint_scoring": {
+            "ints": [],
+            "class_kills": []
+        },
+        "checkpoint_debris": {
+            "debris": []
+        },
+        "checkpoint_events": {
+            "goal_timestamp": 0,
+            "events": []
+        },
+        "checkpoint_world": {
+            "asteroids_enabled": 1,
+            "autopilot_engaged": 1,
+            "asteroids": [
+                {
+                    "flags": 0,
+                    "pos_x": 10.0,
+                    "uvec_z": 0.0,
+                    "type": "Brown",
+                    "pos_z": 30.0,
+                    "subtype": 2,
+                    "pos_y": 20.0,
+                    "rotvel_z": 0.0,
+                    "vel_y": 2.0,
+                    "final_death_time": 4321,
+                    "fvec_x": 0.0,
+                    "fvec_y": 0.0,
+                    "rvec_x": 1.0,
+                    "fvec_z": 1.0,
+                    "rotvel_x": 0.0,
+                    "uvec_x": 0.0,
+                    "rvec_z": 0.0,
+                    "uvec_y": 1.0,
+                    "rvec_y": 0.0,
+                    "vel_x": 1.0,
+                    "check_for_wrap": 0,
+                    "vel_z": 3.0,
+                    "rotvel_y": 0.0,
+                    "hull": 15.5,
+                    "target": "Beta 1",
+                    "check_for_collide": 0
+                }
+            ],
+            "current_nav": "Escort",
+            "soundtrack": "3: Death's Door",
+            "music_battle_started": 1,
+            "navs": [
+                {
+                    "name": "Rally Point",
+                    "target_ship": "",
+                    "flags": 4,
+                    "waypoint_list": "Waypoint path 1",
+                    "waypoint_num": 3
+                },
+                {
+                    "name": "Escort",
+                    "target_ship": "Beta 1",
+                    "flags": 8,
+                    "waypoint_list": "",
+                    "waypoint_num": -1
+                }
+            ]
+        }
+    }
+}
