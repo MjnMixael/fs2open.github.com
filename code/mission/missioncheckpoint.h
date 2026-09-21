@@ -137,6 +137,16 @@ enum class ShipDisposition {
 	Vanished,
 };
 
+// A nav point's mutable state.  Nav points themselves are created by the mission, but whether
+// one has been visited, hidden or locked is all SEXP-driven and changes during play.
+struct nav_state {
+	SCP_string name;
+	int flags = 0;
+	SCP_string target_ship;     // when the nav is bound to a ship, by name
+	SCP_string waypoint_list;   // when it is bound to a waypoint path, by name
+	int waypoint_num = -1;
+};
+
 // One live asteroid.  The field regenerates from the mission file on every load, at random
 // positions and always at full strength, so without this a restored mission has a differently
 // shaped field with every asteroid the player already destroyed back in it.
@@ -514,6 +524,16 @@ struct checkpoint_data {
 	SCP_vector<hotkey_state> hotkeys;
 	SCP_vector<asteroid_state> asteroids;
 	bool asteroids_enabled = true;
+
+	SCP_vector<nav_state> navs;
+	SCP_string current_nav;          // by name, empty for none
+	bool autopilot_engaged = false;
+
+	// Which soundtrack the mission is on and whether combat music has already kicked in; a
+	// restore that drops these starts the mission's opening track over a battle in progress.
+	// By name, because the index is into music.tbl and not stable across builds or mod loads.
+	SCP_string soundtrack;
+	bool music_battle_started = false;
 	// Which hotkey set the player currently has selected, -1 for none.  Separate from the sets
 	// themselves: restoring the contents but not the selection drops the player back to no
 	// selection mid-mission.
