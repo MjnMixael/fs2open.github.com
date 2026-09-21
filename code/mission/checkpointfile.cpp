@@ -482,6 +482,26 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 
 	write_string_list(handler, "squadron_wings", data.squadron_wings);
 
+	handler->writeInt("support_tally", data.support.tally);
+	handler->writeString("support_class", data.support.ship_class.c_str());
+	handler->writeInt("support_max", data.support.max_support_ships);
+	handler->writeInt("support_max_concurrent", data.support.max_concurrent_ships);
+	handler->writeString("support_arrival", data.support.arrival_location.c_str());
+	handler->writeString("support_departure", data.support.departure_location.c_str());
+	handler->writeString("support_arrival_anchor", data.support.arrival_anchor_ship.c_str());
+	handler->writeInt("support_arrival_anchor_special", data.support.arrival_anchor_special);
+	handler->writeString("support_departure_anchor", data.support.departure_anchor_ship.c_str());
+	handler->writeInt("support_departure_anchor_special", data.support.departure_anchor_special);
+
+	// One entry per team, each holding that team's weapon class -> rounds left map.
+	handler->startArrayWrite("support_rearm_pools", data.support.rearm_pools.size());
+	for (const auto& pool : data.support.rearm_pools) {
+		handler->startSectionWrite(Section::Unnamed);
+		write_int_map(handler, "pool", pool);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
 	handler->writeBool("autopilot_engaged", data.autopilot_engaged);
 	handler->writeString("current_nav", data.current_nav.c_str());
 	handler->writeString("soundtrack", data.soundtrack.c_str());
@@ -507,6 +527,28 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	data.asteroids.clear();
 	data.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
 	read_string_list(handler, "squadron_wings", data.squadron_wings);
+
+	data.support.tally = handler->readIntOr("support_tally", 0);
+	data.support.ship_class = handler->readStringOr("support_class", "");
+	data.support.max_support_ships = handler->readIntOr("support_max", 0);
+	data.support.max_concurrent_ships = handler->readIntOr("support_max_concurrent", 0);
+	data.support.arrival_location = handler->readStringOr("support_arrival", "");
+	data.support.departure_location = handler->readStringOr("support_departure", "");
+	data.support.arrival_anchor_ship = handler->readStringOr("support_arrival_anchor", "");
+	data.support.arrival_anchor_special = handler->readIntOr("support_arrival_anchor_special", -1);
+	data.support.departure_anchor_ship = handler->readStringOr("support_departure_anchor", "");
+	data.support.departure_anchor_special = handler->readIntOr("support_departure_anchor_special", -1);
+
+	data.support.rearm_pools.clear();
+	if (handler->hasField("support_rearm_pools")) {
+		auto pool_count = handler->startArrayRead("support_rearm_pools");
+		for (size_t i = 0; i < pool_count; i++, handler->nextArraySection()) {
+			SCP_map<SCP_string, int> pool;
+			read_int_map(handler, "pool", pool);
+			data.support.rearm_pools.push_back(std::move(pool));
+		}
+		handler->endArrayRead();
+	}
 	data.autopilot_engaged = handler->readBoolOr("autopilot_engaged", false);
 	data.current_nav = handler->readStringOr("current_nav", "");
 	data.soundtrack = handler->readStringOr("soundtrack", "");
@@ -958,6 +1000,7 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			handler->writeString("persona", ship_data.persona.c_str());
 			handler->writeString("cargo", ship_data.cargo.c_str());
 			handler->writeBool("cargo_no_deplete", ship_data.cargo_no_deplete);
+			handler->writeBool("no_parse_object", ship_data.no_parse_object);
 
 			write_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
 			write_vector(handler, "fvec_x", "fvec_y", "fvec_z", ship_data.orient.vec.fvec);
@@ -1031,6 +1074,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			ship_data.persona = handler->readStringOr("persona", "");
 			ship_data.cargo = handler->readStringOr("cargo", "");
 			ship_data.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
+			ship_data.no_parse_object = handler->readBoolOr("no_parse_object", false);
 
 			read_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
 			read_vector(handler, "fvec_x", "fvec_y", "fvec_z", ship_data.orient.vec.fvec);
