@@ -387,6 +387,14 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		ship.ai.flags = {"kamikaze", "no_dynamic"};
 		ship.ai.target_ship = "Beta 1";
 		ship.ai.ints["mode"] = 3;
+		ship.ai.ai_class = "Captain";
+		ship.ai.vecs["goal_point"] = vm_vec_new(7.0f, 8.0f, 9.0f);
+		ship.ai.override_floats["forward"] = 0.5f;
+		ship.ai.previous_target_ship = "Gamma 1";
+		ship.ai.attacker_ship = "Delta 1";
+		ship.ai.ignore_new = {"Epsilon 1", "", "Zeta 1"};
+		ship.ai.last_subsys_target_ship = "Beta 1";
+		ship.ai.last_subsys_target = "turret03#1";
 
 		checkpoint::ai_goal_state goal;
 		goal.mode = "Attack ship";
@@ -635,6 +643,22 @@ TEST_F(CheckpointRoundTripTest, AiStateSurvives)
 	EXPECT_EQ(ai.flags, SCP_vector<SCP_string>({"kamikaze", "no_dynamic"}));
 	EXPECT_EQ(ai.target_ship, SCP_string("Beta 1"));
 	EXPECT_EQ(ai.ints.at("mode"), 3);
+
+	// ai_class is an index into ai.tbl at runtime, so it has to travel as a name like every
+	// other table index.
+	EXPECT_EQ(ai.ai_class, SCP_string("Captain"));
+
+	// The steering points and the maneuver override, without which a restored ship on a
+	// waypoint leg flies at the origin.
+	EXPECT_FLOAT_EQ(ai.vecs.at("goal_point").xyz.z, 9.0f);
+	EXPECT_FLOAT_EQ(ai.override_floats.at("forward"), 0.5f);
+
+	EXPECT_EQ(ai.previous_target_ship, SCP_string("Gamma 1"));
+	EXPECT_EQ(ai.attacker_ship, SCP_string("Delta 1"));
+	// Fixed-length array restored by slot, so the empty middle entry has to survive as empty.
+	EXPECT_EQ(ai.ignore_new, SCP_vector<SCP_string>({"Epsilon 1", "", "Zeta 1"}));
+	EXPECT_EQ(ai.last_subsys_target_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(ai.last_subsys_target, SCP_string("turret03#1"));
 
 	ASSERT_EQ(ai.goals.size(), 1u);
 	EXPECT_EQ(ai.goals[0].mode, SCP_string("Attack ship"));

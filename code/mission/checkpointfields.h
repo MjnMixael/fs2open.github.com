@@ -258,7 +258,6 @@
 	F(previous_submode)                                                                        \
 	F(submode_parm0)                                                                           \
 	F(submode_parm1)                                                                           \
-	F(ai_class)                                                                                \
 	F(active_goal)                                                                             \
 	F(wp_index)                                                                                \
 	F(wp_flags)                                                                                \
@@ -271,6 +270,8 @@
 
 #define CKPT_AI_FLOATS(F)                                                                      \
 	F(submode_float0)                                                                          \
+	F(lethality)                                                                               \
+	F(aspect_locked_time)                                                                      \
 	F(target_time)                                                                             \
 	F(artillery_lock_time)
 
@@ -281,7 +282,8 @@
 	F(last_attack_time)                                                                        \
 	F(last_hit_time)                                                                           \
 	F(last_hit_target_time)                                                                    \
-	F(resume_goal_time)
+	F(resume_goal_time)                                                                        \
+	F(afterburner_stop_time)
 
 #define CKPT_AI_STAMPS(F)                                                                      \
 	F(mode_time)                                                                               \
@@ -304,6 +306,32 @@
 	F(ai_override_rot_timestamp)                                                               \
 	F(multilock_check_timestamp)                                                               \
 	F(next_dynamic_path_check_time)
+
+// World-space points the AI is steering towards or guarding.  Without these a restored ship on a
+// waypoint leg or a guard orbit flies at the origin until it picks a new one.
+#define CKPT_AI_VECS(F)                                                                        \
+	F(goal_point)                                                                              \
+	F(prev_goal_point)                                                                         \
+	F(guard_vec)                                                                               \
+	F(big_attack_point)                                                                        \
+	F(artillery_lock_pos)
+
+// ------------------------------------------------------------------
+// control_info, as used for ai_info::ai_override_ci -- see code/physics/physics.h
+// ------------------------------------------------------------------
+
+// Only the six axes and the cruise percentage: a SEXP or script maneuver override sets those and
+// nothing else, and the firing counts belong to the player's controls rather than to the override.
+// Without these an override with Lateral_never_expire set comes back still flagged but with the
+// ship told to hold still.
+#define CKPT_AI_OVERRIDE_FLOATS(F)                                                             \
+	F(pitch)                                                                                   \
+	F(bank)                                                                                    \
+	F(heading)                                                                                 \
+	F(forward)                                                                                 \
+	F(sideways)                                                                                \
+	F(vertical)                                                                                \
+	F(forward_cruise_percent)
 
 // ------------------------------------------------------------------
 // player, mission-scoped fields only -- see code/playerman/player.h
