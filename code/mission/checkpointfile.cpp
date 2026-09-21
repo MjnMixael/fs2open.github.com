@@ -782,6 +782,7 @@ void write_hotkeys(pilot::FileHandler* handler, const checkpoint::checkpoint_dat
 void read_hotkeys(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 {
 	data.hotkeys.clear();
+	data.current_hotkey_set = handler->readIntOr("current_hotkey_set", -1);
 
 	if (!handler->hasField("hotkeys")) {
 		return;
