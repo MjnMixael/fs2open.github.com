@@ -435,6 +435,49 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		nav2.target_ship = "Beta 1";
 		data.navs.push_back(nav2);
 
+		// Things in the air.  Both a weapon and a beam carry a flag list, and both live in the
+		// same section, so this is the same collision hazard the ship section had.
+		checkpoint::projectile_state shot;
+		shot.weapon_class = "Harpoon";
+		shot.pos = vm_vec_new(100.0f, 0.0f, -50.0f);
+		shot.velocity = vm_vec_new(0.0f, 0.0f, 400.0f);
+		shot.hull = 12.0f;
+		shot.lifeleft = 3.5f;
+		shot.creation_time = 65536;
+		shot.group_id = 4;
+		shot.team = "Hostile";
+		shot.flags = {"locked_when_fired", "no_thruster"};
+		shot.weapon_state = "homed_flight";
+		shot.parent_ship = "Beta 1";
+		shot.parent_turret = "turret01#0";
+		shot.homing_ship = "Alpha 1";
+		shot.homing_subsys = "engine01#1";
+		shot.has_homing_pos = true;
+		shot.homing_pos = vm_vec_new(1.0f, 2.0f, 3.0f);
+		shot.lssm_stage = 2;
+		shot.cmeasure_timer = 9000;
+		data.projectiles.push_back(shot);
+
+		checkpoint::beam_shot_state beam;
+		beam.weapon_class = "LTerSlash";
+		beam.shooter_ship = "Beta 1";
+		beam.turret = "turret02#0";
+		beam.target_ship = "Alpha 1";
+		beam.target_subsys = "engine01#0";
+		beam.team = "Hostile";
+		beam.weapon_state = "firing";
+		beam.flags = {"shrink", "force_firing"};
+		beam.life_left = 1.75f;
+		beam.framecount = 22;
+		beam.shot_index = 1;
+		beam.bank = 0;
+		beam.warmup_stamp = -1;
+		beam.warmdown_stamp = 4200;
+		beam.dir_a = vm_vec_new(0.0f, 1.0f, 0.0f);
+		beam.shot_count = 3;
+		beam.shot_aim = {0.5f, 1.5f, 2.5f};
+		data.beams.push_back(beam);
+
 		data.squadron_wings = {"Alpha", "Beta", "", "Delta"};
 
 		data.current_nav = "Escort";
@@ -576,4 +619,56 @@ TEST_F(CheckpointRoundTripTest, WorldStateSurvives)
 	EXPECT_TRUE(read.autopilot_engaged);
 	EXPECT_EQ(read.soundtrack, SCP_string("3: Death's Door"));
 	EXPECT_TRUE(read.music_battle_started);
+}
+
+// A weapon and a beam share a section and both carry a "flags" array, so this is the same shape
+// of hazard as the ship section -- one key reused between them would drop the other's list.
+TEST_F(CheckpointRoundTripTest, ProjectilesAndBeamsSurvive)
+{
+	ASSERT_TRUE(checkpoint::checkpoint_write(makePopulated()));
+
+	checkpoint::checkpoint_data read;
+	ASSERT_TRUE(checkpoint::checkpoint_read(Slot(), read));
+
+	ASSERT_EQ(read.projectiles.size(), 1u);
+	const auto& shot = read.projectiles[0];
+
+	EXPECT_EQ(shot.weapon_class, SCP_string("Harpoon"));
+	EXPECT_FLOAT_EQ(shot.pos.xyz.z, -50.0f);
+	EXPECT_FLOAT_EQ(shot.velocity.xyz.z, 400.0f);
+	EXPECT_FLOAT_EQ(shot.lifeleft, 3.5f);
+	EXPECT_EQ(shot.creation_time, 65536);
+	EXPECT_EQ(shot.group_id, 4);
+	EXPECT_EQ(shot.flags, SCP_vector<SCP_string>({"locked_when_fired", "no_thruster"}));
+	EXPECT_EQ(shot.weapon_state, SCP_string("homed_flight"));
+	EXPECT_EQ(shot.parent_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(shot.parent_turret, SCP_string("turret01#0"));
+	EXPECT_EQ(shot.homing_ship, SCP_string("Alpha 1"));
+	EXPECT_EQ(shot.homing_subsys, SCP_string("engine01#1"));
+	EXPECT_TRUE(shot.has_homing_pos);
+	EXPECT_FLOAT_EQ(shot.homing_pos.xyz.y, 2.0f);
+	EXPECT_EQ(shot.lssm_stage, 2);
+	EXPECT_EQ(shot.cmeasure_timer, 9000);
+
+	ASSERT_EQ(read.beams.size(), 1u);
+	const auto& beam = read.beams[0];
+
+	EXPECT_EQ(beam.weapon_class, SCP_string("LTerSlash"));
+	EXPECT_EQ(beam.shooter_ship, SCP_string("Beta 1"));
+	EXPECT_EQ(beam.turret, SCP_string("turret02#0"));
+	EXPECT_EQ(beam.target_ship, SCP_string("Alpha 1"));
+	EXPECT_EQ(beam.target_subsys, SCP_string("engine01#0"));
+	EXPECT_EQ(beam.flags, SCP_vector<SCP_string>({"shrink", "force_firing"}));
+	EXPECT_EQ(beam.weapon_state, SCP_string("firing"));
+	EXPECT_FLOAT_EQ(beam.life_left, 1.75f);
+	EXPECT_EQ(beam.framecount, 22);
+	EXPECT_EQ(beam.shot_index, 1);
+	EXPECT_EQ(beam.warmup_stamp, -1);
+	EXPECT_EQ(beam.warmdown_stamp, 4200);
+	EXPECT_FLOAT_EQ(beam.dir_a.xyz.y, 1.0f);
+
+	// The aim vectors decide exactly how the beam sweeps, so the whole list has to come back.
+	EXPECT_EQ(beam.shot_count, 3);
+	ASSERT_EQ(beam.shot_aim.size(), 3u);
+	EXPECT_FLOAT_EQ(beam.shot_aim[2], 2.5f);
 }
