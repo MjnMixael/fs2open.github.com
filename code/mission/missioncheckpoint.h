@@ -139,6 +139,14 @@ enum class ShipDisposition {
 // something in the mission -- the target, the waypoint list, the dock points -- goes out as the
 // name it was given rather than the index it resolved to, so a mod that reorders its tables
 // cannot turn "guard the Orion" into "guard something else".
+// One end of a docking connection, as seen from the ship that holds it.  Both ships record the
+// link, so the restore has to guard against docking the same pair twice.
+struct dock_link_state {
+	SCP_string other_ship;
+	SCP_string my_point;      // dock point name on this ship
+	SCP_string their_point;   // dock point name on the other ship
+};
+
 struct ai_goal_state {
 	SCP_string mode;             // from Ai_goal_names
 	SCP_string type;             // ai_goal_type, by name
@@ -230,6 +238,7 @@ struct ship_state {
 	SCP_vector<subsystem_state> subsystems;
 	weapon_state weapons;
 	ai_state ai;
+	SCP_vector<dock_link_state> docks;
 
 	// --- only meaningful when the ship had already left ---
 	fix exit_time = 0;
