@@ -418,7 +418,7 @@ class CheckpointRoundTripTest : public test::FSTestFixture {
 		anim.id = 0xDEADBEEF;
 		anim.time = 1.25f;
 		anim.speed = 2.0f;
-		anim.instance_flags = 0x1'0000'0001ULL; // deliberately above 32 bits
+		anim.instance_flags = {"stop_after_next_loop", "seamless_fully_started"};
 		ship.animations.push_back(anim);
 
 		data.ships.push_back(std::move(ship));
@@ -725,8 +725,10 @@ TEST_F(CheckpointRoundTripTest, DocksAndAnimationsSurvive)
 	EXPECT_EQ(ship.animations[0].id, 0xDEADBEEFu);
 	EXPECT_FLOAT_EQ(ship.animations[0].time, 1.25f);
 	EXPECT_FLOAT_EQ(ship.animations[0].speed, 2.0f);
-	// Above 32 bits, so this also pins the two-halves encoding.
-	EXPECT_EQ(ship.animations[0].instance_flags, 0x1'0000'0001ULL);
+	// Named, like every other flag set in the file; order is preserved.
+	ASSERT_EQ(ship.animations[0].instance_flags.size(), 2u);
+	EXPECT_EQ(ship.animations[0].instance_flags[0], SCP_string("stop_after_next_loop"));
+	EXPECT_EQ(ship.animations[0].instance_flags[1], SCP_string("seamless_fully_started"));
 }
 
 // A weapon and a beam share a section and both carry a "flags" array, so this is the same shape
