@@ -455,6 +455,9 @@ struct variable_state {
 	SCP_string name;
 	bool is_number = false;
 	SCP_string value;
+	// The full SEXP_VARIABLE_* type word: a script can create a variable mid-mission and can
+	// change its persistence.  Zero in a file from before this was stored.
+	int type = 0;
 };
 
 // A waypoint list, whole.  checkpointfields.h once said these "come only from the mission
@@ -470,6 +473,8 @@ struct scoring_state {
 	SCP_map<SCP_string, int> ints;
 	// Per-ship-class kills, keyed by class name so a table change cannot misattribute them.
 	SCP_map<SCP_string, int> class_kills;
+	// grant-medal, by name (Medals comes from a table); empty means none.
+	SCP_string medal_earned;
 };
 
 // What an event had got up to.  Matched back by name; everything the mission file defines about
@@ -886,15 +891,54 @@ struct reinforcement_state {
 	bool available = false;
 };
 
+// One message sent but not yet played.  send-message-list pushes a whole conversation onto the
+// queue at once, with cumulative delays, so a checkpoint taken mid-way would otherwise drop the
+// rest of it -- possibly a minute of dialogue -- with the event that sent it restored as done.
+struct message_queue_state {
+	SCP_string message;          // Messages[].name
+	SCP_string special_message;  // the text with variables substituted, if that was done
+	SCP_string who_from;
+	int source = 0;
+	int builtin_type = -1;
+	int flags = 0;               // MQF_*
+	int group = 0;
+	int priority = 0;
+	fix time_added = 0;          // mission time, verbatim
+	int window_timestamp = 0;    // translated
+	int min_delay_stamp = 0;     // translated
+	SCP_string event_to_cancel;  // by event name; empty for none
+};
+
+// One order the player gave.  query-orders reads this history, so mission logic keyed on "did the
+// player order X to do Y" could never fire after a restore without it.  The engine encodes the
+// recipient and target as indices into Parse_names, which get_parse_name_index() extends at
+// runtime, so both go by name; "all fighters" is its own case.
+struct squadmsg_history_state {
+	bool to_all_fighters = false;
+	SCP_string order_to;
+	SCP_string order;            // Player_orders[].parse_name
+	SCP_string target;
+	SCP_string order_from;       // ship name
+	SCP_string special_subsys;   // for a subsystem order: the subsystem's name on the target
+	fix order_time = 0;          // mission time, verbatim
+};
+
+// A message a script added during the mission.  Those are appended to Messages[] and are gone
+// after a reload, so a send-message still to come that names one would find nothing.
+struct message_state {
+	SCP_string name;
+	SCP_string text;
+	SCP_string persona;          // by name; empty for none
+	int multi_team = -1;
+};
+
 // Mission state that belongs to no ship: the built-in message budget, the personas already spoken
-// for, the mission mood, the training context and the reinforcement allowances.
+// for, the mission mood, the training context, the reinforcement allowances, the message queue,
+// the order history and the player's mission-scoped awards and grants.
 //
-// Deliberately absent, and each worth naming: the mission message queue and the training message
-// queue, both of which live in file statics in their own modules and hold at most a few seconds
-// of text that has not been said yet; Squadmsg_history, which is a log of orders given rather
-// than state that affects play, and whose four ship references each have their own encoding;
-// Players_target and the lock tracking beside it, which the training update recomputes every
-// frame.
+// Deliberately absent, and each worth naming: the training message queue, which lives in file
+// statics in missiontraining.cpp and holds at most a few seconds of pending text; Players_target
+// and the lock tracking beside it, which the training update recomputes every frame.
 struct mission_extra_state {
 	// As with the environment, an absent section has to mean "says nothing" rather than "all
 	// zeroes" -- zero built-in messages used is a real value.
@@ -917,6 +961,24 @@ struct mission_extra_state {
 	bool perspective_locked = false;
 	bool slew_locked = false;
 	int viewer_mode = 0;
+
+	SCP_vector<message_queue_state> message_queue;
+	SCP_vector<squadmsg_history_state> squad_history;
+	SCP_vector<message_state> added_messages;
+
+	// grant-promotion, and the "all alone" message having played; both are Player->flags bits
+	// that player_level_init() resets.
+	bool promoted = false;
+	bool no_check_all_alone_msg = false;
+
+	// allow-ship / allow-weapon are folded into the campaign only when the mission ends, and
+	// tech-add-* sets flags on the tables; both are lost on a resume from a fresh launch, with
+	// the granting event restored as already fired.  All by name.
+	SCP_vector<SCP_string> granted_ships;
+	SCP_vector<SCP_string> granted_weapons;
+	SCP_vector<SCP_string> tech_ships;
+	SCP_vector<SCP_string> tech_weapons;
+	SCP_vector<SCP_string> tech_intel;
 };
 
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
