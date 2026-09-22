@@ -1746,10 +1746,11 @@ void store_mission_extras(mission_extra_state& out)
 		if (entry.order_from >= 0 && entry.order_from < MAX_SHIPS) {
 			state.order_from = Ships[entry.order_from].ship_name;
 		}
-		// The subsystem index is into the target ship's list; only a live target can name it.
+		// The subsystem index is into the target ship's list; only a live target can name it, and
+		// only if it still has that many subsystems (the target's class may have changed since).
 		if (entry.special_index >= 0 && !state.target.empty()) {
 			int target_shipnum = ship_name_lookup(state.target.c_str());
-			if (target_shipnum >= 0) {
+			if (target_shipnum >= 0 && entry.special_index < Ship_info[Ships[target_shipnum].ship_info_index].n_subsystems) {
 				ship_subsys* subsys = ship_get_indexed_subsys(&Ships[target_shipnum], entry.special_index);
 				if (subsys != nullptr && subsys->system_info != nullptr) {
 					state.special_subsys = subsys->system_info->subobj_name;
@@ -1923,6 +1924,18 @@ void apply_mission_extras(const checkpoint_data& data)
 			mission_campaign_save_persistent(CAMPAIGN_PERSISTENT_WEAPON, weapon_class);
 		}
 	}
+	// The lists are the complete set of what was in the tech room, so the room is emptied first:
+	// tech-reset-to-default can take entries out, and an entry a previous session added is still
+	// flagged in this one.
+	for (auto& sip : Ship_info) {
+		sip.flags.remove(Ship::Info_Flags::In_tech_database);
+	}
+	for (auto& wip : Weapon_info) {
+		wip.wi_flags.remove(Weapon::Info_Flags::In_tech_database);
+	}
+	for (auto& intel : Intel_info) {
+		intel.flags &= ~IIF_IN_TECH_DATABASE;
+	}
 	for (const auto& name : state.tech_ships) {
 		int ship_class = lookup_ship_class(name);
 		if (ship_class >= 0) {
@@ -1971,8 +1984,14 @@ void apply_mission_history(const checkpoint_data& data)
 	MessageQ.clear();
 	MessageQ_num = 0;
 	for (const auto& saved : state.message_queue) {
+		// A built-in message and a mission message can share a name; the engine itself keeps
+		// them apart by searching only the built-ins for one and only the mission's for the
+		// other (message_send_builtin / change_message), so the search here does the same.
+		int first = (saved.builtin_type >= 0) ? 0 : Num_builtin_messages;
+		int last = (saved.builtin_type >= 0) ? Num_builtin_messages : Num_messages;
+
 		int message_num = -1;
-		for (int i = 0; i < Num_messages && i < static_cast<int>(Messages.size()); i++) {
+		for (int i = first; i < last && i < static_cast<int>(Messages.size()); i++) {
 			if (!stricmp(Messages[i].name, saved.message.c_str())) {
 				message_num = i;
 				break;
