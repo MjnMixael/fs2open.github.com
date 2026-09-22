@@ -166,7 +166,6 @@ static bool ship_subsys_is_fighterbay(ship_subsys *ss);
 static int ship_template_lookup(const char *token);
 static void ship_set_eye(object *obj, int eye_index);
 static void ship_start_targeting_laser(ship *shipp);
-static void ship_add_ship_type_kill_count(int ship_info_index);
 static int ship_info_lookup_sub(const char *token);
 
 enum class LegacyShipParticleType : uint8_t {DAMAGE_SPEW, SPLIT_PARTICLES, OTHER};
@@ -17227,7 +17226,7 @@ void ship_add_ship_type_count( int ship_info_index, int num )
 	Ship_type_counts[type].total += num;
 }
 
-static void ship_add_ship_type_kill_count( int ship_info_index )
+void ship_add_ship_type_kill_count( int ship_info_index )
 {
 	int type = ship_class_query_general_type(ship_info_index);
 
