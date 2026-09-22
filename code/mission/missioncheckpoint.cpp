@@ -25,6 +25,7 @@
 #include "ai/aigoals.h"
 #include "object/waypoint.h"
 #include "gamesequence/gamesequence.h"
+#include "globalincs/memory/utils.h"
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
 #include "hud/hudsquadmsg.h"
@@ -55,6 +56,7 @@
 #include "parse/sexp_container.h"
 #include "playerman/player.h"
 #include "popup/popup.h"
+#include "prop/prop.h"
 #include "scripting/global_hooks.h"
 #include "scripting/hook_api.h"
 #include "ship/ship.h"
@@ -252,6 +254,27 @@ struct wing_flag_entry {
 // flags (Ignore_count, Reinforcement) are reproduced by the mission load and are deliberately
 // absent; the warp options are not parse-time, since alter-wing-flag can set every one of them.
 // Has_display_name travels with wing_state::display_name for the same reason as the ship flag.
+struct prop_flag_entry {
+	Prop::Prop_Flags flag;
+	const char* name;
+};
+
+// All of a prop's instance flags are render settings the SEXPs and scripts can set.
+const prop_flag_entry Prop_flag_table[] = {
+	{Prop::Prop_Flags::Glowmaps_disabled, "glowmaps_disabled"},
+	{Prop::Prop_Flags::Draw_as_wireframe, "draw_as_wireframe"},
+	{Prop::Prop_Flags::Render_full_detail, "render_full_detail"},
+	{Prop::Prop_Flags::Render_without_light, "render_without_light"},
+	{Prop::Prop_Flags::Render_without_diffuse, "render_without_diffuse"},
+	{Prop::Prop_Flags::Render_without_glowmap, "render_without_glowmap"},
+	{Prop::Prop_Flags::Render_without_normalmap, "render_without_normalmap"},
+	{Prop::Prop_Flags::Render_without_heightmap, "render_without_heightmap"},
+	{Prop::Prop_Flags::Render_without_ambientmap, "render_without_ambientmap"},
+	{Prop::Prop_Flags::Render_without_specmap, "render_without_specmap"},
+	{Prop::Prop_Flags::Render_without_reflectmap, "render_without_reflectmap"},
+	{Prop::Prop_Flags::Render_with_alpha_mult, "render_with_alpha_mult"},
+};
+
 struct exit_flag_entry {
 	Ship::Exit_Flags flag;
 	const char* name;
@@ -2122,6 +2145,172 @@ void store_environment(environment_state& out)
 // ship by object, and the environment is applied before the ships are reconciled -- so any nav on
 // a ship that arrived after time zero, or on a support ship, would find nothing and be dropped.
 // This runs once every ship the checkpoint knows about exists.
+// Props.  Every parsed prop gets a disposition, so one whose spawn cue had not fired stays
+// pending and one that had vanished stays gone; every live prop gets its state; a live prop with
+// no parsed_prop behind it (prop-create, mission.createProp) is marked as such so the apply
+// builds it from scratch.
+void store_props(checkpoint_data& data)
+{
+	auto capture_live = [](const prop& live, prop_state& state) {
+		const object* objp = &Objects[live.objnum];
+
+		state.prop_class = (live.prop_info_index >= 0 && live.prop_info_index < prop_info_size())
+			? Prop_info[live.prop_info_index].name
+			: SCP_string();
+		state.pos = objp->pos;
+		state.orient = objp->orient;
+		state.vel = objp->phys_info.vel;
+		state.rotvel = objp->phys_info.rotvel;
+		state.alpha_mult = live.alpha_mult;
+		collect_flags(live.flags, Prop_flag_table, state.flags);
+		collect_flags(objp->flags, Object_flag_table, state.object_flags);
+		state.glow_banks.assign(live.glow_point_bank_active.begin(), live.glow_point_bank_active.end());
+		for (const auto& tr : live.replacement_textures) {
+			if (!tr.from_table) {
+				state.texture_old.emplace_back(tr.old_texture);
+				state.texture_new.emplace_back(tr.new_texture);
+			}
+		}
+		state.collision_group_id = objp->collision_group_id;
+		state.despawn_delay = live.despawn_delay;
+	};
+
+	SCP_vector<bool> live_matched(Props.size(), false);
+
+	for (const auto& parsed : Parse_props) {
+		prop_state state;
+		state.name = parsed.name;
+
+		int id = prop_name_lookup(parsed.name);
+		const prop* live = (id >= 0) ? prop_id_lookup(id) : nullptr;
+
+		if (live != nullptr && live->objnum >= 0 && !Objects[live->objnum].flags[Object::Object_Flags::Should_be_dead]) {
+			live_matched[id] = true;
+			capture_live(*live, state);
+		} else {
+			state.disposition = parsed.spawned ? ShipDisposition::Vanished : ShipDisposition::NotYetHere;
+		}
+		data.props.push_back(std::move(state));
+	}
+
+	for (size_t i = 0; i < Props.size(); i++) {
+		if (live_matched[i] || !Props[i].has_value()) {
+			continue;
+		}
+		const prop& live = Props[i].value();
+		if (live.objnum < 0 || Objects[live.objnum].type != OBJ_PROP ||
+		    Objects[live.objnum].flags[Object::Object_Flags::Should_be_dead]) {
+			continue;
+		}
+
+		prop_state state;
+		state.name = live.prop_name;
+		state.no_parse_prop = true;
+		capture_live(live, state);
+		data.props.push_back(std::move(state));
+	}
+}
+
+void apply_props(const checkpoint_data& data)
+{
+	for (const auto& state : data.props) {
+		int id = prop_name_lookup(state.name.c_str());
+		prop* live = (id >= 0) ? prop_id_lookup(id) : nullptr;
+
+		parsed_prop* parsed = nullptr;
+		for (auto& candidate : Parse_props) {
+			if (!stricmp(candidate.name, state.name.c_str())) {
+				parsed = &candidate;
+				break;
+			}
+		}
+
+		if (state.disposition != ShipDisposition::Present) {
+			// Not here at the checkpoint.  Take out what the fresh load made, and leave the
+			// parsed prop pending or spent to match.
+			if (live != nullptr && live->objnum >= 0) {
+				Objects[live->objnum].flags.set(Object::Object_Flags::Should_be_dead);
+			}
+			if (parsed != nullptr) {
+				parsed->spawned = (state.disposition == ShipDisposition::Vanished);
+			}
+			continue;
+		}
+
+		int prop_class = prop_info_lookup(state.prop_class.c_str());
+
+		if (live == nullptr) {
+			int objnum = -1;
+			if (parsed != nullptr) {
+				// Its spawn cue had fired; the same creation the cue would have run.
+				objnum = create_prop_from_parsed(*parsed);
+			} else if (prop_class >= 0) {
+				objnum = prop_create(&state.orient, &state.pos, prop_class, state.name.c_str());
+			}
+			if (objnum < 0) {
+				mprintf(("CHECKPOINT => Cannot recreate prop '%s' (class '%s'); dropping it.\n",
+				         state.name.c_str(),
+				         state.prop_class.c_str()));
+				continue;
+			}
+			id = Objects[objnum].instance;
+			live = prop_id_lookup(id);
+			if (live == nullptr) {
+				continue;
+			}
+		}
+
+		if (prop_class >= 0 && prop_class != live->prop_info_index) {
+			change_prop_type(id, prop_class);
+			live = prop_id_lookup(id);
+		}
+
+		object* objp = &Objects[live->objnum];
+		objp->pos = state.pos;
+		objp->last_pos = state.pos;
+		objp->orient = state.orient;
+		objp->last_orient = state.orient;
+		objp->phys_info.vel = state.vel;
+		objp->phys_info.desired_vel = state.vel;
+		objp->phys_info.rotvel = state.rotvel;
+		objp->collision_group_id = state.collision_group_id;
+
+		live->alpha_mult = state.alpha_mult;
+		apply_flags(state.flags, Prop_flag_table, live->flags);
+		{
+			auto object_flags = objp->flags;
+			apply_flags(state.object_flags, Object_flag_table, object_flags);
+			obj_set_flags(objp, object_flags);
+		}
+
+		for (size_t i = 0; i < state.glow_banks.size() && i < live->glow_point_bank_active.size(); i++) {
+			live->glow_point_bank_active[i] = state.glow_banks[i];
+		}
+
+		// Instance replacements on top of whatever the class and the parse already put there,
+		// resolved the way the parse's own are.
+		if (!state.texture_old.empty()) {
+			for (size_t i = 0; i < state.texture_old.size() && i < state.texture_new.size(); i++) {
+				texture_replace tr;
+				memset(&tr, 0, sizeof(tr));
+				strcpy_s(tr.ship_name, state.name.c_str());
+				strcpy_s(tr.old_texture, state.texture_old[i].c_str());
+				strcpy_s(tr.new_texture, state.texture_new[i].c_str());
+				tr.new_texture_id = -1;
+				tr.from_table = false;
+				live->replacement_textures.push_back(tr);
+			}
+			prop_apply_replacement_textures(live);
+		}
+
+		live->despawn_delay = translate_stamp(state.despawn_delay);
+	}
+
+	// The props taken out above go now, not at the end of the frame, so nothing later in the
+	// apply can find them by name.
+	obj_delete_all_that_should_be_dead();
+}
+
 // Put the waypoint lists back the way the mission had left them: positions a script moved, and
 // whole lists a script created, which the fresh parse does not have.  Before the ships, since the
 // AI orders and nav points restored with them refer to lists by name.
@@ -4030,6 +4219,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 		data.wings.push_back(std::move(state));
 	}
+
+	// --- props ---
+	store_props(data);
 
 	// --- waypoint lists ---
 	// Whole, since a script can have created, renamed or moved any of them; see
@@ -6026,6 +6218,7 @@ void mission_checkpoint_apply()
 	apply_navpoints(data);
 
 	apply_asteroids(data);
+	apply_props(data);
 	apply_wings(data);
 
 	// Every restored goal, ship and wing alike, is back now; keep new goals from reusing a
