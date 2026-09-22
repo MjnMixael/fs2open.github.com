@@ -151,6 +151,12 @@ const ship_flag_entry Ship_flag_table[] = {
 	// Set the first time a ship screams, so it does not scream again.  Same class of state as the
 	// player's built-in message budget, which is restored for the same reason.
 	{Ship::Ship_Flags::Ship_has_screamed, "ship_has_screamed"},
+	// The warp options read like parse-time settings, but alter-ship-flag, set-arrival-info and
+	// set-departure-info all rewrite them mid-mission.
+	{Ship::Ship_Flags::No_arrival_warp, "no_arrival_warp"},
+	{Ship::Ship_Flags::No_departure_warp, "no_departure_warp"},
+	{Ship::Ship_Flags::Same_arrival_warp_when_docked, "same_arrival_warp_when_docked"},
+	{Ship::Ship_Flags::Same_departure_warp_when_docked, "same_departure_warp_when_docked"},
 };
 
 // Several things a designer thinks of as ship state -- invulnerability, weapon protection,
@@ -226,9 +232,10 @@ struct wing_flag_entry {
 
 // Wing state that changes during the mission.  Gone and Departing are the ones that matter for
 // directives: is-destroyed and friends read them, so a wing that had been wiped out before the
-// checkpoint has to come back still wiped out rather than merely empty.  The parse-time flags
-// (Ignore_count, Reinforcement, the arrival/departure warp options) are reproduced by the
-// mission load and are deliberately absent.
+// checkpoint has to come back still wiped out rather than merely empty.  The genuinely parse-time
+// flags (Ignore_count, Reinforcement) are reproduced by the mission load and are deliberately
+// absent; the warp options are not parse-time, since alter-wing-flag can set every one of them.
+// Has_display_name travels with wing_state::display_name for the same reason as the ship flag.
 const wing_flag_entry Wing_flag_table[] = {
 	{Ship::Wing_Flags::Gone, "gone"},
 	{Ship::Wing_Flags::Departing, "departing"},
@@ -240,6 +247,12 @@ const wing_flag_entry Wing_flag_table[] = {
 	{Ship::Wing_Flags::No_arrival_music, "no_arrival_music"},
 	{Ship::Wing_Flags::No_arrival_message, "no_arrival_message"},
 	{Ship::Wing_Flags::No_first_wave_message, "no_first_wave_message"},
+	{Ship::Wing_Flags::No_arrival_warp, "no_arrival_warp"},
+	{Ship::Wing_Flags::No_departure_warp, "no_departure_warp"},
+	{Ship::Wing_Flags::Same_arrival_warp_when_docked, "same_arrival_warp_when_docked"},
+	{Ship::Wing_Flags::Same_departure_warp_when_docked, "same_departure_warp_when_docked"},
+	{Ship::Wing_Flags::Waypoints_no_formation, "waypoints_no_formation"},
+	{Ship::Wing_Flags::Has_display_name, "has_display_name"},
 };
 
 struct ai_flag_entry {
@@ -3348,9 +3361,18 @@ SCP_map<SCP_string, existence_cache_entry> Existence_cache;
 // the level teardown empties it.
 SCP_map<SCP_string, SCP_string> Script_data;
 
+// Slots name files, and the filename folds case (see checkpoint_filename()), so "Alpha" and
+// "alpha" are the same checkpoint and must be the same cache entry.
+SCP_string existence_cache_key(const SCP_string& slot)
+{
+	SCP_string key = slot;
+	SCP_tolower(key);
+	return key;
+}
+
 void invalidate_existence_cache(const SCP_string& slot)
 {
-	Existence_cache.erase(slot);
+	Existence_cache.erase(existence_cache_key(slot));
 }
 
 } // namespace
@@ -3843,7 +3865,9 @@ bool mission_checkpoint_exists(const SCP_string& slot)
 		return false;
 	}
 
-	auto cached = Existence_cache.find(slot);
+	auto key = existence_cache_key(slot);
+
+	auto cached = Existence_cache.find(key);
 	if (cached != Existence_cache.end() && cached->second.mission == Game_current_mission_filename) {
 		return cached->second.exists;
 	}
@@ -3859,15 +3883,36 @@ bool mission_checkpoint_exists(const SCP_string& slot)
 		}
 	}
 
-	Existence_cache[slot] = {SCP_string(Game_current_mission_filename), exists};
+	Existence_cache[key] = {SCP_string(Game_current_mission_filename), exists};
 
 	return exists;
 }
 
 void mission_checkpoint_delete(const SCP_string& slot)
 {
+	// Every entry point is a no-op in multiplayer, deletion included: a multiplayer mission has
+	// no checkpoints of its own, so the only files it could reach are somebody's single-player
+	// ones.
+	if (Game_mode & GM_MULTIPLAYER) {
+		return;
+	}
+
 	checkpoint_delete_file(slot);
 	invalidate_existence_cache(slot);
+}
+
+int mission_checkpoint_delete_all(const SCP_string& mission_name)
+{
+	if (Game_mode & GM_MULTIPLAYER) {
+		return 0;
+	}
+
+	int deleted = checkpoint_delete_all(mission_name);
+
+	// Whichever mission that was, nothing cached about any slot can be trusted now.
+	Existence_cache.clear();
+
+	return deleted;
 }
 
 // ------------------------------------------------------------------
@@ -5139,7 +5184,11 @@ void apply_clock(const checkpoint_data& data)
 	// delta at zero restores those stamps verbatim, which is what such a file used to get.
 	Stamp_delta = (data.saved_timestamp_ms != 0) ? (now_after_jump - data.saved_timestamp_ms) : 0;
 
-	Missiontime = timestamp_get_mission_time();
+	// Not timestamp_get_mission_time(): that reads the same frame-start snapshot timestamp() does,
+	// which the jump above did not refresh, so it would answer roughly zero until the first frame
+	// of the restored mission recomputes it.  The saved value is what everything created during
+	// the apply that stamps Missiontime -- debris, freshly initialised AI -- should see.
+	Missiontime = data.mission_time;
 	The_mission.HUD_timer_padding = data.hud_timer_padding;
 
 	mprintf(("CHECKPOINT => Clock restored to mission time %d; shifting saved timestamps by %d ms.\n",
@@ -5210,6 +5259,12 @@ void mission_checkpoint_maybe_offer_resume()
 
 void mission_checkpoint_mission_complete()
 {
+	// debrief_accept() calls this before it branches on multiplayer, and a multiplayer mission
+	// never has checkpoints to clean up.
+	if (Game_mode & GM_MULTIPLAYER) {
+		return;
+	}
+
 	if (!The_mission.flags[Mission::Mission_Flags::Checkpoint_delete_on_completion]) {
 		return;
 	}
