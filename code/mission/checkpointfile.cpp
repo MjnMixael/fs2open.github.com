@@ -1488,6 +1488,7 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->writeString("name", var.name.c_str());
 		handler->writeBool("is_number", var.is_number);
 		handler->writeString("value", var.value.c_str());
+		handler->writeInt("type", var.type);
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -1536,6 +1537,7 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			var.name = handler->readStringOr("name", "");
 			var.is_number = handler->readBoolOr("is_number", false);
 			var.value = handler->readStringOr("value", "");
+			var.type = handler->readIntOr("type", 0);
 
 			data.variables.push_back(std::move(var));
 		}
@@ -1996,6 +1998,58 @@ void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpo
 	handler->writeBool("slew_locked", state.slew_locked);
 	handler->writeInt("viewer_mode", state.viewer_mode);
 
+	handler->writeBool("promoted", state.promoted);
+	handler->writeBool("no_check_all_alone_msg", state.no_check_all_alone_msg);
+	write_string_list(handler, "granted_ships", state.granted_ships);
+	write_string_list(handler, "granted_weapons", state.granted_weapons);
+	write_string_list(handler, "tech_ships", state.tech_ships);
+	write_string_list(handler, "tech_weapons", state.tech_weapons);
+	write_string_list(handler, "tech_intel", state.tech_intel);
+
+	handler->startArrayWrite("message_queue", state.message_queue.size());
+	for (const auto& entry : state.message_queue) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("message", entry.message.c_str());
+		handler->writeString("special_message", entry.special_message.c_str());
+		handler->writeString("who_from", entry.who_from.c_str());
+		handler->writeInt("source", entry.source);
+		handler->writeInt("builtin_type", entry.builtin_type);
+		handler->writeInt("flags", entry.flags);
+		handler->writeInt("group", entry.group);
+		handler->writeInt("priority", entry.priority);
+		handler->writeInt("time_added", static_cast<std::int32_t>(entry.time_added));
+		handler->writeInt("window_timestamp", entry.window_timestamp);
+		handler->writeInt("min_delay_stamp", entry.min_delay_stamp);
+		handler->writeString("event_to_cancel", entry.event_to_cancel.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("squad_history", state.squad_history.size());
+	for (const auto& entry : state.squad_history) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeBool("to_all_fighters", entry.to_all_fighters);
+		handler->writeString("order_to", entry.order_to.c_str());
+		handler->writeString("order", entry.order.c_str());
+		handler->writeString("target", entry.target.c_str());
+		handler->writeString("order_from", entry.order_from.c_str());
+		handler->writeString("special_subsys", entry.special_subsys.c_str());
+		handler->writeInt("order_time", static_cast<std::int32_t>(entry.order_time));
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("added_messages", state.added_messages.size());
+	for (const auto& entry : state.added_messages) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", entry.name.c_str());
+		handler->writeString("text", entry.text.c_str());
+		handler->writeString("persona", entry.persona.c_str());
+		handler->writeInt("multi_team", entry.multi_team);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
 	handler->startArrayWrite("reinforcements", state.reinforcements.size());
 	for (const auto& reinforcement : state.reinforcements) {
 		handler->startSectionWrite(Section::Unnamed);
@@ -2028,6 +2082,73 @@ void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_dat
 	state.perspective_locked = handler->readBoolOr("perspective_locked", false);
 	state.slew_locked = handler->readBoolOr("slew_locked", false);
 	state.viewer_mode = handler->readIntOr("viewer_mode", 0);
+
+	state.promoted = handler->readBoolOr("promoted", false);
+	state.no_check_all_alone_msg = handler->readBoolOr("no_check_all_alone_msg", false);
+	read_string_list(handler, "granted_ships", state.granted_ships);
+	read_string_list(handler, "granted_weapons", state.granted_weapons);
+	read_string_list(handler, "tech_ships", state.tech_ships);
+	read_string_list(handler, "tech_weapons", state.tech_weapons);
+	read_string_list(handler, "tech_intel", state.tech_intel);
+
+	state.message_queue.clear();
+	if (handler->hasField("message_queue")) {
+		auto count = handler->startArrayRead("message_queue");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::message_queue_state entry;
+			entry.message = handler->readStringOr("message", "");
+			entry.special_message = handler->readStringOr("special_message", "");
+			entry.who_from = handler->readStringOr("who_from", "");
+			entry.source = handler->readIntOr("source", 0);
+			entry.builtin_type = handler->readIntOr("builtin_type", -1);
+			entry.flags = handler->readIntOr("flags", 0);
+			entry.group = handler->readIntOr("group", 0);
+			entry.priority = handler->readIntOr("priority", 0);
+			entry.time_added = static_cast<fix>(handler->readIntOr("time_added", 0));
+			entry.window_timestamp = handler->readIntOr("window_timestamp", 0);
+			entry.min_delay_stamp = handler->readIntOr("min_delay_stamp", 0);
+			entry.event_to_cancel = handler->readStringOr("event_to_cancel", "");
+			if (!entry.message.empty()) {
+				state.message_queue.push_back(std::move(entry));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	state.squad_history.clear();
+	if (handler->hasField("squad_history")) {
+		auto count = handler->startArrayRead("squad_history");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::squadmsg_history_state entry;
+			entry.to_all_fighters = handler->readBoolOr("to_all_fighters", false);
+			entry.order_to = handler->readStringOr("order_to", "");
+			entry.order = handler->readStringOr("order", "");
+			entry.target = handler->readStringOr("target", "");
+			entry.order_from = handler->readStringOr("order_from", "");
+			entry.special_subsys = handler->readStringOr("special_subsys", "");
+			entry.order_time = static_cast<fix>(handler->readIntOr("order_time", 0));
+			if (!entry.order.empty()) {
+				state.squad_history.push_back(std::move(entry));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	state.added_messages.clear();
+	if (handler->hasField("added_messages")) {
+		auto count = handler->startArrayRead("added_messages");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::message_state entry;
+			entry.name = handler->readStringOr("name", "");
+			entry.text = handler->readStringOr("text", "");
+			entry.persona = handler->readStringOr("persona", "");
+			entry.multi_team = handler->readIntOr("multi_team", -1);
+			if (!entry.name.empty()) {
+				state.added_messages.push_back(std::move(entry));
+			}
+		}
+		handler->endArrayRead();
+	}
 
 	state.reinforcements.clear();
 	if (handler->hasField("reinforcements")) {
@@ -2167,6 +2288,7 @@ void write_scoring(pilot::FileHandler* handler, const checkpoint::checkpoint_dat
 
 	write_int_map(handler, "ints", data.scoring.ints);
 	write_int_map(handler, "class_kills", data.scoring.class_kills);
+	handler->writeString("medal_earned", data.scoring.medal_earned.c_str());
 
 	handler->endSectionWrite();
 }
@@ -2175,6 +2297,7 @@ void read_scoring(pilot::FileHandler* handler, checkpoint::checkpoint_data& data
 {
 	read_int_map(handler, "ints", data.scoring.ints);
 	read_int_map(handler, "class_kills", data.scoring.class_kills);
+	data.scoring.medal_earned = handler->readStringOr("medal_earned", "");
 }
 
 // Read nothing but the Info section, for enumeration.  Stops as soon as it has what it came for
