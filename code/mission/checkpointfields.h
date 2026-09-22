@@ -266,7 +266,9 @@
 	F(enemy_wing)                                                                              \
 	F(kamikaze_damage)                                                                         \
 	F(form_obj_slotnum)                                                                        \
-	F(ai_aburn_use_factor)
+	F(ai_aburn_use_factor)                                                                     \
+	F(rearm_first_missile)                                                                     \
+	F(rearm_first_ballistic_primary)
 
 #define CKPT_AI_FLOATS(F)                                                                      \
 	F(submode_float0)                                                                          \
@@ -305,7 +307,8 @@
 	F(ai_override_lat_timestamp)                                                               \
 	F(ai_override_rot_timestamp)                                                               \
 	F(multilock_check_timestamp)                                                               \
-	F(next_dynamic_path_check_time)
+	F(next_dynamic_path_check_time)                                                            \
+	F(force_warp_time)
 
 // World-space points the AI is steering towards or guarding.  Without these a restored ship on a
 // waypoint leg or a guard orbit flies at the origin until it picks a new one.
