@@ -161,6 +161,13 @@ const ship_flag_entry Ship_flag_table[] = {
 	{Ship::Ship_Flags::No_departure_warp, "no_departure_warp"},
 	{Ship::Ship_Flags::Same_arrival_warp_when_docked, "same_arrival_warp_when_docked"},
 	{Ship::Ship_Flags::Same_departure_warp_when_docked, "same_departure_warp_when_docked"},
+	// Set once ship_process_post() has recorded each bank's starting ammo.  Without it the first
+	// frame after a restore records the *current* ammo as the starting ammo, and the rearm cap
+	// silently drops to whatever the player had left when the checkpoint was written.
+	{Ship::Ship_Flags::Ammo_count_recorded, "ammo_count_recorded"},
+	// alter-ship-flag can set this mid-mission, and it decides whether the ship's death counts
+	// towards the ship-type kill totals.
+	{Ship::Ship_Flags::Ignore_count, "ignore_count"},
 };
 
 // Several things a designer thinks of as ship state -- invulnerability, weapon protection,
@@ -240,6 +247,20 @@ struct wing_flag_entry {
 // flags (Ignore_count, Reinforcement) are reproduced by the mission load and are deliberately
 // absent; the warp options are not parse-time, since alter-wing-flag can set every one of them.
 // Has_display_name travels with wing_state::display_name for the same reason as the ship flag.
+struct exit_flag_entry {
+	Ship::Exit_Flags flag;
+	const char* name;
+};
+
+// What an exited record remembers about how the ship left, beyond Destroyed/Departed (which the
+// disposition carries) and Player_deleted (which the restore corrects itself).
+const exit_flag_entry Exit_flag_table[] = {
+	{Ship::Exit_Flags::Cargo_known, "cargo_known"},
+	{Ship::Exit_Flags::Been_tagged, "been_tagged"},
+	{Ship::Exit_Flags::Red_alert_carry, "red_alert_carry"},
+	{Ship::Exit_Flags::From_player_wing, "from_player_wing"},
+};
+
 const wing_flag_entry Wing_flag_table[] = {
 	{Ship::Wing_Flags::Gone, "gone"},
 	{Ship::Wing_Flags::Departing, "departing"},
@@ -3514,14 +3535,41 @@ bool mission_checkpoint_store(const SCP_string& slot)
 			data.ships.push_back(std::move(state));
 			continue;
 
-		case ShipStatus::DEATH_ROLL:
+		case ShipStatus::DEATH_ROLL: {
 			// A ship part-way through its death roll is going to be gone in a moment and
 			// there is no way to resume a death roll on a fresh load.  Record it as already
-			// destroyed; that is the state the mission is about to reach anyway.
+			// destroyed; that is the state the mission is about to reach anyway.  The exited
+			// record it is about to leave is built here from the live ship, the way
+			// ship_add_exited_ship() will build it.
 			state.disposition = ShipDisposition::Destroyed;
 			state.exit_time = Missiontime;
+
+			const ship* shipp = entry.shipp();
+			const object* objp = entry.objp();
+			if (shipp != nullptr && objp != nullptr) {
+				state.ship_class = ship_class_name(shipp->ship_info_index);
+				state.team = team_name(shipp->team);
+				state.display_name = shipp->get_display_name();
+				state.cargo = cargo_name(shipp->cargo1);
+				state.cargo_no_deplete = (shipp->cargo1 & CARGO_NO_DEPLETE) != 0;
+				state.exit_hull_strength = static_cast<int>(objp->hull_strength);
+				if (shipp->flags[Ship::Ship_Flags::Cargo_revealed]) {
+					state.exit_flags.emplace_back("cargo_known");
+					state.time_cargo_revealed = shipp->time_cargo_revealed;
+				}
+				if (shipp->time_first_tagged > 0) {
+					state.exit_flags.emplace_back("been_tagged");
+				}
+				if (shipp->flags[Ship::Ship_Flags::Red_alert_store_status]) {
+					state.exit_flags.emplace_back("red_alert_carry");
+				}
+				if (shipp->flags[Ship::Ship_Flags::From_player_wing]) {
+					state.exit_flags.emplace_back("from_player_wing");
+				}
+			}
 			data.ships.push_back(std::move(state));
 			continue;
+		}
 
 		case ShipStatus::EXITED: {
 			state.disposition = ShipDisposition::Vanished;
@@ -3533,6 +3581,16 @@ bool mission_checkpoint_store(const SCP_string& slot)
 				} else if (exited.flags[Ship::Exit_Flags::Departed]) {
 					state.disposition = ShipDisposition::Departed;
 				}
+
+				// What the ship had become by the time it left; see ship_state::exit_time.
+				state.ship_class = ship_class_name(exited.ship_class);
+				state.team = team_name(exited.team);
+				state.display_name = exited.display_name;
+				state.cargo = cargo_name(exited.cargo1);
+				state.cargo_no_deplete = (exited.cargo1 & CARGO_NO_DEPLETE) != 0;
+				state.time_cargo_revealed = exited.time_cargo_revealed;
+				state.exit_hull_strength = exited.hull_strength;
+				collect_flags(exited.flags, Exit_flag_table, state.exit_flags);
 			}
 			data.ships.push_back(std::move(state));
 			continue;
@@ -3706,6 +3764,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		goal_state state;
 		state.name = goal.name;
 		state.satisfied = goal.satisfied;
+		state.invalid = (goal.type & INVALID_GOAL) != 0;
 		data.goals.push_back(std::move(state));
 	}
 
@@ -4122,6 +4181,21 @@ void remove_ship_for_restore(const ship_registry_entry* entry, const ship_state&
 		break;
 	}
 
+	// The quiet red-alert cleanup does not count the kill towards the ship-type totals the way
+	// SHIP_DESTROYED does, and percent-ships-destroyed reads those totals, so count it here with
+	// the same test ship_cleanup() applies -- against the class the ship had when it died.
+	if (state.disposition == ShipDisposition::Destroyed) {
+		ship* shipp = &Ships[shipnum];
+		int killed_class = lookup_ship_class(state.ship_class);
+		if (killed_class < 0) {
+			killed_class = shipp->ship_info_index;
+		}
+		if (!(shipp->flags[Ship::Ship_Flags::Ignore_count]) ||
+		    ((shipp->wingnum != -1) && !(Wings[shipp->wingnum].flags[Ship::Wing_Flags::Ignore_count]))) {
+			ship_add_ship_type_kill_count(killed_class);
+		}
+	}
+
 	objp->flags.set(Object::Object_Flags::Should_be_dead);
 	dock_undock_all(objp);
 	ship_cleanup(shipnum, cleanup_mode);
@@ -4148,6 +4222,30 @@ void remove_ship_for_restore(const ship_registry_entry* entry, const ship_state&
 	exited.flags.remove(Ship::Exit_Flags::Player_deleted);
 	exited.flags.set(exit_reason);
 	exited.time = state.exit_time;
+
+	// The record was just built from the ship the mission file describes; put back what the ship
+	// had become by the time it left, which is what the SEXPs that ask about dead ships read.
+	int exited_class = lookup_ship_class(state.ship_class);
+	if (exited_class >= 0) {
+		exited.ship_class = exited_class;
+	}
+	int exited_team = lookup_team(state.team);
+	if (exited_team >= 0) {
+		exited.team = exited_team;
+	}
+	if (!state.display_name.empty()) {
+		exited.display_name = state.display_name;
+	}
+	if (!state.cargo.empty()) {
+		int cargo = lookup_cargo(state.cargo);
+		if (state.cargo_no_deplete) {
+			cargo |= CARGO_NO_DEPLETE;
+		}
+		exited.cargo1 = static_cast<char>(cargo);
+	}
+	exited.time_cargo_revealed = state.time_cargo_revealed;
+	exited.hull_strength = state.exit_hull_strength;
+	apply_flags(state.exit_flags, Exit_flag_table, exited.flags);
 }
 
 // Take out every ship the checkpoint says had already gone but which is standing here alive.
@@ -5222,6 +5320,11 @@ void apply_mission_logic(const checkpoint_data& data)
 		}
 
 		it->satisfied = state.satisfied;
+		if (state.invalid) {
+			it->type |= INVALID_GOAL;
+		} else {
+			it->type &= ~INVALID_GOAL;
+		}
 	}
 
 	// The log is replayed wholesale rather than merged, so whatever is here now is discarded and

@@ -1948,6 +1948,10 @@ extern ship_subsys *ship_get_indexed_subsys(ship *sp, int index);	// returns ind
 extern int ship_find_subsys(const ship *sp, const char *ss_name);		// returns numerical index in linked list of subsystems
 extern int ship_get_subsys_index(const ship_subsys *subsys);
 
+// count a kill of this class towards the per-type totals that percent-ships-destroyed reads;
+// ship_cleanup() does this for SHIP_DESTROYED, and the checkpoint restore for kills it replays
+void ship_add_ship_type_kill_count(int ship_info_index);
+
 extern bool ship_subsystems_blown(const ship *shipp, int type, bool skip_dying_check = false);
 extern float ship_get_subsystem_strength(const ship *shipp, int type, bool skip_dying_check = false, bool no_minimum_engine_str = false);
 extern ship_subsys *ship_get_subsys(const ship *shipp, const char *subsys_name);
