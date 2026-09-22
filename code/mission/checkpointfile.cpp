@@ -1126,8 +1126,8 @@ void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoi
 		handler->writeInt("departure_delay", p_obj.departure_delay);
 		handler->writeInt("escort_priority", p_obj.escort_priority);
 		handler->writeInt("respawn_priority", p_obj.respawn_priority);
-		handler->writeInt("alt_type_index", p_obj.alt_type_index);
-		handler->writeInt("callsign_index", p_obj.callsign_index);
+		handler->writeString("alt_name", p_obj.alt_name.c_str());
+		handler->writeString("callsign", p_obj.callsign.c_str());
 		handler->writeString("cargo", p_obj.cargo.c_str());
 		handler->writeBool("cargo_no_deplete", p_obj.cargo_no_deplete);
 
@@ -1169,8 +1169,8 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 		p_obj.departure_delay = handler->readIntOr("departure_delay", 0);
 		p_obj.escort_priority = handler->readIntOr("escort_priority", 0);
 		p_obj.respawn_priority = handler->readIntOr("respawn_priority", 0);
-		p_obj.alt_type_index = handler->readIntOr("alt_type_index", -1);
-		p_obj.callsign_index = handler->readIntOr("callsign_index", -1);
+		p_obj.alt_name = handler->readStringOr("alt_name", "");
+		p_obj.callsign = handler->readStringOr("callsign", "");
 		p_obj.cargo = handler->readStringOr("cargo", "");
 		p_obj.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 
@@ -1258,6 +1258,8 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			handler->writeString("persona", ship_data.persona.c_str());
 			handler->writeString("cargo", ship_data.cargo.c_str());
 			handler->writeBool("cargo_no_deplete", ship_data.cargo_no_deplete);
+			handler->writeString("alt_name", ship_data.alt_name.c_str());
+			handler->writeString("callsign", ship_data.callsign.c_str());
 			handler->writeBool("no_parse_object", ship_data.no_parse_object);
 
 			write_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
@@ -1332,6 +1334,8 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			ship_data.persona = handler->readStringOr("persona", "");
 			ship_data.cargo = handler->readStringOr("cargo", "");
 			ship_data.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
+			ship_data.alt_name = handler->readStringOr("alt_name", "");
+			ship_data.callsign = handler->readStringOr("callsign", "");
 			ship_data.no_parse_object = handler->readBoolOr("no_parse_object", false);
 
 			read_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
@@ -1592,6 +1596,8 @@ void write_log(pilot::FileHandler* handler, const checkpoint::checkpoint_data& d
 		handler->writeInt("timestamp", static_cast<std::int32_t>(entry.timestamp));
 		handler->writeInt("timer_padding", entry.timer_padding);
 		handler->writeInt("index", entry.index);
+		handler->writeString("index_name", entry.index_name.c_str());
+		handler->writeString("index_class", entry.index_class.c_str());
 		handler->writeString("primary_team", entry.primary_team.c_str());
 		handler->writeString("secondary_team", entry.secondary_team.c_str());
 		handler->writeString("pname", entry.pname.c_str());
@@ -1623,6 +1629,8 @@ void read_log(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		entry.timestamp = static_cast<fix>(handler->readIntOr("timestamp", 0));
 		entry.timer_padding = handler->readIntOr("timer_padding", 0);
 		entry.index = handler->readIntOr("index", 0);
+		entry.index_name = handler->readStringOr("index_name", "");
+		entry.index_class = handler->readStringOr("index_class", "");
 		entry.primary_team = handler->readStringOr("primary_team", "");
 		entry.secondary_team = handler->readStringOr("secondary_team", "");
 		entry.pname = handler->readStringOr("pname", "");
@@ -1743,7 +1751,7 @@ void write_debris(pilot::FileHandler* handler, const checkpoint::checkpoint_data
 		handler->writeFloat("max_hull", piece.max_hull);
 		handler->writeFloat("lifeleft", piece.lifeleft);
 		handler->writeFloat("damage_mult", piece.damage_mult);
-		handler->writeInt("parent_alt_name", piece.parent_alt_name);
+		handler->writeString("parent_alt_name", piece.parent_alt_name.c_str());
 		handler->writeBool("do_not_expire", piece.do_not_expire);
 
 		handler->endSectionWrite();
@@ -1782,7 +1790,7 @@ void read_debris(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		piece.max_hull = handler->readFloatOr("max_hull", 0.0f);
 		piece.lifeleft = handler->readFloatOr("lifeleft", -1.0f);
 		piece.damage_mult = handler->readFloatOr("damage_mult", 1.0f);
-		piece.parent_alt_name = handler->readIntOr("parent_alt_name", -1);
+		piece.parent_alt_name = handler->readStringOr("parent_alt_name", "");
 		piece.do_not_expire = handler->readBoolOr("do_not_expire", false);
 
 		if (!piece.ship_class.empty() && !piece.submodel.empty()) {
