@@ -25,6 +25,7 @@
 #include "ai/aigoals.h"
 #include "object/waypoint.h"
 #include "gamesequence/gamesequence.h"
+#include "globalincs/linklist.h"
 #include "globalincs/memory/utils.h"
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
@@ -687,6 +688,123 @@ int callsign_index_for_name(const SCP_string& name)
 	return index;
 }
 
+// Armor and damage types come from tables, so both go by name.  Empty means "none" (-1), which
+// for a ship means the class default.
+SCP_string armor_type_name(int armor_type)
+{
+	if (armor_type < 0 || armor_type >= static_cast<int>(Armor_types.size())) {
+		return SCP_string();
+	}
+	return Armor_types[armor_type].GetNamePtr();
+}
+
+int lookup_armor_type(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+	for (int i = 0; i < static_cast<int>(Armor_types.size()); i++) {
+		if (Armor_types[i].IsName(name.c_str())) {
+			return i;
+		}
+	}
+	mprintf(("CHECKPOINT => Armor type '%s' no longer exists.\n", name.c_str()));
+	return -1;
+}
+
+SCP_string damage_type_name(int damage_type)
+{
+	if (damage_type < 0 || damage_type >= static_cast<int>(Damage_types.size())) {
+		return SCP_string();
+	}
+	return Damage_types[damage_type].name;
+}
+
+int lookup_damage_type(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+	for (int i = 0; i < static_cast<int>(Damage_types.size()); i++) {
+		if (!stricmp(Damage_types[i].name, name.c_str())) {
+			return i;
+		}
+	}
+	mprintf(("CHECKPOINT => Damage type '%s' no longer exists.\n", name.c_str()));
+	return -1;
+}
+
+// The texture replacements applied to a model instance, recovered as (old, new) texture names:
+// the instance only holds bitmap ids, but the model still knows each slot's original texture and
+// bmpman knows every loaded bitmap's filename.  "invisible" is the engine's own spelling for a
+// texture switched off, and is what the replace-texture SEXP accepts back.
+void capture_instance_textures(int model_instance_num, SCP_vector<SCP_string>& out_old, SCP_vector<SCP_string>& out_new)
+{
+	polymodel_instance* pmi = (model_instance_num >= 0) ? model_get_instance(model_instance_num) : nullptr;
+	if (pmi == nullptr || pmi->texture_replace == nullptr) {
+		return;
+	}
+	polymodel* pm = model_get(pmi->model_num);
+	if (pm == nullptr) {
+		return;
+	}
+
+	for (int j = 0; j < pm->n_textures; j++) {
+		for (int t = 0; t < TM_NUM_TYPES; t++) {
+			int replacement = (*pmi->texture_replace)[j * TM_NUM_TYPES + t];
+			if (replacement == -1) {
+				continue;
+			}
+			int original = pm->maps[j].textures[t].GetOriginalTexture();
+			if (original < 0) {
+				continue;
+			}
+
+			char old_name[MAX_FILENAME_LEN];
+			bm_get_filename(original, old_name);
+			out_old.emplace_back(old_name);
+
+			if (replacement == REPLACE_WITH_INVISIBLE) {
+				out_new.emplace_back("invisible");
+			} else {
+				char new_name[MAX_FILENAME_LEN];
+				bm_get_filename(replacement, new_name);
+				out_new.emplace_back(new_name);
+			}
+		}
+	}
+}
+
+// change-iff-color stores a colour-table index that iff_init_color() hands out at runtime, so the
+// override goes out as the colour itself and is re-registered on the way back.
+void store_iff_colors(const SCP_map<std::pair<int, int>, int>& in, SCP_vector<iff_color_state>& out)
+{
+	for (const auto& entry : in) {
+		iff_color_state state;
+		state.observer = team_name(entry.first.first);
+		state.observed = team_name(entry.first.second);
+		const color* c = iff_get_color(entry.second, 0);
+		if (c != nullptr) {
+			state.r = c->red;
+			state.g = c->green;
+			state.b = c->blue;
+		}
+		out.push_back(std::move(state));
+	}
+}
+
+void load_iff_colors(const SCP_vector<iff_color_state>& in, SCP_map<std::pair<int, int>, int>& out)
+{
+	for (const auto& state : in) {
+		int observer = lookup_team(state.observer);
+		int observed = lookup_team(state.observed);
+		if (observer < 0 || observed < 0) {
+			continue;
+		}
+		out[{observer, observed}] = iff_init_color(state.r, state.g, state.b);
+	}
+}
+
 // Ai_classes comes from ai.tbl, so an AI class is a table index and goes by name.
 SCP_string ai_class_name(int ai_class)
 {
@@ -872,6 +990,7 @@ void store_ship_scalars(const ship& obj, SCP_map<SCP_string, float>& out_floats,
 		auto& out = out_ints;
 		CKPT_SHIP_INTS(CKPT_STORE_INT)
 		CKPT_SHIP_STAMPS(CKPT_STORE_INT)
+		CKPT_SHIP_MISSION_TIMES(CKPT_STORE_INT)
 	}
 }
 
@@ -885,6 +1004,7 @@ void load_ship_scalars(ship& obj, const SCP_map<SCP_string, float>& in_floats, c
 		const auto& in = in_ints;
 		CKPT_SHIP_INTS(CKPT_LOAD_INT)
 		CKPT_SHIP_STAMPS(CKPT_LOAD_STAMP)
+		CKPT_SHIP_MISSION_TIMES(CKPT_LOAD_INT)
 	}
 }
 
@@ -899,6 +1019,7 @@ void store_subsys_scalars(const ship_subsys& obj, SCP_map<SCP_string, float>& ou
 		auto& out = out_ints;
 		CKPT_SUBSYS_INTS(CKPT_STORE_INT)
 		CKPT_SUBSYS_STAMPS(CKPT_STORE_INT)
+		CKPT_SUBSYS_MISSION_TIMES(CKPT_STORE_INT)
 	}
 }
 
@@ -913,6 +1034,7 @@ void load_subsys_scalars(ship_subsys& obj, const SCP_map<SCP_string, float>& in_
 		const auto& in = in_ints;
 		CKPT_SUBSYS_INTS(CKPT_LOAD_INT)
 		CKPT_SUBSYS_STAMPS(CKPT_LOAD_STAMP)
+		CKPT_SUBSYS_MISSION_TIMES(CKPT_LOAD_INT)
 	}
 }
 
@@ -1534,6 +1656,36 @@ void store_mission_extras(mission_extra_state& out)
 	out.slew_locked = Slew_locked;
 	out.viewer_mode = Viewer_mode;
 
+	for (const auto& info : ai_get_preferred_primary_info()) {
+		preferred_primary_state state;
+		state.subject = info.subject.object_name;
+		state.target = info.target.object_name;
+		state.weapon = weapon_class_name(info.weapon_index);
+		out.preferred_primaries.push_back(std::move(state));
+	}
+	for (const auto& info : ai_get_huge_fire_info()) {
+		huge_fire_state state;
+		state.team = team_name(info.team);
+		state.weapon = weapon_class_name(info.weapon_index);
+		if (info.ship_registry_index >= 0 && info.ship_registry_index < static_cast<int>(Ship_registry.size())) {
+			state.ship = Ship_registry[info.ship_registry_index].name;
+		}
+		state.max_fire_count = info.max_fire_count;
+		out.huge_fire.push_back(std::move(state));
+	}
+
+	if (Player != nullptr) {
+		out.player_throttle = Player->ci.forward_cruise_percent;
+		out.auto_targeting = (Player->flags & PLAYER_FLAGS_AUTO_TARGETING) != 0;
+		out.auto_match_speed = (Player->flags & PLAYER_FLAGS_AUTO_MATCH_SPEED) != 0;
+		out.match_target = (Player->flags & PLAYER_FLAGS_MATCH_TARGET) != 0;
+		out.death_message = Player->death_message;
+		out.friendly_hits = Player->friendly_hits;
+		out.friendly_damage = Player->friendly_damage;
+		out.friendly_last_hit_time = Player->friendly_last_hit_time;
+		out.last_warning_message_time = Player->last_warning_message_time;
+	}
+
 	if (Player != nullptr) {
 		out.promoted = (Player->flags & PLAYER_FLAGS_PROMOTED) != 0;
 		out.no_check_all_alone_msg = (Player->flags & PLAYER_FLAGS_NO_CHECK_ALL_ALONE_MSG) != 0;
@@ -1687,6 +1839,53 @@ void apply_mission_extras(const checkpoint_data& data)
 	Perspective_locked = state.perspective_locked;
 	Slew_locked = state.slew_locked;
 	Viewer_mode = state.viewer_mode;
+
+	// Both tables are rebuilt.  The subject and target of a preferred primary are whatever text
+	// the SEXP named, and the engine's own evaluator turns that back into a reference; a huge-fire
+	// permission goes back in through the same call good-secondary-time makes.
+	{
+		auto& preferred = ai_get_preferred_primary_info();
+		preferred.clear();
+		for (const auto& saved : state.preferred_primaries) {
+			int weapon_class = lookup_weapon_class(saved.weapon);
+			if (weapon_class < 0 || saved.subject.empty() || saved.target.empty()) {
+				continue;
+			}
+			primary_fire_info info;
+			eval_object_ship_wing_point_team(&info.subject, -1, saved.subject.c_str());
+			eval_object_ship_wing_point_team(&info.target, -1, saved.target.c_str());
+			info.weapon_index = weapon_class;
+			preferred.push_back(std::move(info));
+		}
+
+		ai_get_huge_fire_info().clear();
+		for (const auto& saved : state.huge_fire) {
+			int team = lookup_team(saved.team);
+			int weapon_class = lookup_weapon_class(saved.weapon);
+			if (team < 0 || weapon_class < 0 || saved.ship.empty()) {
+				continue;
+			}
+			ai_good_secondary_time(team, weapon_class, saved.max_fire_count, saved.ship.c_str());
+		}
+	}
+
+	if (Player != nullptr) {
+		Player->ci.forward_cruise_percent = state.player_throttle;
+		if (state.auto_targeting) {
+			Player->flags |= PLAYER_FLAGS_AUTO_TARGETING;
+		}
+		if (state.auto_match_speed) {
+			Player->flags |= PLAYER_FLAGS_AUTO_MATCH_SPEED;
+		}
+		if (state.match_target) {
+			Player->flags |= PLAYER_FLAGS_MATCH_TARGET;
+		}
+		Player->death_message = state.death_message;
+		Player->friendly_hits = state.friendly_hits;
+		Player->friendly_damage = state.friendly_damage;
+		Player->friendly_last_hit_time = state.friendly_last_hit_time;
+		Player->last_warning_message_time = state.last_warning_message_time;
+	}
 
 	if (Player != nullptr) {
 		if (state.promoted) {
@@ -3699,6 +3898,38 @@ void load_ai(ship* shipp, const ai_state& in)
 	}
 }
 
+// The ship-level references to other ships, resolved once every ship in the mission exists:
+// guard-range clamps, the Knossos a ship departs through, and who has damaged it.
+void resolve_ship_references(ship* shipp, const ship_state& state)
+{
+	for (const auto& guard : state.guard_ranges) {
+		int target = ship_name_lookup(guard.ship.c_str());
+		if (target >= 0) {
+			set_guard_range_ship(guard.range, target, shipp);
+		}
+	}
+
+	shipp->special_warpout_objnum = objnum_for_ship_name(state.special_warpout_ship);
+
+	for (int i = 0; i < MAX_DAMAGE_SLOTS; i++) {
+		shipp->damage_ship_id[i] = 0;
+		shipp->damage_ship[i] = 0.0f;
+	}
+	int slot = 0;
+	for (const auto& credit : state.damage_credits) {
+		if (slot >= MAX_DAMAGE_SLOTS) {
+			break;
+		}
+		int objnum = objnum_for_ship_name(credit.ship);
+		if (objnum < 0) {
+			continue;
+		}
+		shipp->damage_ship_id[slot] = Objects[objnum].signature;
+		shipp->damage_ship[slot] = credit.damage;
+		slot++;
+	}
+}
+
 // Everything the AI points at, resolved once every ship in the mission exists.  Split out from
 // load_ai() because a ship's target is very often a ship that has not been restored yet.
 void resolve_ai_references(ship* shipp, const ai_state& in)
@@ -3790,6 +4021,44 @@ void store_subsystems(const ship* shipp, SCP_vector<subsystem_state>& out)
 		collect_flags(subsys->flags, Subsys_flag_table, state.flags);
 		store_subsys_scalars(*subsys, state.floats, state.ints);
 
+		state.armor_type = armor_type_name(subsys->armor_type_idx);
+		state.targeting_order.assign(subsys->turret_targeting_order, subsys->turret_targeting_order + NUM_TURRET_ORDER_TYPES);
+		for (int i = 0; i < subsys->num_target_priorities && i < 32; i++) {
+			int priority = subsys->target_priority[i];
+			if (priority >= 0 && priority < static_cast<int>(Ai_tp_list.size())) {
+				state.target_priorities.emplace_back(Ai_tp_list[priority].name);
+			}
+		}
+		state.scripting_target_override = subsys->scripting_target_override;
+
+		// The forced subsystem target lives on the turret's target ship; it is only meaningful
+		// while that target is a ship, which is also the only case turret_target names.
+		if (subsys->flags[Ship::Subsystem_Flags::Forced_subsys_target] && subsys->targeted_subsys != nullptr &&
+		    subsys->turret_enemy_objnum >= 0 && subsys->turret_enemy_objnum < MAX_OBJECTS) {
+			const object* target = &Objects[subsys->turret_enemy_objnum];
+			if (target->type == OBJ_SHIP && target->instance >= 0) {
+				state.forced_target_subsys = subsys_key_for(&Ships[target->instance], subsys->targeted_subsys);
+			}
+		}
+
+		if (subsys->submodel_instance_1 != nullptr) {
+			const submodel_instance* smi = subsys->submodel_instance_1;
+			state.has_rotation = true;
+			state.cur_angle = smi->cur_angle;
+			state.cur_offset = smi->cur_offset;
+			state.current_turn_rate = smi->current_turn_rate;
+			state.desired_turn_rate = smi->desired_turn_rate;
+			state.turn_accel = smi->turn_accel;
+			state.current_shift_rate = smi->current_shift_rate;
+			state.desired_shift_rate = smi->desired_shift_rate;
+			state.canonical_orient = smi->canonical_orient;
+			state.canonical_offset = smi->canonical_offset;
+		}
+		if (subsys->submodel_instance_2 != nullptr && subsys->submodel_instance_2 != subsys->submodel_instance_1) {
+			state.has_gun_orient = true;
+			state.gun_canonical_orient = subsys->submodel_instance_2->canonical_orient;
+		}
+
 		// A turret's target is stored by ship name; the objnum it holds is meaningless once
 		// the mission is reloaded.
 		if (subsys->turret_enemy_objnum >= 0 && subsys->turret_enemy_objnum < MAX_OBJECTS) {
@@ -3839,6 +4108,42 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in)
 			if (state.cargo_no_deplete) {
 				subsys->subsys_cargo_name |= CARGO_NO_DEPLETE;
 			}
+		}
+
+		subsys->armor_type_idx = lookup_armor_type(state.armor_type);
+		for (size_t i = 0; i < state.targeting_order.size() && i < NUM_TURRET_ORDER_TYPES; i++) {
+			subsys->turret_targeting_order[i] = state.targeting_order[i];
+		}
+		if (!state.target_priorities.empty()) {
+			subsys->num_target_priorities = 0;
+			for (const auto& name : state.target_priorities) {
+				if (subsys->num_target_priorities >= 32) {
+					break;
+				}
+				for (int i = 0; i < static_cast<int>(Ai_tp_list.size()); i++) {
+					if (!stricmp(Ai_tp_list[i].name, name.c_str())) {
+						subsys->target_priority[subsys->num_target_priorities++] = i;
+						break;
+					}
+				}
+			}
+		}
+		subsys->scripting_target_override = state.scripting_target_override;
+
+		if (state.has_rotation && subsys->submodel_instance_1 != nullptr) {
+			submodel_instance* smi = subsys->submodel_instance_1;
+			smi->cur_angle = state.cur_angle;
+			smi->cur_offset = state.cur_offset;
+			smi->current_turn_rate = state.current_turn_rate;
+			smi->desired_turn_rate = state.desired_turn_rate;
+			smi->turn_accel = state.turn_accel;
+			smi->current_shift_rate = state.current_shift_rate;
+			smi->desired_shift_rate = state.desired_shift_rate;
+			smi->canonical_orient = state.canonical_orient;
+			smi->canonical_offset = state.canonical_offset;
+		}
+		if (state.has_gun_orient && subsys->submodel_instance_2 != nullptr) {
+			subsys->submodel_instance_2->canonical_orient = state.gun_canonical_orient;
 		}
 
 		// Never leave a subsystem above its (possibly changed) maximum.
@@ -3908,6 +4213,12 @@ void resolve_turret_targets(ship* shipp, const SCP_vector<subsystem_state>& in)
 
 		it->second->turret_enemy_objnum = entry->objnum;
 		it->second->turret_enemy_sig = Objects[entry->objnum].signature;
+
+		// A forced subsystem target is on that ship.  The turret code treats a null pointer with
+		// the flag set as "clear the flag", so leaving this unresolved would silently drop it.
+		if (!state.forced_target_subsys.empty()) {
+			it->second->targeted_subsys = find_subsys_by_key(state.turret_target, state.forced_target_subsys);
+		}
 	}
 }
 
@@ -4140,6 +4451,65 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.countermeasure_class = weapon_class_name(shipp->current_cmeasure);
 		state.persona = persona_name(shipp->persona_index);
 
+		state.departure_location = static_cast<int>(shipp->departure_location);
+		state.departure_anchor = anchor_name(shipp->departure_anchor);
+		state.armor_type = armor_type_name(shipp->armor_type_idx);
+		state.shield_armor_type = armor_type_name(shipp->shield_armor_type_idx);
+		state.collision_damage_type = damage_type_name(shipp->collision_damage_type_idx);
+		state.debris_damage_type = damage_type_name(shipp->debris_damage_type_idx);
+		state.use_special_explosion = shipp->use_special_explosion;
+		state.use_shockwave = shipp->use_shockwave;
+
+		state.orders_present = true;
+		for (size_t order : shipp->orders_accepted) {
+			if (order < Player_orders.size()) {
+				state.orders_accepted.push_back(Player_orders[order].parse_name);
+			}
+		}
+		for (size_t order : shipp->orders_allowed_against) {
+			if (order < Player_orders.size()) {
+				state.orders_allowed_against.push_back(Player_orders[order].parse_name);
+			}
+		}
+
+		for (const auto& entry : shipp->max_guard_ranges) {
+			if (entry.shipnum >= 0 && entry.shipnum < MAX_SHIPS && entry.range > 0.0f) {
+				guard_range_state guard;
+				guard.ship = Ships[entry.shipnum].ship_name;
+				guard.range = entry.range;
+				state.guard_ranges.push_back(std::move(guard));
+			}
+		}
+		state.special_warpout_ship = ship_name_for_objnum(shipp->special_warpout_objnum);
+
+		state.glow_banks.assign(shipp->glow_point_bank_active.begin(), shipp->glow_point_bank_active.end());
+		capture_instance_textures(shipp->model_instance_num, state.texture_old, state.texture_new);
+		state.collision_group_id = objp->collision_group_id;
+
+		state.team_color = shipp->team_name;
+		state.secondary_team_color = shipp->secondary_team_name;
+		store_iff_colors(shipp->ship_iff_color, state.iff_colors);
+
+		state.sim_hull = objp->sim_hull_strength;
+
+		// Who has damaged it, by signature at runtime; only a live attacker can be named, and only
+		// a live one could still be credited.
+		for (int i = 0; i < MAX_DAMAGE_SLOTS; i++) {
+			if (shipp->damage_ship_id[i] <= 0 || shipp->damage_ship[i] <= 0.0f) {
+				continue;
+			}
+			for (auto so : list_range(&Ship_obj_list)) {
+				const object* attacker = &Objects[so->objnum];
+				if (attacker->signature == shipp->damage_ship_id[i] && attacker->type == OBJ_SHIP) {
+					damage_credit_state credit;
+					credit.ship = Ships[attacker->instance].ship_name;
+					credit.damage = shipp->damage_ship[i];
+					state.damage_credits.push_back(std::move(credit));
+					break;
+				}
+			}
+		}
+
 		if (shipp->wingnum >= 0 && shipp->wingnum < MAX_WINGS) {
 			state.wing_name = Wings[shipp->wingnum].name;
 		}
@@ -4182,6 +4552,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		if (wingp->has_display_name()) {
 			state.display_name = wingp->display_name;
 		}
+
+		if (wingp->formation >= 0 && wingp->formation < static_cast<int>(Wing_formations.size())) {
+			state.formation = Wing_formations[wingp->formation].name;
+		}
+		state.formation_scale = wingp->formation_scale;
 
 		// set-arrival-info and set-departure-info rewrite all of this on a wing exactly as they
 		// do on a ship that has not arrived.
@@ -4412,6 +4787,14 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.callsign = callsign_for_index(p_objp->callsign_index);
 		state.cargo = cargo_name(p_objp->cargo1);
 		state.cargo_no_deplete = (p_objp->cargo1 & CARGO_NO_DEPLETE) != 0;
+
+		state.collision_group_id = p_objp->collision_group_id;
+		state.team_color = p_objp->team_color_setting;
+		for (const auto& tr : p_objp->replacement_textures) {
+			state.texture_old.emplace_back(tr.old_texture);
+			state.texture_new.emplace_back(tr.new_texture);
+		}
+		store_iff_colors(p_objp->alt_iff_color, state.iff_colors);
 
 		collect_def_flags(p_objp->flags, Parse_object_flags, Num_parse_object_flags, state.flags);
 		store_parse_subsystems(p_objp, state.subsystems);
@@ -5004,6 +5387,59 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 	shipp->alt_type_index = alt_index_for_name(state.alt_name);
 	shipp->callsign_index = callsign_index_for_name(state.callsign);
 
+	shipp->departure_location = static_cast<DepartureLocation>(state.departure_location);
+	{
+		auto departure_anchor = lookup_anchor(state.departure_anchor);
+		if (departure_anchor.isValid()) {
+			shipp->departure_anchor = departure_anchor;
+		}
+	}
+
+	shipp->armor_type_idx = lookup_armor_type(state.armor_type);
+	shipp->shield_armor_type_idx = lookup_armor_type(state.shield_armor_type);
+	shipp->collision_damage_type_idx = lookup_damage_type(state.collision_damage_type);
+	shipp->debris_damage_type_idx = lookup_damage_type(state.debris_damage_type);
+	shipp->use_special_explosion = state.use_special_explosion;
+	shipp->use_shockwave = state.use_shockwave;
+
+	if (state.orders_present) {
+		shipp->orders_accepted.clear();
+		shipp->orders_allowed_against.clear();
+		for (const auto& name : state.orders_accepted) {
+			for (size_t i = 0; i < Player_orders.size(); i++) {
+				if (!stricmp(Player_orders[i].parse_name.c_str(), name.c_str())) {
+					shipp->orders_accepted.insert(i);
+					break;
+				}
+			}
+		}
+		for (const auto& name : state.orders_allowed_against) {
+			for (size_t i = 0; i < Player_orders.size(); i++) {
+				if (!stricmp(Player_orders[i].parse_name.c_str(), name.c_str())) {
+					shipp->orders_allowed_against.insert(i);
+					break;
+				}
+			}
+		}
+	}
+
+	for (size_t i = 0; i < state.glow_banks.size() && i < shipp->glow_point_bank_active.size(); i++) {
+		shipp->glow_point_bank_active[i] = state.glow_banks[i];
+	}
+	for (size_t i = 0; i < state.texture_old.size() && i < state.texture_new.size(); i++) {
+		ship_replace_active_texture(entry->shipnum, state.texture_old[i].c_str(), state.texture_new[i].c_str());
+	}
+	objp->collision_group_id = state.collision_group_id;
+
+	shipp->team_name = state.team_color;
+	shipp->secondary_team_name = state.secondary_team_color;
+	load_iff_colors(state.iff_colors, shipp->ship_iff_color);
+
+	objp->sim_hull_strength = state.sim_hull;
+
+	// Guard ranges, the Knossos and the damage credits name other ships and are resolved in the
+	// second pass; see resolve_ship_references().
+
 	int persona = lookup_persona(state.persona);
 	if (persona >= 0) {
 		shipp->persona_index = persona;
@@ -5089,6 +5525,15 @@ void apply_wings(const checkpoint_data& data)
 		apply_flags(state.flags, Wing_flag_table, wingp->flags);
 		wingp->time_gone = state.time_gone;
 		wingp->wave_delay_timestamp = TIMESTAMP(translate_stamp(state.wave_delay_timestamp));
+
+		wingp->formation = -1;
+		for (int i = 0; i < static_cast<int>(Wing_formations.size()); i++) {
+			if (!state.formation.empty() && !stricmp(Wing_formations[i].name, state.formation.c_str())) {
+				wingp->formation = i;
+				break;
+			}
+		}
+		wingp->formation_scale = state.formation_scale;
 
 		// The flag was restored above; the string has to follow it or the wing claims a display
 		// name it does not have.
@@ -5327,6 +5772,22 @@ void apply_parse_objects(const checkpoint_data& data)
 		p_objp->respawn_priority = state.respawn_priority;
 		p_objp->alt_type_index = alt_index_for_name(state.alt_name);
 		p_objp->callsign_index = callsign_index_for_name(state.callsign);
+
+		p_objp->collision_group_id = state.collision_group_id;
+		p_objp->team_color_setting = state.team_color;
+		// Replaced wholesale: the saved list already holds what the mission file gave it.
+		p_objp->replacement_textures.clear();
+		for (size_t i = 0; i < state.texture_old.size() && i < state.texture_new.size(); i++) {
+			texture_replace tr;
+			memset(&tr, 0, sizeof(tr));
+			strcpy_s(tr.ship_name, p_objp->name);
+			strcpy_s(tr.old_texture, state.texture_old[i].c_str());
+			strcpy_s(tr.new_texture, state.texture_new[i].c_str());
+			tr.new_texture_id = -1;
+			tr.from_table = false;
+			p_objp->replacement_textures.push_back(tr);
+		}
+		load_iff_colors(state.iff_colors, p_objp->alt_iff_color);
 		if (!state.cargo.empty()) {
 			int cargo = lookup_cargo(state.cargo);
 			if (state.cargo_no_deplete) {
@@ -6211,6 +6672,7 @@ void mission_checkpoint_apply()
 			resolve_turret_targets(&Ships[entry->shipnum], state.subsystems);
 			restore_docks(&Ships[entry->shipnum], &Objects[entry->objnum], state.docks);
 			resolve_ai_references(&Ships[entry->shipnum], state.ai);
+			resolve_ship_references(&Ships[entry->shipnum], state);
 		}
 	}
 
