@@ -258,7 +258,11 @@ struct animation_state {
 	float time = 0.0f;
 	float duration = 0.0f;
 	float speed = 1.0f;
-	std::uint64_t instance_flags = 0;
+
+	// Named, like every other flag set in this file.  A bit position in a FLAG_LIST is an
+	// implementation detail that moves whenever somebody inserts an entry, so raw bits would
+	// quietly corrupt every checkpoint on the next engine update.
+	SCP_vector<SCP_string> instance_flags;
 };
 
 // One end of a docking connection, as seen from the ship that holds it.  Both ships record the

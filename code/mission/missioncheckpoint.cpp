@@ -327,6 +327,19 @@ struct event_flag_entry {
 	const char* name;
 };
 
+struct animation_instance_flag_entry {
+	animation::Animation_Instance_Flags flag;
+	const char* name;
+};
+
+// Where a running animation had got to in its own loop handling.  By name like every other flag
+// set: these are positions in a FLAG_LIST, and the list gains entries.
+const animation_instance_flag_entry Animation_instance_flag_table[] = {
+	{animation::Animation_Instance_Flags::Stop_after_next_loop, "stop_after_next_loop"},
+	{animation::Animation_Instance_Flags::Seamless_loop_shutdown, "seamless_loop_shutdown"},
+	{animation::Animation_Instance_Flags::Seamless_fully_started, "seamless_fully_started"},
+};
+
 const event_flag_entry Event_flag_table[] = {
 	{MEF_CURRENT, "current"},
 	{MEF_DIRECTIVE_SPECIAL, "directive_special"},
@@ -2410,7 +2423,7 @@ void store_animations(const object* objp, SCP_vector<animation_state>& out)
 		state.time = entry.second.time;
 		state.duration = entry.second.duration;
 		state.speed = entry.second.speed;
-		state.instance_flags = entry.second.instance_flags.to_u64();
+		collect_flags(entry.second.instance_flags, Animation_instance_flag_table, state.instance_flags);
 
 		out.push_back(std::move(state));
 	}
@@ -2439,7 +2452,7 @@ void restore_animations(const object* objp, const SCP_vector<animation_state>& i
 		data.time = state.time;
 		data.duration = state.duration;
 		data.speed = state.speed;
-		data.instance_flags.from_u64(state.instance_flags);
+		apply_flags(state.instance_flags, Animation_instance_flag_table, data.instance_flags);
 
 		// A miss means the animation was renamed or removed from the table since the checkpoint
 		// was written, which is a mod change rather than an error.
