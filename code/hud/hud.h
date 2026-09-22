@@ -303,6 +303,9 @@ public:
 	void getPosition(int *x, int *y) const;
 	bool isOffbyDefault() const;
 	bool isActive() const;
+	bool isSexpOverridden() const { return sexp_override; }
+	bool isSexpColorLocked() const { return sexp_lock_color; }
+	bool isActiveIgnoringOverride() const { return active; }
 
 	// Config getters
 	SCP_string getConfigName() const;
