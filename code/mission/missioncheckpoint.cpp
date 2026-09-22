@@ -4693,6 +4693,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		ship_state state;
 		state.name = entry.name;
 
+		// A script may have renamed the ship; the fresh load will only know the parse name.
+		if (entry.has_p_objp() && stricmp(entry.p_objp()->name, entry.name) != 0) {
+			state.parse_name = entry.p_objp()->name;
+		}
+
 		switch (entry.status) {
 		case ShipStatus::PRESENT:
 			break;
@@ -5064,7 +5069,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		bool sticky = (Sexp_nodes[i].value == SEXP_KNOWN_TRUE) || (Sexp_nodes[i].value == SEXP_KNOWN_FALSE) ||
 					  (Sexp_nodes[i].value == SEXP_NAN_FOREVER) || (Sexp_nodes[i].value == SEXP_NUM_EVAL);
 
-		if (!sticky && Sexp_nodes[i].flags == SNF_DEFAULT_VALUE) {
+		// An is-true-for-duration node that has started its clock is state too, sticky or not.
+		int duration_index = Sexp_nodes[i].duration_index;
+		bool has_duration = (duration_index >= 0) && (duration_index < static_cast<int>(Sexp_is_true_for_duration_times.size()));
+
+		if (!sticky && Sexp_nodes[i].flags == SNF_DEFAULT_VALUE && !has_duration) {
 			continue;
 		}
 
@@ -5076,6 +5085,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		// For a rolled `rand` the text is the number it settled on, so it has to travel with it.
 		if (Sexp_nodes[i].value == SEXP_NUM_EVAL) {
 			state.text = Sexp_nodes[i].text;
+		}
+
+		if (has_duration) {
+			state.has_duration = true;
+			state.duration_start = Sexp_is_true_for_duration_times[duration_index];
 		}
 
 		data.sexp_nodes.push_back(std::move(state));
@@ -5515,6 +5529,41 @@ void remove_ship_for_restore(const ship_registry_entry* entry, const ship_state&
 
 // Take out every ship the checkpoint says had already gone but which is standing here alive.
 // Safe to call more than once: a ship that has already been removed is EXITED and is skipped.
+// The registry entry a ship state describes.  Until apply_ship_renames() has run, a ship a script
+// renamed is only in the registry under its parse name.
+const ship_registry_entry* registry_entry_for(const ship_state& state)
+{
+	auto entry = ship_registry_get(state.name);
+	if (entry == nullptr && !state.parse_name.empty()) {
+		entry = ship_registry_get(state.parse_name);
+	}
+	return entry;
+}
+
+// Put back the names scripts had given ships.  ship.Name (Lua) renames the ship and its registry
+// entry but not its parse object, so the fresh load created the ship under the mission file's
+// name; after this, every ship that exists is findable by the name the checkpoint stores.  A ship
+// not created yet keeps its parse name, since that is what its parse object will create it as.
+void apply_ship_renames(const checkpoint_data& data)
+{
+	for (const auto& state : data.ships) {
+		if (state.parse_name.empty()) {
+			continue;
+		}
+
+		int entry_index = ship_registry_get_index(state.parse_name);
+		if (entry_index < 0 || !Ship_registry[entry_index].has_shipp()) {
+			continue;
+		}
+
+		ship* shipp = Ship_registry[entry_index].shipp();
+		strcpy_s(shipp->ship_name, state.name.c_str());
+		ship_registry_rename(entry_index, shipp->ship_name, true);
+
+		mprintf(("CHECKPOINT => Ship '%s' is named '%s' again.\n", state.parse_name.c_str(), state.name.c_str()));
+	}
+}
+
 void remove_gone_ships(const checkpoint_data& data)
 {
 	for (const auto& state : data.ships) {
@@ -5522,7 +5571,7 @@ void remove_gone_ships(const checkpoint_data& data)
 			continue;
 		}
 
-		auto entry = ship_registry_get(state.name);
+		auto entry = registry_entry_for(state);
 		if (entry == nullptr) {
 			// The mission no longer has this ship at all; nothing to reconcile.
 			continue;
@@ -5550,7 +5599,7 @@ void block_gone_arrivals(const checkpoint_data& data)
 			continue;
 		}
 
-		auto entry = ship_registry_get(state.name);
+		auto entry = registry_entry_for(state);
 		if (entry == nullptr || entry->status != ShipStatus::NOT_YET_PRESENT || !entry->has_p_objp()) {
 			continue;
 		}
@@ -5640,7 +5689,7 @@ void restore_loose_arrivals(const checkpoint_data& data)
 			continue;
 		}
 
-		auto entry = ship_registry_get(state.name);
+		auto entry = registry_entry_for(state);
 		if (entry == nullptr || entry->status != ShipStatus::NOT_YET_PRESENT || !entry->has_p_objp()) {
 			continue;
 		}
@@ -5690,6 +5739,9 @@ void reconcile_ship_existence(const checkpoint_data& data)
 	restore_wing_arrivals(data);
 	restore_loose_arrivals(data);
 	restore_dynamic_ships(data);
+	// Every ship that is going to exist does now; give the renamed ones their names back before
+	// anything looks them up by those names.
+	apply_ship_renames(data);
 	remove_gone_ships(data);
 	block_gone_arrivals(data);
 }
@@ -6786,6 +6838,13 @@ void apply_mission_logic(const checkpoint_data& data)
 
 		if (state.value == SEXP_NUM_EVAL && !state.text.empty()) {
 			strcpy_s(Sexp_nodes[state.index].text, state.text.c_str());
+		}
+
+		// The duration clocks are handed out in evaluation order and cleared by the level init,
+		// so the node simply gets the next slot, holding the mission time it started at.
+		if (state.has_duration) {
+			Sexp_nodes[state.index].duration_index = static_cast<int>(Sexp_is_true_for_duration_times.size());
+			Sexp_is_true_for_duration_times.push_back(state.duration_start);
 		}
 	}
 
