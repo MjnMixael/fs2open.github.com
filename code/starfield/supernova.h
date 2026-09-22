@@ -53,6 +53,14 @@ void supernova_start(int seconds);
 // stop a supernova
 void supernova_stop();
 
+// the countdown as it stands, for the checkpoint: how long it was set for, and how long is left
+float supernova_time_total();
+float supernova_seconds_left();
+
+// put a countdown back part-way through, as supernova_start() would have left it that long ago;
+// the stage is re-derived by supernova_process() from the time left
+void supernova_restore(float total_seconds, float seconds_left);
+
 // call once per frame
 void supernova_process();
 
