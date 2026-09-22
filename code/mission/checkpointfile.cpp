@@ -432,7 +432,7 @@ void write_parse_subsystems(pilot::FileHandler* handler, const SCP_vector<checkp
 		handler->startSectionWrite(Section::Unnamed);
 		handler->writeString("name", sub.name.c_str());
 		handler->writeFloat("percent", sub.percent);
-		handler->writeInt("ai_class", sub.ai_class);
+		handler->writeString("ai_class", sub.ai_class.c_str());
 		handler->writeString("cargo", sub.cargo.c_str());
 		handler->writeString("cargo_title", sub.cargo_title.c_str());
 		write_string_list(handler, "primary_banks", sub.primary_banks);
@@ -457,7 +457,7 @@ void read_parse_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::p
 		checkpoint::parse_subsys_state sub;
 		sub.name = handler->readStringOr("name", "");
 		sub.percent = handler->readFloatOr("percent", 0.0f);
-		sub.ai_class = handler->readIntOr("ai_class", -1);
+		sub.ai_class = handler->readStringOr("ai_class", "");
 		sub.cargo = handler->readStringOr("cargo", "");
 		sub.cargo_title = handler->readStringOr("cargo_title", "");
 		read_string_list(handler, "primary_banks", sub.primary_banks);
@@ -1061,6 +1061,7 @@ void write_subsystems(pilot::FileHandler* handler, const SCP_vector<checkpoint::
 		handler->writeBool("has_weapons", subsys.has_weapons);
 		if (subsys.has_weapons) {
 			write_weapon_state(handler, subsys.weapons);
+			handler->writeString("ai_class", subsys.ai_class.c_str());
 		}
 
 		handler->endSectionWrite();
@@ -1095,6 +1096,7 @@ void read_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::subsyst
 		subsys.has_weapons = handler->readBoolOr("has_weapons", false);
 		if (subsys.has_weapons) {
 			read_weapon_state(handler, subsys.weapons);
+			subsys.ai_class = handler->readStringOr("ai_class", "");
 		}
 
 		subsystems.push_back(std::move(subsys));
