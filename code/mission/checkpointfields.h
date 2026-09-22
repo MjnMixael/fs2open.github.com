@@ -85,10 +85,11 @@
 	F(level2_tag_left)
 
 // current_cmeasure (a weapon class index), persona_index (an index into Personas, built from
-// messages.tbl) and subsys_cargo_name / cargo1 (indices into Cargo_names, which set-cargo extends
-// at runtime) are all table or runtime indices and are captured by name instead; see the
-// "never write a runtime index" rule above.  hotkey is a hotkey *set* number, not an index into
-// anything, so it stays.
+// messages.tbl), subsys_cargo_name / cargo1 (indices into Cargo_names, which set-cargo extends
+// at runtime) and alt_type_index / callsign_index (indices into Mission_alt_types and
+// Mission_callsigns, which change-alt-name and change-callsign extend at runtime) are all table
+// or runtime indices and are captured by name instead; see the "never write a runtime index"
+// rule above.  hotkey is a hotkey *set* number, not an index into anything, so it stays.
 #define CKPT_SHIP_INTS(F)                                                                      \
 	F(cmeasure_count)                                                                          \
 	F(shield_recharge_index)                                                                   \
@@ -98,8 +99,6 @@
 	F(respawn_priority)                                                                        \
 	F(score)                                                                                   \
 	F(hotkey)                                                                                  \
-	F(alt_type_index)                                                                          \
-	F(callsign_index)                                                                          \
 	F(ship_guardian_threshold)                                                                 \
 	F(subsys_disrupted_flags)                                                                  \
 	F(num_swarm_missiles_to_fire)                                                              \
@@ -242,10 +241,9 @@
 // Object references (target, goal, guard, ignore, support ship, hitter) are NOT here: an objnum
 // means nothing after a reload, so those are stored by ship name in ai_state.
 
-// enemy_wing and guard_wingnum index Wings[], which only the mission parse ever builds -- the same
-// reasoning that lets alt_type_index and callsign_index stay as indices.  wp_list_index and
-// wp_index are positions in a waypoint list, and waypoint lists likewise come only from the
-// mission file.
+// enemy_wing and guard_wingnum index Wings[], which only the mission parse ever builds.
+// wp_list_index and wp_index are positions in a waypoint list, and waypoint lists likewise come
+// only from the mission file.
 //
 // mode, previous_mode, submode and previous_submode are AIM_ and AIS_ values.  Unlike the goal
 // modes, which go by name, these stay as numbers: they are #defines with explicit values rather
