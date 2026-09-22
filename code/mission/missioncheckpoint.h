@@ -39,10 +39,6 @@
  *   every load and can name weapons or debris that do not survive at all; a bad remap double-
  *   damages a ship.  total_time is about a second, so a checkpoint almost never lands inside one.
  *
- *   Small debris.  It expires in seconds, it is pure decoration, and debris_create_only() culls
- *   it by distance anyway.  Hull debris is captured, because a capital ship wreck is permanent,
- *   collidable and targetable -- battlefield terrain rather than an effect.
- *
  *   Particles, decals, trails, sparks, sound handles and RNG state.  None of these are ever worth
  *   doing: they are either regenerated within a frame or two of the restore, or they are handles
  *   into subsystems that were torn down with the level.
@@ -268,9 +264,52 @@ struct jump_node_state {
 	SCP_string name;
 	SCP_string display_name;
 	SCP_string model;              // filename; empty means the default model
+	bool show_polys = false;       // set-jumpnode-model's second argument
 	bool hidden = false;
 	bool colored = false;
 	int color[4] = {0, 0, 0, 0};
+
+	// A script can move a jump node's object like any other.  has_pos is false in a checkpoint
+	// written before this was captured; the node then stays where the mission file put it.
+	bool has_pos = false;
+	vec3d pos = vmd_zero_vector;
+};
+
+// A nebula poof type: whether it is on, and a fade in progress.  Poof_info comes from the
+// tables and the fade fields on it are runtime state (neb2_fade_poof), so they go by name.
+struct poof_state {
+	SCP_string name;
+	bool enabled = false;
+	int fade_start = -1;          // engine timestamp; shifted on restore
+	int fade_duration = -1;       // -1 means no fade in progress
+	bool fade_in = true;
+	float fade_multiplier = -1.0f;
+};
+
+// A post-processing effect's live setting (set-post-effect).
+struct post_effect_state {
+	SCP_string name;
+	float intensity = 0.0f;
+	vec3d rgb = vmd_zero_vector;
+};
+
+// A class-level damage type override (weapon-set-damage-type, ship-set-shockwave-damage-type,
+// field-set-damage-type): the table entry it applies to, and the damage type by name, empty
+// meaning none.  Only entries that differ from their table default are stored.
+struct damage_type_override_state {
+	SCP_string subject;
+	SCP_string damage_type;
+};
+
+// A coordinate point.  Everything a SEXP or a script can change on one, plus the point itself:
+// scripts can create and delete these mid-mission, so the set is restored, not just the fields.
+struct coordinate_point_state {
+	SCP_string name;
+	SCP_string group;
+	vec3d pos = vmd_zero_vector;   // a point has no orientation (Dont_change_orientation)
+	int escort_priority = 0;
+	int multi_team = -1;
+	bool visible = false;
 };
 
 // One live sun or background bitmap.  These are instances rather than the definition of the
@@ -740,12 +779,13 @@ struct parse_object_state {
 	SCP_vector<iff_color_state> iff_colors;
 };
 
-// A piece of hull debris.
+// A piece of debris.
 //
-// Only hull debris is captured.  Small debris expires in seconds and is pure decoration, but a
-// large hull chunk has lifeleft == -1 -- it stays for the rest of the mission, it collides, and
-// it can be targeted and shot.  That makes a capital ship wreck part of the battlefield rather
-// than an effect, and a restore that loses it is immediately obvious.
+// Hull debris is what matters: a large hull chunk has lifeleft == -1 -- it stays for the rest of
+// the mission, it collides, and it can be targeted and shot -- so a capital ship wreck is part of
+// the battlefield rather than an effect, and a restore that loses it is immediately obvious.  The
+// generic fragments, and anything a script made from a model of its own, come along too now that
+// the model goes by filename; they cost nothing extra and a script may have been counting on them.
 struct debris_state {
 	SCP_string ship_class;    // what it broke off
 	SCP_string submodel;      // by name, so a re-exported pof cannot scramble it
@@ -765,6 +805,15 @@ struct debris_state {
 	SCP_string parent_alt_name; // by name; see ship_state::alt_name.  Empty means none.
 
 	bool do_not_expire = false;
+
+	// Hull debris is a piece of the ship's own model; the rest is generic fragments from the
+	// debris model, and a script can make debris from any model at all.  So the model goes by
+	// filename, and a chunk with no ship class is fine as long as it has a model.  A checkpoint
+	// written before this was captured has hull debris only and no model name; the class's model
+	// is used then.
+	bool is_hull = true;
+	SCP_string model;
+	fix time_started = 0;       // mission time, verbatim; what debris_find_oldest() sorts by
 };
 
 // A weapon in flight.  Note the name: `weapon_state` above is a ship's weapon banks, which is a
@@ -819,6 +868,23 @@ struct projectile_state {
 	vec3d lssm_target_pos = vmd_zero_vector;
 
 	int cmeasure_timer = 0;     // engine timestamp, shifted on restore
+
+	vec3d rotational_velocity = vmd_zero_vector;
+
+	// Mines: the chase in progress and the cooldown after it.  Both engine timestamps.
+	int mine_chase_expires = -1;
+	int mine_chase_cooldown_expires = -1;
+
+	// Continuous child spawns, one stamp per spawn type; empty in a checkpoint written before
+	// this was captured, in which case the spawn clocks start over.
+	SCP_vector<int> last_spawn_times;
+
+	// Big-ship attack point: where on the target this shot is aimed, and when to pick anew.
+	int big_attack_point_stamp = 0;
+	vec3d big_attack_point = vmd_zero_vector;
+
+	// Collision groups are a bitmask a SEXP or script assigns; a shot inherits its parent's.
+	int collision_group_id = 0;
 };
 
 // A beam that is mid-fire.
@@ -1006,6 +1072,70 @@ struct environment_state {
 	// an empty string for an unused slot.  The set-squadron-wings SEXP can change this
 	// mid-mission, and a restart puts the mission's original wings back.
 	SCP_vector<SCP_string> squadron_wings;
+
+	// --- Effects and the rest of the world ---
+	// Added after the section above; effects_present is false in a checkpoint written before
+	// then, and none of what follows is applied from such a file.
+
+	bool effects_present = false;
+
+	// set-gravity-accel.  Turning gravity on or off also changes which weapons are subject to it,
+	// so the restore goes through the same recalculation the SEXP does.
+	vec3d gravity = vmd_zero_vector;
+
+	SCP_string storm;   // nebula-change-storm; by name, empty for none
+
+	SCP_vector<poof_state> poofs;
+
+	bool has_volumetrics = false;
+	bool volumetrics_enabled = true;
+
+	// The fog distances a script can move (mission.NebulaNearDistance and friends).
+	float fog_near_distance = 0.0f;
+	float fog_1000m_visibility = 0.0f;
+	float fog_skybox_clip_distance = 0.0f;
+	float fog_clip_distance = 0.0f;
+
+	SCP_vector<post_effect_state> post_effects;
+	bool lightshafts_on = true;
+	float lightshafts_intensity = 0.0f;
+
+	// The sound environment (set-sound-environment, update-sound-environment).  The preset goes
+	// by name; the EFX preset list is a table.  An empty preset means the environment is off.
+	SCP_string sound_env_preset;
+	float sound_env_volume = 0.0f;
+	float sound_env_damping = 0.0f;
+	float sound_env_decay = 0.0f;
+
+	// set-friendly-damage-caps writes into the AI profile for the current skill level.
+	float beam_friendly_damage_cap = 0.0f;
+	float weapon_friendly_damage_cap = 0.0f;
+	float weapon_self_damage_cap = 0.0f;
+
+	SCP_vector<damage_type_override_state> weapon_damage_types;
+	SCP_vector<damage_type_override_state> weapon_shockwave_damage_types;
+	SCP_vector<damage_type_override_state> ship_shockwave_damage_types;
+	SCP_vector<damage_type_override_state> asteroid_damage_types;
+
+	// The briefing, debriefing and fiction scores (Mission_music), by spooled-music name, one
+	// entry per score with an empty string for none.  A script can change them mid-mission.
+	SCP_vector<SCP_string> mission_music;
+
+	SCP_vector<coordinate_point_state> coordinate_points;
+
+	// set-camera-shudder.  A perpetual shudder has no end; a timed one is a stamp.
+	bool shudder_perpetual = false;
+	bool shudder_everywhere = false;
+	int shudder_time = -1;      // engine timestamp; shifted on restore
+	int shudder_total = 0;
+	float shudder_intensity = 0.0f;
+
+	bool photo_mode_allowed = false;
+
+	// Mission flags a SEXP flips at runtime.
+	bool toggle_debriefing = false;
+	bool deactivate_autopilot = false;
+	bool use_autopilot_cinematics = false;
 };
 
 // One reinforcement's remaining allowance.
