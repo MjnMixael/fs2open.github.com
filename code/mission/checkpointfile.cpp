@@ -1670,6 +1670,9 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 
 		handler->writeString("name", ship_data.name.c_str());
 		handler->writeString("disposition", disposition_name(ship_data.disposition));
+		if (!ship_data.parse_name.empty()) {
+			handler->writeString("parse_name", ship_data.parse_name.c_str());
+		}
 
 		if (ship_data.disposition == checkpoint::ShipDisposition::Present) {
 			handler->writeString("class", ship_data.ship_class.c_str());
@@ -1798,6 +1801,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 
 		ship_data.name = handler->readStringOr("name", "");
 		ship_data.disposition = disposition_value(handler->readStringOr("disposition", "present"));
+		ship_data.parse_name = handler->readStringOr("parse_name", "");
 
 		if (ship_data.disposition == checkpoint::ShipDisposition::Present) {
 			ship_data.ship_class = handler->readStringOr("class", "");
@@ -2200,6 +2204,9 @@ void write_sexp(pilot::FileHandler* handler, const checkpoint::checkpoint_data& 
 		if (!node.text.empty()) {
 			handler->writeString("t", node.text.c_str());
 		}
+		if (node.has_duration) {
+			handler->writeInt("d", static_cast<std::int32_t>(node.duration_start));
+		}
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -2231,6 +2238,10 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			node.value = handler->readIntOr("v", 0);
 			node.flags = handler->readIntOr("f", 0);
 			node.text = handler->readStringOr("t", "");
+			if (handler->hasField("d")) {
+				node.has_duration = true;
+				node.duration_start = static_cast<fix>(handler->readIntOr("d", 0));
+			}
 
 			if (node.index >= 0) {
 				data.sexp_nodes.push_back(node);
