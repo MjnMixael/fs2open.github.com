@@ -788,6 +788,29 @@ struct environment_state {
 
 	bool asteroids_enabled = true;
 
+	// The asteroid field's definition, as distinct from the rocks in it (see asteroid_state).
+	// set-asteroid-field, set-debris-field and config-field-targets all rewrite this at runtime,
+	// and a mission whose field a SEXP created has no field in the file at all -- in which case
+	// the fresh load has no models paged in, and every saved rock would be silently dropped.
+	// has_asteroid_field is false in a checkpoint written before this was captured; then the
+	// mission file's field is left alone.
+	bool has_asteroid_field = false;
+	int asteroid_field_num_initial = 0;
+	bool asteroid_field_active = true;       // FT_ACTIVE vs FT_PASSIVE
+	bool asteroid_field_is_debris = false;   // DG_DEBRIS vs DG_ASTEROID
+	bool asteroid_field_enhanced_checks = false;
+	bool asteroid_field_has_inner_bound = false;
+	float asteroid_field_speed = 0.0f;
+	float asteroid_field_bound_rad = 0.0f;
+	vec3d asteroid_field_vel = vmd_zero_vector;
+	vec3d asteroid_field_min = vmd_zero_vector;
+	vec3d asteroid_field_max = vmd_zero_vector;
+	vec3d asteroid_field_inner_min = vmd_zero_vector;
+	vec3d asteroid_field_inner_max = vmd_zero_vector;
+	SCP_vector<SCP_string> asteroid_field_asteroid_types;  // asteroid subtype names, as the field holds them
+	SCP_vector<SCP_string> asteroid_field_debris_types;    // Asteroid_info entries, by name
+	SCP_vector<SCP_string> asteroid_field_targets;
+
 	SCP_vector<navpoint_state> navpoints;
 	int current_nav = -1;
 

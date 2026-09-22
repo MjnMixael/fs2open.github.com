@@ -199,6 +199,8 @@ float asteroid_time_to_impact(object *asteroid_objp);
 void	asteroid_show_brackets();
 void	asteroid_target_closest_danger();
 void asteroid_add_target(object* objp);
+// forget every target; the checkpoint restore rebuilds the list from the field's target names
+void asteroid_clear_targets();
 int get_asteroid_index(const char* asteroid_name);
 const SCP_vector<SCP_string>& get_list_valid_asteroid_subtypes();
 int get_asteroid_subtype_index_by_name(const SCP_string& name, int asteroid_idx);
