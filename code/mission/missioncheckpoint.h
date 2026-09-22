@@ -416,6 +416,10 @@ struct wing_state {
 	SCP_vector<SCP_string> flags;
 	SCP_map<SCP_string, int> ints;
 	SCP_vector<SCP_string> ship_names;   // wing::ship_index, resolved to names
+	// wing::special_ship is an index into ship_index[], which ship_wing_cleanup() compacts as
+	// members leave, so the leader's slot moves during a mission; by name, and re-derived
+	// against the rebuilt list on apply.  Empty means "the first ship".
+	SCP_string special_ship;
 	fix time_gone = 0;
 	int wave_delay_timestamp = 0;
 
