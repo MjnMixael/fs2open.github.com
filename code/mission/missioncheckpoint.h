@@ -205,9 +205,9 @@ struct navpoint_state {
 // One jump node, as the mission has left it.
 //
 // Identified by its position in Jump_nodes rather than by name, because set-jumpnode-name renames
-// the thing that would otherwise be the key.  That list is built solely by the mission parse,
-// which the fingerprint check makes identical across runs -- the same reasoning that lets
-// alt_type_index stay an index.
+// the thing that would otherwise be the key.  That list is built solely by the mission parse and
+// nothing extends it at runtime, which the fingerprint check makes identical across runs -- the
+// same reasoning that lets Wings[] and the waypoint lists go by index.
 struct jump_node_state {
 	int index = 0;
 
@@ -358,6 +358,13 @@ struct ship_state {
 	SCP_string cargo_title;
 	SCP_string countermeasure_class;
 	SCP_string persona;          // Personas is built from messages.tbl, so the index is a table index
+
+	// alt_type_index and callsign_index look like parse-only indices, but change-alt-name and
+	// change-callsign append to Mission_alt_types and Mission_callsigns at runtime, so an index
+	// from the saved run can name a different entry, or none, in the fresh parse.  By name, and
+	// re-added on apply if the fresh parse does not have them.  Empty means none.
+	SCP_string alt_name;
+	SCP_string callsign;
 
 	// ship::cargo1 packs an index into Cargo_names with the "do not deplete" bit.  set-cargo
 	// appends to Cargo_names at runtime, so an index saved in one run can point past the end of
@@ -554,12 +561,9 @@ struct parse_object_state {
 	int departure_delay = 0;
 	int escort_priority = 0;
 	int respawn_priority = 0;
-	// Mission_alt_types and Mission_callsigns are built solely by the mission parse and nothing
-	// extends them at runtime, so these indices mean the same thing in any run of the same
-	// mission file -- which the fingerprint check guarantees.  Cargo_names is not like that; see
-	// the note on ship_state::cargo.
-	int alt_type_index = -1;
-	int callsign_index = -1;
+	// By name, for the reason given on ship_state::alt_name.
+	SCP_string alt_name;
+	SCP_string callsign;
 	SCP_string cargo;
 	bool cargo_no_deplete = false;
 
@@ -588,7 +592,7 @@ struct debris_state {
 	float max_hull = 0.0f;
 	float lifeleft = -1.0f;
 	float damage_mult = 1.0f;
-	int parent_alt_name = -1;   // index into Mission_alt_types, which only the mission parse builds
+	SCP_string parent_alt_name; // by name; see ship_state::alt_name.  Empty means none.
 
 	bool do_not_expire = false;
 };
@@ -868,7 +872,16 @@ struct log_entry_state {
 	int flags = 0;
 	fix timestamp = 0;
 	int timer_padding = 0;
+	// log_entry::index means something different per type, and two of those meanings are indices
+	// this file must not carry: a Cargo_names index for the cargo-revealed entries (set-cargo
+	// extends that list at runtime), and a Ship_info index packed with a subsystem index for
+	// subsystem-destroyed entries (a table index).  Those go out as names in index_name (the cargo,
+	// or the subsystem) and index_class (the ship class), and index is left at zero for them;
+	// every other type's index -- a wave number, a goal number -- is mission-file order and is
+	// carried as it is.
 	int index = 0;
+	SCP_string index_name;
+	SCP_string index_class;
 	// IFF indices come from iff_defs.tbl, so they shift if a mod reorders it.
 	SCP_string primary_team;
 	SCP_string secondary_team;
