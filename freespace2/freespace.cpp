@@ -4959,7 +4959,13 @@ void game_process_event( int current_state, int event )
 			break;
 
 		case GS_EVENT_MAIN_MENU:
-			gameseq_set_state(GS_STATE_MAIN_MENU);		
+			// A checkpoint load that asked to reopen the loadout goes back through the briefing,
+			// and backing out of the briefing comes here rather than through GS_EVENT_END_GAME.
+			// Whatever restore was in flight is abandoned with it; otherwise the next normal entry
+			// to the same mission would apply it silently, with no prompt.
+			mission_checkpoint_clear_pending();
+
+			gameseq_set_state(GS_STATE_MAIN_MENU);
 			break;
 
 		case GS_EVENT_OPTIONS_MENU:
@@ -5003,6 +5009,11 @@ void game_process_event( int current_state, int event )
 			break;
 
 		case GS_EVENT_DEBRIEF:
+			// The mission is over.  A SEXP can end the mission and request a checkpoint load in the
+			// same frame; the restart the load posted is thrown out by the state change, so the
+			// request must go with it, or the debrief's Replay button would apply it silently.
+			mission_checkpoint_clear_pending();
+
 			// did we end the campaign in the main freespace 2 single player campaign?
 			// (specifically, did we successfully jump out when the supernova was in progress
 			// and the campaign was ending?)
