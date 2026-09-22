@@ -447,6 +447,12 @@ struct ship_state {
 	SCP_string name;
 	ShipDisposition disposition = ShipDisposition::Present;
 
+	// The name the mission file gives this ship, when a script has renamed it since (ship.Name
+	// from Lua renames the ship and its registry entry but not its parse object).  A fresh load
+	// only knows the ship by this name; the restore finds it by this and renames it back to
+	// `name`.  Empty when the two agree, which is nearly always.
+	SCP_string parse_name;
+
 	// --- only meaningful when disposition == Present ---
 
 	SCP_string ship_class;
@@ -698,6 +704,12 @@ struct sexp_node_state {
 	int value = 0;
 	int flags = 0;
 	SCP_string text;   // only stored when the node's text carries state, i.e. SEXP_NUM_EVAL
+
+	// is-true-for-duration keeps, per operator node, the mission time at which its condition
+	// first held (Sexp_is_true_for_duration_times, sexp.cpp).  A node with such a clock is stored
+	// whether or not its value is sticky, since losing the clock restarts the countdown.
+	bool has_duration = false;
+	fix duration_start = 0;   // mission time, verbatim
 };
 
 // Containers hold runtime data the same way SEXP variables do.
