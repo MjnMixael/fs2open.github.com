@@ -1499,6 +1499,19 @@ void apply_mission_extras(const checkpoint_data& data)
 	Current_mission_mood = state.mission_mood;
 	The_mission.flags.set(Mission::Mission_Flags::No_builtin_msgs, state.no_builtin_msgs);
 	The_mission.flags.set(Mission::Mission_Flags::No_builtin_command, state.no_builtin_command);
+}
+
+// Separate from the rest of the extras because of when it has to run.  Bringing a reinforcement
+// ship back in goes through mission_did_ship_arrive(), which counts a use and marks the
+// reinforcement available exactly as if the player had just called it -- so this has to come
+// after the arrival reconciliation, or the saved count is incremented on top of.
+void apply_reinforcements(const checkpoint_data& data)
+{
+	const auto& state = data.mission;
+
+	if (!state.present) {
+		return;
+	}
 
 	// Matched by name, because Reinforcements is built by the mission parse in the order the file
 	// lists them and a reinforcement that has been renamed is a different one.
@@ -1804,6 +1817,64 @@ void store_environment(environment_state& out)
 	}
 }
 
+// Split from apply_environment() because of when it can run: a nav bound to a ship resolves that
+// ship by object, and the environment is applied before the ships are reconciled -- so any nav on
+// a ship that arrived after time zero, or on a support ship, would find nothing and be dropped.
+// This runs once every ship the checkpoint knows about exists.
+void apply_navpoints(const checkpoint_data& data)
+{
+	const auto& env = data.environment;
+
+	if (!env.present) {
+		return;
+	}
+
+	for (size_t i = 0; i < env.navpoints.size() && i < static_cast<size_t>(MAX_NAVPOINTS); i++) {
+		const auto& state = env.navpoints[i];
+		NavPoint& nav = Navs[i];
+
+		if (state.name.empty()) {
+			nav.clear();
+			continue;
+		}
+
+		strcpy_s(nav.m_NavName, state.name.c_str());
+		nav.flags = state.flags;
+		nav.waypoint_num = state.waypoint_num;
+		nav.target_index = -1;
+
+		if (state.flags & NP_WAYPOINT) {
+			nav.target_index = find_matching_waypoint_list_index(state.target.c_str());
+		} else if (state.flags & NP_SHIP) {
+			nav.target_index = objnum_for_ship_name(state.target);
+		}
+
+		// A nav whose target has gone is cleared rather than left pointing at nothing, since the
+		// autopilot code dereferences it.
+		if ((state.flags & NP_VALIDTYPE) && nav.target_index < 0) {
+			mprintf(("CHECKPOINT => Navpoint '%s' has lost what it pointed at; dropping it.\n",
+			         state.name.c_str()));
+			nav.clear();
+			continue;
+		}
+
+		for (int c = 0; c < 3; c++) {
+			nav.normal_color[c] = static_cast<ubyte>(state.normal_color[c]);
+			nav.visited_color[c] = static_cast<ubyte>(state.visited_color[c]);
+		}
+	}
+	// Only point at a nav that survived; the autopilot indexes Navs[CurrentNav] without checking.
+	CurrentNav = -1;
+	if (env.current_nav >= 0 && env.current_nav < MAX_NAVPOINTS && Navs[env.current_nav].m_NavName[0] != '\0') {
+		CurrentNav = env.current_nav;
+	}
+
+	// Autopilot is deliberately not resumed.  Half of what it needs is the flight path it had
+	// worked out, which is not stored, and a restore that drops the player into a half-engaged
+	// autopilot flying nowhere is worse than one that hands the controls back.
+	AutoPilotEngaged = false;
+}
+
 // Put the sky, the nebula, the music and the rest of the mission's dressing back.
 //
 // Everything here goes through the engine's own setters rather than by bashing the globals,
@@ -1925,50 +1996,8 @@ void apply_environment(const checkpoint_data& data)
 	// Only the toggle.  The rocks themselves are restored separately; see apply_asteroids().
 	Asteroids_enabled = env.asteroids_enabled ? 1 : 0;
 
-	for (size_t i = 0; i < env.navpoints.size() && i < static_cast<size_t>(MAX_NAVPOINTS); i++) {
-		const auto& state = env.navpoints[i];
-		NavPoint& nav = Navs[i];
-
-		if (state.name.empty()) {
-			nav.clear();
-			continue;
-		}
-
-		strcpy_s(nav.m_NavName, state.name.c_str());
-		nav.flags = state.flags;
-		nav.waypoint_num = state.waypoint_num;
-		nav.target_index = -1;
-
-		if (state.flags & NP_WAYPOINT) {
-			nav.target_index = find_matching_waypoint_list_index(state.target.c_str());
-		} else if (state.flags & NP_SHIP) {
-			nav.target_index = objnum_for_ship_name(state.target);
-		}
-
-		// A nav whose target has gone is cleared rather than left pointing at nothing, since the
-		// autopilot code dereferences it.
-		if ((state.flags & NP_VALIDTYPE) && nav.target_index < 0) {
-			mprintf(("CHECKPOINT => Navpoint '%s' has lost what it pointed at; dropping it.\n",
-			         state.name.c_str()));
-			nav.clear();
-			continue;
-		}
-
-		for (int c = 0; c < 3; c++) {
-			nav.normal_color[c] = static_cast<ubyte>(state.normal_color[c]);
-			nav.visited_color[c] = static_cast<ubyte>(state.visited_color[c]);
-		}
-	}
-	// Only point at a nav that survived; the autopilot indexes Navs[CurrentNav] without checking.
-	CurrentNav = -1;
-	if (env.current_nav >= 0 && env.current_nav < MAX_NAVPOINTS && Navs[env.current_nav].m_NavName[0] != '\0') {
-		CurrentNav = env.current_nav;
-	}
-
-	// Autopilot is deliberately not resumed.  Half of what it needs is the flight path it had
-	// worked out, which is not stored, and a restore that drops the player into a half-engaged
-	// autopilot flying nowhere is worse than one that hands the controls back.
-	AutoPilotEngaged = false;
+	// The nav points are not here: a nav bound to a ship needs that ship's object, and this runs
+	// before the ships are reconciled.  See apply_navpoints().
 
 	for (const auto& state : env.jump_nodes) {
 		if (state.index < 0 || state.index >= static_cast<int>(Jump_nodes.size())) {
@@ -5160,6 +5189,9 @@ void mission_checkpoint_apply()
 
 	reconcile_ship_existence(data);
 
+	// After the reconciliation, which counts a use for every reinforcement it brings back.
+	apply_reinforcements(data);
+
 	for (const auto& state : data.ships) {
 		if (state.disposition != ShipDisposition::Present) {
 			continue;
@@ -5201,8 +5233,12 @@ void mission_checkpoint_apply()
 		}
 	}
 
+	// Now that every ship a nav could point at exists.
+	apply_navpoints(data);
+
 	apply_asteroids(data);
 	apply_wings(data);
+
 	apply_variables(data);
 	apply_scoring(data);
 
