@@ -408,7 +408,15 @@ struct ship_state {
 	SCP_vector<animation_state> animations;
 
 	// --- only meaningful when the ship had already left ---
+	//
+	// ship_class, team, display_name, cargo and cargo_no_deplete above are filled in for a gone
+	// ship too, from its exited record: SEXPs keep asking a dead ship its class, IFF and cargo,
+	// and the fresh load's record is built from the mission file, not from what the ship had
+	// become by the time it died.
 	fix exit_time = 0;
+	SCP_vector<SCP_string> exit_flags;   // Exit_Flags by name; see Exit_flag_table
+	fix time_cargo_revealed = 0;         // mission time, verbatim
+	int exit_hull_strength = 0;
 };
 
 struct wing_state {
@@ -484,10 +492,14 @@ struct event_state {
 	SCP_vector<SCP_string> backup_log_buffer;
 };
 
-// Goals only really have one piece of runtime state.
+// Goals have two pieces of runtime state: whether they were met, and whether they still count.
+// invalidate-goal and validate-goal flip the INVALID_GOAL bit in mission_goal::type mid-mission,
+// and an invalidated objective that came back valid would show in the objectives screen, be
+// counted by the goals-incomplete queries and reach the debrief.
 struct goal_state {
 	SCP_string name;
 	int satisfied = 0;
+	bool invalid = false;
 };
 
 // A SEXP node whose evaluation state has stopped being the default.
