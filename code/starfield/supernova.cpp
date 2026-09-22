@@ -112,6 +112,31 @@ void supernova_start(int seconds)
 	Supernova_status = SUPERNOVA_STAGE::STARTED;
 }
 
+float supernova_time_total()
+{
+	return Supernova_time_total;
+}
+
+float supernova_seconds_left()
+{
+	return Supernova_time_left;
+}
+
+void supernova_restore(float total_seconds, float seconds_left)
+{
+	if (Game_mode & GM_MULTIPLAYER) {
+		return;
+	}
+
+	Supernova_time_total = total_seconds;
+	Supernova_time_left = seconds_left;
+	Supernova_timestamp = _timestamp(fl2i(seconds_left * MILLISECONDS_PER_SECOND));
+
+	// STARTED is enough: the first supernova_process() moves it on to CLOSE if the time left
+	// says so, playing the approach sound as it would have
+	Supernova_status = SUPERNOVA_STAGE::STARTED;
+}
+
 void supernova_stop()
 {
 	// There's no currently active supernova
