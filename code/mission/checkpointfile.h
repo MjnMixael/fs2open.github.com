@@ -47,14 +47,20 @@ SCP_vector<SCP_string> checkpoint_list_slots(const SCP_string& mission_name);
 // how many files were removed.
 int checkpoint_delete_all(const SCP_string& mission_name);
 
-// Write a checkpoint.  Returns false and logs on failure; a failed write leaves any previous
-// checkpoint for that slot untouched.
+// Write a checkpoint.  Returns false and logs on failure.  A slot whose file could not be opened
+// keeps its previous checkpoint; one whose file was opened but could not be written out in full
+// ends up with no checkpoint at all, since a partial file is worse than none.
 bool checkpoint_write(const checkpoint_data& data);
 
 // Read a checkpoint.  Returns false if the file is missing, unreadable, or not a checkpoint.
 // A mission fingerprint mismatch is NOT an error here -- it is reported through
 // checkpoint_matches_current_mission() so the caller can decide what to do about it.
 bool checkpoint_read(const SCP_string& slot, checkpoint_data& data);
+
+// Do two mission filenames name the same mission?  The extension is not part of a mission's
+// identity: Game_current_mission_filename carries one when the mission was started from the
+// command line or a script and not when it was started from the campaign or the tech room.
+bool checkpoint_same_mission(const char* a, const char* b);
 
 // Does this checkpoint belong to the mission that is currently loaded?
 bool checkpoint_matches_current_mission(const checkpoint_data& data);

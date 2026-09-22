@@ -1189,6 +1189,8 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 void write_hotkeys(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
 	handler->writeInt("current_hotkey_set", data.current_hotkey_set);
+	write_string_list(handler, "escort_points", data.escort_points);
+
 	handler->startArrayWrite("hotkeys", data.hotkeys.size());
 	for (const auto& set : data.hotkeys) {
 		handler->startSectionWrite(Section::Unnamed);
@@ -1213,6 +1215,7 @@ void read_hotkeys(pilot::FileHandler* handler, checkpoint::checkpoint_data& data
 {
 	data.hotkeys.clear();
 	data.current_hotkey_set = handler->readIntOr("current_hotkey_set", -1);
+	read_string_list(handler, "escort_points", data.escort_points);
 
 	if (!handler->hasField("hotkeys")) {
 		return;
@@ -2319,8 +2322,10 @@ bool checkpoint_write(const checkpoint_data& data)
 		return false;
 	}
 
-	// The handler takes ownership of the file and closes it in its destructor.
-	std::unique_ptr<pilot::FileHandler> handler(new pilot::JSONFileHandler(fp, false));
+	// The handler takes ownership of the file and closes it in its destructor.  The concrete type
+	// is kept to hand because only it can say whether the final write went through.
+	auto json_handler = new pilot::JSONFileHandler(fp, false);
+	std::unique_ptr<pilot::FileHandler> handler(json_handler);
 
 	handler->writeUInt("signature", CHECKPOINT_FILE_ID);
 	handler->writeUInt("version", CHECKPOINT_VERSION);
@@ -2345,6 +2350,18 @@ bool checkpoint_write(const checkpoint_data& data)
 	handler->endWritingSections();
 
 	handler->flush();
+
+	// Opening for writing truncated whatever was there, so a dump that failed part-way (disk
+	// full, most likely) has left a file that is not a checkpoint.  Better none at all than one
+	// that will be rejected as corrupt on every future read.
+	if (json_handler->writeFailed()) {
+		handler.reset();   // closes the file first
+		cf_delete(filename.c_str(),
+			CF_TYPE_CHECKPOINTS,
+			CF_LOCATION_ROOT_USER | CF_LOCATION_ROOT_GAME | CF_LOCATION_TYPE_ROOT);
+		mprintf(("CHECKPOINT => Failed to write '%s'; the partial file has been removed.\n", filename.c_str()));
+		return false;
+	}
 
 	mprintf(("CHECKPOINT => Wrote '%s' (%d ships, %d wings, %d variables, %d events, %d goals, %d log entries, "
 	         "%d debris, %d pending arrivals)\n",
@@ -2483,6 +2500,11 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 	return true;
 }
 
+bool checkpoint_same_mission(const char* a, const char* b)
+{
+	return lcase_equal(base_name(a), base_name(b));
+}
+
 bool checkpoint_matches_current_mission(const checkpoint_data& data)
 {
 	// The filename is a hash of pilot, campaign, mission and slot, so opening the right file is
@@ -2504,7 +2526,7 @@ bool checkpoint_matches_current_mission(const checkpoint_data& data)
 		return false;
 	}
 
-	if (stricmp(data.mission_filename.c_str(), Game_current_mission_filename) != 0) {
+	if (!checkpoint_same_mission(data.mission_filename.c_str(), Game_current_mission_filename)) {
 		return false;
 	}
 

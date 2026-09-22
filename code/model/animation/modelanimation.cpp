@@ -412,7 +412,17 @@ namespace animation {
 		// rest of the state (paused vs running, direction, speed, instance flags) matters just
 		// as much for putting an animation back where it was.
 		float time = state.time;
-		animation->start(pmi, state.canonicalDirection, true, false, false, &time);
+
+		// start() treats a reverse start on a Pause_on_reverse animation as a pause request and
+		// returns before play() has enrolled the instance, which would leave the restored state
+		// sitting on an animation nothing steps.  Start those forward instead: the direction is
+		// about to be overwritten by the instance data anyway, and all start() is needed for here
+		// is the enrolment.
+		auto direction = state.canonicalDirection;
+		if (direction == ModelAnimationDirection::RWD && animation->m_flags[Animation_Flags::Pause_on_reverse])
+			direction = ModelAnimationDirection::FWD;
+
+		animation->start(pmi, direction, true, false, false, &time);
 		animation->setInstanceData(pmi->id, state);
 
 		return true;

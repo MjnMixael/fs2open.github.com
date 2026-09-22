@@ -17,6 +17,7 @@
 #include "starfield/starfield.h"
 #include "ai/ai.h"
 #include "asteroid/asteroid.h"
+#include "coordinate_points/coordinate_point.h"
 #include "gamesnd/eventmusic.h"
 #include "autopilot/autopilot.h"
 #include "ai/aigoals.h"
@@ -62,8 +63,11 @@
 #include <array>
 
 extern char Game_current_mission_filename[];
-// Lives in freespace.cpp with no header of its own; the graphics back ends declare it the same way.
+// These live in freespace.cpp with no header of their own; the graphics back ends and sexp.cpp
+// declare them the same way.
 extern int Game_subspace_effect;
+extern void game_start_subspace_ambient_sound();
+extern void game_stop_subspace_ambient_sound();
 
 using namespace checkpoint;
 
@@ -1919,8 +1923,16 @@ void apply_environment(const checkpoint_data& data)
 		neb2_post_level_init(env.neb_fog_color_override);
 	}
 
-	// Subspace: the flag and the visual, but not the ambient sound, which is a sound handle and
-	// so on the list of things this system does not carry.
+	// Subspace: the flag, the visual and the ambient sound, the same three things the
+	// mission-set-subspace SEXP moves together.  The sound is not a handle that is carried across;
+	// it is started and stopped here so it cannot be left out of step with the effect -- the
+	// simulation frame starts it whenever the effect is on, but nothing but this would stop it
+	// when a checkpoint turns the effect off.
+	if (env.subspace && !Game_subspace_effect) {
+		game_start_subspace_ambient_sound();
+	} else if (!env.subspace && Game_subspace_effect) {
+		game_stop_subspace_ambient_sound();
+	}
 	Game_subspace_effect = env.subspace ? 1 : 0;
 	The_mission.flags.set(Mission::Mission_Flags::Subspace, env.subspace);
 	stars_set_dynamic_environment(env.subspace);
@@ -1983,10 +1995,21 @@ void apply_environment(const checkpoint_data& data)
 		}
 	}
 
-	// Ask for the battle song rather than setting the flag, which only means "already kicked
-	// off": forcing it on over the opening track would keep combat music from ever coming in.
+	// The opening pattern has already been chosen by now -- event_music_first_pattern() ran when
+	// the gameplay state was entered, before this apply -- and nothing has begun playing yet,
+	// which is exactly the condition under which first_pattern() is willing to choose again.
+	// With the battle flag set it chooses SONG_BTTL_1 outright.
+	//
+	// The flag is set directly rather than through event_music_battle_start(): that would queue
+	// the battle song behind the opening one as a forced next pattern, which the re-pick then
+	// never consumes and which would fire a spurious switch when the restored battle ends; and
+	// it refuses unless hostiles are present, which at this point in the apply -- before the
+	// ships are reconciled -- only holds for hostiles the mission file placed at time zero.  The
+	// battle-over check that clears the flag runs off a timer the level init has already armed,
+	// so a flag restored with no hostiles left simply clears itself after the usual interval.
 	if (env.music_battle_started) {
-		event_music_battle_start();
+		Event_Music_battle_started = 1;
+		event_music_first_pattern();
 	}
 
 	hud_set_draw(env.hud_draw ? 1 : 0);
@@ -2027,6 +2050,10 @@ void apply_environment(const checkpoint_data& data)
 
 		if (state.colored) {
 			node.SetAlphaColor(state.color[0], state.color[1], state.color[2], state.color[3]);
+		} else if (node.IsColored()) {
+			// The mission file coloured it and a SEXP put it back to the default since.  Passing
+			// the default colour is how SetAlphaColor() clears the flag (jumpnode.cpp).
+			node.SetAlphaColor(0, 255, 0, 255);
 		}
 
 		if (state.model.empty()) {
@@ -3795,6 +3822,19 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		data.current_hotkey_set = Player->current_hotkey_set;
 	}
 
+	// Coordinate points on the escort list.  Ships are rebuilt from their escort flag; these
+	// have no flag, so the list itself is walked for them.
+	for (int i = 0; i < hud_escort_num_ships_on_list(); i++) {
+		int objnum = hud_escort_return_objnum(i);
+		if (objnum < 0 || objnum >= MAX_OBJECTS || Objects[objnum].type != OBJ_COORDINATE_POINT) {
+			continue;
+		}
+		const mission_coordinate_point* point = find_coordinate_point_by_objnum(objnum);
+		if (point != nullptr) {
+			data.escort_points.push_back(point->name);
+		}
+	}
+
 	store_asteroids(data);
 	store_environment(data.environment);
 	store_mission_extras(data.mission);
@@ -4587,6 +4627,17 @@ void apply_hud_state(const checkpoint_data& data)
 		}
 	}
 
+	// Coordinate points come back by name.  A point the mission no longer has is simply not
+	// re-added, and neither is one whose escort priority is zero in the fresh load: that
+	// priority is per-point mission state a script can raise at runtime, and the checkpoint does
+	// not carry it, so a point a script promoted and then escorted is lost on restore.
+	for (const auto& name : data.escort_points) {
+		const mission_coordinate_point* point = find_coordinate_point_by_name(name.c_str());
+		if (point != nullptr && point->objnum >= 0) {
+			hud_add_ship_to_escort(point->objnum, 1);
+		}
+	}
+
 	if (Player == nullptr) {
 		return;
 	}
@@ -4788,6 +4839,13 @@ void apply_beams(const checkpoint_data& data)
 
 		int shooter_objnum = objnum_for_ship_name(state.shooter_ship);
 		ship_subsys* turret = find_subsys_by_key(state.shooter_ship, state.turret);
+
+		// A fighter beam fires from a stand-in turret (ship::fighter_beam_turret_data) that is not
+		// in the subsystem list, so it has no key and turret is null here, and the beam is
+		// dropped below.  That is deliberate: the stand-in is only initialised by
+		// ship_fire_primary() the first time the fighter fires, from data private to ship.cpp,
+		// and re-firing through it before that dereferences null.  The player is still holding
+		// the trigger, so the beam is back within a frame anyway.
 
 		// A beam is anchored to the turret that is firing it, so if either the shooter or its
 		// turret is gone there is nothing to re-fire.  The turret will simply acquire and fire
@@ -5293,7 +5351,7 @@ void mission_checkpoint_apply()
 	// If we somehow arrived in a different mission -- the restart failed and dropped the
 	// player back to the main hall, say, and they then started something else -- the saved
 	// state belongs to a mission that is not loaded and must not be applied to this one.
-	if (stricmp(data.mission_filename.c_str(), Game_current_mission_filename) != 0) {
+	if (!checkpoint_same_mission(data.mission_filename.c_str(), Game_current_mission_filename)) {
 		mprintf(("CHECKPOINT => Checkpoint '%s' is for '%s' but '%s' is loaded; discarding it.\n",
 		         data.slot.c_str(),
 		         data.mission_filename.c_str(),
