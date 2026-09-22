@@ -311,6 +311,11 @@ struct ai_state {
 
 	SCP_string ai_class;           // an index into Ai_classes, which comes from ai.tbl, so by name
 
+	// Not here: ai_info::lua_ai_target, the argument list a Lua-driven AI order carries.  It is a
+	// LuaValueList, which has no serialisable form, so a script order in progress is lost on
+	// restore.  A script that needs its orders to survive should stage what it needs through
+	// mission.setCheckpointData() and re-issue them from the On Checkpoint Restore hook.
+
 	SCP_map<SCP_string, int> ints;
 	SCP_map<SCP_string, float> floats;
 	SCP_map<SCP_string, int> mission_times;
@@ -951,6 +956,11 @@ struct checkpoint_data {
 	// themselves: restoring the contents but not the selection drops the player back to no
 	// selection mid-mission.
 	int current_hotkey_set = -1;
+
+	// Coordinate points on the escort list, by name.  Ships need nothing stored (the escort flag
+	// on each ship rebuilds the list), but a coordinate point carries no such flag: the list is
+	// the only record that the player put it there.
+	SCP_vector<SCP_string> escort_points;
 	int goal_timestamp = 0;
 
 	bool loaded = false;
