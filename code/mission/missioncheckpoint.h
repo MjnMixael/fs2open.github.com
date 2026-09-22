@@ -167,9 +167,11 @@ struct subsystem_state {
 	SCP_map<SCP_string, float> floats;
 	SCP_map<SCP_string, int> ints;
 
-	// Turrets have their own weapon banks.
+	// Turrets have their own weapon banks, and their own AI class (change-ai-class can retarget a
+	// single turret).  By name, since Ai_classes comes from ai.tbl.
 	weapon_state weapons;
 	bool has_weapons = false;
+	SCP_string ai_class;
 };
 
 // What had become of a ship at the moment the checkpoint was taken.  Mirrors ShipStatus, but
@@ -530,7 +532,9 @@ struct hotkey_state {
 struct parse_subsys_state {
 	SCP_string name;               // subsystem name, or the "Pilot" pseudo-subsystem
 	float percent = 0.0f;
-	int ai_class = -1;
+	// By name; Ai_classes comes from ai.tbl.  Empty means the parse's own value (usually the
+	// SUBSYS_STATUS_NO_CHANGE sentinel) is left as it is.
+	SCP_string ai_class;
 	SCP_string cargo;
 	SCP_string cargo_title;
 	// Bank contents by weapon class name; ammo runs in parallel.  An empty name is an empty bank.

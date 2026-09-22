@@ -43,6 +43,7 @@
 #include "network/multiutil.h"
 #include "object/object.h"
 #include "object/objectdock.h"
+#include "object/parseobjectdock.h"
 #include "parse/parselo.h"
 #include "parse/sexp.h"
 #include "parse/sexp_container.h"
@@ -52,6 +53,7 @@
 #include "scripting/hook_api.h"
 #include "ship/ship.h"
 #include "ship/shipfx.h"
+#include "ship/shiphit.h"
 #include "stats/scoring.h"
 #include "weapon/beam.h"
 #include "weapon/weapon.h"
@@ -619,6 +621,31 @@ int callsign_index_for_name(const SCP_string& name)
 	return index;
 }
 
+// Ai_classes comes from ai.tbl, so an AI class is a table index and goes by name.
+SCP_string ai_class_name(int ai_class)
+{
+	if (ai_class < 0 || ai_class >= static_cast<int>(Ai_class_names.size())) {
+		return SCP_string();
+	}
+	return Ai_class_names[ai_class];
+}
+
+int lookup_ai_class(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+
+	for (size_t i = 0; i < Ai_class_names.size(); i++) {
+		if (!stricmp(Ai_class_names[i], name.c_str())) {
+			return static_cast<int>(i);
+		}
+	}
+
+	mprintf(("CHECKPOINT => AI class '%s' no longer exists.\n", name.c_str()));
+	return -1;
+}
+
 // Anchors are an int that is either a ship registry index or a bitfield naming an IFF, so they go
 // out as text the same way the mission file stores them.
 SCP_string anchor_name(anchor_t anchor)
@@ -909,6 +936,28 @@ void store_weapons(const ship_weapon& swp, weapon_state& out)
 // is retrying in a different ship) the extra banks are simply dropped.
 void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes)
 {
+	// Keeping the loadout means keeping all of it.  The player may have just picked a different
+	// ship, or different weapons in the same banks, and the checkpoint's ammo counts, capacities
+	// and bank selections describe weapons that are no longer there: a saved
+	// current_secondary_bank of 1 on a ship that now has one bank is an out-of-range index the
+	// firing code asserts on.  So only the flags and the tertiary/detonation scalars come back,
+	// and the bank selection is put back to what the fresh loadout gave it.
+	if (!restore_classes) {
+		int current_primary = swp.current_primary_bank;
+		int current_secondary = swp.current_secondary_bank;
+		int previous_primary = swp.previous_primary_bank;
+		int previous_secondary = swp.previous_secondary_bank;
+
+		apply_flags(in.flags, Weapon_flag_table, swp.flags);
+		load_weapon_scalars(swp, in.scalars);
+
+		swp.current_primary_bank = current_primary;
+		swp.current_secondary_bank = current_secondary;
+		swp.previous_primary_bank = previous_primary;
+		swp.previous_secondary_bank = previous_secondary;
+		return;
+	}
+
 	int num_primaries = MIN(swp.num_primary_banks, static_cast<int>(in.primary_banks.size()));
 	for (int i = 0; i < num_primaries; i++) {
 		const auto& bank = in.primary_banks[i];
@@ -1228,7 +1277,9 @@ void store_parse_subsystems(const p_object* p_objp, SCP_vector<parse_subsys_stat
 		parse_subsys_state state;
 		state.name = sssp->name;
 		state.percent = sssp->percent;
-		state.ai_class = sssp->ai_class;
+		// ai_class_name() returns empty for the SUBSYS_STATUS_NO_CHANGE sentinel and any other
+		// out-of-range value, which is what "leave the parse's value alone" means on the way back.
+		state.ai_class = ai_class_name(sssp->ai_class);
 		state.cargo = cargo_name(sssp->subsys_cargo_name);
 		state.cargo_title = sssp->subsys_cargo_title;
 
@@ -1270,7 +1321,12 @@ void load_parse_subsystems(p_object* p_objp, const SCP_vector<parse_subsys_state
 		}
 
 		sssp->percent = state.percent;
-		sssp->ai_class = state.ai_class;
+		if (!state.ai_class.empty()) {
+			int ai_class = lookup_ai_class(state.ai_class);
+			if (ai_class >= 0) {
+				sssp->ai_class = ai_class;
+			}
+		}
 		if (!state.cargo.empty()) {
 			sssp->subsys_cargo_name = lookup_cargo(state.cargo);
 		}
@@ -2791,9 +2847,7 @@ void store_ai(const ship* shipp, ai_state& out)
 
 	// ai_class is an index into Ai_classes, which comes from ai.tbl, so it goes by name like
 	// every other table index.
-	if (aip->ai_class >= 0 && aip->ai_class < static_cast<int>(Ai_class_names.size())) {
-		out.ai_class = Ai_class_names[aip->ai_class];
-	}
+	out.ai_class = ai_class_name(aip->ai_class);
 
 	out.target_ship = ship_name_for_objnum(aip->target_objnum);
 	out.previous_target_ship = ship_name_for_objnum(aip->previous_target_objnum);
@@ -2920,17 +2974,21 @@ void load_ai(ship* shipp, const ai_state& in)
 
 	apply_flags(in.flags, Ai_flag_table, aip->ai_flags);
 	apply_flags(in.override_flags, Ai_override_flag_table, aip->ai_override_flags);
-	load_ai_scalars(*aip, in);
-	load_ai_override(aip->ai_override_ci, in.override_floats);
 
+	// The class before the scalars: ship_set_new_ai_class() is what turns a class into the
+	// accuracy, evasion, courage and the rest that the AI actually flies by, and it also writes
+	// the defaults for a few values (ai_aburn_use_factor) that the scalars then overwrite with
+	// what the mission had set.  Writing only ai_class would leave the ship reporting one class
+	// and flying another.
 	if (!in.ai_class.empty()) {
-		for (size_t i = 0; i < Ai_class_names.size(); i++) {
-			if (!stricmp(Ai_class_names[i], in.ai_class.c_str())) {
-				aip->ai_class = static_cast<int>(i);
-				break;
-			}
+		int ai_class = lookup_ai_class(in.ai_class);
+		if (ai_class >= 0 && ai_class != aip->ai_class) {
+			ship_set_new_ai_class(shipp, ai_class);
 		}
 	}
+
+	load_ai_scalars(*aip, in);
+	load_ai_override(aip->ai_override_ci, in.override_floats);
 
 	// Object references are resolved in a second pass, once every ship exists -- see
 	// resolve_ai_references().  Only the goals, which carry names rather than objnums, can be
@@ -3044,6 +3102,7 @@ void store_subsystems(const ship* shipp, SCP_vector<subsystem_state>& out)
 		if (subsys->system_info != nullptr && subsys->system_info->type == SUBSYSTEM_TURRET) {
 			state.has_weapons = true;
 			store_weapons(subsys->weapons, state.weapons);
+			state.ai_class = ai_class_name(subsys->weapons.ai_class);
 		}
 
 		out.push_back(std::move(state));
@@ -3087,8 +3146,34 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in)
 			subsys->current_hits = subsys->max_hits;
 		}
 
+		// A destroyed subsystem is more than zero hits.  do_subobj_destroyed_stuff() also marks
+		// the submodel (and a turret's barrel) blown off, which is what stops it rendering and
+		// colliding, and links any subsystem that has no submodel of its own.  That function is
+		// not called here because it also logs, prints to the HUD, spawns the explosion and fires
+		// the On Subsystem Destroyed hook, all of which already happened in the run that was
+		// saved; this is just the lasting part of it.
+		if (subsys->current_hits <= 0.0f && subsys->max_hits > 0.0f &&
+		    !subsys->flags[Ship::Subsystem_Flags::No_disappear] && subsys->system_info != nullptr) {
+			const model_subsystem* psub = subsys->system_info;
+			if (psub->subobj_num > -1 && subsys->submodel_instance_1 != nullptr) {
+				subsys->submodel_instance_1->blown_off = true;
+			}
+			if (psub->subobj_num != psub->turret_gun_sobj && psub->turret_gun_sobj >= 0 &&
+			    subsys->submodel_instance_2 != nullptr) {
+				subsys->submodel_instance_2->blown_off = true;
+			}
+			check_subsystem_submodel_link(shipp, subsys, true);
+		}
+
 		if (state.has_weapons) {
 			load_weapons(subsys->weapons, state.weapons, true);
+
+			if (!state.ai_class.empty()) {
+				int ai_class = lookup_ai_class(state.ai_class);
+				if (ai_class >= 0) {
+					ship_subsystem_set_new_ai_class(subsys, ai_class);
+				}
+			}
 		}
 
 		// Turret targets are resolved in a second pass, once every ship exists.
@@ -3200,6 +3285,15 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	if (!mission_checkpoint_allowed()) {
 		mprintf(("CHECKPOINT => Checkpoints are switched off for this mission; not storing.\n"));
+		return false;
+	}
+
+	// SEXPs keep evaluating while the player's ship is in its death roll, so a store can be asked
+	// for then.  A ship mid-death-roll is recorded as destroyed, and a restore would take the
+	// player's ship out of the mission with no death sequence to follow -- a checkpoint that can
+	// never be resumed.  There is nothing worth saving at that point anyway.
+	if (Player_ship != nullptr && Player_ship->flags[Ship::Ship_Flags::Dying]) {
+		mprintf(("CHECKPOINT => The player's ship is dying; not storing.\n"));
 		return false;
 	}
 
@@ -3946,6 +4040,16 @@ void restore_wing_arrivals(const checkpoint_data& data)
 // These go through the engine's own arrival path with the cue forced, rather than being created
 // behind its back, so the arrival list, support-ship housekeeping and docked groups are all
 // handled the way they normally would be.
+// dock_evaluate_all_docked_objects() callback: remember the member of a parse-object dock group
+// that carries the leader flag.
+void find_dock_leader_helper(p_object* pobjp, p_dock_function_info* infop)
+{
+	if (pobjp->flags[Mission::Parse_Object_Flags::SF_Dock_leader]) {
+		infop->maintained_variables.objp_value = pobjp;
+		infop->early_return_condition = true;
+	}
+}
+
 void restore_loose_arrivals(const checkpoint_data& data)
 {
 	for (const auto& state : data.ships) {
@@ -3963,6 +4067,25 @@ void restore_loose_arrivals(const checkpoint_data& data)
 		// Wing members arrive with their wing, and a ship whose docked group has already been
 		// created came in as somebody else's cargo.
 		if (p_objp->wingnum >= 0 || p_objp->created_object != nullptr) {
+			continue;
+		}
+
+		// A docked group is created whole by its leader, and only its leader: parse_create_object()
+		// asserts as much.  Which member leads is decided by class, not by registry order, so a
+		// non-leader can come up here before its leader has -- and the leader may not be coming
+		// at all, if it was destroyed or departed before the checkpoint while this one survived.
+		// Either way the answer is the same: bring the leader in, which creates the whole group.
+		// A leader the checkpoint says is gone is taken out again by remove_gone_ships(), which
+		// runs after this and undocks what it removes.
+		if (object_is_docked(p_objp) && !p_objp->flags[Mission::Parse_Object_Flags::SF_Dock_leader]) {
+			p_dock_function_info dfi;
+			dock_evaluate_all_docked_objects(p_objp, &dfi, find_dock_leader_helper);
+
+			// A leader in a wing arrives with its wing (restore_wing_arrivals() has already run).
+			p_object* leader = dfi.maintained_variables.objp_value;
+			if (leader != nullptr && leader->created_object == nullptr && leader->wingnum < 0) {
+				mission_maybe_make_ship_arrive(leader, true);
+			}
 			continue;
 		}
 
@@ -4033,7 +4156,17 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 	}
 
 	apply_flags(state.flags, Ship_flag_table, shipp->flags);
-	apply_flags(state.object_flags, Object_flag_table, objp->flags);
+
+	// Object flags go through obj_set_flags() rather than straight onto the object, because
+	// Collides is not just a bit: membership of the collision pair list only changes through
+	// obj_add_collider()/obj_remove_collider(), which obj_set_flags() drives.  Bashing the bit on
+	// a ship the mission file created with no-collide leaves it a ghost for the rest of the
+	// mission.
+	{
+		auto object_flags = objp->flags;
+		apply_flags(state.object_flags, Object_flag_table, object_flags);
+		obj_set_flags(objp, object_flags);
+	}
 
 	// After the flags, because Has_display_name decides whether the name is used at all: a ship
 	// the mission had cleared the display name on has to come back cleared, not with whatever
@@ -4042,6 +4175,16 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 
 	load_ship_scalars(*shipp, state.floats, state.ints);
 	load_physics(objp->phys_info, state.physics_floats, state.physics_vecs);
+
+	// current_viewpoint indexes the model's eye points, and the model may not be the one the
+	// checkpoint was written against -- a kept loadout, or a mod that re-exported the pof.  The
+	// big-ship AI reads view_positions[current_viewpoint] unchecked.
+	{
+		polymodel* pm = model_get(Ship_info[shipp->ship_info_index].model_num);
+		if (pm == nullptr || shipp->current_viewpoint < 0 || shipp->current_viewpoint >= pm->n_view_positions) {
+			shipp->current_viewpoint = 0;
+		}
+	}
 
 	objp->pos = state.pos;
 	objp->orient = state.orient;
@@ -4973,6 +5116,22 @@ void mission_checkpoint_apply()
 		         Game_current_mission_filename));
 		mission_checkpoint_clear_pending();
 		return;
+	}
+
+	// The store refuses to write while the player is dying, but a file from an older build, or
+	// one written from a script that got at the store some other way, could still say the player's
+	// ship is gone.  Applying that would remove the player's ship and leave a ghost with no death
+	// sequence, so the mission starts fresh instead.
+	if (Player_ship != nullptr) {
+		for (const auto& state : data.ships) {
+			if (state.disposition != ShipDisposition::Present && !stricmp(state.name.c_str(), Player_ship->ship_name)) {
+				mprintf(("CHECKPOINT => Checkpoint '%s' records the player's ship '%s' as gone; discarding it.\n",
+				         data.slot.c_str(),
+				         Player_ship->ship_name));
+				mission_checkpoint_clear_pending();
+				return;
+			}
+		}
 	}
 
 	mprintf(("CHECKPOINT => Applying checkpoint '%s' to '%s'.\n", data.slot.c_str(), Game_current_mission_filename));
