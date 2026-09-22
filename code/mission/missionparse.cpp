@@ -9409,7 +9409,9 @@ int mission_do_departure(object *objp, bool goal_is_to_warp)
 		beginning_departure = true;
 		mprintf(("Entered mission_do_departure() for %s\n", shipp->ship_name));
 
-	if (OnDepartureStartedHook->isActive())
+	// (not while restoring a checkpoint: a ship caught departing is told to depart again on
+	// restore, and the script already saw this departure start in the run that was saved)
+	if (!Game_restoring && OnDepartureStartedHook->isActive())
 	{
 		// add scripting hook for 'On Departure Started' --wookieejedi
 		// hook is placed at the beginning of this function to allow the scripter to

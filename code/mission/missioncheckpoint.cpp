@@ -3143,6 +3143,30 @@ void load_ai(ship* shipp, const ai_state& in)
 	if (!in.waypoint_list.empty()) {
 		aip->wp_list_index = find_matching_waypoint_list_index(in.waypoint_list.c_str());
 	}
+
+	// A waypoint mode with no list to fly dereferences null on the first frame.  The list is
+	// gone -- renamed, or created by a script and not in this parse -- so the ship idles instead;
+	// its goals are restored and will re-issue the order if one still names a list that exists.
+	if (aip->mode == AIM_WAYPOINTS && aip->wp_list_index < 0) {
+		mprintf(("CHECKPOINT => '%s' was flying waypoint list '%s', which no longer exists; idling it.\n",
+		         shipp->ship_name,
+		         in.waypoint_list.c_str()));
+		aip->mode = AIM_NONE;
+	}
+
+	// The path_* fields are indices into a global path array that is rebuilt from the models
+	// on every load, so they are deliberately not captured (checkpointfields.h) and every ship
+	// comes back with no path.  Most modes recover: ai_path() builds one when path_start is -1,
+	// and bay emerge/depart fall back to AIM_NONE.  Two docking legs do not -- the approach
+	// (DOCK_2/3) and the first undock legs (UNDOCK_1/2) index Path_points[] straight off
+	// path_cur, which is -1.  Put those back one leg, to the submode that builds the path.
+	if (aip->mode == AIM_DOCK) {
+		if (aip->submode == AIS_DOCK_2 || aip->submode == AIS_DOCK_3) {
+			aip->submode = AIS_DOCK_1;
+		} else if (aip->submode == AIS_UNDOCK_1 || aip->submode == AIS_UNDOCK_2) {
+			aip->submode = AIS_UNDOCK_0;
+		}
+	}
 }
 
 // Everything the AI points at, resolved once every ship in the mission exists.  Split out from
@@ -3612,6 +3636,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 			} else {
 				state.ship_names.emplace_back();
 			}
+		}
+
+		if (wingp->special_ship >= 0 && wingp->special_ship < wingp->current_count &&
+		    wingp->ship_index[wingp->special_ship] >= 0) {
+			state.special_ship = Ships[wingp->ship_index[wingp->special_ship]].ship_name;
 		}
 
 		data.wings.push_back(std::move(state));
@@ -4472,6 +4501,60 @@ void apply_wings(const checkpoint_data& data)
 			wingp->ship_index[i] = -1;
 		}
 		wingp->current_count = count;
+
+		// The leader's slot in the list just rebuilt.  Left at the mission file's value it can
+		// point past the end of a wing that has lost ships, and the squad message code indexes
+		// Ships[] with ship_index[special_ship] unchecked.
+		wingp->special_ship = 0;
+		for (int i = 0; i < count; i++) {
+			if (!state.special_ship.empty() && lcase_equal(Ships[wingp->ship_index[i]].ship_name, state.special_ship)) {
+				wingp->special_ship = i;
+				break;
+			}
+		}
+		if (count > 0) {
+			wingp->special_ship_ship_info_index = Ships[wingp->ship_index[wingp->special_ship]].ship_info_index;
+		}
+	}
+}
+
+// Tell a ship that was on its way out to leave again.
+//
+// A ship caught departing comes back with its AI mode restored but nothing behind it: the bay
+// departure path is not captured (ai_bay_depart() drops to AIM_NONE when it finds none) and the
+// Departing ship flags are not restored.  For a lone ship the departure cue simply fires again.
+// For a wing member it does not -- the wing's own Departing flag is restored, and
+// mission_eval_departures() skips a wing already flagged, so nothing ever re-issues the order and
+// the wing idles for the rest of the mission with every event waiting on it.  So the order is
+// re-issued here, through the same call the cue would have made, for every ship whose restored
+// mode says it was leaving.  Runs after apply_wings(), which is where the wing's departure info
+// that mission_do_departure() copies onto the ship comes back.
+void reissue_departures(const checkpoint_data& data)
+{
+	for (const auto& state : data.ships) {
+		if (state.disposition != ShipDisposition::Present || !state.ai.present) {
+			continue;
+		}
+
+		auto entry = ship_registry_get(state.name);
+		if (entry == nullptr || !entry->has_shipp() || !entry->has_objp()) {
+			continue;
+		}
+
+		ship* shipp = &Ships[entry->shipnum];
+		if (shipp->ai_index < 0 || shipp->ai_index >= MAX_AI_INFO) {
+			continue;
+		}
+
+		ai_info* aip = &Ai_info[shipp->ai_index];
+		if (aip->mode != AIM_BAY_DEPART && aip->mode != AIM_WARP_OUT) {
+			continue;
+		}
+
+		// From the top: mission_do_departure() treats a ship already in AIM_WARP_OUT as mid-way
+		// and skips the setup a wing member needs.
+		aip->mode = AIM_NONE;
+		mission_do_departure(&Objects[entry->objnum]);
 	}
 }
 
@@ -4763,6 +4846,23 @@ void apply_projectiles(const checkpoint_data& data)
 		wp->lssm_warpout_time = translate_stamp(static_cast<int>(state.lssm_warpout_time));
 		wp->lssm_warpin_time = translate_stamp(static_cast<int>(state.lssm_warpin_time));
 		wp->lssm_target_pos = state.lssm_target_pos;
+
+		// A local SSM in stages 2 and 3 is inside the warp-out effect or in subspace: stage 2 reads
+		// Objects[lssm_warp_idx] unguarded, and that fireball did not survive the reload, while a
+		// stage 3 missile had its Renders and Collides flags cleared, which weapon_create() has
+		// just put back.  Neither is recoverable in place, so the missile is put back at stage 1
+		// with the warp-out due now: the engine opens a fresh warphole from where it stands and
+		// carries on.  Stage 4 (warping in) guards the index and falls through to stage 5 on its
+		// own when it finds none.
+		if (wp->lssm_stage == 2 || wp->lssm_stage == 3) {
+			wp->lssm_stage = 1;
+			wp->lssm_warpout_time = timestamp(0);
+		} else if (wp->lssm_stage == 4) {
+			// Warping in, next to its target, with the warp-in effect gone: stage 4 only waits on
+			// that effect before handing over, so hand over now the way it would.
+			wp->lssm_stage = 5;
+			vm_vec_copy_scale(&objp->phys_info.desired_vel, &objp->orient.vec.fvec, Weapon_info[weapon_class].lssm_stage5_vel);
+		}
 
 		wp->cmeasure_timer = translate_stamp(state.cmeasure_timer);
 
@@ -5459,6 +5559,9 @@ void mission_checkpoint_apply()
 	if (Ai_goal_signature <= Max_restored_goal_signature) {
 		Ai_goal_signature = Max_restored_goal_signature + 1;
 	}
+
+	// After the wings, whose departure info a departing wing member is handed on the way out.
+	reissue_departures(data);
 
 	apply_variables(data);
 	apply_scoring(data);
