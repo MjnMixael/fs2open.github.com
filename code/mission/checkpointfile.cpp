@@ -2571,6 +2571,58 @@ void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpo
 	}
 	handler->endArrayWrite();
 
+	handler->writeBool("hud_present", state.hud_present);
+	handler->startArrayWrite("hud_gauges", state.hud_gauges.size());
+	for (const auto& gauge : state.hud_gauges) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", gauge.name.c_str());
+		handler->writeBool("custom", gauge.custom);
+		handler->writeBool("active", gauge.active);
+		handler->writeBool("sexp_override", gauge.sexp_override);
+		handler->writeBool("sexp_color", gauge.sexp_color);
+		handler->writeInt("color_r", gauge.color[0]);
+		handler->writeInt("color_g", gauge.color[1]);
+		handler->writeInt("color_b", gauge.color[2]);
+		handler->writeInt("color_a", gauge.color[3]);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+	handler->writeBool("hud_high_contrast", state.hud_high_contrast);
+	handler->writeBool("disable_cockpits", state.disable_cockpits);
+	handler->writeBool("disable_cockpit_sway", state.disable_cockpit_sway);
+	handler->writeBool("sensor_static_forced", state.sensor_static_forced);
+
+	handler->startArrayWrite("ignored_keys", state.ignored_keys.size());
+	for (const auto& key : state.ignored_keys) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("action", key.action.c_str());
+		handler->writeInt("count", key.count);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("scrollback", state.scrollback.size());
+	for (const auto& line : state.scrollback) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeInt("time", static_cast<std::int32_t>(line.time));
+		handler->writeInt("source", line.source);
+		handler->writeString("text", line.text.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->startArrayWrite("file_sounds", state.file_sounds.size());
+	for (const auto& sound : state.file_sounds) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("filename", sound.filename.c_str());
+		handler->writeInt("type", sound.type);
+		handler->writeBool("loop", sound.loop);
+		handler->writeBool("paused", sound.paused);
+		handler->writeString("variable", sound.variable.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
 	handler->endSectionWrite();
 }
 
@@ -2706,6 +2758,78 @@ void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_dat
 			reinforcement.num_uses = handler->readIntOr("num_uses", 0);
 			reinforcement.available = handler->readBoolOr("available", false);
 			state.reinforcements.push_back(std::move(reinforcement));
+		}
+		handler->endArrayRead();
+	}
+
+	state.hud_present = handler->readBoolOr("hud_present", false);
+	state.hud_gauges.clear();
+	if (handler->hasField("hud_gauges")) {
+		auto count = handler->startArrayRead("hud_gauges");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::hud_gauge_state gauge;
+			gauge.name = handler->readStringOr("name", "");
+			gauge.custom = handler->readBoolOr("custom", false);
+			gauge.active = handler->readBoolOr("active", true);
+			gauge.sexp_override = handler->readBoolOr("sexp_override", false);
+			gauge.sexp_color = handler->readBoolOr("sexp_color", false);
+			gauge.color[0] = handler->readIntOr("color_r", 0);
+			gauge.color[1] = handler->readIntOr("color_g", 0);
+			gauge.color[2] = handler->readIntOr("color_b", 0);
+			gauge.color[3] = handler->readIntOr("color_a", 0);
+			if (!gauge.name.empty()) {
+				state.hud_gauges.push_back(std::move(gauge));
+			}
+		}
+		handler->endArrayRead();
+	}
+	state.hud_high_contrast = handler->readBoolOr("hud_high_contrast", false);
+	state.disable_cockpits = handler->readBoolOr("disable_cockpits", false);
+	state.disable_cockpit_sway = handler->readBoolOr("disable_cockpit_sway", false);
+	state.sensor_static_forced = handler->readBoolOr("sensor_static_forced", false);
+
+	state.ignored_keys.clear();
+	if (handler->hasField("ignored_keys")) {
+		auto count = handler->startArrayRead("ignored_keys");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::ignored_key_state key;
+			key.action = handler->readStringOr("action", "");
+			key.count = handler->readIntOr("count", 0);
+			if (!key.action.empty()) {
+				state.ignored_keys.push_back(std::move(key));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	state.scrollback.clear();
+	if (handler->hasField("scrollback")) {
+		auto count = handler->startArrayRead("scrollback");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::scrollback_line_state line;
+			line.time = static_cast<fix>(handler->readIntOr("time", 0));
+			line.source = handler->readIntOr("source", 0);
+			line.text = handler->readStringOr("text", "");
+			if (!line.text.empty()) {
+				state.scrollback.push_back(std::move(line));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	state.file_sounds.clear();
+	if (handler->hasField("file_sounds")) {
+		auto count = handler->startArrayRead("file_sounds");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::file_sound_state sound;
+			sound.filename = handler->readStringOr("filename", "");
+			sound.type = handler->readIntOr("type", -1);
+			sound.loop = handler->readBoolOr("loop", false);
+			sound.paused = handler->readBoolOr("paused", false);
+			sound.variable = handler->readStringOr("variable", "");
+			if (!sound.filename.empty()) {
+				state.file_sounds.push_back(std::move(sound));
+			}
 		}
 		handler->endArrayRead();
 	}
