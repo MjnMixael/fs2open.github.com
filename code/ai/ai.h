@@ -607,6 +607,24 @@ extern void ai_set_good_rearm_time( int team, int time );
 extern void ai_set_bad_rearm_time(int team, int time);
 extern void ai_good_secondary_time( int team, int weapon_index, int num_weapons, const char *shipname );
 
+// what good-primary-time and good-secondary-time have set up so far this mission; exposed so the
+// mission checkpoint can carry both across a restore
+typedef struct {
+	object_ship_wing_point_team subject;
+	object_ship_wing_point_team target;
+	int weapon_index;
+} primary_fire_info;
+
+typedef struct {
+	int team;
+	int weapon_index;
+	int max_fire_count;
+	int ship_registry_index;
+} huge_fire_info;
+
+SCP_vector<primary_fire_info>& ai_get_preferred_primary_info();
+SCP_vector<huge_fire_info>& ai_get_huge_fire_info();
+
 extern void ai_do_objects_docked_stuff(object *docker, int docker_point, object *dockee, int dockee_point, bool update_clients = true);
 extern void ai_do_objects_undocked_stuff( object *docker, object *dockee );
 extern void ai_do_objects_repairing_stuff( object *repaired_obj, object *repair_obj, int how );

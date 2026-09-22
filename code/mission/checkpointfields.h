@@ -82,7 +82,8 @@
 	F(tag_total)                                                                               \
 	F(tag_left)                                                                                \
 	F(level2_tag_total)                                                                        \
-	F(level2_tag_left)
+	F(level2_tag_left)                                                                         \
+	F(alpha_mult)
 
 // current_cmeasure (a weapon class index), persona_index (an index into Personas, built from
 // messages.tbl), subsys_cargo_name / cargo1 (indices into Cargo_names, which set-cargo extends
@@ -109,7 +110,22 @@
 	F(current_viewpoint)                                                                       \
 	F(arrival_distance)                                                                        \
 	F(arrival_path_mask)                                                                       \
-	F(departure_path_mask)
+	F(departure_path_mask)                                                                     \
+	F(special_exp_damage)                                                                      \
+	F(special_exp_blast)                                                                       \
+	F(special_exp_inner)                                                                       \
+	F(special_exp_outer)                                                                       \
+	F(special_exp_shockwave_speed)                                                             \
+	F(special_exp_deathroll_time)                                                              \
+	F(team_change_time)
+
+// Mission-time (fix) values, restored verbatim like the AI's: when the cargo was scanned and when
+// the ship was first tagged, which cargo-known-delay and has-been-tagged-delay measure from.
+// team_change_timestamp is a fix too despite its name (change-team-color's fade start).
+#define CKPT_SHIP_MISSION_TIMES(F)                                                             \
+	F(time_cargo_revealed)                                                                     \
+	F(time_first_tagged)                                                                       \
+	F(team_change_timestamp)
 
 // arrival_delay and departure_delay are dual-purpose: in-mission they hold a real timestamp once
 // the delay timer has been armed, and a non-positive value meaning "so many seconds, timer not
@@ -151,6 +167,10 @@
 #define CKPT_SUBSYS_INTS(F)                                                                    \
 	F(subsys_guardian_threshold)                                                               \
 	F(turret_next_fire_pos)
+
+// Mission time, verbatim; cap-subsys-cargo-known-delay measures from it.
+#define CKPT_SUBSYS_MISSION_TIMES(F)                                                           \
+	F(time_subsys_cargo_revealed)
 
 #define CKPT_SUBSYS_STAMPS(F)                                                                  \
 	F(turret_next_enemy_check_stamp)                                                           \
@@ -198,7 +218,8 @@
 	F(red_alert_skipped_ships)                                                                 \
 	F(arrival_distance)                                                                        \
 	F(wave_delay_min)                                                                          \
-	F(wave_delay_max)
+	F(wave_delay_max)                                                                          \
+	F(num_waves)
 
 // Same dual encoding as the ship versions; wave_delay_timestamp is a real TIMESTAMP and is
 // handled separately in wing_state.
