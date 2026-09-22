@@ -87,6 +87,18 @@ const char *campaign_types[MAX_CAMPAIGN_TYPES] =
 static SCP_set<int> Granted_ships;
 static SCP_set<int> Granted_weapons;
 
+void mission_campaign_get_granted(SCP_vector<int>& ships, SCP_vector<int>& weapons)
+{
+	ships.assign(Granted_ships.begin(), Granted_ships.end());
+	weapons.assign(Granted_weapons.begin(), Granted_weapons.end());
+}
+
+void mission_campaign_clear_granted()
+{
+	Granted_ships.clear();
+	Granted_weapons.clear();
+}
+
 // variables to control the UI stuff for loading campaigns
 LOCAL UI_WINDOW Campaign_window;
 LOCAL UI_LISTBOX Campaign_listbox;

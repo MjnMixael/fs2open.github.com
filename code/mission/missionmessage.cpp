@@ -183,24 +183,7 @@ static TIMESTAMP Message_expire;			// timestamp to extend the duration of messag
 // variables to control message queuing.  All new messages to the player are queued.  The array
 // will be ordered by priority, then time submitted.
 
-#define MQF_CONVERT_TO_COMMAND		(1<<0)			// convert this queued message to terran command
-#define MQF_CHECK_ALIVE					(1<<1)			// check for the existence of who_from before sending
-
-typedef struct message_q {
-	fix	time_added;					// time at which this entry was added
-	TIMESTAMP window_timestamp;		// timestamp which will tell us how long we have to play the message
-	int	priority;					// priority of the message
-	int	message_num;				// index into the Messages[] array
-	SCP_vm_unique_ptr<char> special_message;	// Goober5000 - message to play if we've replaced stuff (like variables)
-	char who_from[NAME_LENGTH];		// who this message is from
-	int	source;						// who the source of the message is (HUD_SOURCE_* type)
-	int	builtin_type;				// type of builtin message (-1 if mission message)
-	int	flags;						// should this message entry be converted to Terran Command head/wave file
-	TIMESTAMP min_delay_stamp;		// minimum delay before this message will start playing
-	int	group;						// message is part of a group, don't time it out
-	int event_num_to_cancel;		// Goober5000 - if this event is true, the message will not be played
-} message_q;
-
+// message_q and the MQF_* flags live in missionmessage.h now, so the checkpoint can see them
 #define DEFAULT_MESSAGE_LENGTH	3000			// default number of milliseconds to display message indicator on hud
 SCP_vector<message_q>	MessageQ;
 int MessageQ_num;			// keeps track of number of entries on the queue.
