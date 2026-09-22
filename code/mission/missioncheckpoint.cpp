@@ -2521,6 +2521,92 @@ void store_docks(const ship* shipp, const object* objp, SCP_vector<dock_link_sta
 	}
 }
 
+// Does the checkpoint have this exact link -- these two ships, at these two bays?
+//
+// Links are stored from both ends, so looking under either ship finds it; the docker's entry is
+// checked first and the dockee's second only because a ship the checkpoint never mentions has no
+// entry to look under at all.
+bool checkpoint_has_dock_link(const checkpoint_data& data,
+	const SCP_string& docker,
+	const SCP_string& dockee,
+	const SCP_string& docker_point,
+	const SCP_string& dockee_point)
+{
+	for (const auto& ship_data : data.ships) {
+		bool forward = lcase_equal(ship_data.name, docker);
+		if (!forward && !lcase_equal(ship_data.name, dockee)) {
+			continue;
+		}
+
+		// Read from this ship's side: "my" is whichever end we are standing on.
+		const SCP_string& other = forward ? dockee : docker;
+		const SCP_string& mine = forward ? docker_point : dockee_point;
+		const SCP_string& theirs = forward ? dockee_point : docker_point;
+
+		for (const auto& link : ship_data.docks) {
+			if (lcase_equal(link.other_ship, other) && lcase_equal(link.my_point, mine) &&
+				lcase_equal(link.their_point, theirs)) {
+				return true;
+			}
+		}
+	}
+
+	return false;
+}
+
+// Break every live link the checkpoint does not have, before any of them are rebuilt.
+//
+// The mission load has just recreated the docking the mission file describes, and the checkpoint
+// is the authority on what was still docked -- so a freighter that had released its cargo, or a
+// support ship that had finished and pulled away, otherwise comes back still attached.  Restoring
+// only adds links, so without this pass there is nothing that can ever take one away.
+//
+// Same ships at different bays counts as stale too: undocking here lets restore_docks() rebuild
+// the link properly rather than leaving the mission file's arrangement in place.
+//
+// The links to break are collected before any of them is broken, because undocking rewrites the
+// lists being walked.
+void undock_stale_links(const checkpoint_data& data)
+{
+	SCP_vector<std::pair<object*, object*>> to_undock;
+
+	for (const auto& entry : Ship_registry) {
+		if (!entry.has_shipp() || !entry.has_objp()) {
+			continue;
+		}
+
+		ship* shipp = &Ships[entry.shipnum];
+		object* objp = &Objects[entry.objnum];
+
+		for (dock_instance* dock_ptr = objp->dock_list; dock_ptr != nullptr; dock_ptr = dock_ptr->next) {
+			object* other = dock_ptr->docked_objp;
+			if (other == nullptr || other->type != OBJ_SHIP || other->instance < 0) {
+				continue;
+			}
+
+			ship* other_shipp = &Ships[other->instance];
+
+			// Once per pair: the dock lists are symmetric, so only the end whose name sorts first
+			// gets to decide.
+			if (stricmp(shipp->ship_name, other_shipp->ship_name) >= 0) {
+				continue;
+			}
+
+			SCP_string my_point = dock_point_name(shipp, dock_ptr->dockpoint_used);
+			SCP_string their_point =
+				dock_point_name(other_shipp, dock_find_dockpoint_used_by_object(other, objp));
+
+			if (!checkpoint_has_dock_link(data, shipp->ship_name, other_shipp->ship_name, my_point, their_point)) {
+				to_undock.emplace_back(objp, other);
+			}
+		}
+	}
+
+	for (const auto& pair : to_undock) {
+		ai_do_objects_undocked_stuff(pair.first, pair.second);
+	}
+}
+
 // Run once every ship exists.  Both ends of a link are stored, so the pair is checked first --
 // docking an already-docked pair a second time would corrupt the dock list.
 void restore_docks(ship* shipp, object* objp, const SCP_vector<dock_link_state>& in)
@@ -4759,6 +4845,10 @@ void mission_checkpoint_apply()
 
 		apply_ship(state, skip_loadout);
 	}
+
+	// Before anything is re-docked, since restore_docks() only ever adds links and the mission
+	// load has just rebuilt the file's own docking.
+	undock_stale_links(data);
 
 	// Turret targets reference other ships, so they can only be resolved once every ship has
 	// been through apply_ship().
