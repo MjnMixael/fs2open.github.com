@@ -1398,6 +1398,7 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		write_int_map(handler, "ints", wing_data.ints);
 		write_string_list(handler, "flags", wing_data.flags);
 		write_string_list(handler, "ships", wing_data.ship_names);
+		handler->writeString("special_ship", wing_data.special_ship.c_str());
 
 		handler->writeString("display_name", wing_data.display_name.c_str());
 		handler->writeString("arrival_anchor", wing_data.arrival_anchor.c_str());
@@ -1444,6 +1445,7 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_int_map(handler, "ints", wing_data.ints);
 			read_string_list(handler, "flags", wing_data.flags);
 			read_string_list(handler, "ships", wing_data.ship_names);
+			wing_data.special_ship = handler->readStringOr("special_ship", "");
 
 			wing_data.display_name = handler->readStringOr("display_name", "");
 			wing_data.arrival_anchor = handler->readStringOr("arrival_anchor", "");
