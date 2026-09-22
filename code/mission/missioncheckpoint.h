@@ -173,6 +173,57 @@ struct subsystem_state {
 	weapon_state weapons;
 	bool has_weapons = false;
 	SCP_string ai_class;
+
+	// set-armor-type, by name; empty means the class default.
+	SCP_string armor_type;
+
+	// Turret targeting as the mission set it: turret-set-target-order (fixed order-type ids),
+	// turret-set-target-priorities (Ai_tp_list, by name), turret-set-forced-subsys-target (the
+	// subsystem on turret_target, by lookup key) and a script's targeting override.
+	SCP_vector<int> targeting_order;
+	SCP_vector<SCP_string> target_priorities;
+	SCP_string forced_target_subsys;
+	bool scripting_target_override = false;
+
+	// The submodel the subsystem drives: its pose and, for a rotating or translating one, how
+	// fast it is going and was told to go.  A turret's base is submodel 1 and its barrels
+	// submodel 2, so restoring both poses puts a turret back where it was aiming.  has_rotation
+	// is false for a subsystem with no submodel of its own.
+	bool has_rotation = false;
+	float cur_angle = 0.0f;
+	float cur_offset = 0.0f;
+	float current_turn_rate = 0.0f;
+	float desired_turn_rate = 0.0f;
+	float turn_accel = 0.0f;
+	float current_shift_rate = 0.0f;
+	float desired_shift_rate = 0.0f;
+	matrix canonical_orient = vmd_identity_matrix;
+	vec3d canonical_offset = vmd_zero_vector;
+	bool has_gun_orient = false;
+	matrix gun_canonical_orient = vmd_identity_matrix;
+};
+
+// One guard-range clamp from set-guard-range: this ship will not chase further than range from
+// the named ship.
+struct guard_range_state {
+	SCP_string ship;
+	float range = -1.0f;
+};
+
+// One change-iff-color override: how observer sees observed on this ship, as a colour rather
+// than the colour-table index iff_init_color() hands out at runtime.
+struct iff_color_state {
+	SCP_string observer;
+	SCP_string observed;
+	int r = 0;
+	int g = 0;
+	int b = 0;
+};
+
+// Damage dealt to this ship by a named attacker, which is what decides kill and assist credit.
+struct damage_credit_state {
+	SCP_string ship;
+	float damage = 0.0f;
 };
 
 // What had become of a ship at the moment the checkpoint was taken.  Mirrors ShipStatus, but
@@ -407,6 +458,47 @@ struct ship_state {
 	SCP_vector<dock_link_state> docks;
 	SCP_vector<animation_state> animations;
 
+	// set-departure-info rewrites the route on a present ship as it does on a wing; the anchor by
+	// name.  (The path mask and the delay are in the registries already.)
+	int departure_location = 0;
+	SCP_string departure_anchor;
+
+	// set-armor-type and ship-set-damage-type, all by name; empty means the class default.
+	SCP_string armor_type;
+	SCP_string shield_armor_type;
+	SCP_string collision_damage_type;
+	SCP_string debris_damage_type;
+
+	// set-explosion-option: the numbers are in the int registry; these are its two switches.
+	bool use_special_explosion = false;
+	bool use_shockwave = false;
+
+	// set-player-orders and set-order-allowed-for-target, as Player_orders parse names.  An empty
+	// set is a real value (every order removed), so orders_present says whether the file had
+	// them at all.
+	bool orders_present = false;
+	SCP_vector<SCP_string> orders_accepted;
+	SCP_vector<SCP_string> orders_allowed_against;
+
+	SCP_vector<guard_range_state> guard_ranges;
+	SCP_string special_warpout_ship;    // set-special-warpout-name: the Knossos, by name
+
+	SCP_vector<bool> glow_banks;
+	// Instance texture replacements (old, new), in parallel, recovered from the model instance
+	// by texture name; "invisible" is the engine's own spelling for a texture switched off.
+	SCP_vector<SCP_string> texture_old;
+	SCP_vector<SCP_string> texture_new;
+	int collision_group_id = 0;
+
+	// change-team-color: the colour set and, mid-fade, the one being faded from; the fade's start
+	// time and length are in the registries.
+	SCP_string team_color;
+	SCP_string secondary_team_color;
+	SCP_vector<iff_color_state> iff_colors;
+
+	float sim_hull = 0.0f;              // training-weapon damage, which is kept apart from the real hull
+	SCP_vector<damage_credit_state> damage_credits;
+
 	// --- only meaningful when the ship had already left ---
 	//
 	// ship_class, team, display_name, cargo and cargo_no_deplete above are filled in for a gone
@@ -449,6 +541,10 @@ struct wing_state {
 	// A wing carries its own ai_goals[], handed to each ship as it arrives, and a SEXP can
 	// rewrite them mid-mission.  Same struct as the per-ship orders.
 	SCP_vector<ai_goal_state> goals;
+
+	// set-wing-formation: the formation by name (empty for the default) and its scale.
+	SCP_string formation;
+	float formation_scale = 1.0f;
 };
 
 struct variable_state {
@@ -635,6 +731,13 @@ struct parse_object_state {
 	bool cargo_no_deplete = false;
 
 	SCP_vector<SCP_string> flags;
+
+	// The same SEXPs reach a ship that has not arrived yet; see the ship_state fields.
+	int collision_group_id = 0;
+	SCP_string team_color;
+	SCP_vector<SCP_string> texture_old;
+	SCP_vector<SCP_string> texture_new;
+	SCP_vector<iff_color_state> iff_colors;
 };
 
 // A piece of hull debris.
@@ -950,6 +1053,23 @@ struct squadmsg_history_state {
 	fix order_time = 0;          // mission time, verbatim
 };
 
+// good-primary-time: which primary an AI subject should use against a target.  Subject and
+// target are whatever text the SEXP named -- a ship, a wing, a team -- and the engine rebuilds
+// the reference from that text.
+struct preferred_primary_state {
+	SCP_string subject;
+	SCP_string target;
+	SCP_string weapon;
+};
+
+// good-secondary-time: permission for a team to fire a big secondary at a ship, so many at once.
+struct huge_fire_state {
+	SCP_string team;
+	SCP_string weapon;
+	SCP_string ship;
+	int max_fire_count = 0;
+};
+
 // A message a script added during the mission.  Those are appended to Messages[] and are gone
 // after a reload, so a send-message still to come that names one would find nothing.
 struct message_state {
@@ -1006,6 +1126,22 @@ struct mission_extra_state {
 	SCP_vector<SCP_string> tech_ships;
 	SCP_vector<SCP_string> tech_weapons;
 	SCP_vector<SCP_string> tech_intel;
+
+	SCP_vector<preferred_primary_state> preferred_primaries;
+	SCP_vector<huge_fire_state> huge_fire;
+
+	// The player's own settings and standing: throttle (set-player-throttle-speed and the
+	// throttle keys), the two auto-targeting toggles and speed matching, the death message
+	// (set-death-message), and the friendly-fire tally the traitor logic keeps.
+	float player_throttle = 0.0f;
+	bool auto_targeting = false;
+	bool auto_match_speed = false;
+	bool match_target = false;
+	SCP_string death_message;
+	int friendly_hits = 0;
+	float friendly_damage = 0.0f;
+	fix friendly_last_hit_time = 0;      // mission time, verbatim
+	fix last_warning_message_time = 0;   // mission time, verbatim
 };
 
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine

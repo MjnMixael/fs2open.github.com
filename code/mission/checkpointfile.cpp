@@ -61,6 +61,42 @@ SCP_string base_name(const char* filename)
 // Small helpers for the repetitive name/value maps
 // ------------------------------------------------------------------
 
+void write_iff_colors(pilot::FileHandler* handler, const char* name, const SCP_vector<checkpoint::iff_color_state>& values)
+{
+	handler->startArrayWrite(name, values.size());
+	for (const auto& entry : values) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("observer", entry.observer.c_str());
+		handler->writeString("observed", entry.observed.c_str());
+		handler->writeInt("r", entry.r);
+		handler->writeInt("g", entry.g);
+		handler->writeInt("b", entry.b);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_iff_colors(pilot::FileHandler* handler, const char* name, SCP_vector<checkpoint::iff_color_state>& values)
+{
+	values.clear();
+
+	if (!handler->hasField(name)) {
+		return;
+	}
+
+	auto count = handler->startArrayRead(name);
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::iff_color_state entry;
+		entry.observer = handler->readStringOr("observer", "");
+		entry.observed = handler->readStringOr("observed", "");
+		entry.r = handler->readIntOr("r", 0);
+		entry.g = handler->readIntOr("g", 0);
+		entry.b = handler->readIntOr("b", 0);
+		values.push_back(std::move(entry));
+	}
+	handler->endArrayRead();
+}
+
 void write_string_list(pilot::FileHandler* handler, const char* name, const SCP_vector<SCP_string>& values)
 {
 	handler->startArrayWrite(name, values.size());
@@ -1170,6 +1206,32 @@ void write_subsystems(pilot::FileHandler* handler, const SCP_vector<checkpoint::
 		handler->writeBool("cargo_no_deplete", subsys.cargo_no_deplete);
 		handler->writeString("turret_target", subsys.turret_target.c_str());
 
+		handler->writeString("armor_type", subsys.armor_type.c_str());
+		write_int_list(handler, "targeting_order", subsys.targeting_order);
+		write_string_list(handler, "target_priorities", subsys.target_priorities);
+		handler->writeString("forced_target_subsys", subsys.forced_target_subsys.c_str());
+		handler->writeBool("scripting_target_override", subsys.scripting_target_override);
+		handler->writeBool("has_rotation", subsys.has_rotation);
+		if (subsys.has_rotation) {
+			handler->writeFloat("cur_angle", subsys.cur_angle);
+			handler->writeFloat("cur_offset", subsys.cur_offset);
+			handler->writeFloat("current_turn_rate", subsys.current_turn_rate);
+			handler->writeFloat("desired_turn_rate", subsys.desired_turn_rate);
+			handler->writeFloat("turn_accel", subsys.turn_accel);
+			handler->writeFloat("current_shift_rate", subsys.current_shift_rate);
+			handler->writeFloat("desired_shift_rate", subsys.desired_shift_rate);
+			write_vector(handler, "orient_fvec_x", "orient_fvec_y", "orient_fvec_z", subsys.canonical_orient.vec.fvec);
+			write_vector(handler, "orient_uvec_x", "orient_uvec_y", "orient_uvec_z", subsys.canonical_orient.vec.uvec);
+			write_vector(handler, "orient_rvec_x", "orient_rvec_y", "orient_rvec_z", subsys.canonical_orient.vec.rvec);
+			write_vector(handler, "offset_x", "offset_y", "offset_z", subsys.canonical_offset);
+		}
+		handler->writeBool("has_gun_orient", subsys.has_gun_orient);
+		if (subsys.has_gun_orient) {
+			write_vector(handler, "gun_fvec_x", "gun_fvec_y", "gun_fvec_z", subsys.gun_canonical_orient.vec.fvec);
+			write_vector(handler, "gun_uvec_x", "gun_uvec_y", "gun_uvec_z", subsys.gun_canonical_orient.vec.uvec);
+			write_vector(handler, "gun_rvec_x", "gun_rvec_y", "gun_rvec_z", subsys.gun_canonical_orient.vec.rvec);
+		}
+
 		write_string_list(handler, "flags", subsys.flags);
 		write_float_map(handler, "floats", subsys.floats);
 		write_int_map(handler, "ints", subsys.ints);
@@ -1204,6 +1266,32 @@ void read_subsystems(pilot::FileHandler* handler, SCP_vector<checkpoint::subsyst
 		subsys.cargo = handler->readStringOr("cargo", "");
 		subsys.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 		subsys.turret_target = handler->readStringOr("turret_target", "");
+
+		subsys.armor_type = handler->readStringOr("armor_type", "");
+		read_int_list(handler, "targeting_order", subsys.targeting_order);
+		read_string_list(handler, "target_priorities", subsys.target_priorities);
+		subsys.forced_target_subsys = handler->readStringOr("forced_target_subsys", "");
+		subsys.scripting_target_override = handler->readBoolOr("scripting_target_override", false);
+		subsys.has_rotation = handler->readBoolOr("has_rotation", false);
+		if (subsys.has_rotation) {
+			subsys.cur_angle = handler->readFloatOr("cur_angle", 0.0f);
+			subsys.cur_offset = handler->readFloatOr("cur_offset", 0.0f);
+			subsys.current_turn_rate = handler->readFloatOr("current_turn_rate", 0.0f);
+			subsys.desired_turn_rate = handler->readFloatOr("desired_turn_rate", 0.0f);
+			subsys.turn_accel = handler->readFloatOr("turn_accel", 0.0f);
+			subsys.current_shift_rate = handler->readFloatOr("current_shift_rate", 0.0f);
+			subsys.desired_shift_rate = handler->readFloatOr("desired_shift_rate", 0.0f);
+			read_vector(handler, "orient_fvec_x", "orient_fvec_y", "orient_fvec_z", subsys.canonical_orient.vec.fvec);
+			read_vector(handler, "orient_uvec_x", "orient_uvec_y", "orient_uvec_z", subsys.canonical_orient.vec.uvec);
+			read_vector(handler, "orient_rvec_x", "orient_rvec_y", "orient_rvec_z", subsys.canonical_orient.vec.rvec);
+			read_vector(handler, "offset_x", "offset_y", "offset_z", subsys.canonical_offset);
+		}
+		subsys.has_gun_orient = handler->readBoolOr("has_gun_orient", false);
+		if (subsys.has_gun_orient) {
+			read_vector(handler, "gun_fvec_x", "gun_fvec_y", "gun_fvec_z", subsys.gun_canonical_orient.vec.fvec);
+			read_vector(handler, "gun_uvec_x", "gun_uvec_y", "gun_uvec_z", subsys.gun_canonical_orient.vec.uvec);
+			read_vector(handler, "gun_rvec_x", "gun_rvec_y", "gun_rvec_z", subsys.gun_canonical_orient.vec.rvec);
+		}
 
 		read_string_list(handler, "flags", subsys.flags);
 		read_float_map(handler, "floats", subsys.floats);
@@ -1248,6 +1336,11 @@ void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoi
 		handler->writeString("callsign", p_obj.callsign.c_str());
 		handler->writeString("cargo", p_obj.cargo.c_str());
 		handler->writeBool("cargo_no_deplete", p_obj.cargo_no_deplete);
+		handler->writeInt("collision_group_id", p_obj.collision_group_id);
+		handler->writeString("team_color", p_obj.team_color.c_str());
+		write_string_list(handler, "texture_old", p_obj.texture_old);
+		write_string_list(handler, "texture_new", p_obj.texture_new);
+		write_iff_colors(handler, "iff_colors", p_obj.iff_colors);
 
 		write_string_list(handler, "flags", p_obj.flags);
 		write_parse_subsystems(handler, p_obj.subsystems);
@@ -1291,6 +1384,11 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 		p_obj.callsign = handler->readStringOr("callsign", "");
 		p_obj.cargo = handler->readStringOr("cargo", "");
 		p_obj.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
+		p_obj.collision_group_id = handler->readIntOr("collision_group_id", 0);
+		p_obj.team_color = handler->readStringOr("team_color", "");
+		read_string_list(handler, "texture_old", p_obj.texture_old);
+		read_string_list(handler, "texture_new", p_obj.texture_new);
+		read_iff_colors(handler, "iff_colors", p_obj.iff_colors);
 
 		read_string_list(handler, "flags", p_obj.flags);
 		read_parse_subsystems(handler, p_obj.subsystems);
@@ -1382,6 +1480,49 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			handler->writeBool("cargo_no_deplete", ship_data.cargo_no_deplete);
 			handler->writeString("alt_name", ship_data.alt_name.c_str());
 			handler->writeString("callsign", ship_data.callsign.c_str());
+
+			handler->writeInt("departure_location", ship_data.departure_location);
+			handler->writeString("departure_anchor", ship_data.departure_anchor.c_str());
+			handler->writeString("armor_type", ship_data.armor_type.c_str());
+			handler->writeString("shield_armor_type", ship_data.shield_armor_type.c_str());
+			handler->writeString("collision_damage_type", ship_data.collision_damage_type.c_str());
+			handler->writeString("debris_damage_type", ship_data.debris_damage_type.c_str());
+			handler->writeBool("use_special_explosion", ship_data.use_special_explosion);
+			handler->writeBool("use_shockwave", ship_data.use_shockwave);
+			handler->writeBool("orders_present", ship_data.orders_present);
+			write_string_list(handler, "orders_accepted", ship_data.orders_accepted);
+			write_string_list(handler, "orders_allowed_against", ship_data.orders_allowed_against);
+			handler->startArrayWrite("guard_ranges", ship_data.guard_ranges.size());
+			for (const auto& guard : ship_data.guard_ranges) {
+				handler->startSectionWrite(Section::Unnamed);
+				handler->writeString("ship", guard.ship.c_str());
+				handler->writeFloat("range", guard.range);
+				handler->endSectionWrite();
+			}
+			handler->endArrayWrite();
+			handler->writeString("special_warpout_ship", ship_data.special_warpout_ship.c_str());
+			{
+				SCP_vector<int> glow_banks;
+				for (bool on : ship_data.glow_banks) {
+					glow_banks.push_back(on ? 1 : 0);
+				}
+				write_int_list(handler, "glow_banks", glow_banks);
+			}
+			write_string_list(handler, "texture_old", ship_data.texture_old);
+			write_string_list(handler, "texture_new", ship_data.texture_new);
+			handler->writeInt("collision_group_id", ship_data.collision_group_id);
+			handler->writeString("team_color", ship_data.team_color.c_str());
+			handler->writeString("secondary_team_color", ship_data.secondary_team_color.c_str());
+			write_iff_colors(handler, "iff_colors", ship_data.iff_colors);
+			handler->writeFloat("sim_hull", ship_data.sim_hull);
+			handler->startArrayWrite("damage_credits", ship_data.damage_credits.size());
+			for (const auto& credit : ship_data.damage_credits) {
+				handler->startSectionWrite(Section::Unnamed);
+				handler->writeString("ship", credit.ship.c_str());
+				handler->writeFloat("damage", credit.damage);
+				handler->endSectionWrite();
+			}
+			handler->endArrayWrite();
 			handler->writeBool("no_parse_object", ship_data.no_parse_object);
 
 			write_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
@@ -1467,6 +1608,55 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			ship_data.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
 			ship_data.alt_name = handler->readStringOr("alt_name", "");
 			ship_data.callsign = handler->readStringOr("callsign", "");
+
+			ship_data.departure_location = handler->readIntOr("departure_location", 0);
+			ship_data.departure_anchor = handler->readStringOr("departure_anchor", "");
+			ship_data.armor_type = handler->readStringOr("armor_type", "");
+			ship_data.shield_armor_type = handler->readStringOr("shield_armor_type", "");
+			ship_data.collision_damage_type = handler->readStringOr("collision_damage_type", "");
+			ship_data.debris_damage_type = handler->readStringOr("debris_damage_type", "");
+			ship_data.use_special_explosion = handler->readBoolOr("use_special_explosion", false);
+			ship_data.use_shockwave = handler->readBoolOr("use_shockwave", false);
+			ship_data.orders_present = handler->readBoolOr("orders_present", false);
+			read_string_list(handler, "orders_accepted", ship_data.orders_accepted);
+			read_string_list(handler, "orders_allowed_against", ship_data.orders_allowed_against);
+			ship_data.guard_ranges.clear();
+			if (handler->hasField("guard_ranges")) {
+				auto count = handler->startArrayRead("guard_ranges");
+				for (size_t j = 0; j < count; j++, handler->nextArraySection()) {
+					checkpoint::guard_range_state guard;
+					guard.ship = handler->readStringOr("ship", "");
+					guard.range = handler->readFloatOr("range", -1.0f);
+					ship_data.guard_ranges.push_back(std::move(guard));
+				}
+				handler->endArrayRead();
+			}
+			ship_data.special_warpout_ship = handler->readStringOr("special_warpout_ship", "");
+			{
+				SCP_vector<int> glow_banks;
+				read_int_list(handler, "glow_banks", glow_banks);
+				for (int on : glow_banks) {
+					ship_data.glow_banks.push_back(on != 0);
+				}
+			}
+			read_string_list(handler, "texture_old", ship_data.texture_old);
+			read_string_list(handler, "texture_new", ship_data.texture_new);
+			ship_data.collision_group_id = handler->readIntOr("collision_group_id", 0);
+			ship_data.team_color = handler->readStringOr("team_color", "");
+			ship_data.secondary_team_color = handler->readStringOr("secondary_team_color", "");
+			read_iff_colors(handler, "iff_colors", ship_data.iff_colors);
+			ship_data.sim_hull = handler->readFloatOr("sim_hull", 0.0f);
+			ship_data.damage_credits.clear();
+			if (handler->hasField("damage_credits")) {
+				auto count = handler->startArrayRead("damage_credits");
+				for (size_t j = 0; j < count; j++, handler->nextArraySection()) {
+					checkpoint::damage_credit_state credit;
+					credit.ship = handler->readStringOr("ship", "");
+					credit.damage = handler->readFloatOr("damage", 0.0f);
+					ship_data.damage_credits.push_back(std::move(credit));
+				}
+				handler->endArrayRead();
+			}
 			ship_data.no_parse_object = handler->readBoolOr("no_parse_object", false);
 
 			read_vector(handler, "pos_x", "pos_y", "pos_z", ship_data.pos);
@@ -1532,6 +1722,8 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		write_string_list(handler, "flags", wing_data.flags);
 		write_string_list(handler, "ships", wing_data.ship_names);
 		handler->writeString("special_ship", wing_data.special_ship.c_str());
+		handler->writeString("formation", wing_data.formation.c_str());
+		handler->writeFloat("formation_scale", wing_data.formation_scale);
 
 		handler->writeString("display_name", wing_data.display_name.c_str());
 		handler->writeString("arrival_anchor", wing_data.arrival_anchor.c_str());
@@ -1580,6 +1772,8 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_string_list(handler, "flags", wing_data.flags);
 			read_string_list(handler, "ships", wing_data.ship_names);
 			wing_data.special_ship = handler->readStringOr("special_ship", "");
+			wing_data.formation = handler->readStringOr("formation", "");
+			wing_data.formation_scale = handler->readFloatOr("formation_scale", 1.0f);
 
 			wing_data.display_name = handler->readStringOr("display_name", "");
 			wing_data.arrival_anchor = handler->readStringOr("arrival_anchor", "");
@@ -2065,6 +2259,36 @@ void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpo
 	handler->writeBool("slew_locked", state.slew_locked);
 	handler->writeInt("viewer_mode", state.viewer_mode);
 
+	handler->startArrayWrite("preferred_primaries", state.preferred_primaries.size());
+	for (const auto& entry : state.preferred_primaries) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("subject", entry.subject.c_str());
+		handler->writeString("target", entry.target.c_str());
+		handler->writeString("weapon", entry.weapon.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+	handler->startArrayWrite("huge_fire", state.huge_fire.size());
+	for (const auto& entry : state.huge_fire) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("team", entry.team.c_str());
+		handler->writeString("weapon", entry.weapon.c_str());
+		handler->writeString("ship", entry.ship.c_str());
+		handler->writeInt("max_fire_count", entry.max_fire_count);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->writeFloat("player_throttle", state.player_throttle);
+	handler->writeBool("auto_targeting", state.auto_targeting);
+	handler->writeBool("auto_match_speed", state.auto_match_speed);
+	handler->writeBool("match_target", state.match_target);
+	handler->writeString("death_message", state.death_message.c_str());
+	handler->writeInt("friendly_hits", state.friendly_hits);
+	handler->writeFloat("friendly_damage", state.friendly_damage);
+	handler->writeInt("friendly_last_hit_time", static_cast<std::int32_t>(state.friendly_last_hit_time));
+	handler->writeInt("last_warning_message_time", static_cast<std::int32_t>(state.last_warning_message_time));
+
 	handler->writeBool("promoted", state.promoted);
 	handler->writeBool("no_check_all_alone_msg", state.no_check_all_alone_msg);
 	write_string_list(handler, "granted_ships", state.granted_ships);
@@ -2149,6 +2373,42 @@ void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_dat
 	state.perspective_locked = handler->readBoolOr("perspective_locked", false);
 	state.slew_locked = handler->readBoolOr("slew_locked", false);
 	state.viewer_mode = handler->readIntOr("viewer_mode", 0);
+
+	state.preferred_primaries.clear();
+	if (handler->hasField("preferred_primaries")) {
+		auto count = handler->startArrayRead("preferred_primaries");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::preferred_primary_state entry;
+			entry.subject = handler->readStringOr("subject", "");
+			entry.target = handler->readStringOr("target", "");
+			entry.weapon = handler->readStringOr("weapon", "");
+			state.preferred_primaries.push_back(std::move(entry));
+		}
+		handler->endArrayRead();
+	}
+	state.huge_fire.clear();
+	if (handler->hasField("huge_fire")) {
+		auto count = handler->startArrayRead("huge_fire");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::huge_fire_state entry;
+			entry.team = handler->readStringOr("team", "");
+			entry.weapon = handler->readStringOr("weapon", "");
+			entry.ship = handler->readStringOr("ship", "");
+			entry.max_fire_count = handler->readIntOr("max_fire_count", 0);
+			state.huge_fire.push_back(std::move(entry));
+		}
+		handler->endArrayRead();
+	}
+
+	state.player_throttle = handler->readFloatOr("player_throttle", 0.0f);
+	state.auto_targeting = handler->readBoolOr("auto_targeting", false);
+	state.auto_match_speed = handler->readBoolOr("auto_match_speed", false);
+	state.match_target = handler->readBoolOr("match_target", false);
+	state.death_message = handler->readStringOr("death_message", "");
+	state.friendly_hits = handler->readIntOr("friendly_hits", 0);
+	state.friendly_damage = handler->readFloatOr("friendly_damage", 0.0f);
+	state.friendly_last_hit_time = static_cast<fix>(handler->readIntOr("friendly_last_hit_time", 0));
+	state.last_warning_message_time = static_cast<fix>(handler->readIntOr("last_warning_message_time", 0));
 
 	state.promoted = handler->readBoolOr("promoted", false);
 	state.no_check_all_alone_msg = handler->readBoolOr("no_check_all_alone_msg", false);
