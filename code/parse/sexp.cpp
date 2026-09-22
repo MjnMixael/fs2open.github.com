@@ -14941,6 +14941,7 @@ void sexp_set_sound_environment(int node)
 
 	if ( preset && !stricmp(preset, SEXP_NONE_STRING) ) {
 		sound_env_disable();
+		Game_sound_env.id = -1;
 		return;
 	}
 
@@ -14976,7 +14977,10 @@ void sexp_set_sound_environment(int node)
 			env.damping = val;
 		}
 	}
-	
+
+	// keep the mission's environment in step: the mission checkpoint stores it, and a restore
+	// puts it back through sound_env_set()
+	Game_sound_env = env;
 	sound_env_set(&env);
 }
 
@@ -15002,10 +15006,13 @@ void sexp_update_sound_environment(int node)
 
 		if ( option == SEO_VOLUME ) {
 			ds_eax_set_volume(val);
+			Game_sound_env.volume = val;
 		} else if ( option == SEO_DECAY_TIME ) {
 			ds_eax_set_decay_time(val);
+			Game_sound_env.decay = val;
 		} else if ( option == SEO_DAMPING ) {
 			ds_eax_set_damping(val);
+			Game_sound_env.damping = val;
 		}
 	}
 }

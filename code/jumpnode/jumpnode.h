@@ -96,6 +96,7 @@ public:
 	bool IsHidden() const;
 	bool IsColored() const;
 	bool IsSpecialModel() const;
+	bool IsShowingPolys() const;
 	bool HasDisplayName() const;
 	const char* GetModelFilename() const; // returns JN_DEFAULT_MODEL if not a special model
 	void ResetToDefaultModel();           // unloads special model and restores default
