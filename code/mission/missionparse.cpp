@@ -443,7 +443,7 @@ flag_def_list_new<Mission::Mission_Flags> Parse_mission_flags[] = {
 	{"Large Ships Do Not Collide By Default",    Mission::Mission_Flags::Large_ships_no_collide_by_default, true, false},
 	{"Limit Support Rearm to Mission Pool",       Mission::Mission_Flags::Limited_support_rearm_pool, true, false},
 	// The checkpoint flags all live in the Checkpoints subdialog rather than the general flag
-	// list, which is what is_special (the last column) means to the editor.
+	// list; that is the editor's decision (MissionSpecDialogModel.cpp), not is_special's.
 	{"No Checkpoint Resume Prompt",               Mission::Mission_Flags::No_checkpoint_resume_prompt, true, false},
 	{"Checkpoint Resume Keeps Player Loadout",    Mission::Mission_Flags::Checkpoint_keep_player_loadout, true, false},
 	{"Checkpoint Resume Keeps Wing Loadout",      Mission::Mission_Flags::Checkpoint_keep_wing_loadout, true, false},
@@ -4996,7 +4996,10 @@ int parse_wing_create_ships( wing *wingp, int num_to_create, bool force_create, 
 	
 	// possibly play some event driven music here.  Send a network packet indicating the wing was
 	// created.  Only do this stuff if actually in the mission.
-	if ( (objnum != -1) && (Game_mode & GM_IN_MISSION) ) {		// if true, we have created at least one new ship.
+	// (not while restoring a checkpoint: the wave is being put back where the save left it, so the
+	// log is replayed from the save, the positions come from the save, and the player is not
+	// watching an arrival -- no music, no placement, no warp-in, no arrival hook)
+	if ( (objnum != -1) && (Game_mode & GM_IN_MISSION) && !Game_restoring ) {		// if true, we have created at least one new ship.
 		int it, ship_num;
 
 		// see if this wing is a player starting wing, and if so, call the maybe_add_form_goal
