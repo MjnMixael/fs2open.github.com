@@ -1618,6 +1618,30 @@ void store_environment(environment_state& out)
 
 	out.asteroids_enabled = (Asteroids_enabled != 0);
 
+	// The field definition, since set-asteroid-field and friends rewrite it and a field a SEXP
+	// created is not in the mission file at all.  The rocks go separately; see store_asteroids().
+	out.has_asteroid_field = true;
+	out.asteroid_field_num_initial = Asteroid_field.num_initial_asteroids;
+	out.asteroid_field_active = (Asteroid_field.field_type == FT_ACTIVE);
+	out.asteroid_field_is_debris = (Asteroid_field.debris_genre == DG_DEBRIS);
+	out.asteroid_field_enhanced_checks = Asteroid_field.enhanced_visibility_checks;
+	out.asteroid_field_has_inner_bound = Asteroid_field.has_inner_bound;
+	out.asteroid_field_speed = Asteroid_field.speed;
+	out.asteroid_field_bound_rad = Asteroid_field.bound_rad;
+	out.asteroid_field_vel = Asteroid_field.vel;
+	out.asteroid_field_min = Asteroid_field.min_bound;
+	out.asteroid_field_max = Asteroid_field.max_bound;
+	out.asteroid_field_inner_min = Asteroid_field.inner_min_bound;
+	out.asteroid_field_inner_max = Asteroid_field.inner_max_bound;
+	out.asteroid_field_asteroid_types = Asteroid_field.field_asteroid_type;
+	out.asteroid_field_targets = Asteroid_field.target_names;
+	// Debris types are Asteroid_info indices; -1 marks one the parse already invalidated.
+	for (int debris_type : Asteroid_field.field_debris_type) {
+		if (debris_type >= 0) {
+			out.asteroid_field_debris_types.push_back(asteroid_type_name(debris_type));
+		}
+	}
+
 	// Navpoints go out whole, unused slots included, since a nav is identified by its slot.
 	for (int i = 0; i < MAX_NAVPOINTS; i++) {
 		const NavPoint& nav = Navs[i];
@@ -2342,11 +2366,56 @@ void store_asteroids(checkpoint_data& data)
 void apply_asteroids(const checkpoint_data& data)
 {
 	// Asteroids_enabled itself is restored with the rest of the world; see apply_environment().
-	//
-	// Nothing was captured, which means either the mission has no field or the checkpoint
-	// predates this being saved.  Either way, leave the freshly created field alone rather than
-	// wiping it.
-	if (data.asteroids.empty()) {
+	const auto& env = data.environment;
+	bool field_known = env.present && env.has_asteroid_field;
+
+	// The field itself first.  This is the definition set-asteroid-field, set-debris-field and
+	// config-field-targets rewrite, and it decides where rocks wrap, what they are thrown at and
+	// which models are loaded -- a field the mission file never declared has none paged in, and
+	// asteroid_create() would quietly refuse every saved rock.  So the models are paged in here
+	// the same way asteroid_create_all() does it, and then only the saved rocks are created.
+	if (field_known) {
+		Asteroid_field.num_initial_asteroids = env.asteroid_field_num_initial;
+		Asteroid_field.field_type = env.asteroid_field_active ? FT_ACTIVE : FT_PASSIVE;
+		Asteroid_field.debris_genre = env.asteroid_field_is_debris ? DG_DEBRIS : DG_ASTEROID;
+		Asteroid_field.enhanced_visibility_checks = env.asteroid_field_enhanced_checks;
+		Asteroid_field.has_inner_bound = env.asteroid_field_has_inner_bound;
+		Asteroid_field.speed = env.asteroid_field_speed;
+		Asteroid_field.bound_rad = env.asteroid_field_bound_rad;
+		Asteroid_field.vel = env.asteroid_field_vel;
+		Asteroid_field.min_bound = env.asteroid_field_min;
+		Asteroid_field.max_bound = env.asteroid_field_max;
+		Asteroid_field.inner_min_bound = env.asteroid_field_inner_min;
+		Asteroid_field.inner_max_bound = env.asteroid_field_inner_max;
+		Asteroid_field.field_asteroid_type = env.asteroid_field_asteroid_types;
+		Asteroid_field.target_names = env.asteroid_field_targets;
+
+		Asteroid_field.field_debris_type.clear();
+		for (const auto& name : env.asteroid_field_debris_types) {
+			int debris_type = lookup_asteroid_type(name);
+			if (debris_type >= 0) {
+				Asteroid_field.field_debris_type.push_back(debris_type);
+			}
+		}
+
+		if (Asteroid_field.debris_genre == DG_DEBRIS) {
+			for (int debris_type : Asteroid_field.field_debris_type) {
+				asteroid_load(debris_type, 0);
+			}
+		} else {
+			for (const auto& subtype : Asteroid_field.field_asteroid_type) {
+				asteroid_load(ASTEROID_TYPE_SMALL, get_asteroid_subtype_index_by_name(subtype, ASTEROID_TYPE_SMALL));
+				asteroid_load(ASTEROID_TYPE_MEDIUM, get_asteroid_subtype_index_by_name(subtype, ASTEROID_TYPE_MEDIUM));
+				asteroid_load(ASTEROID_TYPE_LARGE, get_asteroid_subtype_index_by_name(subtype, ASTEROID_TYPE_LARGE));
+			}
+		}
+	}
+
+	// A checkpoint from before the field was captured says nothing about it, and if it captured
+	// no rocks either then the mission either has no field or the file predates rock capture.
+	// Either way, leave the freshly created field alone rather than wiping it.  Once the field is
+	// known, an empty rock list is real -- the player cleared it -- and the fresh rocks go.
+	if (!field_known && data.asteroids.empty()) {
 		return;
 	}
 
@@ -2388,6 +2457,21 @@ void apply_asteroids(const checkpoint_data& data)
 			ast->check_for_wrap = TIMESTAMP(translate_stamp(state.check_for_wrap));
 			ast->check_for_collide = TIMESTAMP(translate_stamp(state.check_for_collide));
 			ast->final_death_time = TIMESTAMP(translate_stamp(state.final_death_time));
+		}
+	}
+
+	// The throw targets last, once the rocks exist: the live target list was built from the
+	// mission file's names as those ships were created, so it is rebuilt from the names just
+	// restored (a target config-field-targets removed stays removed), and asteroid_add_target()
+	// counts the rocks already heading for each target as it adds it -- which only comes out
+	// right if the restored rocks are already there to be counted.
+	if (field_known) {
+		asteroid_clear_targets();
+		for (const auto& name : Asteroid_field.target_names) {
+			int objnum = objnum_for_ship_name(name);
+			if (objnum >= 0) {
+				asteroid_add_target(&Objects[objnum]);
+			}
 		}
 	}
 }
