@@ -575,6 +575,12 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	write_string_list(handler, "asteroid_field_debris_types", env.asteroid_field_debris_types);
 	write_string_list(handler, "asteroid_field_targets", env.asteroid_field_targets);
 
+	handler->writeInt("supernova_stage", env.supernova_stage);
+	handler->writeFloat("supernova_total", env.supernova_total);
+	handler->writeFloat("supernova_left", env.supernova_left);
+	handler->writeFloat("time_compression", env.time_compression);
+	handler->writeBool("time_compression_locked", env.time_compression_locked);
+
 	handler->writeInt("current_nav", env.current_nav);
 	handler->startArrayWrite("navpoints", env.navpoints.size());
 	for (const auto& nav : env.navpoints) {
@@ -611,6 +617,21 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	handler->endArrayWrite();
 
 	write_string_list(handler, "squadron_wings", env.squadron_wings);
+
+	handler->startArrayWrite("waypoint_lists", data.waypoint_lists.size());
+	for (const auto& list : data.waypoint_lists) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", list.name.c_str());
+		handler->startArrayWrite("points", list.points.size());
+		for (const auto& point : list.points) {
+			handler->startSectionWrite(Section::Unnamed);
+			write_vector(handler, "x", "y", "z", point);
+			handler->endSectionWrite();
+		}
+		handler->endArrayWrite();
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
 
 	// The asteroid field itself, which is the one part of the world made of objects.
 	handler->startArrayWrite("asteroids", data.asteroids.size());
@@ -744,6 +765,12 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	read_string_list(handler, "asteroid_field_debris_types", env.asteroid_field_debris_types);
 	read_string_list(handler, "asteroid_field_targets", env.asteroid_field_targets);
 
+	env.supernova_stage = handler->readIntOr("supernova_stage", 0);
+	env.supernova_total = handler->readFloatOr("supernova_total", 0.0f);
+	env.supernova_left = handler->readFloatOr("supernova_left", 0.0f);
+	env.time_compression = handler->readFloatOr("time_compression", 1.0f);
+	env.time_compression_locked = handler->readBoolOr("time_compression_locked", false);
+
 	env.current_nav = handler->readIntOr("current_nav", -1);
 	env.navpoints.clear();
 	if (handler->hasField("navpoints")) {
@@ -786,6 +813,28 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	}
 
 	read_string_list(handler, "squadron_wings", env.squadron_wings);
+
+	data.waypoint_lists.clear();
+	if (handler->hasField("waypoint_lists")) {
+		auto count = handler->startArrayRead("waypoint_lists");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::waypoint_list_state list;
+			list.name = handler->readStringOr("name", "");
+			if (handler->hasField("points")) {
+				auto num_points = handler->startArrayRead("points");
+				for (size_t j = 0; j < num_points; j++, handler->nextArraySection()) {
+					vec3d point = vmd_zero_vector;
+					read_vector(handler, "x", "y", "z", point);
+					list.points.push_back(point);
+				}
+				handler->endArrayRead();
+			}
+			if (!list.name.empty()) {
+				data.waypoint_lists.push_back(std::move(list));
+			}
+		}
+		handler->endArrayRead();
+	}
 
 	data.asteroids.clear();
 	if (handler->hasField("asteroids")) {
@@ -1942,6 +1991,11 @@ void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpo
 	handler->writeBool("no_builtin_msgs", state.no_builtin_msgs);
 	handler->writeBool("no_builtin_command", state.no_builtin_command);
 
+	handler->writeBool("player_use_ai", state.player_use_ai);
+	handler->writeBool("perspective_locked", state.perspective_locked);
+	handler->writeBool("slew_locked", state.slew_locked);
+	handler->writeInt("viewer_mode", state.viewer_mode);
+
 	handler->startArrayWrite("reinforcements", state.reinforcements.size());
 	for (const auto& reinforcement : state.reinforcements) {
 		handler->startSectionWrite(Section::Unnamed);
@@ -1969,6 +2023,11 @@ void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_dat
 	state.mission_mood = handler->readIntOr("mission_mood", 0);
 	state.no_builtin_msgs = handler->readBoolOr("no_builtin_msgs", false);
 	state.no_builtin_command = handler->readBoolOr("no_builtin_command", false);
+
+	state.player_use_ai = handler->readBoolOr("player_use_ai", false);
+	state.perspective_locked = handler->readBoolOr("perspective_locked", false);
+	state.slew_locked = handler->readBoolOr("slew_locked", false);
+	state.viewer_mode = handler->readIntOr("viewer_mode", 0);
 
 	state.reinforcements.clear();
 	if (handler->hasField("reinforcements")) {
