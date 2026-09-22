@@ -27,6 +27,9 @@
 #include "gamesequence/gamesequence.h"
 #include "globalincs/systemvars.h"
 #include "hud/hudescort.h"
+#include "hud/hudsquadmsg.h"
+#include "menuui/techmenu.h"
+#include "stats/medals.h"
 #include "hud/hudwingmanstatus.h"
 #include "hud/hudtarget.h"
 #include "model/animation/modelanimation.h"
@@ -763,6 +766,11 @@ int lookup_team(const SCP_string& name)
 // between the two runs' clocks, which preserves how far in the future (or past) it was.
 
 int Stamp_delta = 0;
+
+// How many entries Messages[] had once the mission was parsed, noted on every entry into
+// gameplay.  Anything past it at store time was added by a script and has to travel with the
+// checkpoint, since a reload puts the parse's count back.
+int Parsed_message_count = 0;
 
 int translate_stamp(int saved)
 {
@@ -1503,6 +1511,107 @@ void store_mission_extras(mission_extra_state& out)
 	out.slew_locked = Slew_locked;
 	out.viewer_mode = Viewer_mode;
 
+	if (Player != nullptr) {
+		out.promoted = (Player->flags & PLAYER_FLAGS_PROMOTED) != 0;
+		out.no_check_all_alone_msg = (Player->flags & PLAYER_FLAGS_NO_CHECK_ALL_ALONE_MSG) != 0;
+	}
+
+	// The message queue, entry by entry; see message_queue_state.
+	for (int i = 0; i < MessageQ_num && i < static_cast<int>(MessageQ.size()); i++) {
+		const auto& entry = MessageQ[i];
+		if (entry.message_num < 0 || entry.message_num >= static_cast<int>(Messages.size())) {
+			continue;
+		}
+
+		message_queue_state state;
+		state.message = Messages[entry.message_num].name;
+		if (entry.special_message != nullptr) {
+			state.special_message = entry.special_message.get();
+		}
+		state.who_from = entry.who_from;
+		state.source = entry.source;
+		state.builtin_type = entry.builtin_type;
+		state.flags = entry.flags;
+		state.group = entry.group;
+		state.priority = entry.priority;
+		state.time_added = entry.time_added;
+		state.window_timestamp = entry.window_timestamp.value();
+		state.min_delay_stamp = entry.min_delay_stamp.value();
+		if (entry.event_num_to_cancel >= 0 && entry.event_num_to_cancel < static_cast<int>(Mission_events.size())) {
+			state.event_to_cancel = Mission_events[entry.event_num_to_cancel].name;
+		}
+		out.message_queue.push_back(std::move(state));
+	}
+
+	// The order history; see squadmsg_history_state.
+	for (const auto& entry : Squadmsg_history) {
+		squadmsg_history_state state;
+		if (entry.order < 0 || entry.order >= static_cast<int>(Player_orders.size())) {
+			continue;
+		}
+		state.order = Player_orders[entry.order].parse_name;
+		state.to_all_fighters = (entry.order_to < 0);
+		if (entry.order_to >= 0 && entry.order_to < static_cast<int>(Parse_names.size())) {
+			state.order_to = Parse_names[entry.order_to];
+		}
+		if (entry.target >= 0 && entry.target < static_cast<int>(Parse_names.size())) {
+			state.target = Parse_names[entry.target];
+		}
+		if (entry.order_from >= 0 && entry.order_from < MAX_SHIPS) {
+			state.order_from = Ships[entry.order_from].ship_name;
+		}
+		// The subsystem index is into the target ship's list; only a live target can name it.
+		if (entry.special_index >= 0 && !state.target.empty()) {
+			int target_shipnum = ship_name_lookup(state.target.c_str());
+			if (target_shipnum >= 0) {
+				ship_subsys* subsys = ship_get_indexed_subsys(&Ships[target_shipnum], entry.special_index);
+				if (subsys != nullptr && subsys->system_info != nullptr) {
+					state.special_subsys = subsys->system_info->subobj_name;
+				}
+			}
+		}
+		state.order_time = entry.order_time;
+		out.squad_history.push_back(std::move(state));
+	}
+
+	// Messages a script added since the parse; see message_state and Parsed_message_count.
+	for (int i = MAX(Parsed_message_count, Num_builtin_messages); i < Num_messages && i < static_cast<int>(Messages.size()); i++) {
+		message_state state;
+		state.name = Messages[i].name;
+		state.text = Messages[i].message;
+		state.persona = persona_name(Messages[i].persona_index);
+		state.multi_team = Messages[i].multi_team;
+		out.added_messages.push_back(std::move(state));
+	}
+
+	// What the mission has granted so far; see the field comments.
+	{
+		SCP_vector<int> ships;
+		SCP_vector<int> weapons;
+		mission_campaign_get_granted(ships, weapons);
+		for (int ship_class : ships) {
+			out.granted_ships.push_back(ship_class_name(ship_class));
+		}
+		for (int weapon_class : weapons) {
+			out.granted_weapons.push_back(weapon_class_name(weapon_class));
+		}
+	}
+	for (const auto& sip : Ship_info) {
+		if (sip.flags[Ship::Info_Flags::In_tech_database]) {
+			out.tech_ships.emplace_back(sip.name);
+		}
+	}
+	for (const auto& wip : Weapon_info) {
+		if (wip.wi_flags[Weapon::Info_Flags::In_tech_database]) {
+			out.tech_weapons.emplace_back(wip.name);
+		}
+	}
+	for (const auto& intel : Intel_info) {
+		if (intel.flags & IIF_IN_TECH_DATABASE) {
+			out.tech_intel.emplace_back(intel.name);
+		}
+	}
+
 	for (const auto& reinforcement : Reinforcements) {
 		reinforcement_state state;
 		state.name = reinforcement.name;
@@ -1555,6 +1664,135 @@ void apply_mission_extras(const checkpoint_data& data)
 	Perspective_locked = state.perspective_locked;
 	Slew_locked = state.slew_locked;
 	Viewer_mode = state.viewer_mode;
+
+	if (Player != nullptr) {
+		if (state.promoted) {
+			Player->flags |= PLAYER_FLAGS_PROMOTED;
+		}
+		if (state.no_check_all_alone_msg) {
+			Player->flags |= PLAYER_FLAGS_NO_CHECK_ALL_ALONE_MSG;
+		}
+	}
+
+	// The grants are rebuilt rather than merged, so a grant made after the checkpoint in this
+	// session is rolled back with everything else.  The tech flags only ever go on: nothing in a
+	// mission takes an entry out of the tech room, so re-setting what was set is complete.
+	mission_campaign_clear_granted();
+	for (const auto& name : state.granted_ships) {
+		int ship_class = lookup_ship_class(name);
+		if (ship_class >= 0) {
+			mission_campaign_save_persistent(CAMPAIGN_PERSISTENT_SHIP, ship_class);
+		}
+	}
+	for (const auto& name : state.granted_weapons) {
+		int weapon_class = lookup_weapon_class(name);
+		if (weapon_class >= 0) {
+			mission_campaign_save_persistent(CAMPAIGN_PERSISTENT_WEAPON, weapon_class);
+		}
+	}
+	for (const auto& name : state.tech_ships) {
+		int ship_class = lookup_ship_class(name);
+		if (ship_class >= 0) {
+			Ship_info[ship_class].flags.set(Ship::Info_Flags::In_tech_database);
+		}
+	}
+	for (const auto& name : state.tech_weapons) {
+		int weapon_class = lookup_weapon_class(name);
+		if (weapon_class >= 0) {
+			Weapon_info[weapon_class].wi_flags.set(Weapon::Info_Flags::In_tech_database);
+		}
+	}
+	for (const auto& name : state.tech_intel) {
+		int intel = intel_info_lookup(name.c_str());
+		if (intel >= 0) {
+			Intel_info[intel].flags |= IIF_IN_TECH_DATABASE;
+		}
+	}
+}
+
+// The mission's own record of what has been said and ordered: script-added messages, the message
+// queue and the order history.  After the ships and the mission logic, since the queue refers to
+// events and the history to ships.  Nothing here writes to the mission log.
+void apply_mission_history(const checkpoint_data& data)
+{
+	const auto& state = data.mission;
+
+	if (!state.present) {
+		return;
+	}
+
+	// Script-added messages first, since the queue may name one.
+	for (const auto& added : state.added_messages) {
+		bool exists = false;
+		for (int i = 0; i < Num_messages && i < static_cast<int>(Messages.size()); i++) {
+			if (!stricmp(Messages[i].name, added.name.c_str())) {
+				exists = true;
+				break;
+			}
+		}
+		if (!exists) {
+			add_message(added.name.c_str(), added.text.c_str(), lookup_persona(added.persona), added.multi_team);
+		}
+	}
+
+	MessageQ.clear();
+	MessageQ_num = 0;
+	for (const auto& saved : state.message_queue) {
+		int message_num = -1;
+		for (int i = 0; i < Num_messages && i < static_cast<int>(Messages.size()); i++) {
+			if (!stricmp(Messages[i].name, saved.message.c_str())) {
+				message_num = i;
+				break;
+			}
+		}
+		if (message_num < 0) {
+			mprintf(("CHECKPOINT => Queued message '%s' no longer exists; dropping it.\n", saved.message.c_str()));
+			continue;
+		}
+
+		MessageQ.emplace_back();
+		auto& entry = MessageQ.back();
+		entry.time_added = saved.time_added;
+		entry.window_timestamp = TIMESTAMP(translate_stamp(saved.window_timestamp));
+		entry.priority = saved.priority;
+		entry.message_num = message_num;
+		if (!saved.special_message.empty()) {
+			entry.special_message.reset(vm_strdup(saved.special_message.c_str()));
+		}
+		strcpy_s(entry.who_from, saved.who_from.c_str());
+		entry.source = saved.source;
+		entry.builtin_type = saved.builtin_type;
+		entry.flags = saved.flags;
+		entry.min_delay_stamp = TIMESTAMP(translate_stamp(saved.min_delay_stamp));
+		entry.group = saved.group;
+		entry.event_num_to_cancel = saved.event_to_cancel.empty() ? -1 : mission_event_lookup(saved.event_to_cancel.c_str());
+		MessageQ_num++;
+	}
+
+	Squadmsg_history.clear();
+	for (const auto& saved : state.squad_history) {
+		squadmsg_history entry;
+		for (int i = 0; i < static_cast<int>(Player_orders.size()); i++) {
+			if (!stricmp(Player_orders[i].parse_name.c_str(), saved.order.c_str())) {
+				entry.order = i;
+				break;
+			}
+		}
+		if (entry.order < 0) {
+			continue;
+		}
+		entry.order_to = saved.to_all_fighters ? -1 : get_parse_name_index(saved.order_to.c_str());
+		entry.target = saved.target.empty() ? -1 : get_parse_name_index(saved.target.c_str());
+		entry.order_from = saved.order_from.empty() ? -1 : ship_name_lookup(saved.order_from.c_str());
+		if (!saved.special_subsys.empty() && !saved.target.empty()) {
+			int target_shipnum = ship_name_lookup(saved.target.c_str());
+			if (target_shipnum >= 0) {
+				entry.special_index = ship_find_subsys(&Ships[target_shipnum], saved.special_subsys.c_str());
+			}
+		}
+		entry.order_time = saved.order_time;
+		Squadmsg_history.push_back(entry);
+	}
 }
 
 // Separate from the rest of the extras because of when it has to run.  Bringing a reinforcement
@@ -3815,6 +4053,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.name = Sexp_variables[i].variable_name;
 		state.is_number = (Sexp_variables[i].type & SEXP_VARIABLE_NUMBER) != 0;
 		state.value = Sexp_variables[i].text;
+		state.type = Sexp_variables[i].type;
 
 		data.variables.push_back(std::move(state));
 	}
@@ -3830,6 +4069,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 			if (Player->stats.m_okKills[i] != 0) {
 				data.scoring.class_kills[Ship_info[i].name] = Player->stats.m_okKills[i];
 			}
+		}
+
+		if (Player->stats.m_medal_earned >= 0 && Player->stats.m_medal_earned < static_cast<int>(Medals.size())) {
+			data.scoring.medal_earned = Medals[Player->stats.m_medal_earned].name;
 		}
 	}
 
@@ -4762,7 +5005,13 @@ void apply_variables(const checkpoint_data& data)
 	for (const auto& state : data.variables) {
 		int index = get_index_sexp_variable_name(state.name.c_str());
 		if (index < 0) {
-			mprintf(("CHECKPOINT => SEXP variable '%s' no longer exists; skipping it.\n", state.name.c_str()));
+			// Not in this parse: a script created it during the mission (mission.SEXPVariables
+			// accepts new names).  Recreate it, which needs the type word; a file from before
+			// that was stored can only fall back to the number/string bit.
+			int type = (state.type != 0) ? state.type : (state.is_number ? SEXP_VARIABLE_NUMBER : SEXP_VARIABLE_STRING);
+			if (sexp_add_variable(state.value.c_str(), state.name.c_str(), type) < 0) {
+				mprintf(("CHECKPOINT => No room to recreate SEXP variable '%s'; skipping it.\n", state.name.c_str()));
+			}
 			continue;
 		}
 
@@ -4773,6 +5022,11 @@ void apply_variables(const checkpoint_data& data)
 		}
 
 		strcpy_s(Sexp_variables[index].text, state.value.c_str());
+		// The persistence bits can be changed by a script mid-mission, so the whole type word
+		// comes back when the file has it.
+		if (state.type != 0) {
+			Sexp_variables[index].type = state.type;
+		}
 		Sexp_variables[index].type |= SEXP_VARIABLE_MODIFIED;
 	}
 }
@@ -4800,6 +5054,16 @@ void apply_scoring(const checkpoint_data& data)
 			continue;
 		}
 		Player->stats.m_okKills[ship_class] = entry.second;
+	}
+
+	Player->stats.m_medal_earned = -1;
+	if (!data.scoring.medal_earned.empty()) {
+		for (int i = 0; i < static_cast<int>(Medals.size()); i++) {
+			if (!stricmp(Medals[i].name, data.scoring.medal_earned.c_str())) {
+				Player->stats.m_medal_earned = i;
+				break;
+			}
+		}
 	}
 }
 
@@ -5562,6 +5826,11 @@ void apply_clock(const checkpoint_data& data)
 
 void mission_checkpoint_maybe_offer_resume()
 {
+	// This runs on every entry into gameplay, with the mission freshly parsed, which makes it the
+	// one place to note how many messages the parse produced: everything a script adds after
+	// this is what the store has to carry.  Before any early return, deliberately.
+	Parsed_message_count = Num_messages;
+
 	// A mid-mission load is already being serviced.  That path comes back through this same
 	// event, so without this check the player would be asked a second time for the restore
 	// they just asked for.
@@ -5779,6 +6048,9 @@ void mission_checkpoint_apply()
 
 	// After the world, because a restored event's state describes ships that now exist.
 	apply_mission_logic(data);
+
+	// After the mission logic, whose events the queued messages refer to.
+	apply_mission_history(data);
 
 	// HUD state last: the escort list is rebuilt from the ship flags, so every ship has to be in
 	// its final state first.
