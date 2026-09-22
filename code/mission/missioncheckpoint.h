@@ -20,9 +20,10 @@
  *
  * A checkpoint is captured live (mission_checkpoint_store) and restored by reloading the
  * mission from scratch and bashing the saved state on top of the freshly created objects
- * (mission_checkpoint_apply, called from game_post_level_init).  Reloading rather than
- * restoring in place means the engine is always in a known-clean state; it is the same
- * approach the red alert code takes.
+ * (mission_checkpoint_apply, called from the GS_EVENT_ENTER_GAME handler once the loadout has
+ * been committed; see its declaration below for why there and not game_post_level_init).
+ * Reloading rather than restoring in place means the engine is always in a known-clean state;
+ * it is the same approach the red alert code takes.
  *
  * Everything that crosses the file is keyed by name -- ship names, class names, subsystem
  * names -- never by a runtime index, so a checkpoint survives table changes and engine
@@ -978,6 +979,11 @@ bool mission_checkpoint_exists(const SCP_string& slot);
 
 // Remove a checkpoint.  Silently does nothing if there was none.
 void mission_checkpoint_delete(const SCP_string& slot);
+
+// Remove every checkpoint this pilot has for a mission (the current one when the name is empty)
+// in the current campaign, and return how many went.  The only way to delete in bulk that keeps
+// the existence cache honest; scripts must come through here rather than the file layer.
+int mission_checkpoint_delete_all(const SCP_string& mission_name);
 
 // Request a load.  This does NOT reload the mission itself -- doing that while SEXP
 // evaluation is on the stack would tear the level down underneath the caller.  It records the
