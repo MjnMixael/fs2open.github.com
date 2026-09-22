@@ -343,6 +343,11 @@ bool CJumpNode::IsSpecialModel() const
 	return ((m_flags & JN_SPECIAL_MODEL) != 0);
 }
 
+bool CJumpNode::IsShowingPolys() const
+{
+	return ((m_flags & JN_SHOW_POLYS) != 0);
+}
+
 const char* CJumpNode::GetModelFilename() const
 {
 	if (!IsSpecialModel()) return JN_DEFAULT_MODEL;
