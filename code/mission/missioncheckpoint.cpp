@@ -4779,8 +4779,24 @@ void apply_beams(const checkpoint_data& data)
 		info.per_burst_rotation = 0.0f;
 		info.burst_index = 0;
 
-		info.bfi_flags = lookup_beam_flags(state.flags) &
-		                 (BF_FORCE_FIRING | BF_IS_FIGHTER_BEAM | BF_TARGETING_COORDS | BF_FLOATING_BEAM);
+		// The beam's own flags are BF_*; what beam_fire() reads from the fire info are BFIF_*, and
+		// the two are different bit layouts despite the matching names.  Translate one by one.
+		{
+			int saved_flags = lookup_beam_flags(state.flags);
+			info.bfi_flags = 0;
+			if (saved_flags & BF_FORCE_FIRING) {
+				info.bfi_flags |= BFIF_FORCE_FIRING;
+			}
+			if (saved_flags & BF_IS_FIGHTER_BEAM) {
+				info.bfi_flags |= BFIF_IS_FIGHTER_BEAM;
+			}
+			if (saved_flags & BF_TARGETING_COORDS) {
+				info.bfi_flags |= BFIF_TARGETING_COORDS;
+			}
+			if (saved_flags & BF_FLOATING_BEAM) {
+				info.bfi_flags |= BFIF_FLOATING_BEAM;
+			}
+		}
 
 		// The fire method is not kept on the beam, but it is fully determined by the flags that
 		// are, and all beam_has_valid_params() does with it is decide which of shooter, turret
@@ -4819,6 +4835,10 @@ void apply_beams(const checkpoint_data& data)
 		beam* b = &Beams[Objects[objnum].instance];
 
 		b->flags = lookup_beam_flags(state.flags);
+		// beam_fire() ignores the point it is handed and takes the turret's next firing point,
+		// which the subsystem restore has already advanced past the barrel this beam came from.
+		// beam_aim() places the beam from b->firingpoint every frame, so put it back.
+		b->firingpoint = state.firingpoint;
 		b->life_left = state.life_left;
 		b->current_width_factor = state.current_width_factor;
 		b->u_offset_local = state.u_offset_local;
@@ -4849,8 +4869,11 @@ void apply_beams(const checkpoint_data& data)
 		if (b->warmdown_stamp == -1 && saved_state == WeaponState::WARMDOWN) {
 			beam_start_warmdown(b);
 		}
-		if (b->warmdown_stamp != -1) {
-			b->warmdown_stamp = translate_stamp(state.warmdown_stamp >= 0 ? state.warmdown_stamp : b->warmdown_stamp);
+		// Only a stamp the file carried is in the checkpoint's clock.  If beam_start_firing() chose
+		// to warm down on its own, the stamp it set is already in this run's clock and shifting it
+		// would either end the warmdown next frame or stretch it for minutes.
+		if (b->warmdown_stamp != -1 && state.warmdown_stamp >= 0) {
+			b->warmdown_stamp = translate_stamp(state.warmdown_stamp);
 		}
 
 		// Re-assert what beam_start_firing() overwrote.
