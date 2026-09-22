@@ -290,23 +290,20 @@ float	AI_frametime;
 
 SCP_vector<const char*> Ai_class_names;
 
-//used for good-primary-time
-typedef struct {
-	object_ship_wing_point_team subject;
-	object_ship_wing_point_team target;
-	int weapon_index;
-} primary_fire_info;
-
+// primary_fire_info and huge_fire_info are declared in ai.h so the mission checkpoint can carry
+// both tables across a restore
 static SCP_vector<primary_fire_info> Preferred_primary_info;
-
-typedef struct {
-	int team;
-	int weapon_index;
-	int max_fire_count;
-	int ship_registry_index;
-} huge_fire_info;
-
 static SCP_vector<huge_fire_info> Ai_huge_fire_info;
+
+SCP_vector<primary_fire_info>& ai_get_preferred_primary_info()
+{
+	return Preferred_primary_info;
+}
+
+SCP_vector<huge_fire_info>& ai_get_huge_fire_info()
+{
+	return Ai_huge_fire_info;
+}
 
 int Ai_last_arrive_path;	// index of ship_bay path used by last arrival from a fighter bay
 
