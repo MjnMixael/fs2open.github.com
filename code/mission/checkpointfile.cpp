@@ -1298,6 +1298,15 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			write_animations(handler, ship_data.animations);
 		} else {
 			handler->writeInt("exit_time", static_cast<std::int32_t>(ship_data.exit_time));
+			// The exited record: what the ship had become when it left.
+			handler->writeString("class", ship_data.ship_class.c_str());
+			handler->writeString("team", ship_data.team.c_str());
+			handler->writeString("display_name", ship_data.display_name.c_str());
+			handler->writeString("cargo", ship_data.cargo.c_str());
+			handler->writeBool("cargo_no_deplete", ship_data.cargo_no_deplete);
+			write_string_list(handler, "exit_flags", ship_data.exit_flags);
+			handler->writeInt("time_cargo_revealed", static_cast<std::int32_t>(ship_data.time_cargo_revealed));
+			handler->writeInt("exit_hull_strength", ship_data.exit_hull_strength);
 		}
 
 		handler->endSectionWrite();
@@ -1374,6 +1383,14 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_animations(handler, ship_data.animations);
 		} else {
 			ship_data.exit_time = static_cast<fix>(handler->readIntOr("exit_time", 0));
+			ship_data.ship_class = handler->readStringOr("class", "");
+			ship_data.team = handler->readStringOr("team", "");
+			ship_data.display_name = handler->readStringOr("display_name", "");
+			ship_data.cargo = handler->readStringOr("cargo", "");
+			ship_data.cargo_no_deplete = handler->readBoolOr("cargo_no_deplete", false);
+			read_string_list(handler, "exit_flags", ship_data.exit_flags);
+			ship_data.time_cargo_revealed = static_cast<fix>(handler->readIntOr("time_cargo_revealed", 0));
+			ship_data.exit_hull_strength = handler->readIntOr("exit_hull_strength", 0);
 		}
 
 		data.ships.push_back(std::move(ship_data));
@@ -1560,6 +1577,7 @@ void write_goals(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->startSectionWrite(Section::Unnamed);
 		handler->writeString("name", goal.name.c_str());
 		handler->writeInt("satisfied", goal.satisfied);
+		handler->writeBool("invalid", goal.invalid);
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -1581,6 +1599,7 @@ void read_goals(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 
 		goal.name = handler->readStringOr("name", "");
 		goal.satisfied = handler->readIntOr("satisfied", 0);
+		goal.invalid = handler->readBoolOr("invalid", false);
 
 		if (!goal.name.empty()) {
 			data.goals.push_back(std::move(goal));
