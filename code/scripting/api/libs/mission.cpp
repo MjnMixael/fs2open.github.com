@@ -2150,7 +2150,7 @@ ADE_FUNC(deleteAllCheckpoints,
 		mission_name = nullptr;
 	}
 
-	return ade_set_args(L, "i", checkpoint::checkpoint_delete_all(mission_name != nullptr ? mission_name : ""));
+	return ade_set_args(L, "i", mission_checkpoint_delete_all(mission_name != nullptr ? mission_name : ""));
 }
 
 ADE_FUNC(startMission,

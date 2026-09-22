@@ -1188,6 +1188,7 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 
 void write_hotkeys(pilot::FileHandler* handler, const checkpoint::checkpoint_data& data)
 {
+	handler->writeInt("current_hotkey_set", data.current_hotkey_set);
 	handler->startArrayWrite("hotkeys", data.hotkeys.size());
 	for (const auto& set : data.hotkeys) {
 		handler->startSectionWrite(Section::Unnamed);
@@ -2108,7 +2109,9 @@ bool checkpoint_peek_info(const SCP_string& filename, checkpoint::checkpoint_dat
 		handler.reset(new pilot::JSONFileHandler(fp, true));
 	} catch (const std::exception&) {
 		// Not our file, or not valid JSON.  Enumeration walks whatever is in the directory, so
-		// this is a perfectly ordinary thing to run into.
+		// this is a perfectly ordinary thing to run into.  The handler's constructor threw before
+		// there was a handler to own the file, so it is still ours to close.
+		cfclose(fp);
 		return false;
 	}
 
@@ -2285,8 +2288,12 @@ int checkpoint_delete_all(const SCP_string& mission_name)
 {
 	int deleted = 0;
 
+	// The same locations the write and the single delete name: checkpoint_find_files() looks in
+	// the game root as well as the user root, so a file it found there has to be deletable there.
 	for (const auto& found : checkpoint_find_files(mission_name)) {
-		if (cf_delete(found.filename.c_str(), CF_TYPE_CHECKPOINTS, CF_LOCATION_ROOT_USER | CF_LOCATION_TYPE_ROOT)) {
+		if (cf_delete(found.filename.c_str(),
+			CF_TYPE_CHECKPOINTS,
+			CF_LOCATION_ROOT_USER | CF_LOCATION_ROOT_GAME | CF_LOCATION_TYPE_ROOT)) {
 			++deleted;
 		}
 	}
@@ -2302,8 +2309,9 @@ bool checkpoint_write(const checkpoint_data& data)
 {
 	auto filename = checkpoint_filename(data.slot);
 
-	cf_create_directory(CF_TYPE_CHECKPOINTS);
-
+	// No explicit cf_create_directory() here: cfopen() creates the directory itself, with the
+	// location flags it is given.  Called on its own with the default flags it would create an
+	// empty checkpoints directory inside the active mod's folder instead.
 	auto fp = cfopen(filename.c_str(), "wb", CF_TYPE_CHECKPOINTS, false,
 	                 CF_LOCATION_ROOT_USER | CF_LOCATION_ROOT_GAME | CF_LOCATION_TYPE_ROOT);
 	if (fp == nullptr) {
@@ -2371,6 +2379,9 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 		handler.reset(new pilot::JSONFileHandler(fp, true));
 	} catch (const std::exception& e) {
 		mprintf(("CHECKPOINT => Failed to parse '%s': %s\n", filename.c_str(), e.what()));
+		// The constructor threw before a handler existed to own the file.  Left open, a checkpoint
+		// truncated by a crash would cost one CFILE block on every mission entry.
+		cfclose(fp);
 		return false;
 	}
 
