@@ -785,9 +785,7 @@ void write_animations(pilot::FileHandler* handler, const SCP_vector<checkpoint::
 		handler->writeFloat("time", anim.time);
 		handler->writeFloat("duration", anim.duration);
 		handler->writeFloat("speed", anim.speed);
-		// Split in two because the handler has no 64-bit write and instance flags can exceed 32.
-		handler->writeUInt("flags_hi", static_cast<std::uint32_t>(anim.instance_flags >> 32));
-		handler->writeUInt("flags_lo", static_cast<std::uint32_t>(anim.instance_flags & 0xFFFFFFFFu));
+		write_string_list(handler, "instance_flags", anim.instance_flags);
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -810,10 +808,7 @@ void read_animations(pilot::FileHandler* handler, SCP_vector<checkpoint::animati
 		anim.time = handler->readFloatOr("time", 0.0f);
 		anim.duration = handler->readFloatOr("duration", 0.0f);
 		anim.speed = handler->readFloatOr("speed", 1.0f);
-
-		std::uint64_t hi = handler->readUIntOr("flags_hi", 0);
-		std::uint64_t lo = handler->readUIntOr("flags_lo", 0);
-		anim.instance_flags = (hi << 32) | lo;
+		read_string_list(handler, "instance_flags", anim.instance_flags);
 
 		animations.push_back(std::move(anim));
 	}
