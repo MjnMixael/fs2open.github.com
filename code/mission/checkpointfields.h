@@ -144,10 +144,13 @@
 	F(gun_rotation_rate_pct)                                                                   \
 	F(rof_scaler)
 
+// turret_swarm_num is deliberately absent: it counts the live entries of turret_swarm_info_index[],
+// which are indices into the runtime Turret_swarm_info[] array.  Restoring the count without the
+// entries makes the next swarm fire read Turret_swarm_info[-1].  A swarm in progress lasts under a
+// second, so the turret simply starts its next one from scratch.
 #define CKPT_SUBSYS_INTS(F)                                                                    \
 	F(subsys_guardian_threshold)                                                               \
-	F(turret_next_fire_pos)                                                                    \
-	F(turret_swarm_num)
+	F(turret_next_fire_pos)
 
 #define CKPT_SUBSYS_STAMPS(F)                                                                  \
 	F(turret_next_enemy_check_stamp)                                                           \
