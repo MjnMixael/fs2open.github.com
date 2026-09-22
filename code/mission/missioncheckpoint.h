@@ -1228,6 +1228,45 @@ struct message_state {
 // Deliberately absent, and each worth naming: the training message queue, which lives in file
 // statics in missiontraining.cpp and holds at most a few seconds of pending text; Players_target
 // and the lock tracking beside it, which the training update recomputes every frame.
+// A HUD gauge's runtime switches: hud-set-active / hud-activate-gauge-type, and hud-set-color.
+// Built-in gauges go by their config name, custom gauges by their custom name; the two are
+// separate namespaces, hence the flag.
+struct hud_gauge_state {
+	SCP_string name;
+	bool custom = false;
+	bool active = true;
+	bool sexp_override = false;
+
+	// The colour is only stored when a SEXP set it (sexp_lock_color); otherwise the gauge has
+	// whatever the player's HUD configuration gives it, which is not mission state.
+	bool sexp_color = false;
+	int color[4] = {0, 0, 0, 0};
+};
+
+// ignore-key: the action, by the text controlsconfig gives it, and how many more presses to
+// swallow (negative means for good).
+struct ignored_key_state {
+	SCP_string action;
+	int count = 0;
+};
+
+// A line of the message log.
+struct scrollback_line_state {
+	fix time = 0;      // mission time, verbatim
+	int source = 0;
+	SCP_string text;
+};
+
+// A stream started by play-sound-from-file.  See sexp_music_entry; the variable is the one
+// the SEXP was given, which holds the stream handle and is rewritten on restore.
+struct file_sound_state {
+	SCP_string filename;
+	int type = -1;
+	bool loop = false;
+	bool paused = false;
+	SCP_string variable;
+};
+
 struct mission_extra_state {
 	// As with the environment, an absent section has to mean "says nothing" rather than "all
 	// zeroes" -- zero built-in messages used is a real value.
@@ -1284,6 +1323,22 @@ struct mission_extra_state {
 	float friendly_damage = 0.0f;
 	fix friendly_last_hit_time = 0;      // mission time, verbatim
 	fix last_warning_message_time = 0;   // mission time, verbatim
+
+	// --- HUD and input ---
+	// Added after the fields above; hud_present is false in a checkpoint written before then,
+	// and none of what follows is applied from such a file.
+
+	bool hud_present = false;
+
+	SCP_vector<hud_gauge_state> hud_gauges;
+	bool hud_high_contrast = false;
+	bool disable_cockpits = false;
+	bool disable_cockpit_sway = false;
+	bool sensor_static_forced = false;   // hud-force-sensor-static
+
+	SCP_vector<ignored_key_state> ignored_keys;
+	SCP_vector<scrollback_line_state> scrollback;
+	SCP_vector<file_sound_state> file_sounds;
 };
 
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine

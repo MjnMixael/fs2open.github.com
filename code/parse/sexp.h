@@ -1580,6 +1580,18 @@ int sexp_add_variable(const char *text, const char *var_name, int type, int inde
 // Exposed so the mission checkpoint can carry the clocks across a restore.
 extern SCP_vector<fix> Sexp_is_true_for_duration_times;
 
+// play-sound-from-file: the streams currently playing, so the mission checkpoint can start them
+// again.  A stream started through a variable is identified by that variable, since the variable
+// holds the (runtime) stream handle; the default stream has no variable.
+struct sexp_music_entry {
+	SCP_string filename;
+	int type = -1;
+	bool loop = false;
+	bool paused = false;
+	SCP_string variable;
+};
+void sexp_music_get_playing(SCP_vector<sexp_music_entry>& out);
+void sexp_music_restore(const sexp_music_entry& entry);
 bool generate_special_explosion_block_variables();
 int num_block_variables();
 bool has_special_explosion_block_index(ship *shipp, int *index);

@@ -1072,6 +1072,7 @@ SCP_vector<fix> Sexp_is_true_for_duration_times;
 
 // for play-music - Goober5000
 SCP_vector<int>	Sexp_music_handles;		// All handles used by all invocations of play-sound-from-file.  The default handle is in index 0.
+SCP_vector<sexp_music_entry> Sexp_music_entries;	// What each handle is playing, parallel to Sexp_music_handles; see sexp_music_get_playing()
 
 // for sound environments - Goober5000/Taylor
 #define SEO_VOLUME		0
@@ -14544,6 +14545,7 @@ void sexp_music_close()
 	for (auto music_handle : Sexp_music_handles)
 		audiostream_close_file(music_handle);
 	Sexp_music_handles.clear();
+	Sexp_music_entries.clear();
 }
 
 // Goober5000
@@ -14600,6 +14602,14 @@ void sexp_load_music(const char *filename, int type = -1, int sexp_var = -1)
 	if (Sexp_music_handles[index] < 0)
 		Warning(LOCATION, "In sexp_load_music, could not create audio handle for '%s'!  You might be trying to play too many sounds at once.", filename);
 
+	// remember what this handle is, so a mission checkpoint can start it again
+	Sexp_music_entries.resize(Sexp_music_handles.size());
+	Sexp_music_entries[index] = sexp_music_entry();
+	Sexp_music_entries[index].filename = filename;
+	Sexp_music_entries[index].type = type;
+	if (sexp_var >= 0)
+		Sexp_music_entries[index].variable = Sexp_variables[sexp_var].variable_name;
+
 	// if we have a variable, save it there too
 	if (sexp_var >= 0)
 	{
@@ -14638,6 +14648,54 @@ void sexp_start_music(int loop, int sexp_var)
 	// start playing
 	if (!audiostream_is_playing(music_handle))
 		audiostream_play(music_handle, (Master_event_music_volume * aav_music_volume), loop);
+
+	if (index < static_cast<int>(Sexp_music_entries.size()))
+		Sexp_music_entries[index].loop = (loop != 0);
+}
+
+// The streams play-sound-from-file has going right now, for the mission checkpoint.  A stream
+// that has finished is not "going", and neither is a handle that was closed.
+void sexp_music_get_playing(SCP_vector<sexp_music_entry>& out)
+{
+	out.clear();
+
+	for (size_t i = 0; i < Sexp_music_handles.size() && i < Sexp_music_entries.size(); ++i)
+	{
+		int music_handle = Sexp_music_handles[i];
+		if (music_handle < 0)
+			continue;
+
+		bool paused = audiostream_is_paused(music_handle);
+		if (!paused && !audiostream_is_playing(music_handle))
+			continue;
+
+		sexp_music_entry entry = Sexp_music_entries[i];
+		entry.paused = paused;
+		out.push_back(std::move(entry));
+	}
+}
+
+// Start a stream the checkpoint recorded, the same way the SEXPs would have: load it, which
+// writes the new handle into the variable if there was one, then play it.  The stream starts
+// from the beginning; where it had got to is not something the checkpoint carries.
+void sexp_music_restore(const sexp_music_entry& entry)
+{
+	if (Cmdline_freespace_no_music)
+		return;
+
+	int sexp_var = -1;
+	if (!entry.variable.empty())
+	{
+		sexp_var = get_index_sexp_variable_name(entry.variable.c_str());
+		if (sexp_var < 0)
+			return;
+	}
+
+	sexp_load_music(entry.filename.c_str(), entry.type, sexp_var);
+	sexp_start_music(entry.loop ? 1 : 0, sexp_var);
+
+	if (entry.paused)
+		sexp_pause_unpause_music(true, sexp_var);
 }
 
 gamesnd_id sexp_get_sound_index(int node)
