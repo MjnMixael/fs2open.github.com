@@ -573,6 +573,52 @@ int lookup_persona(const SCP_string& name)
 	return index;
 }
 
+// Alt names and callsigns.  Mission_alt_types and Mission_callsigns are seeded by the mission
+// parse, but change-alt-name and change-callsign append to them at runtime, so an index is only
+// good within one run.  On the way back in a name the fresh parse does not have is added, which
+// is exactly what the SEXP did the first time.
+SCP_string alt_name_for_index(int index)
+{
+	return (index >= 0) ? SCP_string(mission_parse_lookup_alt_index(index)) : SCP_string();
+}
+
+int alt_index_for_name(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+
+	int index = mission_parse_lookup_alt(name.c_str());
+	if (index < 0) {
+		index = mission_parse_add_alt(name.c_str());
+	}
+	if (index < 0) {
+		mprintf(("CHECKPOINT => No room for alt name '%s'.\n", name.c_str()));
+	}
+	return index;
+}
+
+SCP_string callsign_for_index(int index)
+{
+	return (index >= 0) ? SCP_string(mission_parse_lookup_callsign_index(index)) : SCP_string();
+}
+
+int callsign_index_for_name(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+
+	int index = mission_parse_lookup_callsign(name.c_str());
+	if (index < 0) {
+		index = mission_parse_add_callsign(name.c_str());
+	}
+	if (index < 0) {
+		mprintf(("CHECKPOINT => No room for callsign '%s'.\n", name.c_str()));
+	}
+	return index;
+}
+
 // Anchors are an int that is either a ship registry index or a bitfield naming an IFF, so they go
 // out as text the same way the mission file stores them.
 SCP_string anchor_name(anchor_t anchor)
@@ -3242,6 +3288,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.cargo_title = shipp->cargo_title;
 		state.cargo = cargo_name(shipp->cargo1);
 		state.cargo_no_deplete = (shipp->cargo1 & CARGO_NO_DEPLETE) != 0;
+		state.alt_name = alt_name_for_index(shipp->alt_type_index);
+		state.callsign = callsign_for_index(shipp->callsign_index);
 		state.countermeasure_class = weapon_class_name(shipp->current_cmeasure);
 		state.persona = persona_name(shipp->persona_index);
 
@@ -3390,7 +3438,24 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.flags = entry.flags;
 		state.timestamp = entry.timestamp;
 		state.timer_padding = entry.timer_padding;
-		state.index = entry.index;
+		// See log_entry_state::index for which types carry an index that has to go out by name.
+		if (entry.type == LOG_CARGO_REVEALED || entry.type == LOG_CAP_SUBSYS_CARGO_REVEALED) {
+			state.index_name = cargo_name(entry.index);
+		} else if (entry.type == LOG_SHIP_SUBSYS_DESTROYED) {
+			int ship_class = (entry.index >> 16) & 0xffff;
+			int subsys_index = entry.index & 0xffff;
+			state.index_class = ship_class_name(ship_class);
+			if (ship_class >= 0 && ship_class < ship_info_size() && subsys_index >= 0 &&
+			    subsys_index < Ship_info[ship_class].n_subsystems) {
+				state.index_name = Ship_info[ship_class].subsystems[subsys_index].subobj_name;
+			}
+		} else if (entry.type == LOG_WING_DESTROYED || entry.type == LOG_WING_DEPARTED) {
+			// The wing's team, an IFF index; nothing reads it back, but it goes by name like every
+			// other IFF index in the file.
+			state.index_name = team_name(entry.index);
+		} else {
+			state.index = entry.index;
+		}
 		state.primary_team = team_name(entry.primary_team);
 		state.secondary_team = team_name(entry.secondary_team);
 		state.pname = entry.pname;
@@ -3470,8 +3535,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.departure_delay = p_objp->departure_delay;
 		state.escort_priority = p_objp->escort_priority;
 		state.respawn_priority = p_objp->respawn_priority;
-		state.alt_type_index = p_objp->alt_type_index;
-		state.callsign_index = p_objp->callsign_index;
+		state.alt_name = alt_name_for_index(p_objp->alt_type_index);
+		state.callsign = callsign_for_index(p_objp->callsign_index);
 		state.cargo = cargo_name(p_objp->cargo1);
 		state.cargo_no_deplete = (p_objp->cargo1 & CARGO_NO_DEPLETE) != 0;
 
@@ -3547,7 +3612,7 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.max_hull = db.max_hull;
 		state.lifeleft = db.lifeleft;
 		state.damage_mult = db.damage_mult;
-		state.parent_alt_name = db.parent_alt_name;
+		state.parent_alt_name = alt_name_for_index(db.parent_alt_name);
 		state.do_not_expire = db.flags[Debris_Flags::DoNotExpire];
 
 		// A chunk with no class or submodel cannot be recreated, and hull debris always has both.
@@ -3959,6 +4024,9 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 		shipp->cargo1 = static_cast<char>(cargo);
 	}
 
+	shipp->alt_type_index = alt_index_for_name(state.alt_name);
+	shipp->callsign_index = callsign_index_for_name(state.callsign);
+
 	int persona = lookup_persona(state.persona);
 	if (persona >= 0) {
 		shipp->persona_index = persona;
@@ -4185,8 +4253,8 @@ void apply_parse_objects(const checkpoint_data& data)
 		p_objp->departure_delay = translate_stamp(state.departure_delay);
 		p_objp->escort_priority = state.escort_priority;
 		p_objp->respawn_priority = state.respawn_priority;
-		p_objp->alt_type_index = state.alt_type_index;
-		p_objp->callsign_index = state.callsign_index;
+		p_objp->alt_type_index = alt_index_for_name(state.alt_name);
+		p_objp->callsign_index = callsign_index_for_name(state.callsign);
 		if (!state.cargo.empty()) {
 			int cargo = lookup_cargo(state.cargo);
 			if (state.cargo_no_deplete) {
@@ -4590,7 +4658,7 @@ void apply_debris(const checkpoint_data& data)
 
 		auto objp = debris_create_only(-1,
 			ship_class,
-			state.parent_alt_name,
+			alt_index_for_name(state.parent_alt_name),
 			lookup_team(state.team),
 			state.hull_strength,
 			0,
@@ -4698,6 +4766,32 @@ void apply_mission_logic(const checkpoint_data& data)
 		entry.timestamp = state.timestamp;
 		entry.timer_padding = state.timer_padding;
 		entry.index = state.index;
+		// The two index meanings that went out by name; see log_entry_state::index.
+		if (entry.type == LOG_CARGO_REVEALED || entry.type == LOG_CAP_SUBSYS_CARGO_REVEALED) {
+			entry.index = lookup_cargo(state.index_name);
+		} else if (entry.type == LOG_SHIP_SUBSYS_DESTROYED) {
+			int ship_class = lookup_ship_class(state.index_class);
+			int subsys_index = -1;
+			if (ship_class >= 0) {
+				for (int i = 0; i < Ship_info[ship_class].n_subsystems; i++) {
+					if (!subsystem_stricmp(Ship_info[ship_class].subsystems[i].subobj_name, state.index_name.c_str())) {
+						subsys_index = i;
+						break;
+					}
+				}
+			}
+			// The log display indexes Ship_info[].subsystems[] with this unchecked, so an entry
+			// that cannot be resolved is left out rather than pointed at something else.
+			if (subsys_index < 0) {
+				mprintf(("CHECKPOINT => Log entry for subsystem '%s' of class '%s' cannot be resolved; dropping it.\n",
+				         state.index_name.c_str(),
+				         state.index_class.c_str()));
+				continue;
+			}
+			entry.index = ((ship_class << 16) & 0xffff0000) | (subsys_index & 0xffff);
+		} else if (entry.type == LOG_WING_DESTROYED || entry.type == LOG_WING_DEPARTED) {
+			entry.index = lookup_team(state.index_name);
+		}
 		entry.primary_team = lookup_team(state.primary_team);
 		entry.secondary_team = lookup_team(state.secondary_team);
 		strcpy_s(entry.pname, state.pname.c_str());
