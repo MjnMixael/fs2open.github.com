@@ -5923,7 +5923,8 @@ void post_process_path_stuff()
 
 // Create the live prop object described by a parsed_prop, carrying over its instance data.
 // Marks the parsed_prop as spawned.  Returns the object number, or -1 on failure.
-static int create_prop_from_parsed(parsed_prop& propp)
+// (declared in prop.h: the checkpoint restore brings back a prop that had spawned through this)
+int create_prop_from_parsed(parsed_prop& propp)
 {
 	int objnum = prop_create(&propp.orientation, &propp.position, propp.prop_info_index, propp.name);
 	if (objnum < 0)

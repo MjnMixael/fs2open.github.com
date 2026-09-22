@@ -460,6 +460,33 @@ struct variable_state {
 	int type = 0;
 };
 
+// A prop: a piece of the scene with no crew and no AI, created by the mission file, by prop-create
+// or by a script, and moved, re-textured, hidden or removed by any of them.  Mirrors ship_state in
+// miniature.  A parsed prop carries a disposition the same way a ship does: Present, NotYetHere
+// (its spawn cue had not fired) or Vanished; a prop with no parsed_prop behind it is recreated
+// from scratch.
+struct prop_state {
+	SCP_string name;
+	ShipDisposition disposition = ShipDisposition::Present;
+	bool no_parse_prop = false;
+
+	SCP_string prop_class;       // Prop_info entry, by name
+	vec3d pos = vmd_zero_vector;
+	matrix orient = vmd_identity_matrix;
+	vec3d vel = vmd_zero_vector;
+	vec3d rotvel = vmd_zero_vector;
+
+	float alpha_mult = 1.0f;
+	SCP_vector<SCP_string> flags;          // Prop_Flags, by name
+	SCP_vector<SCP_string> object_flags;   // Object_Flags, by name
+	SCP_vector<bool> glow_banks;
+	// Instance texture replacements (old, new), in parallel; class-level ones come from the table.
+	SCP_vector<SCP_string> texture_old;
+	SCP_vector<SCP_string> texture_new;
+	int collision_group_id = 0;
+	int despawn_delay = 0;       // dual-encoded like a ship's departure delay; translated
+};
+
 // A waypoint list, whole.  checkpointfields.h once said these "come only from the mission
 // file"; scripts can create, rename and move them (mission.createWaypointList, the list's Name
 // setter, Object.Position on a waypoint), and both AI orders and nav points refer to them by
@@ -1034,6 +1061,7 @@ struct checkpoint_data {
 	SCP_vector<ship_state> ships;
 	SCP_vector<wing_state> wings;
 	SCP_vector<waypoint_list_state> waypoint_lists;
+	SCP_vector<prop_state> props;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;
 
