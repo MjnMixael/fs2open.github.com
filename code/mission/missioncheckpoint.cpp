@@ -1639,6 +1639,17 @@ void load_training_scalars(const SCP_map<SCP_string, int>& in)
 
 // Mission state that belongs to no ship: the built-in message budget, the personas already spoken
 // for, the mission mood, the training context and the reinforcement allowances.
+// The gauge set the HUD is drawing: the player's ship class has its own if the table gave it
+// one, otherwise the defaults.  hud_get_gauge() searches in the same order.
+const SCP_vector<std::unique_ptr<HudGauge>>& live_hud_gauges()
+{
+	if (Player_ship != nullptr && Player_ship->ship_info_index >= 0 &&
+	    !Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
+		return Ship_info[Player_ship->ship_info_index].hud_gauges;
+	}
+	return default_hud_gauges;
+}
+
 void store_mission_extras(mission_extra_state& out)
 {
 	out.present = true;
@@ -1805,6 +1816,87 @@ void store_mission_extras(mission_extra_state& out)
 		state.num_uses = reinforcement.num_uses;
 		state.available = (reinforcement.flags & RF_IS_AVAILABLE) != 0;
 		out.reinforcements.push_back(std::move(state));
+	}
+
+	// --- HUD and input ---
+	out.hud_present = true;
+
+	// Only gauges a SEXP has touched: hidden, overridden or recoloured.  The rest are in whatever
+	// state the player's HUD configuration puts them, which the restore leaves alone.
+	for (const auto& gauge : live_hud_gauges()) {
+		hud_gauge_state state;
+		state.custom = gauge->isCustom();
+		state.name = state.custom ? gauge->getCustomGaugeName() : gauge->getConfigName();
+		state.active = gauge->isActiveIgnoringOverride();
+		state.sexp_override = gauge->isSexpOverridden();
+		state.sexp_color = gauge->isSexpColorLocked();
+
+		if (state.active && !state.sexp_override && !state.sexp_color) {
+			continue;
+		}
+		if (state.sexp_color) {
+			const color& c = gauge->getColor();
+			state.color[0] = c.red;
+			state.color[1] = c.green;
+			state.color[2] = c.blue;
+			state.color[3] = c.alpha;
+		}
+		out.hud_gauges.push_back(std::move(state));
+	}
+
+	out.hud_high_contrast = HUD_high_contrast;
+	out.disable_cockpits = Disable_cockpits;
+	out.disable_cockpit_sway = Disable_cockpit_sway;
+	out.sensor_static_forced = Sensor_static_forced;
+
+	// Ignored_keys is CCFG_MAX long, so actions a script added past that cannot be ignored and
+	// are not looked at.
+	for (int i = 0; i < CCFG_MAX && i < static_cast<int>(Control_config.size()); i++) {
+		if (Ignored_keys[i] != 0) {
+			ignored_key_state state;
+			state.action = Control_config[i].text;
+			state.count = Ignored_keys[i];
+			out.ignored_keys.push_back(std::move(state));
+		}
+	}
+
+	for (const auto& line : Msg_scrollback_vec) {
+		scrollback_line_state state;
+		state.time = line.time;
+		state.source = line.source;
+		state.text = line.text;
+		out.scrollback.push_back(std::move(state));
+	}
+
+	SCP_vector<sexp_music_entry> playing;
+	sexp_music_get_playing(playing);
+	for (const auto& entry : playing) {
+		file_sound_state state;
+		state.filename = entry.filename;
+		state.type = entry.type;
+		state.loop = entry.loop;
+		state.paused = entry.paused;
+		state.variable = entry.variable;
+		out.file_sounds.push_back(std::move(state));
+	}
+}
+
+// The streams play-sound-from-file had going.  After the variables, since a stream started
+// through a variable is identified by it, and the load writes the new handle into that variable.
+void apply_file_sounds(const checkpoint_data& data)
+{
+	if (!data.mission.hud_present) {
+		return;
+	}
+
+	for (const auto& state : data.mission.file_sounds) {
+		sexp_music_entry entry;
+		entry.filename = state.filename;
+		entry.type = state.type;
+		entry.loop = state.loop;
+		entry.paused = state.paused;
+		entry.variable = state.variable;
+		sexp_music_restore(entry);
 	}
 }
 
@@ -6253,6 +6345,61 @@ void apply_hud_state(const checkpoint_data& data)
 		}
 	}
 
+	// The gauge switches, the HUD toggles, the ignored keys and the message log.  After the
+	// ships, since the gauge set depends on the player's ship class.
+	const auto& extras = data.mission;
+	if (extras.hud_present) {
+		// Every gauge goes back to its default first: `active` is not reset by the level init,
+		// so a gauge a SEXP hid in an earlier run would otherwise stay hidden.
+		for (const auto& gauge : live_hud_gauges()) {
+			bool custom = gauge->isCustom();
+			SCP_string name = custom ? SCP_string(gauge->getCustomGaugeName()) : gauge->getConfigName();
+
+			const hud_gauge_state* saved = nullptr;
+			for (const auto& state : extras.hud_gauges) {
+				if (state.custom == custom && !stricmp(state.name.c_str(), name.c_str())) {
+					saved = &state;
+					break;
+				}
+			}
+
+			gauge->updateActive(saved == nullptr || saved->active);
+			gauge->updateSexpOverride(saved != nullptr && saved->sexp_override);
+
+			if (saved != nullptr && saved->sexp_color) {
+				// The same dance hud-set-color does: the SEXP lock is what keeps the HUD
+				// configuration from overwriting the colour, so it has to be lifted to set it.
+				gauge->sexpLockConfigColor(false);
+				gauge->updateColor(saved->color[0], saved->color[1], saved->color[2], saved->color[3]);
+				gauge->sexpLockConfigColor(true);
+			}
+		}
+
+		hud_set_contrast(extras.hud_high_contrast);
+		Disable_cockpits = extras.disable_cockpits;
+		Disable_cockpit_sway = extras.disable_cockpit_sway;
+		Sensor_static_forced = extras.sensor_static_forced;
+
+		for (int i = 0; i < CCFG_MAX; i++) {
+			Ignored_keys[i] = 0;
+		}
+		for (const auto& key : extras.ignored_keys) {
+			for (int i = 0; i < CCFG_MAX && i < static_cast<int>(Control_config.size()); i++) {
+				if (!stricmp(Control_config[i].text.c_str(), key.action.c_str())) {
+					Ignored_keys[i] = key.count;
+					break;
+				}
+			}
+		}
+
+		// The log is rebuilt whole: whatever the fresh load has logged so far belongs to the run
+		// being replaced.  Each line carries its own mission time.
+		Msg_scrollback_vec.clear();
+		for (const auto& line : extras.scrollback) {
+			hud_add_msg_to_scrollback(line.text.c_str(), line.source, line.time);
+		}
+	}
+
 	if (Player == nullptr) {
 		return;
 	}
@@ -7142,6 +7289,7 @@ void mission_checkpoint_apply()
 	reissue_departures(data);
 
 	apply_variables(data);
+	apply_file_sounds(data);
 	apply_scoring(data);
 
 	// Debris is independent of everything else; it just needs the ship classes paged in, which the
