@@ -2943,6 +2943,12 @@ void store_ai(const ship* shipp, ai_state& out)
 	}
 }
 
+// The highest goal signature any restored goal carried.  Ai_goal_signature restarts at zero on
+// every level load, and ai_process_mission_orders() tells "the active goal changed" from "it did
+// not" purely by comparing signatures, so a new goal handed a number a restored goal already holds
+// can be mistaken for it.  The apply pushes the counter past this once every goal is back.
+int Max_restored_goal_signature = -1;
+
 void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 {
 	ai_goal_reset(&goal);
@@ -2950,6 +2956,15 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 	ai_goal_mode mode;
 	if (!ai_goal_mode_value(in.mode, mode)) {
 		mprintf(("CHECKPOINT => AI goal '%s' no longer exists; dropping it.\n", in.mode.c_str()));
+		return;
+	}
+
+	// A chase-weapon goal is keyed on a weapon slot (target_instance), and a weapon in flight has
+	// no name to find it by again: the projectile restore recreates it in whatever slot is free.
+	// Restoring the goal without its slot would leave target_instance at -1, which the goal
+	// validation asserts on and then indexes Weapons[] with.  The AI picks a new bomb to chase
+	// within a frame, so dropping the goal costs nothing.
+	if (mode == AI_GOAL_CHASE_WEAPON) {
 		return;
 	}
 
@@ -2963,6 +2978,10 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 	goal.time = in.time;
 	goal.int_data = in.int_data;
 	goal.float_data = in.float_data;
+
+	if (in.signature > Max_restored_goal_signature) {
+		Max_restored_goal_signature = in.signature;
+	}
 
 	// A chase-ship-class submode is a class index, so re-resolve it rather than trusting the
 	// number, which a table change would have reassigned.
@@ -2982,7 +3001,10 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 	}
 
 	// Always names, never indices -- see store_ai_goal().  Clearing the two "index valid" flags
-	// is what tells the AI to read them as names.
+	// is what tells the AI to read them as names.  That only holds for AI_GOAL_DOCK, which the
+	// engine re-resolves lazily; a rearm goal's dispatch reads the indices straight out of the
+	// union, so those are resolved in resolve_ai_goal_dockpoints() once every ship is in its
+	// final state.
 	goal.flags.remove(AI::Goal_Flags::Docker_index_valid);
 	goal.flags.remove(AI::Goal_Flags::Dockee_index_valid);
 	if (!in.docker_point.empty()) {
@@ -2991,6 +3013,50 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 	if (!in.dockee_point.empty()) {
 		goal.dockee.name = ai_add_dock_name(in.dockee_point.c_str());
 	}
+}
+
+// Turn the dock point names a restored goal carries back into indices, for the goal modes whose
+// execution reads the indices without checking the flags first.  ai_rearm_repair() is handed
+// docker.index and dockee.index directly (aigoals.cpp, AI_GOAL_REARM_REPAIR dispatch), and both
+// ai_get_dock_goal_indexes() and ai_path_0() assert the index-valid flags, so a rearm goal left
+// holding names would be executed with the low bits of a pointer as a bay number.
+//
+// Second pass only: it needs the model of the ship holding the goal and of the target, and the
+// first pass may not have changed either ship's class yet.  A goal whose dock points no longer
+// resolve is dropped, which is what happens to a rearm goal whose support ship has gone.
+void resolve_ai_goal_dockpoints(const ship* shipp, ai_goal& goal)
+{
+	if (goal.ai_mode != AI_GOAL_REARM_REPAIR) {
+		return;
+	}
+	if (goal.flags[AI::Goal_Flags::Docker_index_valid] && goal.flags[AI::Goal_Flags::Dockee_index_valid]) {
+		return;
+	}
+
+	int target_shipnum = (goal.target_name != nullptr) ? ship_name_lookup(goal.target_name) : -1;
+	int docker_model = Ship_info[shipp->ship_info_index].model_num;
+	int dockee_model = (target_shipnum >= 0) ? Ship_info[Ships[target_shipnum].ship_info_index].model_num : -1;
+
+	int docker_index = -1;
+	int dockee_index = -1;
+	if (docker_model >= 0 && goal.docker.name != nullptr) {
+		docker_index = model_find_dock_name_index(docker_model, goal.docker.name);
+	}
+	if (dockee_model >= 0 && goal.dockee.name != nullptr) {
+		dockee_index = model_find_dock_name_index(dockee_model, goal.dockee.name);
+	}
+
+	if (docker_index < 0 || dockee_index < 0) {
+		mprintf(("CHECKPOINT => Rearm goal on '%s' has no usable dock points any more; dropping it.\n",
+		         shipp->ship_name));
+		ai_goal_reset(&goal);
+		return;
+	}
+
+	goal.docker.index = docker_index;
+	goal.dockee.index = dockee_index;
+	goal.flags.set(AI::Goal_Flags::Docker_index_valid);
+	goal.flags.set(AI::Goal_Flags::Dockee_index_valid);
 }
 
 void load_ai(ship* shipp, const ai_state& in)
@@ -3097,6 +3163,17 @@ void resolve_ai_references(ship* shipp, const ai_state& in)
 		: -1;
 
 	aip->last_subsys_target = find_subsys_by_key(in.last_subsys_target_ship, in.last_subsys_target);
+
+	for (int i = 0; i < MAX_AI_GOALS; i++) {
+		resolve_ai_goal_dockpoints(shipp, aip->goals[i]);
+	}
+
+	// A goal the loader dropped (an unknown mode, a chase-weapon goal, a rearm goal with no dock
+	// points) leaves its slot empty; an active_goal that pointed there has nothing to point at.
+	if (aip->active_goal >= 0 && aip->active_goal < MAX_AI_GOALS &&
+	    aip->goals[aip->active_goal].ai_mode == AI_GOAL_NONE) {
+		aip->active_goal = -1;
+	}
 }
 
 void store_subsystems(const ship* shipp, SCP_vector<subsystem_state>& out)
@@ -5192,6 +5269,8 @@ void mission_checkpoint_apply()
 	// After the reconciliation, which counts a use for every reinforcement it brings back.
 	apply_reinforcements(data);
 
+	Max_restored_goal_signature = -1;
+
 	for (const auto& state : data.ships) {
 		if (state.disposition != ShipDisposition::Present) {
 			continue;
@@ -5238,6 +5317,12 @@ void mission_checkpoint_apply()
 
 	apply_asteroids(data);
 	apply_wings(data);
+
+	// Every restored goal, ship and wing alike, is back now; keep new goals from reusing a
+	// signature one of them holds.  See Max_restored_goal_signature.
+	if (Ai_goal_signature <= Max_restored_goal_signature) {
+		Ai_goal_signature = Max_restored_goal_signature + 1;
+	}
 
 	apply_variables(data);
 	apply_scoring(data);
