@@ -200,7 +200,7 @@ void pilot::JSONFileHandler::endArrayWrite() {
 void pilot::JSONFileHandler::flush() {
 	Assertion(_elementStack.size() == 1, "Not all sections or arrays have been ended!");
 
-	json_dump_cfile(_rootObj, _cfp, JSON_INDENT(4));
+	_writeFailed = (json_dump_cfile(_rootObj, _cfp, JSON_INDENT(4)) != 0);
 }
 void pilot::JSONFileHandler::writeInteger(const char* name, json_int_t val) {
 	ensureNotExists(name);
