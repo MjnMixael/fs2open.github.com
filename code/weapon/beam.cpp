@@ -2327,7 +2327,9 @@ void beam_start_warmdown(beam *b)
 	b->warmdown_stamp = timestamp(Weapon_info[b->weapon_info_index].b_info.beam_warmdown);			
 
 	// start the warmdown sound
-	if(Weapon_info[b->weapon_info_index].b_info.beam_warmdown_sound.isValid()){
+	// (not while restoring a checkpoint: the beam is being wound forward to the phase it was saved
+	// in, and the sound, the turret's animation and the script already happened in the saved run)
+	if(!Game_restoring && Weapon_info[b->weapon_info_index].b_info.beam_warmdown_sound.isValid()){
 		snd_play_3d(gamesnd_get_game_sound(Weapon_info[b->weapon_info_index].b_info.beam_warmdown_sound), &b->last_start, &View_position);
 	}
 
@@ -2337,7 +2339,7 @@ void beam_start_warmdown(beam *b)
 		b->beam_sound_loop = sound_handle::invalid();
 	}
 
-	if (b->subsys != nullptr) {
+	if (!Game_restoring && b->subsys != nullptr) {
 		// Starts the warmdown program if it exists
 		b->subsys->system_info->beam_warmdown_program.start(b->objp,
 			&vmd_zero_vector,
@@ -2347,7 +2349,7 @@ void beam_start_warmdown(beam *b)
 
 	beam_set_state(&Weapon_info[b->weapon_info_index], b, WeaponState::WARMDOWN);
 
-	if (scripting::hooks::OnBeamWarmdown->isActive()) {
+	if (!Game_restoring && scripting::hooks::OnBeamWarmdown->isActive()) {
 		scripting::hooks::OnBeamWarmdown->run(scripting::hooks::WeaponUsedConditions{ b->objp == nullptr ? nullptr : &Ships[b->objp->instance], b->target, SCP_vector<int>{ b->weapon_info_index }, true },
 			scripting::hook_param_list(
 				scripting::hook_param("Beam", 'o', &Objects[b->objnum]),
