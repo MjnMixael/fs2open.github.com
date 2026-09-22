@@ -123,6 +123,10 @@ void asteroid_add_target(object* objp) {
 	Asteroid_targets.push_back(new_target);
 }
 
+void asteroid_clear_targets() {
+	Asteroid_targets.clear();
+}
+
 /**
  * Force updating of pair stuff for asteroid *objp.
  */
