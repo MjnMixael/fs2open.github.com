@@ -14,8 +14,19 @@
 #include "hud/hud.h"
 #include "jumpnode/jumpnode.h"
 #include "nebula/neb.h"
+#include "nebula/neblightning.h"
 #include "starfield/starfield.h"
 #include "starfield/supernova.h"
+#include "camera/photomode.h"
+#include "controlconfig/controlsconfig.h"
+#include "graphics/grinternal.h"
+#include "hud/hudmessage.h"
+#include "io/keycontrol.h"
+#include "math/bitarray.h"
+#include "object/objcollide.h"
+#include "ship/subsysdamage.h"
+#include "sound/ds.h"
+#include "sound/sound.h"
 #include "freespace.h"
 #include "ai/ai.h"
 #include "asteroid/asteroid.h"
@@ -2331,6 +2342,13 @@ void store_environment(environment_state& out)
 			state.color[2] = c.blue;
 			state.color[3] = c.alpha;
 		}
+		state.show_polys = node.IsShowingPolys();
+
+		int objnum = node.GetSCPObjectNumber();
+		if (objnum >= 0 && objnum < MAX_OBJECTS) {
+			state.has_pos = true;
+			state.pos = Objects[objnum].pos;
+		}
 
 		out.jump_nodes.push_back(std::move(state));
 	}
@@ -2338,6 +2356,122 @@ void store_environment(environment_state& out)
 	for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
 		out.squadron_wings.emplace_back(Squadron_wings[i] >= 0 ? Wings[Squadron_wings[i]].name : "");
 	}
+
+	// --- Effects and the rest of the world ---
+	out.effects_present = true;
+
+	out.gravity = The_mission.gravity;
+	if (Storm != nullptr) {
+		out.storm = Storm->name;
+	}
+
+	// Every poof type, on or off, so the restore can put the set back exactly.  The flag array
+	// is only allocated once the poof table has been read.
+	if (Neb2_poof_flags != nullptr) {
+		for (size_t i = 0; i < Poof_info.size(); i++) {
+			const poof_info& info = Poof_info[i];
+
+			poof_state state;
+			state.name = info.name;
+			state.enabled = (get_bit(Neb2_poof_flags.get(), i) != 0);
+			state.fade_start = info.fade_start.value();
+			state.fade_duration = info.fade_duration;
+			state.fade_in = info.fade_in;
+			state.fade_multiplier = info.fade_multiplier;
+			out.poofs.push_back(std::move(state));
+		}
+	}
+
+	out.has_volumetrics = The_mission.volumetrics.has_value();
+	if (out.has_volumetrics) {
+		out.volumetrics_enabled = The_mission.volumetrics->get_enabled();
+	}
+
+	out.fog_near_distance = Neb2_fog_near_distance;
+	out.fog_1000m_visibility = Neb2_fog_1000m_visibility;
+	out.fog_skybox_clip_distance = Neb2_fog_skybox_clip_distance;
+	out.fog_clip_distance = Neb2_fog_clip_distance;
+
+	if (graphics::Post_processing_manager != nullptr) {
+		for (const auto& effect : graphics::Post_processing_manager->getPostEffects()) {
+			post_effect_state state;
+			state.name = effect.name;
+			state.intensity = effect.intensity;
+			state.rgb = effect.rgb;
+			out.post_effects.push_back(std::move(state));
+		}
+
+		const auto& lightshafts = graphics::Post_processing_manager->getLightshaftParams();
+		out.lightshafts_on = lightshafts.on;
+		out.lightshafts_intensity = lightshafts.intensity;
+	}
+
+	// The preset by name; -1 (the <none> case of set-sound-environment) is an empty name.
+	if (Game_sound_env.id >= 0 && Game_sound_env.id < static_cast<int>(EFX_presets.size())) {
+		out.sound_env_preset = EFX_presets[Game_sound_env.id].name;
+	}
+	out.sound_env_volume = Game_sound_env.volume;
+	out.sound_env_damping = Game_sound_env.damping;
+	out.sound_env_decay = Game_sound_env.decay;
+
+	if (The_mission.ai_profile != nullptr) {
+		out.beam_friendly_damage_cap = The_mission.ai_profile->beam_friendly_damage_cap[Game_skill_level];
+		out.weapon_friendly_damage_cap = The_mission.ai_profile->weapon_friendly_damage_cap[Game_skill_level];
+		out.weapon_self_damage_cap = The_mission.ai_profile->weapon_self_damage_cap[Game_skill_level];
+	}
+
+	// Only the entries a SEXP has moved off their table default; see damage_type_override_state.
+	for (const auto& wip : Weapon_info) {
+		if (wip.damage_type_idx != wip.damage_type_idx_sav) {
+			out.weapon_damage_types.push_back({wip.name, damage_type_name(wip.damage_type_idx)});
+		}
+		if (wip.shockwave.damage_type_idx != wip.shockwave.damage_type_idx_sav) {
+			out.weapon_shockwave_damage_types.push_back({wip.name, damage_type_name(wip.shockwave.damage_type_idx)});
+		}
+	}
+	for (const auto& sip : Ship_info) {
+		if (sip.shockwave.damage_type_idx != sip.shockwave.damage_type_idx_sav) {
+			out.ship_shockwave_damage_types.push_back({sip.name, damage_type_name(sip.shockwave.damage_type_idx)});
+		}
+	}
+	for (const auto& info : Asteroid_info) {
+		if (info.damage_type_idx != info.damage_type_idx_sav) {
+			out.asteroid_damage_types.push_back({info.name, damage_type_name(info.damage_type_idx)});
+		}
+	}
+
+	for (int i = 0; i < NUM_SCORES; i++) {
+		int index = Mission_music[i];
+		bool valid = (index >= 0 && index < static_cast<int>(Spooled_music.size()));
+		out.mission_music.emplace_back(valid ? Spooled_music[index].name : "");
+	}
+
+	for (const auto& cp : Coordinate_points) {
+		if (cp.objnum < 0) {
+			continue;
+		}
+
+		coordinate_point_state state;
+		state.name = cp.name;
+		state.group = cp.group;
+		state.pos = Objects[cp.objnum].pos;
+		state.escort_priority = cp.escort_priority;
+		state.multi_team = cp.multi_team;
+		state.visible = cp.flags[CoordinatePoint::Flags::Visible_in_mission];
+		out.coordinate_points.push_back(std::move(state));
+	}
+
+	out.shudder_perpetual = Game_shudder_perpetual;
+	out.shudder_everywhere = Game_shudder_everywhere;
+	out.shudder_time = Game_shudder_time.value();
+	out.shudder_total = Game_shudder_total;
+	out.shudder_intensity = Game_shudder_intensity;
+
+	out.photo_mode_allowed = game_get_photo_mode_allowed();
+
+	out.toggle_debriefing = The_mission.flags[Mission::Mission_Flags::Toggle_debriefing];
+	out.deactivate_autopilot = The_mission.flags[Mission::Mission_Flags::Deactivate_ap];
+	out.use_autopilot_cinematics = The_mission.flags[Mission::Mission_Flags::Use_ap_cinematics];
 }
 
 // Split from apply_environment() because of when it can run: a nav bound to a ship resolves that
@@ -2788,7 +2922,12 @@ void apply_environment(const checkpoint_data& data)
 		if (state.model.empty()) {
 			node.ResetToDefaultModel();
 		} else {
-			node.SetModel(state.model.c_str());
+			node.SetModel(state.model.c_str(), state.show_polys);
+		}
+
+		int objnum = node.GetSCPObjectNumber();
+		if (state.has_pos && objnum >= 0 && objnum < MAX_OBJECTS) {
+			Objects[objnum].pos = state.pos;
 		}
 	}
 
@@ -2812,6 +2951,197 @@ void apply_environment(const checkpoint_data& data)
 			hud_set_new_squadron_wings(wingnums);
 		}
 	}
+
+	// --- Effects and the rest of the world ---
+	// A checkpoint from before these were captured says nothing about them.
+	if (!env.effects_present) {
+		return;
+	}
+
+	// Gravity.  Whether a weapon is subject to it is a per-weapon flag worked out from whether
+	// there is any, so crossing zero in either direction has to redo that, as the SEXP does.
+	{
+		bool had_gravity = !IS_VEC_NULL(&The_mission.gravity);
+		The_mission.gravity = env.gravity;
+		if (had_gravity != !IS_VEC_NULL(&The_mission.gravity)) {
+			collide_apply_gravity_flags_weapons();
+		}
+	}
+
+	// A name this build does not know leaves no storm, which is also what the empty name means.
+	nebl_set_storm(env.storm.c_str());
+
+	// The poof set and any fade in progress.  The toggles only flip bits; finalize() is what
+	// rebuilds the poofs from them, and it is called once for the lot, as the SEXP does.
+	if (!env.poofs.empty() && Neb2_poof_flags != nullptr) {
+		for (const auto& state : env.poofs) {
+			for (size_t i = 0; i < Poof_info.size(); i++) {
+				if (stricmp(Poof_info[i].name, state.name.c_str()) != 0) {
+					continue;
+				}
+
+				neb2_toggle_poof(static_cast<int>(i), state.enabled);
+				Poof_info[i].fade_start = TIMESTAMP(translate_stamp(state.fade_start));
+				Poof_info[i].fade_duration = state.fade_duration;
+				Poof_info[i].fade_in = state.fade_in;
+				Poof_info[i].fade_multiplier = state.fade_multiplier;
+				break;
+			}
+		}
+		neb2_toggle_poof_finalize();
+	}
+
+	if (env.has_volumetrics && The_mission.volumetrics) {
+		The_mission.volumetrics->set_enabled(env.volumetrics_enabled);
+	}
+
+	Neb2_fog_near_distance = env.fog_near_distance;
+	Neb2_fog_1000m_visibility = env.fog_1000m_visibility;
+	Neb2_fog_skybox_clip_distance = env.fog_skybox_clip_distance;
+	Neb2_fog_clip_distance = env.fog_clip_distance;
+
+	// Post-processing.  gr_post_process_set_effect() takes the 0-100 value the SEXP takes and
+	// scales it into the effect's own range (value / div + add), so the stored intensity is
+	// unscaled first.  A zero colour means "keep", which is what an effect with no colour has.
+	if (graphics::Post_processing_manager != nullptr) {
+		for (const auto& state : env.post_effects) {
+			for (const auto& effect : graphics::Post_processing_manager->getPostEffects()) {
+				if (stricmp(effect.name.c_str(), state.name.c_str()) != 0) {
+					continue;
+				}
+
+				int value = fl2ir((state.intensity - effect.add) * effect.div);
+				vec3d rgb = state.rgb;
+				gr_post_process_set_effect(state.name.c_str(), value, &rgb);
+				break;
+			}
+		}
+
+		// Lightshafts are not in the effect list; the setter special-cases the name.
+		int lightshafts = env.lightshafts_on ? fl2ir(env.lightshafts_intensity * 100.0f) : 0;
+		gr_post_process_set_effect("lightshafts", lightshafts, nullptr);
+	}
+
+	// The sound environment, through the same calls the SEXPs make.  Game_sound_env is what the
+	// engine re-applies whenever the gameplay state is entered, so it is kept in step.
+	if (env.sound_env_preset.empty()) {
+		sound_env_disable();
+		Game_sound_env.id = -1;
+	} else {
+		int preset = ds_eax_get_preset_id(env.sound_env_preset.c_str());
+		if (preset >= 0) {
+			Game_sound_env.id = preset;
+			Game_sound_env.volume = env.sound_env_volume;
+			Game_sound_env.damping = env.sound_env_damping;
+			Game_sound_env.decay = env.sound_env_decay;
+			sound_env_set(&Game_sound_env);
+		}
+	}
+
+	if (The_mission.ai_profile != nullptr) {
+		The_mission.ai_profile->beam_friendly_damage_cap[Game_skill_level] = env.beam_friendly_damage_cap;
+		The_mission.ai_profile->weapon_friendly_damage_cap[Game_skill_level] = env.weapon_friendly_damage_cap;
+		The_mission.ai_profile->weapon_self_damage_cap[Game_skill_level] = env.weapon_self_damage_cap;
+	}
+
+	// Damage-type overrides live on the tables, so one that a previous run set is still there in
+	// a fresh session.  Everything goes back to its table default first, then the overrides the
+	// checkpoint recorded go on -- which is the complete set, since the store keeps every entry
+	// that differs from its default.
+	for (auto& wip : Weapon_info) {
+		wip.damage_type_idx = wip.damage_type_idx_sav;
+		wip.shockwave.damage_type_idx = wip.shockwave.damage_type_idx_sav;
+	}
+	for (auto& sip : Ship_info) {
+		sip.shockwave.damage_type_idx = sip.shockwave.damage_type_idx_sav;
+	}
+	for (auto& info : Asteroid_info) {
+		info.damage_type_idx = info.damage_type_idx_sav;
+	}
+	for (const auto& entry : env.weapon_damage_types) {
+		int weapon_class = lookup_weapon_class(entry.subject);
+		if (weapon_class >= 0) {
+			Weapon_info[weapon_class].damage_type_idx = lookup_damage_type(entry.damage_type);
+		}
+	}
+	for (const auto& entry : env.weapon_shockwave_damage_types) {
+		int weapon_class = lookup_weapon_class(entry.subject);
+		if (weapon_class >= 0) {
+			Weapon_info[weapon_class].shockwave.damage_type_idx = lookup_damage_type(entry.damage_type);
+		}
+	}
+	for (const auto& entry : env.ship_shockwave_damage_types) {
+		int ship_class = lookup_ship_class(entry.subject);
+		if (ship_class >= 0) {
+			Ship_info[ship_class].shockwave.damage_type_idx = lookup_damage_type(entry.damage_type);
+		}
+	}
+	for (const auto& entry : env.asteroid_damage_types) {
+		int asteroid_type = lookup_asteroid_type(entry.subject);
+		if (asteroid_type >= 0) {
+			Asteroid_info[asteroid_type].damage_type_idx = lookup_damage_type(entry.damage_type);
+		}
+	}
+
+	// The scores, through the same setter the parse and the script API use; an empty or unknown
+	// name gives -1, which is what an empty name stored.
+	for (int i = 0; i < NUM_SCORES && i < static_cast<int>(env.mission_music.size()); i++) {
+		event_music_set_score(i, env.mission_music[i].c_str());
+	}
+
+	// Coordinate points: the set first, then the fields.  A point the checkpoint does not have was
+	// deleted by a script; obj_delete() takes it out of Coordinate_points too.  One the fresh load
+	// does not have was created by a script, and is created again under its saved name.
+	{
+		SCP_vector<int> stale;
+		for (const auto& cp : Coordinate_points) {
+			if (cp.objnum < 0) {
+				continue;
+			}
+			bool kept = std::any_of(env.coordinate_points.begin(), env.coordinate_points.end(),
+				[&cp](const coordinate_point_state& state) { return !stricmp(state.name.c_str(), cp.name.c_str()); });
+			if (!kept) {
+				stale.push_back(cp.objnum);
+			}
+		}
+		for (int objnum : stale) {
+			obj_delete(objnum);
+		}
+
+		for (const auto& state : env.coordinate_points) {
+			auto cp = find_coordinate_point_by_name(state.name.c_str());
+			if (cp == nullptr || cp->objnum < 0) {
+				int objnum = coordinate_point_create(&state.pos, state.name.c_str());
+				if (objnum < 0) {
+					continue;
+				}
+				cp = find_coordinate_point_by_objnum(objnum);
+				if (cp == nullptr) {
+					continue;
+				}
+			}
+
+			cp->group = state.group;
+			cp->escort_priority = state.escort_priority;
+			cp->multi_team = state.multi_team;
+			cp->flags.set(CoordinatePoint::Flags::Visible_in_mission, state.visible);
+			Objects[cp->objnum].pos = state.pos;
+		}
+	}
+
+	// The shudder, exactly as game_shudder_apply() left it.  The level init has already cleared
+	// it, so a checkpoint with none in progress restores none.
+	Game_shudder_perpetual = env.shudder_perpetual;
+	Game_shudder_everywhere = env.shudder_everywhere;
+	Game_shudder_time = TIMESTAMP(translate_stamp(env.shudder_time));
+	Game_shudder_total = env.shudder_total;
+	Game_shudder_intensity = env.shudder_intensity;
+
+	game_set_photo_mode_allowed(env.photo_mode_allowed);
+
+	The_mission.flags.set(Mission::Mission_Flags::Toggle_debriefing, env.toggle_debriefing);
+	The_mission.flags.set(Mission::Mission_Flags::Deactivate_ap, env.deactivate_autopilot);
+	The_mission.flags.set(Mission::Mission_Flags::Use_ap_cinematics, env.use_autopilot_cinematics);
 }
 
 // Create the ships that the mission file will not recreate for us.
@@ -3108,6 +3438,16 @@ void store_projectiles(checkpoint_data& data)
 		state.lssm_target_pos = wp->lssm_target_pos;
 
 		state.cmeasure_timer = wp->cmeasure_timer;
+
+		state.rotational_velocity = objp->phys_info.rotvel;
+		state.mine_chase_expires = wp->mine_chase_expires.value();
+		state.mine_chase_cooldown_expires = wp->mine_chase_cooldown_expires.value();
+		for (const auto& stamp : wp->last_spawn_time) {
+			state.last_spawn_times.push_back(stamp.value());
+		}
+		state.big_attack_point_stamp = wp->pick_big_attack_point_timestamp;
+		state.big_attack_point = wp->big_attack_point;
+		state.collision_group_id = objp->collision_group_id;
 
 		data.projectiles.push_back(std::move(state));
 	}
@@ -4848,9 +5188,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	store_projectiles(data);
 	store_beams(data);
 
-	// Hull debris only -- see the note on debris_state.
+	// Every piece of debris: hull chunks, the generic fragments, and anything a script made.
 	for (const auto& db : Debris) {
-		if (!db.flags[Debris_Flags::Used] || !db.is_hull || db.objnum < 0) {
+		if (!db.flags[Debris_Flags::Used] || db.objnum < 0) {
 			continue;
 		}
 
@@ -4859,10 +5199,15 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 		state.ship_class = ship_class_name(db.ship_info_index);
 		state.team = team_name(db.team);
+		state.is_hull = db.is_hull;
+		state.time_started = db.time_started;
 
 		auto pm = model_get(db.model_num);
-		if (pm != nullptr && db.submodel_num >= 0 && db.submodel_num < pm->n_models) {
-			state.submodel = pm->submodel[db.submodel_num].name;
+		if (pm != nullptr) {
+			state.model = pm->filename;
+			if (db.submodel_num >= 0 && db.submodel_num < pm->n_models) {
+				state.submodel = pm->submodel[db.submodel_num].name;
+			}
 		}
 
 		if (db.species >= 0 && db.species < static_cast<int>(Species_info.size())) {
@@ -4884,8 +5229,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.parent_alt_name = alt_name_for_index(db.parent_alt_name);
 		state.do_not_expire = db.flags[Debris_Flags::DoNotExpire];
 
-		// A chunk with no class or submodel cannot be recreated, and hull debris always has both.
-		if (!state.ship_class.empty() && !state.submodel.empty()) {
+		// A chunk needs a submodel and something to find the model by: hull debris always has
+		// its class, and anything else has the model's filename.
+		if (!state.submodel.empty() && (!state.ship_class.empty() || !state.model.empty())) {
 			data.debris.push_back(std::move(state));
 		}
 	}
@@ -5827,9 +6173,8 @@ void apply_hud_state(const checkpoint_data& data)
 	}
 
 	// Coordinate points come back by name.  A point the mission no longer has is simply not
-	// re-added, and neither is one whose escort priority is zero in the fresh load: that
-	// priority is per-point mission state a script can raise at runtime, and the checkpoint does
-	// not carry it, so a point a script promoted and then escorted is lost on restore.
+	// re-added.  The points themselves, with their escort priorities, were restored with the
+	// environment, so a point a script created or promoted and then escorted is back too.
 	for (const auto& name : data.escort_points) {
 		const mission_coordinate_point* point = find_coordinate_point_by_name(name.c_str());
 		if (point != nullptr && point->objnum >= 0) {
@@ -5981,6 +6326,19 @@ void apply_projectiles(const checkpoint_data& data)
 		}
 
 		wp->cmeasure_timer = translate_stamp(state.cmeasure_timer);
+
+		objp->phys_info.rotvel = state.rotational_velocity;
+		wp->mine_chase_expires = TIMESTAMP(translate_stamp(state.mine_chase_expires));
+		wp->mine_chase_cooldown_expires = TIMESTAMP(translate_stamp(state.mine_chase_cooldown_expires));
+		// Empty in a checkpoint from before the spawn clocks were stored; weapon_create() has
+		// already started them over in that case.
+		for (size_t i = 0; i < state.last_spawn_times.size() && i < MAX_SPAWN_TYPES_PER_WEAPON; i++) {
+			wp->last_spawn_time[i] = TIMESTAMP(translate_stamp(state.last_spawn_times[i]));
+		}
+		// 0 and 1 are the "pick now" encodings and pass through translate_stamp() unchanged.
+		wp->pick_big_attack_point_timestamp = translate_stamp(state.big_attack_point_stamp);
+		wp->big_attack_point = state.big_attack_point;
+		objp->collision_group_id = state.collision_group_id;
 
 		// Set after weapon_create(), which resets the flagset and then sets Played_flyby_sound
 		// itself for player shots.
@@ -6219,20 +6577,32 @@ void apply_debris(const checkpoint_data& data)
 
 	for (const auto& state : data.debris) {
 		int ship_class = lookup_ship_class(state.ship_class);
-		if (ship_class < 0) {
+		if (ship_class < 0 && state.is_hull) {
+			// Hull debris is a piece of that class's model; without the class there is nothing
+			// to make it from.
 			continue;
 		}
 
-		int model_num = Ship_info[ship_class].model_num;
+		// The model by filename when the file has one; a checkpoint from before that was stored
+		// has hull debris only, whose model is the class's.  model_load() hands back a model that
+		// is already loaded, which is the usual case -- the class's model, or the generic debris
+		// model the level init pages in.
+		int model_num = -1;
+		if (!state.model.empty()) {
+			model_num = model_load(state.model.c_str(), nullptr, ErrorType::WARNING);
+		} else if (ship_class >= 0) {
+			model_num = Ship_info[ship_class].model_num;
+		}
 		if (model_num < 0) {
-			mprintf(("CHECKPOINT => No model loaded for '%s'; dropping its debris.\n", state.ship_class.c_str()));
+			mprintf(("CHECKPOINT => No model for debris of '%s'; dropping it.\n",
+			         state.model.empty() ? state.ship_class.c_str() : state.model.c_str()));
 			continue;
 		}
 
 		int submodel_num = model_find_submodel_index(model_num, state.submodel.c_str());
 		if (submodel_num < 0) {
 			mprintf(("CHECKPOINT => '%s' has no submodel '%s' any more; dropping that debris.\n",
-			         state.ship_class.c_str(),
+			         state.model.empty() ? state.ship_class.c_str() : state.model.c_str(),
 			         state.submodel.c_str()));
 			continue;
 		}
@@ -6257,7 +6627,7 @@ void apply_debris(const checkpoint_data& data)
 			submodel_num,
 			&state.pos,
 			&state.orient,
-			true,
+			state.is_hull,
 			false,
 			damage_type);
 
@@ -6273,6 +6643,7 @@ void apply_debris(const checkpoint_data& data)
 		// lifeleft is re-rolled from the ship class on creation, so put the saved one back --
 		// including the -1 that makes a large chunk permanent.
 		db->lifeleft = state.lifeleft;
+		db->time_started = state.time_started;
 		db->max_hull = state.max_hull;
 		db->damage_mult = state.damage_mult;
 		if (!state.species.empty()) {
@@ -6286,7 +6657,7 @@ void apply_debris(const checkpoint_data& data)
 	}
 
 	if (created > 0) {
-		mprintf(("CHECKPOINT => Restored %d piece(s) of hull debris.\n", created));
+		mprintf(("CHECKPOINT => Restored %d piece(s) of debris.\n", created));
 	}
 }
 

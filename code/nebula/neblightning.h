@@ -129,6 +129,9 @@ void nebl_level_init();
 // set the storm (call from mission parse)
 void nebl_set_storm(const char *name);
 
+// the storm in effect, or null for none (nebula-change-storm can change it mid-mission)
+extern storm_type *Storm;
+
 // render all lightning bolts
 void nebl_render_all();
 
