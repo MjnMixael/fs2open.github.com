@@ -14,6 +14,10 @@ namespace pilot {
 class JSONFileHandler: public FileHandler {
 	CFILE* _cfp = nullptr;
 
+	// Set when flush() could not write the document out, so a caller that truncated the file on
+	// open can tell that what is on disk now is not a complete file.
+	bool _writeFailed = false;
+
 	json_t* _rootObj = nullptr;
 
 	json_t* _currentEl = nullptr;
@@ -69,6 +73,9 @@ class JSONFileHandler: public FileHandler {
 	void endArrayWrite() override;
 
 	void flush() override;
+
+	// Did the last flush() fail to write the document?
+	bool writeFailed() const { return _writeFailed; }
 
 	std::int8_t readByte(const char* name) override;
 
