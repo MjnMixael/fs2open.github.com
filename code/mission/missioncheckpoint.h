@@ -457,6 +457,15 @@ struct variable_state {
 	SCP_string value;
 };
 
+// A waypoint list, whole.  checkpointfields.h once said these "come only from the mission
+// file"; scripts can create, rename and move them (mission.createWaypointList, the list's Name
+// setter, Object.Position on a waypoint), and both AI orders and nav points refer to them by
+// name, so a list the fresh parse does not have leaves every one of those references dangling.
+struct waypoint_list_state {
+	SCP_string name;
+	SCP_vector<vec3d> points;
+};
+
 struct scoring_state {
 	SCP_map<SCP_string, int> ints;
 	// Per-ship-class kills, keyed by class name so a table change cannot misattribute them.
@@ -841,6 +850,18 @@ struct environment_state {
 	SCP_vector<SCP_string> asteroid_field_debris_types;    // Asteroid_info entries, by name
 	SCP_vector<SCP_string> asteroid_field_targets;
 
+	// A supernova countdown in progress.  Only the two stages the player is still flying through
+	// are restorable (STARTED and CLOSE); the store refuses once the shockwave has hit.  Without
+	// this the countdown vanished, and the event that started it was restored as already fired,
+	// so a mission that ends by supernova could no longer end that way.
+	int supernova_stage = 0;
+	float supernova_total = 0.0f;
+	float supernova_left = 0.0f;
+
+	// set-time-compression and lock-time-compression, both reset by the level init.
+	float time_compression = 1.0f;
+	bool time_compression_locked = false;
+
 	SCP_vector<navpoint_state> navpoints;
 	int current_nav = -1;
 
@@ -889,6 +910,13 @@ struct mission_extra_state {
 	bool no_builtin_command = false;
 
 	SCP_vector<reinforcement_state> reinforcements;
+
+	// player-use-ai hands the player's ship to the AI for a scripted sequence; lock-perspective
+	// fixes the view.  All three are reset by player_level_init().
+	bool player_use_ai = false;
+	bool perspective_locked = false;
+	bool slew_locked = false;
+	int viewer_mode = 0;
 };
 
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
@@ -943,6 +971,7 @@ struct checkpoint_data {
 	// --- state ---
 	SCP_vector<ship_state> ships;
 	SCP_vector<wing_state> wings;
+	SCP_vector<waypoint_list_state> waypoint_lists;
 	SCP_vector<variable_state> variables;
 	scoring_state scoring;
 
