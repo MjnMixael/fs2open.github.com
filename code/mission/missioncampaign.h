@@ -214,6 +214,11 @@ extern void mission_campaign_maybe_play_movie(int type);
 // save persistent information
 extern void mission_campaign_save_persistent( int type, int index );
 
+// the ships and weapons granted so far this mission by allow-ship / allow-weapon, which are only
+// folded into the campaign when the mission ends; the checkpoint carries and puts back the set
+void mission_campaign_get_granted(SCP_vector<int>& ships, SCP_vector<int>& weapons);
+void mission_campaign_clear_granted();
+
 // The following are functions I added to set up the globals and then
 // execute the corresponding mission_campaign_savefile functions.
 
