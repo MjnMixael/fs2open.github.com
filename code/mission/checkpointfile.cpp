@@ -556,6 +556,25 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 
 	handler->writeBool("asteroids_enabled", env.asteroids_enabled);
 
+	handler->writeBool("has_asteroid_field", env.has_asteroid_field);
+	handler->writeInt("asteroid_field_num_initial", env.asteroid_field_num_initial);
+	handler->writeBool("asteroid_field_active", env.asteroid_field_active);
+	handler->writeBool("asteroid_field_is_debris", env.asteroid_field_is_debris);
+	handler->writeBool("asteroid_field_enhanced_checks", env.asteroid_field_enhanced_checks);
+	handler->writeBool("asteroid_field_has_inner_bound", env.asteroid_field_has_inner_bound);
+	handler->writeFloat("asteroid_field_speed", env.asteroid_field_speed);
+	handler->writeFloat("asteroid_field_bound_rad", env.asteroid_field_bound_rad);
+	write_vector(handler, "asteroid_field_vel_x", "asteroid_field_vel_y", "asteroid_field_vel_z", env.asteroid_field_vel);
+	write_vector(handler, "asteroid_field_min_x", "asteroid_field_min_y", "asteroid_field_min_z", env.asteroid_field_min);
+	write_vector(handler, "asteroid_field_max_x", "asteroid_field_max_y", "asteroid_field_max_z", env.asteroid_field_max);
+	write_vector(handler, "asteroid_field_inner_min_x", "asteroid_field_inner_min_y", "asteroid_field_inner_min_z",
+	             env.asteroid_field_inner_min);
+	write_vector(handler, "asteroid_field_inner_max_x", "asteroid_field_inner_max_y", "asteroid_field_inner_max_z",
+	             env.asteroid_field_inner_max);
+	write_string_list(handler, "asteroid_field_asteroid_types", env.asteroid_field_asteroid_types);
+	write_string_list(handler, "asteroid_field_debris_types", env.asteroid_field_debris_types);
+	write_string_list(handler, "asteroid_field_targets", env.asteroid_field_targets);
+
 	handler->writeInt("current_nav", env.current_nav);
 	handler->startArrayWrite("navpoints", env.navpoints.size());
 	for (const auto& nav : env.navpoints) {
@@ -705,6 +724,25 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	env.debriefing_persona = handler->readStringOr("debriefing_persona", "");
 
 	env.asteroids_enabled = handler->readBoolOr("asteroids_enabled", true);
+
+	env.has_asteroid_field = handler->readBoolOr("has_asteroid_field", false);
+	env.asteroid_field_num_initial = handler->readIntOr("asteroid_field_num_initial", 0);
+	env.asteroid_field_active = handler->readBoolOr("asteroid_field_active", true);
+	env.asteroid_field_is_debris = handler->readBoolOr("asteroid_field_is_debris", false);
+	env.asteroid_field_enhanced_checks = handler->readBoolOr("asteroid_field_enhanced_checks", false);
+	env.asteroid_field_has_inner_bound = handler->readBoolOr("asteroid_field_has_inner_bound", false);
+	env.asteroid_field_speed = handler->readFloatOr("asteroid_field_speed", 0.0f);
+	env.asteroid_field_bound_rad = handler->readFloatOr("asteroid_field_bound_rad", 0.0f);
+	read_vector(handler, "asteroid_field_vel_x", "asteroid_field_vel_y", "asteroid_field_vel_z", env.asteroid_field_vel);
+	read_vector(handler, "asteroid_field_min_x", "asteroid_field_min_y", "asteroid_field_min_z", env.asteroid_field_min);
+	read_vector(handler, "asteroid_field_max_x", "asteroid_field_max_y", "asteroid_field_max_z", env.asteroid_field_max);
+	read_vector(handler, "asteroid_field_inner_min_x", "asteroid_field_inner_min_y", "asteroid_field_inner_min_z",
+	            env.asteroid_field_inner_min);
+	read_vector(handler, "asteroid_field_inner_max_x", "asteroid_field_inner_max_y", "asteroid_field_inner_max_z",
+	            env.asteroid_field_inner_max);
+	read_string_list(handler, "asteroid_field_asteroid_types", env.asteroid_field_asteroid_types);
+	read_string_list(handler, "asteroid_field_debris_types", env.asteroid_field_debris_types);
+	read_string_list(handler, "asteroid_field_targets", env.asteroid_field_targets);
 
 	env.current_nav = handler->readIntOr("current_nav", -1);
 	env.navpoints.clear();
