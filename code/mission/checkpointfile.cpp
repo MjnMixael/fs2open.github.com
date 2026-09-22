@@ -97,6 +97,36 @@ void read_iff_colors(pilot::FileHandler* handler, const char* name, SCP_vector<c
 	handler->endArrayRead();
 }
 
+void write_override_list(pilot::FileHandler* handler, const char* name, const SCP_vector<checkpoint::damage_type_override_state>& values)
+{
+	handler->startArrayWrite(name, values.size());
+	for (const auto& value : values) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("subject", value.subject.c_str());
+		handler->writeString("damage_type", value.damage_type.c_str());
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+}
+
+void read_override_list(pilot::FileHandler* handler, const char* name, SCP_vector<checkpoint::damage_type_override_state>& values)
+{
+	values.clear();
+	if (!handler->hasField(name)) {
+		return;
+	}
+	auto count = handler->startArrayRead(name);
+	for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+		checkpoint::damage_type_override_state value;
+		value.subject = handler->readStringOr("subject", "");
+		value.damage_type = handler->readStringOr("damage_type", "");
+		if (!value.subject.empty()) {
+			values.push_back(std::move(value));
+		}
+	}
+	handler->endArrayRead();
+}
+
 void write_string_list(pilot::FileHandler* handler, const char* name, const SCP_vector<SCP_string>& values)
 {
 	handler->startArrayWrite(name, values.size());
@@ -648,11 +678,90 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->writeInt("color_g", node.color[1]);
 		handler->writeInt("color_b", node.color[2]);
 		handler->writeInt("color_a", node.color[3]);
+		handler->writeBool("show_polys", node.show_polys);
+		handler->writeBool("has_pos", node.has_pos);
+		write_vector(handler, "pos_x", "pos_y", "pos_z", node.pos);
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
 
 	write_string_list(handler, "squadron_wings", env.squadron_wings);
+
+	handler->writeBool("effects_present", env.effects_present);
+	write_vector(handler, "gravity_x", "gravity_y", "gravity_z", env.gravity);
+	handler->writeString("storm", env.storm.c_str());
+
+	handler->startArrayWrite("poofs", env.poofs.size());
+	for (const auto& poof : env.poofs) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", poof.name.c_str());
+		handler->writeBool("enabled", poof.enabled);
+		handler->writeInt("fade_start", poof.fade_start);
+		handler->writeInt("fade_duration", poof.fade_duration);
+		handler->writeBool("fade_in", poof.fade_in);
+		handler->writeFloat("fade_multiplier", poof.fade_multiplier);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->writeBool("has_volumetrics", env.has_volumetrics);
+	handler->writeBool("volumetrics_enabled", env.volumetrics_enabled);
+	handler->writeFloat("fog_near_distance", env.fog_near_distance);
+	handler->writeFloat("fog_1000m_visibility", env.fog_1000m_visibility);
+	handler->writeFloat("fog_skybox_clip_distance", env.fog_skybox_clip_distance);
+	handler->writeFloat("fog_clip_distance", env.fog_clip_distance);
+
+	handler->startArrayWrite("post_effects", env.post_effects.size());
+	for (const auto& effect : env.post_effects) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", effect.name.c_str());
+		handler->writeFloat("intensity", effect.intensity);
+		write_vector(handler, "r", "g", "b", effect.rgb);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+	handler->writeBool("lightshafts_on", env.lightshafts_on);
+	handler->writeFloat("lightshafts_intensity", env.lightshafts_intensity);
+
+	handler->writeString("sound_env_preset", env.sound_env_preset.c_str());
+	handler->writeFloat("sound_env_volume", env.sound_env_volume);
+	handler->writeFloat("sound_env_damping", env.sound_env_damping);
+	handler->writeFloat("sound_env_decay", env.sound_env_decay);
+
+	handler->writeFloat("beam_friendly_damage_cap", env.beam_friendly_damage_cap);
+	handler->writeFloat("weapon_friendly_damage_cap", env.weapon_friendly_damage_cap);
+	handler->writeFloat("weapon_self_damage_cap", env.weapon_self_damage_cap);
+
+	write_override_list(handler, "weapon_damage_types", env.weapon_damage_types);
+	write_override_list(handler, "weapon_shockwave_damage_types", env.weapon_shockwave_damage_types);
+	write_override_list(handler, "ship_shockwave_damage_types", env.ship_shockwave_damage_types);
+	write_override_list(handler, "asteroid_damage_types", env.asteroid_damage_types);
+
+	write_string_list(handler, "mission_music", env.mission_music);
+
+	handler->startArrayWrite("coordinate_points", env.coordinate_points.size());
+	for (const auto& point : env.coordinate_points) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", point.name.c_str());
+		handler->writeString("group", point.group.c_str());
+		write_vector(handler, "pos_x", "pos_y", "pos_z", point.pos);
+		handler->writeInt("escort_priority", point.escort_priority);
+		handler->writeInt("multi_team", point.multi_team);
+		handler->writeBool("visible", point.visible);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
+	handler->writeBool("shudder_perpetual", env.shudder_perpetual);
+	handler->writeBool("shudder_everywhere", env.shudder_everywhere);
+	handler->writeInt("shudder_time", env.shudder_time);
+	handler->writeInt("shudder_total", env.shudder_total);
+	handler->writeFloat("shudder_intensity", env.shudder_intensity);
+
+	handler->writeBool("photo_mode_allowed", env.photo_mode_allowed);
+	handler->writeBool("toggle_debriefing", env.toggle_debriefing);
+	handler->writeBool("deactivate_autopilot", env.deactivate_autopilot);
+	handler->writeBool("use_autopilot_cinematics", env.use_autopilot_cinematics);
 
 	handler->startArrayWrite("waypoint_lists", data.waypoint_lists.size());
 	for (const auto& list : data.waypoint_lists) {
@@ -874,12 +983,106 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			node.color[1] = handler->readIntOr("color_g", 0);
 			node.color[2] = handler->readIntOr("color_b", 0);
 			node.color[3] = handler->readIntOr("color_a", 0);
+			node.show_polys = handler->readBoolOr("show_polys", false);
+			node.has_pos = handler->readBoolOr("has_pos", false);
+			read_vector(handler, "pos_x", "pos_y", "pos_z", node.pos);
 			env.jump_nodes.push_back(std::move(node));
 		}
 		handler->endArrayRead();
 	}
 
 	read_string_list(handler, "squadron_wings", env.squadron_wings);
+
+	env.effects_present = handler->readBoolOr("effects_present", false);
+	read_vector(handler, "gravity_x", "gravity_y", "gravity_z", env.gravity);
+	env.storm = handler->readStringOr("storm", "");
+
+	env.poofs.clear();
+	if (handler->hasField("poofs")) {
+		auto count = handler->startArrayRead("poofs");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::poof_state poof;
+			poof.name = handler->readStringOr("name", "");
+			poof.enabled = handler->readBoolOr("enabled", false);
+			poof.fade_start = handler->readIntOr("fade_start", -1);
+			poof.fade_duration = handler->readIntOr("fade_duration", -1);
+			poof.fade_in = handler->readBoolOr("fade_in", true);
+			poof.fade_multiplier = handler->readFloatOr("fade_multiplier", -1.0f);
+			if (!poof.name.empty()) {
+				env.poofs.push_back(std::move(poof));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	env.has_volumetrics = handler->readBoolOr("has_volumetrics", false);
+	env.volumetrics_enabled = handler->readBoolOr("volumetrics_enabled", true);
+	env.fog_near_distance = handler->readFloatOr("fog_near_distance", 0.0f);
+	env.fog_1000m_visibility = handler->readFloatOr("fog_1000m_visibility", 0.0f);
+	env.fog_skybox_clip_distance = handler->readFloatOr("fog_skybox_clip_distance", 0.0f);
+	env.fog_clip_distance = handler->readFloatOr("fog_clip_distance", 0.0f);
+
+	env.post_effects.clear();
+	if (handler->hasField("post_effects")) {
+		auto count = handler->startArrayRead("post_effects");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::post_effect_state effect;
+			effect.name = handler->readStringOr("name", "");
+			effect.intensity = handler->readFloatOr("intensity", 0.0f);
+			read_vector(handler, "r", "g", "b", effect.rgb);
+			if (!effect.name.empty()) {
+				env.post_effects.push_back(std::move(effect));
+			}
+		}
+		handler->endArrayRead();
+	}
+	env.lightshafts_on = handler->readBoolOr("lightshafts_on", true);
+	env.lightshafts_intensity = handler->readFloatOr("lightshafts_intensity", 0.0f);
+
+	env.sound_env_preset = handler->readStringOr("sound_env_preset", "");
+	env.sound_env_volume = handler->readFloatOr("sound_env_volume", 0.0f);
+	env.sound_env_damping = handler->readFloatOr("sound_env_damping", 0.0f);
+	env.sound_env_decay = handler->readFloatOr("sound_env_decay", 0.0f);
+
+	env.beam_friendly_damage_cap = handler->readFloatOr("beam_friendly_damage_cap", 0.0f);
+	env.weapon_friendly_damage_cap = handler->readFloatOr("weapon_friendly_damage_cap", 0.0f);
+	env.weapon_self_damage_cap = handler->readFloatOr("weapon_self_damage_cap", 0.0f);
+
+	read_override_list(handler, "weapon_damage_types", env.weapon_damage_types);
+	read_override_list(handler, "weapon_shockwave_damage_types", env.weapon_shockwave_damage_types);
+	read_override_list(handler, "ship_shockwave_damage_types", env.ship_shockwave_damage_types);
+	read_override_list(handler, "asteroid_damage_types", env.asteroid_damage_types);
+
+	read_string_list(handler, "mission_music", env.mission_music);
+
+	env.coordinate_points.clear();
+	if (handler->hasField("coordinate_points")) {
+		auto count = handler->startArrayRead("coordinate_points");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::coordinate_point_state point;
+			point.name = handler->readStringOr("name", "");
+			point.group = handler->readStringOr("group", "");
+			read_vector(handler, "pos_x", "pos_y", "pos_z", point.pos);
+			point.escort_priority = handler->readIntOr("escort_priority", 0);
+			point.multi_team = handler->readIntOr("multi_team", -1);
+			point.visible = handler->readBoolOr("visible", false);
+			if (!point.name.empty()) {
+				env.coordinate_points.push_back(std::move(point));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	env.shudder_perpetual = handler->readBoolOr("shudder_perpetual", false);
+	env.shudder_everywhere = handler->readBoolOr("shudder_everywhere", false);
+	env.shudder_time = handler->readIntOr("shudder_time", -1);
+	env.shudder_total = handler->readIntOr("shudder_total", 0);
+	env.shudder_intensity = handler->readFloatOr("shudder_intensity", 0.0f);
+
+	env.photo_mode_allowed = handler->readBoolOr("photo_mode_allowed", false);
+	env.toggle_debriefing = handler->readBoolOr("toggle_debriefing", false);
+	env.deactivate_autopilot = handler->readBoolOr("deactivate_autopilot", false);
+	env.use_autopilot_cinematics = handler->readBoolOr("use_autopilot_cinematics", false);
 
 	data.waypoint_lists.clear();
 	if (handler->hasField("waypoint_lists")) {
@@ -2092,6 +2295,9 @@ void write_debris(pilot::FileHandler* handler, const checkpoint::checkpoint_data
 		handler->writeFloat("damage_mult", piece.damage_mult);
 		handler->writeString("parent_alt_name", piece.parent_alt_name.c_str());
 		handler->writeBool("do_not_expire", piece.do_not_expire);
+		handler->writeBool("is_hull", piece.is_hull);
+		handler->writeString("model", piece.model.c_str());
+		handler->writeInt("time_started", static_cast<std::int32_t>(piece.time_started));
 
 		handler->endSectionWrite();
 	}
@@ -2131,8 +2337,11 @@ void read_debris(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		piece.damage_mult = handler->readFloatOr("damage_mult", 1.0f);
 		piece.parent_alt_name = handler->readStringOr("parent_alt_name", "");
 		piece.do_not_expire = handler->readBoolOr("do_not_expire", false);
+		piece.is_hull = handler->readBoolOr("is_hull", true);
+		piece.model = handler->readStringOr("model", "");
+		piece.time_started = static_cast<fix>(handler->readIntOr("time_started", 0));
 
-		if (!piece.ship_class.empty() && !piece.submodel.empty()) {
+		if (!piece.submodel.empty() && (!piece.ship_class.empty() || !piece.model.empty())) {
 			data.debris.push_back(std::move(piece));
 		}
 	}
@@ -2539,6 +2748,14 @@ void write_projectiles(pilot::FileHandler* handler, const checkpoint::checkpoint
 
 		handler->writeInt("cmeasure_timer", shot.cmeasure_timer);
 
+		write_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", shot.rotational_velocity);
+		handler->writeInt("mine_chase_expires", shot.mine_chase_expires);
+		handler->writeInt("mine_chase_cooldown_expires", shot.mine_chase_cooldown_expires);
+		write_int_list(handler, "last_spawn_times", shot.last_spawn_times);
+		handler->writeInt("big_attack_point_stamp", shot.big_attack_point_stamp);
+		write_vector(handler, "big_attack_x", "big_attack_y", "big_attack_z", shot.big_attack_point);
+		handler->writeInt("collision_group_id", shot.collision_group_id);
+
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -2601,6 +2818,14 @@ void read_projectiles(pilot::FileHandler* handler, checkpoint::checkpoint_data& 
 		read_vector(handler, "lssm_x", "lssm_y", "lssm_z", shot.lssm_target_pos);
 
 		shot.cmeasure_timer = handler->readIntOr("cmeasure_timer", 0);
+
+		read_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", shot.rotational_velocity);
+		shot.mine_chase_expires = handler->readIntOr("mine_chase_expires", -1);
+		shot.mine_chase_cooldown_expires = handler->readIntOr("mine_chase_cooldown_expires", -1);
+		read_int_list(handler, "last_spawn_times", shot.last_spawn_times);
+		shot.big_attack_point_stamp = handler->readIntOr("big_attack_point_stamp", 0);
+		read_vector(handler, "big_attack_x", "big_attack_y", "big_attack_z", shot.big_attack_point);
+		shot.collision_group_id = handler->readIntOr("collision_group_id", 0);
 
 		if (!shot.weapon_class.empty()) {
 			data.projectiles.push_back(std::move(shot));

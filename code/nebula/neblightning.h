@@ -133,6 +133,9 @@ void nebl_set_storm(const char *name);
 // preload lightning textures before entering a level
 void nebl_page_in();
 
+// the storm in effect, or null for none (nebula-change-storm can change it mid-mission)
+extern storm_type *Storm;
+
 // render all lightning bolts
 void nebl_render_all();
 

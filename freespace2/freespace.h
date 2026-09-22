@@ -180,6 +180,17 @@ void game_whack_apply( float x, float y );
 // call to apply a "shudder"
 void game_shudder_apply(int time, float intensity, bool perpetual = false, bool everywhere = false);
 
+// the shudder in effect, as game_shudder_apply() set it; the mission checkpoint carries these across a restore
+extern bool Game_shudder_perpetual;
+extern bool Game_shudder_everywhere;
+extern TIMESTAMP Game_shudder_time;
+extern int Game_shudder_total;
+extern float Game_shudder_intensity;
+
+// the sound environment in effect: the mission's, until a SEXP changes it
+struct sound_env;
+extern sound_env Game_sound_env;
+
 //===================================================================
 
 // Used to tell the player that a feature is disabled by build settings
