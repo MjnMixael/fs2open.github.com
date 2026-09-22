@@ -85,6 +85,13 @@ extern SCP_vector<prop_category> Prop_categories;
 // The vector is cleared at the end of each mission, never during.
 extern SCP_vector<std::optional<prop>> Props;
 
+// The props the mission file describes, spawned or still pending (missionparse.cpp).
+extern SCP_vector<parsed_prop> Parse_props;
+
+// Create the live prop object described by a parsed_prop, carrying over its instance data, and
+// mark it spawned.  Returns the object number, or -1 on failure.  (missionparse.cpp)
+int create_prop_from_parsed(parsed_prop& propp);
+
 inline int prop_info_size()
 {
 	return static_cast<int>(Prop_info.size());

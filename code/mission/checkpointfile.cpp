@@ -633,6 +633,37 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	}
 	handler->endArrayWrite();
 
+	handler->startArrayWrite("props", data.props.size());
+	for (const auto& state : data.props) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("name", state.name.c_str());
+		handler->writeString("disposition", disposition_name(state.disposition));
+		handler->writeBool("no_parse_prop", state.no_parse_prop);
+		if (state.disposition == checkpoint::ShipDisposition::Present) {
+			handler->writeString("class", state.prop_class.c_str());
+			write_vector(handler, "pos_x", "pos_y", "pos_z", state.pos);
+			write_vector(handler, "fvec_x", "fvec_y", "fvec_z", state.orient.vec.fvec);
+			write_vector(handler, "uvec_x", "uvec_y", "uvec_z", state.orient.vec.uvec);
+			write_vector(handler, "rvec_x", "rvec_y", "rvec_z", state.orient.vec.rvec);
+			write_vector(handler, "vel_x", "vel_y", "vel_z", state.vel);
+			write_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", state.rotvel);
+			handler->writeFloat("alpha_mult", state.alpha_mult);
+			write_string_list(handler, "flags", state.flags);
+			write_string_list(handler, "object_flags", state.object_flags);
+			SCP_vector<int> glow_banks;
+			for (bool on : state.glow_banks) {
+				glow_banks.push_back(on ? 1 : 0);
+			}
+			write_int_list(handler, "glow_banks", glow_banks);
+			write_string_list(handler, "texture_old", state.texture_old);
+			write_string_list(handler, "texture_new", state.texture_new);
+			handler->writeInt("collision_group_id", state.collision_group_id);
+			handler->writeInt("despawn_delay", state.despawn_delay);
+		}
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
+
 	// The asteroid field itself, which is the one part of the world made of objects.
 	handler->startArrayWrite("asteroids", data.asteroids.size());
 	for (const auto& ast : data.asteroids) {
@@ -831,6 +862,42 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			}
 			if (!list.name.empty()) {
 				data.waypoint_lists.push_back(std::move(list));
+			}
+		}
+		handler->endArrayRead();
+	}
+
+	data.props.clear();
+	if (handler->hasField("props")) {
+		auto count = handler->startArrayRead("props");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::prop_state state;
+			state.name = handler->readStringOr("name", "");
+			state.disposition = disposition_value(handler->readStringOr("disposition", "present"));
+			state.no_parse_prop = handler->readBoolOr("no_parse_prop", false);
+			if (state.disposition == checkpoint::ShipDisposition::Present) {
+				state.prop_class = handler->readStringOr("class", "");
+				read_vector(handler, "pos_x", "pos_y", "pos_z", state.pos);
+				read_vector(handler, "fvec_x", "fvec_y", "fvec_z", state.orient.vec.fvec);
+				read_vector(handler, "uvec_x", "uvec_y", "uvec_z", state.orient.vec.uvec);
+				read_vector(handler, "rvec_x", "rvec_y", "rvec_z", state.orient.vec.rvec);
+				read_vector(handler, "vel_x", "vel_y", "vel_z", state.vel);
+				read_vector(handler, "rotvel_x", "rotvel_y", "rotvel_z", state.rotvel);
+				state.alpha_mult = handler->readFloatOr("alpha_mult", 1.0f);
+				read_string_list(handler, "flags", state.flags);
+				read_string_list(handler, "object_flags", state.object_flags);
+				SCP_vector<int> glow_banks;
+				read_int_list(handler, "glow_banks", glow_banks);
+				for (int on : glow_banks) {
+					state.glow_banks.push_back(on != 0);
+				}
+				read_string_list(handler, "texture_old", state.texture_old);
+				read_string_list(handler, "texture_new", state.texture_new);
+				state.collision_group_id = handler->readIntOr("collision_group_id", 0);
+				state.despawn_delay = handler->readIntOr("despawn_delay", 0);
+			}
+			if (!state.name.empty()) {
+				data.props.push_back(std::move(state));
 			}
 		}
 		handler->endArrayRead();
