@@ -15,6 +15,8 @@
 #include "jumpnode/jumpnode.h"
 #include "nebula/neb.h"
 #include "starfield/starfield.h"
+#include "starfield/supernova.h"
+#include "freespace.h"
 #include "ai/ai.h"
 #include "asteroid/asteroid.h"
 #include "coordinate_points/coordinate_point.h"
@@ -1496,6 +1498,11 @@ void store_mission_extras(mission_extra_state& out)
 	out.no_builtin_msgs = The_mission.flags[Mission::Mission_Flags::No_builtin_msgs];
 	out.no_builtin_command = The_mission.flags[Mission::Mission_Flags::No_builtin_command];
 
+	out.player_use_ai = Player_use_ai;
+	out.perspective_locked = Perspective_locked;
+	out.slew_locked = Slew_locked;
+	out.viewer_mode = Viewer_mode;
+
 	for (const auto& reinforcement : Reinforcements) {
 		reinforcement_state state;
 		state.name = reinforcement.name;
@@ -1537,6 +1544,17 @@ void apply_mission_extras(const checkpoint_data& data)
 	Current_mission_mood = state.mission_mood;
 	The_mission.flags.set(Mission::Mission_Flags::No_builtin_msgs, state.no_builtin_msgs);
 	The_mission.flags.set(Mission::Mission_Flags::No_builtin_command, state.no_builtin_command);
+
+	// The fresh load starts with the player in control; handing over is all that is needed here,
+	// since the AI mode, goals and override the sequence had given the player's ship come back
+	// with its AI state.  (Taking control back would go through sexp_player_use_ai(false), which
+	// clears those, but a fresh load has nothing to clear.)
+	if (state.player_use_ai) {
+		Player_use_ai = true;
+	}
+	Perspective_locked = state.perspective_locked;
+	Slew_locked = state.slew_locked;
+	Viewer_mode = state.viewer_mode;
 }
 
 // Separate from the rest of the extras because of when it has to run.  Bringing a reinforcement
@@ -1771,6 +1789,13 @@ void store_environment(environment_state& out)
 
 	out.asteroids_enabled = (Asteroids_enabled != 0);
 
+	out.supernova_stage = static_cast<int>(supernova_stage());
+	out.supernova_total = supernova_time_total();
+	out.supernova_left = supernova_seconds_left();
+
+	out.time_compression = f2fl(Game_time_compression);
+	out.time_compression_locked = Time_compression_locked;
+
 	// The field definition, since set-asteroid-field and friends rewrite it and a field a SEXP
 	// created is not in the mission file at all.  The rocks go separately; see store_asteroids().
 	out.has_asteroid_field = true;
@@ -1859,6 +1884,53 @@ void store_environment(environment_state& out)
 // ship by object, and the environment is applied before the ships are reconciled -- so any nav on
 // a ship that arrived after time zero, or on a support ship, would find nothing and be dropped.
 // This runs once every ship the checkpoint knows about exists.
+// Put the waypoint lists back the way the mission had left them: positions a script moved, and
+// whole lists a script created, which the fresh parse does not have.  Before the ships, since the
+// AI orders and nav points restored with them refer to lists by name.
+void apply_waypoint_lists(const checkpoint_data& data)
+{
+	// waypoint_add() addresses a waypoint by instance, list index and index packed the way the
+	// waypoint objects themselves carry it (waypoint.cpp, calc_waypoint_instance()).
+	auto instance_of = [](int list_index, int wp_index) { return list_index * 0x10000 + wp_index; };
+
+	for (const auto& state : data.waypoint_lists) {
+		if (state.points.empty()) {
+			continue;
+		}
+
+		int list_index = find_matching_waypoint_list_index(state.name.c_str());
+
+		if (list_index < 0) {
+			// A list the parse does not have.  waypoint_add() with no instance starts a new list
+			// under a generated name, and creates the waypoint object as it goes; the name is
+			// put right afterwards.
+			waypoint_add(&state.points[0], -1, true);
+			list_index = static_cast<int>(Waypoint_lists.size()) - 1;
+			Waypoint_lists[list_index].set_name(state.name.c_str());
+
+			for (size_t i = 1; i < state.points.size(); i++) {
+				waypoint_add(&state.points[i], instance_of(list_index, static_cast<int>(i) - 1), false);
+			}
+			continue;
+		}
+
+		auto& waypoints = Waypoint_lists[list_index].get_waypoints();
+
+		size_t common = MIN(waypoints.size(), state.points.size());
+		for (size_t i = 0; i < common; i++) {
+			waypoints[i].set_pos(&state.points[i]);
+		}
+
+		// Extra saved points were appended by a script; extra live points were removed by one.
+		for (size_t i = common; i < state.points.size(); i++) {
+			waypoint_add(&state.points[i], instance_of(list_index, static_cast<int>(i) - 1), false);
+		}
+		while (Waypoint_lists[list_index].get_waypoints().size() > state.points.size()) {
+			waypoint_remove(&Waypoint_lists[list_index].get_waypoints().back());
+		}
+	}
+}
+
 void apply_navpoints(const checkpoint_data& data)
 {
 	const auto& env = data.environment;
@@ -2052,6 +2124,16 @@ void apply_environment(const checkpoint_data& data)
 
 	// Only the toggle.  The rocks themselves are restored separately; see apply_asteroids().
 	Asteroids_enabled = env.asteroids_enabled ? 1 : 0;
+
+	// Only the stages the player is still flying through; the store refuses anything later.
+	if (env.supernova_stage == static_cast<int>(SUPERNOVA_STAGE::STARTED) ||
+	    env.supernova_stage == static_cast<int>(SUPERNOVA_STAGE::CLOSE)) {
+		supernova_restore(env.supernova_total, env.supernova_left);
+	}
+
+	// Through the same two calls the SEXPs make, so the ramp and the lock behave as they did.
+	set_time_compression(env.time_compression);
+	lock_time_compression(env.time_compression_locked);
 
 	// The nav points are not here: a nav bound to a ship needs that ship's object, and this runs
 	// before the ships are reconciled.  See apply_navpoints().
@@ -3497,6 +3579,13 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		return false;
 	}
 
+	// Likewise once a supernova has hit: from there on the player's controls are locked and the
+	// mission is on rails to its end, with nothing a restore could put back.
+	if (supernova_stage() >= SUPERNOVA_STAGE::HIT) {
+		mprintf(("CHECKPOINT => The supernova has hit; not storing.\n"));
+		return false;
+	}
+
 	// Before anything is gathered, so a script can stage whatever it wants remembered.
 	if (scripting::hooks::OnCheckpointSave->isActive()) {
 		scripting::hooks::OnCheckpointSave->run(
@@ -3702,6 +3791,18 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		}
 
 		data.wings.push_back(std::move(state));
+	}
+
+	// --- waypoint lists ---
+	// Whole, since a script can have created, renamed or moved any of them; see
+	// waypoint_list_state.
+	for (const auto& list : Waypoint_lists) {
+		waypoint_list_state state;
+		state.name = list.get_name();
+		for (const auto& point : list.get_waypoints()) {
+			state.points.push_back(*point.get_pos());
+		}
+		data.waypoint_lists.push_back(std::move(state));
 	}
 
 	// --- SEXP variables ---
@@ -5601,6 +5702,7 @@ void mission_checkpoint_apply()
 	// Before the ships, because restore_dynamic_ships() builds a support ship's parse object
 	// out of the mission's support settings, and the environment is where those live.
 	apply_environment(data);
+	apply_waypoint_lists(data);
 	apply_mission_extras(data);
 
 	reconcile_ship_existence(data);
