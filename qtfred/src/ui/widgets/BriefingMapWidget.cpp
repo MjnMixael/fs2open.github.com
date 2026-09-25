@@ -985,6 +985,15 @@ void BriefingMapWidget::mousePressEvent(QMouseEvent* event) {
 		}
 		anchorIndex = pickedIndex;
 		Q_EMIT iconSelected(pickedIndex, shiftHeld);
+
+		// A Shift+click that toggled the icon out of the selection is a deselect, not a drag; otherwise
+		// the drag would move the rest of the selection while anchored to the icon just removed.
+		const auto& selection = _model->getLineSelection();
+		if (std::find(selection.begin(), selection.end(), pickedIndex) == selection.end()) {
+			_draggingIcon = false;
+			_dragIconIndex = -1;
+			return;
+		}
 	}
 
 	_draggingIcon = true;
@@ -1115,20 +1124,21 @@ void BriefingMapWidget::mouseReleaseEvent(QMouseEvent* event) {
 		return;
 	}
 
-	// A click (no drag) on a member of a multi-selection collapses the selection to just that icon.
-	if (_pendingCollapseIndex >= 0) {
-		Q_EMIT iconSelected(_pendingCollapseIndex, false);
-	}
-
-	_pendingCollapseIndex = -1;
-
 	const bool wasDragging = _draggingIcon;
 	const int draggedIndex = _dragIconIndex;
+	const int collapseIndex = _pendingCollapseIndex;
 	_draggingIcon = false;
 	_dragIconIndex = -1;
+	_pendingCollapseIndex = -1;
 
 	if (wasDragging && draggedIndex >= 0)
 		Q_EMIT iconDragFinished(draggedIndex);
+
+	// A click (no drag) on a member of a multi-selection collapses the selection to just that icon. This
+	// comes after iconDragFinished so the selection change isn't captured in the drag's undo snapshot.
+	if (collapseIndex >= 0) {
+		Q_EMIT iconSelected(collapseIndex, false);
+	}
 }
 
 bool BriefingMapWidget::mouseToReference(const QPointF& logical, float& refX, float& refY) const {
