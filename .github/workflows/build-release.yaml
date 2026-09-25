@@ -4,10 +4,14 @@ on:
   push:
     tags:
       - 'release_*'
+  workflow_dispatch:
+    # Started by weekly-build.yaml on the tag it creates (tags pushed with GITHUB_TOKEN don't trigger push)
 
 jobs:
   create_release:
     name: Create GitHub release
+    # Every other job depends on this one, so this also stops a dispatch on a branch
+    if: startsWith(github.ref, 'refs/tags/release_')
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required to create the GitHub release (repo default token is read-only)

@@ -1,0 +1,72 @@
+name: Weekly build
+
+on:
+  schedule:
+    # Mondays 06:00 UTC = 1am CDT / midnight CST (same time of day as SCP's nightly trigger),
+    # after the Sunday afternoon SCP upstream sync
+    - cron: '0 6 * * 1'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: Only report what would be tagged; don't push a tag or start a build
+        type: boolean
+        default: true
+
+jobs:
+  tag_and_build:
+    name: Tag and start release build
+    # Only run on the OFP repository, not on forks
+    if: github.repository == 'ofp-fs2open/fs2open.github.com'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the tag
+      actions: write    # dispatch build-release.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: master
+          fetch-depth: 0    # full history and tags, needed to see if master is already tagged
+      - name: Tag master and dispatch the release build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run }}
+        run: |
+          # Skip the week if nothing landed since the last release/weekly tag. A second
+          # release_ tag on the same commit would also make `git describe --exact-match`
+          # (used to name the packages) ambiguous.
+          if existing=$(git describe --match 'release_*' --exact-match HEAD 2>/dev/null); then
+            echo "master ($(git rev-parse --short HEAD)) is already tagged as $existing; nothing new to build."
+            exit 0
+          fi
+
+          version() {
+            sed -nE "s/^set_if_not_defined\(FSO_VERSION_$1 ([0-9]+)\)/\1/p" cmake/version.cmake
+          }
+          tag="release_$(version MAJOR)_$(version MINOR)_$(version BUILD)-$(date -u +%Y%m%d)"
+          if [[ ! "$tag" =~ ^release_[0-9]+_[0-9]+_[0-9]+-[0-9]{8}$ ]]; then
+            echo "::error::Could not build a tag name from cmake/version.cmake (got '$tag')"
+            exit 1
+          fi
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists on another commit"
+            exit 1
+          fi
+
+          echo "Tagging $(git log -1 --format='%h %s' HEAD) as $tag"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run: not pushing the tag or starting the build."
+            exit 0
+          fi
+
+          # Must be annotated: dist_functions.sh names packages with `git describe` (no --tags)
+          # and ci/post/main.py finds the tag via for-each-ref %(tag); both ignore lightweight tags
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "$tag" -m "Weekly build $tag"
+          git push origin "refs/tags/$tag"
+
+          # Tags pushed with GITHUB_TOKEN don't trigger push workflows, so start the build explicitly
+          gh workflow run build-release.yaml --ref "$tag"
+          echo "Started Build Release package for $tag"
