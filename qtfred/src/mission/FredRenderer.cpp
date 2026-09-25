@@ -92,7 +92,7 @@ color Fred_grid_dark;
 // view options, and — when the cursor is over them — the same infobox balloon
 // ships show. Asteroid handles leave info_label empty and so render as bare
 // markers; only the volumetric gizmo opts in.
-static void draw_viewport_handles(fso::fred::EditorViewport* viewport,
+void draw_viewport_handles(fso::fred::EditorViewport* viewport,
 	const fso::fred::ViewSettings& view,
 	fso::fred::EditorViewport::HandlePick hovered) {
 	if (!viewport) {

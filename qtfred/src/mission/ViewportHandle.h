@@ -1,6 +1,7 @@
 #pragma once
 
 #include <globalincs/pstypes.h>
+#include <math/vecmat.h>
 
 #include <functional>
 #include <vector>

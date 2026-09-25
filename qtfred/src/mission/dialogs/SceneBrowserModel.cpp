@@ -301,14 +301,14 @@ void SceneBrowserModel::selectObjectFromBrowser(int objNum)
 	_updatingFromBrowser = false;
 }
 
-bool SceneBrowserModel::hasVolumetricNebula() const
+bool SceneBrowserModel::hasVolumetricNebula()
 {
 	// Same test as the viewport gizmo: without a hull there is nothing to show.
 	return The_mission.volumetrics.has_value() && The_mission.volumetrics->get_enabled() &&
 		!The_mission.volumetrics->getHullPof().empty();
 }
 
-bool SceneBrowserModel::hasAsteroidField() const
+bool SceneBrowserModel::hasAsteroidField()
 {
 	return Asteroid_field.num_initial_asteroids > 0;
 }

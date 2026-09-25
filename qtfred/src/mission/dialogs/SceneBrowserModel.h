@@ -64,8 +64,8 @@ public:
 	// Environment entities (volumetric nebula, asteroid field later). These
 	// live outside the object tree; the panel renders a top-level "Environment"
 	// node for them.
-	bool hasVolumetricNebula() const;
-	bool hasAsteroidField() const;
+	static bool hasVolumetricNebula();
+	static bool hasAsteroidField();
 	EnvironmentObject currentEnvironment() const;
 	void selectEnvironmentFromBrowser(EnvironmentObject env);
 
