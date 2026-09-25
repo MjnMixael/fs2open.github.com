@@ -2358,27 +2358,31 @@ float nudgeAstComponent(AstBox box, AstCorner corner, int axis, float delta) {
 	return applied;
 }
 
-// Translate a whole box by delta, clamped per axis so the inner box stays
-// inside the outer one. Returns the delta actually applied.
+// Translate a whole box by delta. The inner box is part of the outer one, so
+// moving the outer box carries the inner box along, unclamped. That includes a
+// disabled inner box's stored bounds, so enabling it later puts it where it
+// was relative to the outer box. Moving the inner
+// box alone is clamped per axis so it stays inside the outer one. Returns the
+// delta actually applied.
 vec3d translateAst(AstBox box, const vec3d& delta) {
+	if (box == AstBox::Outer) {
+		vm_vec_add2(&Asteroid_field.min_bound, &delta);
+		vm_vec_add2(&Asteroid_field.max_bound, &delta);
+		vm_vec_add2(&Asteroid_field.inner_min_bound, &delta);
+		vm_vec_add2(&Asteroid_field.inner_max_bound, &delta);
+		return delta;
+	}
+
 	vec3d applied = vmd_zero_vector;
-	vec3d& mn = astMin(box);
-	vec3d& mx = astMax(box);
+	vec3d& mn = astMin(AstBox::Inner);
+	vec3d& mx = astMax(AstBox::Inner);
 	for (int axis = 0; axis < 3; ++axis) {
+		const float t = kAstMinThickness;
+		const float lo = Asteroid_field.min_bound.a1d[axis] + t - mn.a1d[axis];
+		const float hi = Asteroid_field.max_bound.a1d[axis] - t - mx.a1d[axis];
 		float d = delta.a1d[axis];
-		if (Asteroid_field.has_inner_bound) {
-			const float t = kAstMinThickness;
-			float lo, hi;
-			if (box == AstBox::Outer) {
-				lo = Asteroid_field.inner_max_bound.a1d[axis] + t - mx.a1d[axis];
-				hi = Asteroid_field.inner_min_bound.a1d[axis] - t - mn.a1d[axis];
-			} else {
-				lo = Asteroid_field.min_bound.a1d[axis] + t - mn.a1d[axis];
-				hi = Asteroid_field.max_bound.a1d[axis] - t - mx.a1d[axis];
-			}
-			if (lo <= hi) {
-				d = std::clamp(d, std::min(lo, 0.0f), std::max(hi, 0.0f));
-			}
+		if (lo <= hi) {
+			d = std::clamp(d, std::min(lo, 0.0f), std::max(hi, 0.0f));
 		}
 		mn.a1d[axis] += d;
 		mx.a1d[axis] += d;
