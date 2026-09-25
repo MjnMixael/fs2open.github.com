@@ -303,7 +303,9 @@ void SceneBrowserModel::selectObjectFromBrowser(int objNum)
 
 bool SceneBrowserModel::hasVolumetricNebula() const
 {
-	return The_mission.volumetrics.has_value() && The_mission.volumetrics->get_enabled();
+	// Same test as the viewport gizmo: without a hull there is nothing to show.
+	return The_mission.volumetrics.has_value() && The_mission.volumetrics->get_enabled() &&
+		!The_mission.volumetrics->getHullPof().empty();
 }
 
 bool SceneBrowserModel::hasAsteroidField() const
@@ -516,6 +518,9 @@ void SceneBrowserModel::clearSelection()
 {
 	_updatingFromBrowser = true;
 	_editor->unmark_all();
+	if (_editor->currentEnvironment != EnvironmentObject::None) {
+		_editor->clearEnvironment();
+	}
 	_updatingFromBrowser = false;
 	modelChanged();
 }

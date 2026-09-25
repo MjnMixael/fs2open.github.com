@@ -26,7 +26,6 @@
 #include "starfield/starfield.h"
 
 #include "mission/Editor.h"
-#include "mission/dialogs/EnvEditCommand.h"
 #include "mission/commands/FredCommands.h"
 #include "mission/dialogs/BackgroundEditorDialogModel.h"
 #include "mission/dialogs/BackgroundEditCommand.h"
@@ -165,12 +164,11 @@ void RenderWidget::focusInEvent(QFocusEvent* e) {
 }
 
 void RenderWidget::keyPressEvent(QKeyEvent* key) {
-	// Escape during a viewport-handle drag: drop the grab. The struct retains
-	// whatever the last drag tick wrote (apply/reject on the owning dialog
-	// handles full revert). Env handles take precedence over the background
-	// drag below, matching the press-time pre-pass order.
+	// Escape during a viewport-handle drag reverts it, like the object and
+	// background drags. Env handles take precedence over the background drag
+	// below, matching the press-time pre-pass order.
 	if (_viewport != nullptr && key->key() == Qt::Key_Escape && _handleGrabbed) {
-		finalizeHandleDrag();
+		cancelHandleDrag();
 		key->accept();
 		return;
 	}
@@ -239,14 +237,16 @@ bool RenderWidget::event(QEvent* evt) {
 	return QWidget::event(evt);
 }
 void RenderWidget::mouseDoubleClickEvent(QMouseEvent* event) {
-	// Double-clicking the volumetric gizmo opens its editor, like double-clicking
-	// a real object opens its dialog. The first click of the sequence already
-	// selected it via mousePressEvent.
+	// Double-clicking an environment gizmo opens its editor, like double-clicking
+	// a real object opens its dialog. Select it first: outside Move mode the
+	// first click of the sequence doesn't reach the handle pre-pass.
 	if (_viewport != nullptr && event->button() == Qt::LeftButton) {
 		auto pick = _viewport->pick_handle(event->position().x() * _window->devicePixelRatio(),
 			event->position().y() * _window->devicePixelRatio());
 		const auto env = _viewport->handleEnvironment(pick);
 		if (env != EnvironmentObject::None) {
+			fred->selectEnvironment(env);
+			_viewport->setSelectedHandle(pick);
 			auto parentView = static_cast<FredView*>(parentWidget());
 			Q_ASSERT(parentView);
 			if (env == EnvironmentObject::VolumetricNebula) {
@@ -276,7 +276,7 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	// Orbit camera: right button
 	if (event->button() == Qt::RightButton) {
 		if (_viewport != nullptr && _handleGrabbed) {
-			finalizeHandleDrag();
+			cancelHandleDrag();
 			event->accept();
 			return;
 		}
@@ -306,8 +306,8 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 		return QWidget::mousePressEvent(event);
 	}
 
-	// Viewport handle pre-pass. If the click landed on a handle owned by an
-	// open dialog (asteroid bounds, volumetric center, etc.), consume the click
+	// Viewport handle pre-pass. If the click landed on an environment gizmo
+	// handle (asteroid bounds, volumetric center), consume the click
 	// and route subsequent moves/release to the handle drag path. Normal
 	// object selection is bypassed entirely for this click, which keeps the
 	// marquee-select and selection-lock behaviors fully untouched.
@@ -332,17 +332,11 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 			if (_viewport->begin_handle_drag(pick, px, py)) {
 				_handleGrabbed = true;
 				_usingMarkingBox = false;
-				// Snapshot the globals this gesture will edit, so the release can
-				// push one undo command for the whole drag. Captured after
-				// begin_handle_drag so a refused grab records nothing.
+				// Open the edit transaction so the release records one undo step for
+				// the whole drag. After begin_handle_drag, so a refused grab records
+				// nothing.
 				_handleDragEnv = env;
-				if (env == EnvironmentObject::VolumetricNebula) {
-					_handleDragBefore = dialogs::VolumetricNebulaDialogModel::captureGlobalState();
-				} else if (env == EnvironmentObject::AsteroidField) {
-					_handleDragBefore = dialogs::AsteroidEditorDialogModel::captureGlobalState();
-				} else {
-					_handleDragBefore.clear();
-				}
+				_viewport->beginEnvEdit(env);
 			}
 			event->accept();
 			return;
@@ -517,33 +511,21 @@ void RenderWidget::wheelEvent(QWheelEvent* event)
 }
 
 void RenderWidget::finalizeHandleDrag() {
-	_viewport->commit_handle_drag();
+	_viewport->end_handle_drag();
 	_handleGrabbed = false;
 
-	// One gesture, one undo step. The command restores through the model's
-	// static global path, so it stays valid if the dialog is closed (or never
-	// was open); the model pointer only resyncs a dialog that is open.
-	if (!_handleDragBefore.isEmpty() && _handleDragEnv != EnvironmentObject::None) {
-		QByteArray after;
-		QString text;
-		if (_handleDragEnv == EnvironmentObject::VolumetricNebula) {
-			after = dialogs::VolumetricNebulaDialogModel::captureGlobalState();
-			text = tr("Move Volumetric Nebula");
-		} else {
-			after = dialogs::AsteroidEditorDialogModel::captureGlobalState();
-			text = tr("Resize Asteroid Field");
-		}
-		if (after != _handleDragBefore) {
-			_fredView->mainUndoStack()->push(new dialogs::EnvEditCommand(
-				_handleDragEnv == EnvironmentObject::VolumetricNebula
-					? dialogs::EnvEditCommand::Kind::VolumetricNebula
-					: dialogs::EnvEditCommand::Kind::AsteroidField,
-				_viewport->volumetricEditModel(), _viewport->asteroidEditModel(), fred,
-				_handleDragBefore, after, text));
-		}
-	}
+	// One gesture, one undo step (nothing if the drag changed nothing). The
+	// viewport puts it on the open dialog's stack if there is one.
+	_viewport->commitEnvEdit(_handleDragEnv == EnvironmentObject::VolumetricNebula ? tr("Move Volumetric Nebula")
+	                                                                            : tr("Resize Asteroid Field"));
+	_handleDragEnv = EnvironmentObject::None;
+	_viewport->needsUpdate();
+}
 
-	_handleDragBefore.clear();
+void RenderWidget::cancelHandleDrag() {
+	_viewport->end_handle_drag();
+	_handleGrabbed = false;
+	_viewport->cancelEnvEdit();
 	_handleDragEnv = EnvironmentObject::None;
 	_viewport->needsUpdate();
 }
@@ -716,10 +698,7 @@ void RenderWidget::mouseReleaseEvent(QMouseEvent* event) {
 		return QWidget::mouseReleaseEvent(event);
 	}
 
-	// End any active viewport-handle drag via the commit path, which fires the
-	// handle's on_release. Dialog-owned handles leave on_release unset and mark
-	// their own dirty state; the direct-edit volumetric handle uses it to call
-	// missionChanged() exactly once for the drag.
+	// Finish any active viewport-handle drag, recording its undo step.
 	// Checked before the background drag: env handles win the click.
 	if (_handleGrabbed) {
 		finalizeHandleDrag();

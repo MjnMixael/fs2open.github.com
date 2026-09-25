@@ -3,58 +3,57 @@
 #include "AsteroidEditorDialogModel.h"
 #include "VolumetricNebulaDialogModel.h"
 
-#include <QPointer>
+#include "mission/EditorViewport.h"
+
 #include <QUndoCommand>
 
-#include <typeinfo>
 #include <utility>
 
 namespace fso::fred::dialogs {
 
-// Undo command for the always-on environment gizmos (volumetric nebula centre,
-// asteroid field bounds). Mirrors BackgroundEditCommand: it lives on the main
-// undo stack and may outlive the dialog, so it restores through the model's
-// static global path and only uses the (guarded) model pointer to resync a
-// dialog that happens to be open.
+// Undo command for an environment gizmo edit (volumetric nebula position,
+// asteroid field bounds) made with no editor dialog open. Lives on the main
+// undo stack. The snapshot covers only the fields a gizmo can change, so it
+// restores through the model's static path with no dialog alive. If the
+// matching dialog is open by the time it runs, that dialog's working copy and
+// Cancel baseline are moved to the restored values too, so a later OK or
+// Cancel can't bring the undone edit back.
 //
-// Kind selects which globals the snapshot covers. Both kinds are handled here
-// rather than in two near-identical classes because the only difference is
-// which static pair to call.
+// A gizmo edit made while the dialog is open goes on the dialog's own stack
+// instead (see EditorViewport::commitEnvEdit).
 class EnvEditCommand : public QUndoCommand {
 public:
 	enum class Kind { VolumetricNebula, AsteroidField };
 
 private:
 	Kind _kind;
-	QPointer<VolumetricNebulaDialogModel> _volModel;
-	QPointer<AsteroidEditorDialogModel> _astModel;
-	Editor* _editor;
+	EditorViewport* _viewport;
 	QByteArray _before, _after;
 	bool _skipFirstRedo;
 
 	void apply(const QByteArray& data) {
 		if (_kind == Kind::VolumetricNebula) {
-			VolumetricNebulaDialogModel::restoreGlobalState(data);
-			if (_volModel) {
-				_volModel->resyncFromGlobals();
+			VolumetricNebulaDialogModel::restoreGizmoState(data);
+			if (auto* model = _viewport->volumetricEditModel()) {
+				model->syncGizmoFromGlobals(true);
 			}
 		} else {
-			AsteroidEditorDialogModel::restoreGlobalState(data);
-			if (_astModel) {
-				_astModel->resyncFromGlobals();
+			AsteroidEditorDialogModel::restoreGizmoState(data);
+			if (auto* model = _viewport->asteroidEditModel()) {
+				model->syncGizmoFromGlobals(true);
 			}
 		}
-		if (_editor != nullptr) {
-			_editor->missionChanged();
+		if (_viewport->editor != nullptr) {
+			_viewport->editor->missionChanged();
 		}
+		_viewport->needsUpdate();
 	}
 
 public:
-	EnvEditCommand(Kind kind, VolumetricNebulaDialogModel* volModel, AsteroidEditorDialogModel* astModel,
-		Editor* editor, QByteArray before, QByteArray after, const QString& text,
+	EnvEditCommand(Kind kind, EditorViewport* viewport, QByteArray before, QByteArray after, const QString& text,
 		bool skipFirstRedo = true)
-		: QUndoCommand(text), _kind(kind), _volModel(volModel), _astModel(astModel), _editor(editor),
-		  _before(std::move(before)), _after(std::move(after)), _skipFirstRedo(skipFirstRedo)
+		: QUndoCommand(text), _kind(kind), _viewport(viewport), _before(std::move(before)), _after(std::move(after)),
+		  _skipFirstRedo(skipFirstRedo)
 	{
 	}
 
@@ -67,8 +66,8 @@ public:
 		apply(_after);
 	}
 
-	// Deliberately not mergeable: one gesture (press to release) is one drag is
-	// one undo step, the same rule the background drag uses.
+	// Deliberately not mergeable: one gesture (press to release) is one undo
+	// step, the same rule the background drag uses.
 	int id() const override { return -1; }
 };
 

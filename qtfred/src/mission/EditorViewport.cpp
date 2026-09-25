@@ -23,8 +23,10 @@
 #include "mission/dialogs/BackgroundEditorDialogModel.h"
 #include "mission/dialogs/VolumetricNebulaDialogModel.h"
 #include "mission/dialogs/AsteroidEditorDialogModel.h"
+#include "mission/dialogs/EnvEditCommand.h"
 
 #include <algorithm>
+#include <cfloat>
 
 namespace {
 
@@ -2066,18 +2068,9 @@ void EditorViewport::end_background_drag()
 static constexpr double kHandlePickRadiusSquared = 144.0; // 12px
 
 HandleGroupId EditorViewport::registerHandleGroup(std::vector<ViewportHandle> handles) {
-	// Reuse a free slot if one exists, otherwise grow.
-	for (size_t i = 0; i < _handle_groups.size(); ++i) {
-		if (_handle_groups[i].empty() && _handle_group_generations[i] != 0) {
-			// Slot was used before and freed; reuse with bumped generation.
-			_handle_groups[i] = std::move(handles);
-			HandleGroupId id;
-			id.index = static_cast<int>(i);
-			id.generation = _handle_group_generations[i];
-			needsUpdate();
-			return id;
-		}
-	}
+	// Always a new slot. An empty slot can't be told apart from a registered
+	// group that currently has no handles (a gizmo whose entity went away), so
+	// reusing one would make two groups share an index.
 	_handle_groups.push_back(std::move(handles));
 	_handle_group_generations.push_back(1);
 	HandleGroupId id;
@@ -2238,13 +2231,10 @@ bool EditorViewport::drag_handle(int cx, int cy) {
 		return false;
 	}
 
-	// IMPORTANT: the on_drag callback typically writes back into the owning
-	// dialog model, which emits modelChanged and triggers rebuildHandles,
-	// which replaces the contents of _handle_groups[group_index] via
-	// updateHandleGroup. That destroys the ViewportHandle (and its
-	// std::function!) we're holding a reference to. So copy everything we
-	// need into locals up front before invoking the callback — otherwise
-	// we'd be executing a destructed function object.
+	// IMPORTANT: the on_drag callback edits the mission, which can rebuild the
+	// handle group and destroy the ViewportHandle (and its std::function!) we're
+	// holding a reference to. So copy everything we need into locals up front
+	// before invoking the callback.
 	auto on_drag_copy = handle.on_drag;
 	const auto handle_kind = handle.kind;
 	const vec3d handle_axis = handle.axis;
@@ -2269,12 +2259,16 @@ bool EditorViewport::drag_handle(int cx, int cy) {
 		return true;
 	}
 
-	on_drag_copy(delta);
+	const vec3d applied = on_drag_copy(delta);
 	// Do NOT touch `handle` past here — the rebuild from on_drag may have
 	// invalidated it. The active-handle indices themselves are still valid
-	// (rebuildHandles produces a same-shape vector) so the next tick re-looks
-	// it up by index from the top.
-	_active_handle_last_world = new_world;
+	// (the rebuild produces a same-shape vector) so the next tick re-looks it
+	// up by index from the top.
+	//
+	// Anchor on what was actually applied, not on the cursor: when a clamp
+	// stops the handle, the unapplied part stays pending, so the handle waits
+	// for the cursor to come back to it instead of moving off immediately.
+	vm_vec_add2(&_active_handle_last_world, &applied);
 	needsUpdate();
 	return true;
 }
@@ -2282,24 +2276,6 @@ bool EditorViewport::drag_handle(int cx, int cy) {
 void EditorViewport::end_handle_drag() {
 	_active_handle = {};
 	_active_handle_generation = 0;
-}
-
-void EditorViewport::commit_handle_drag() {
-	// Fire the active handle's on_release (direct-edit handles mark the mission
-	// modified here) before clearing the drag. The group may have been rebuilt
-	// mid-drag, so re-look-up by index and copy the callback before invoking it.
-	if (_active_handle.group_index >= 0 &&
-		_active_handle.group_index < static_cast<int>(_handle_groups.size()) &&
-		_handle_group_generations[_active_handle.group_index] == _active_handle_generation) {
-		const auto& group = _handle_groups[_active_handle.group_index];
-		if (_active_handle.handle_index >= 0 && _active_handle.handle_index < static_cast<int>(group.size())) {
-			auto on_release_copy = group[_active_handle.handle_index].on_release;
-			if (on_release_copy) {
-				on_release_copy();
-			}
-		}
-	}
-	end_handle_drag();
 }
 
 EnvironmentObject EditorViewport::handleEnvironment(HandlePick pick) const {
@@ -2315,7 +2291,8 @@ EnvironmentObject EditorViewport::handleEnvironment(HandlePick pick) const {
 }
 
 // ---------------------------------------------------------------------------
-// Asteroid-field gizmos (direct edits into the global Asteroid_field)
+// Asteroid-field gizmos (edit the global Asteroid_field; an open dialog is
+// synced afterwards by the caller)
 // ---------------------------------------------------------------------------
 
 namespace {
@@ -2323,87 +2300,91 @@ namespace {
 enum class AstBox { Outer, Inner };
 enum class AstCorner { Min, Max };
 
-// Minimum gap between a box's min and max on each axis, matching the dialog
-// model's _MIN_BOX_THICKNESS so a fast drag can't invert or collapse the box.
+// The rules AsteroidEditorDialogModel::validate_data() checks on OK: each box
+// at least this thick on every axis, and the inner box at least this far
+// inside the outer one. Enforced while dragging so a drag can't produce a
+// field the dialog would then refuse.
 constexpr float kAstMinThickness = 400.0f;
 
-void getAstBound(AstBox box, vec3d* mn, vec3d* mx) {
+vec3d& astMin(AstBox box) { return box == AstBox::Outer ? Asteroid_field.min_bound : Asteroid_field.inner_min_bound; }
+vec3d& astMax(AstBox box) { return box == AstBox::Outer ? Asteroid_field.max_bound : Asteroid_field.inner_max_bound; }
+
+// The range one min/max component may take. When the current field already
+// breaks the rules on this axis (a hand-edited mission, say), only the box's
+// own thickness is enforced.
+void astComponentRange(AstBox box, AstCorner corner, int axis, float* lo, float* hi) {
+	const float t = kAstMinThickness;
+	const bool inner = Asteroid_field.has_inner_bound;
+	*lo = -FLT_MAX;
+	*hi = FLT_MAX;
 	if (box == AstBox::Outer) {
-		*mn = Asteroid_field.min_bound;
-		*mx = Asteroid_field.max_bound;
+		if (corner == AstCorner::Min) {
+			*hi = astMax(AstBox::Outer).a1d[axis] - t;
+			if (inner) *hi = std::min(*hi, Asteroid_field.inner_min_bound.a1d[axis] - t);
+		} else {
+			*lo = astMin(AstBox::Outer).a1d[axis] + t;
+			if (inner) *lo = std::max(*lo, Asteroid_field.inner_max_bound.a1d[axis] + t);
+		}
 	} else {
-		*mn = Asteroid_field.inner_min_bound;
-		*mx = Asteroid_field.inner_max_bound;
+		if (corner == AstCorner::Min) {
+			*lo = Asteroid_field.min_bound.a1d[axis] + t;
+			*hi = astMax(AstBox::Inner).a1d[axis] - t;
+		} else {
+			*lo = astMin(AstBox::Inner).a1d[axis] + t;
+			*hi = Asteroid_field.max_bound.a1d[axis] - t;
+		}
+	}
+	if (*lo > *hi) {
+		*lo = -FLT_MAX;
+		*hi = FLT_MAX;
+		if (corner == AstCorner::Min) *hi = astMax(box).a1d[axis] - t;
+		else                          *lo = astMin(box).a1d[axis] + t;
 	}
 }
 
-void setAstBound(AstBox box, const vec3d& mn, const vec3d& mx) {
-	if (box == AstBox::Outer) {
-		Asteroid_field.min_bound = mn;
-		Asteroid_field.max_bound = mx;
-	} else {
-		Asteroid_field.inner_min_bound = mn;
-		Asteroid_field.inner_max_bound = mx;
-	}
-}
-
-// Move one min/max component of a box by delta, clamped so the box keeps at
-// least kAstMinThickness on that axis.
-void nudgeAstComponent(AstBox box, AstCorner corner, int axis, float delta) {
+// Move one min/max component of a box by delta, clamped. Returns the delta
+// actually applied.
+float nudgeAstComponent(AstBox box, AstCorner corner, int axis, float delta) {
 	if (delta == 0.0f || axis < 0 || axis > 2) {
-		return;
+		return 0.0f;
 	}
-	vec3d mn, mx;
-	getAstBound(box, &mn, &mx);
-	if (corner == AstCorner::Min) {
-		float nv = mn.a1d[axis] + delta;
-		nv = std::min(nv, mx.a1d[axis] - kAstMinThickness);
-		mn.a1d[axis] = nv;
-	} else {
-		float nv = mx.a1d[axis] + delta;
-		nv = std::max(nv, mn.a1d[axis] + kAstMinThickness);
-		mx.a1d[axis] = nv;
+	float& value = (corner == AstCorner::Min) ? astMin(box).a1d[axis] : astMax(box).a1d[axis];
+	float lo, hi;
+	astComponentRange(box, corner, axis, &lo, &hi);
+	// Never let the clamp itself move the face the other way.
+	const float target = std::clamp(value + delta, std::min(lo, value), std::max(hi, value));
+	const float applied = target - value;
+	value = target;
+	return applied;
+}
+
+// Translate a whole box by delta, clamped per axis so the inner box stays
+// inside the outer one. Returns the delta actually applied.
+vec3d translateAst(AstBox box, const vec3d& delta) {
+	vec3d applied = vmd_zero_vector;
+	vec3d& mn = astMin(box);
+	vec3d& mx = astMax(box);
+	for (int axis = 0; axis < 3; ++axis) {
+		float d = delta.a1d[axis];
+		if (Asteroid_field.has_inner_bound) {
+			const float t = kAstMinThickness;
+			float lo, hi;
+			if (box == AstBox::Outer) {
+				lo = Asteroid_field.inner_max_bound.a1d[axis] + t - mx.a1d[axis];
+				hi = Asteroid_field.inner_min_bound.a1d[axis] - t - mn.a1d[axis];
+			} else {
+				lo = Asteroid_field.min_bound.a1d[axis] + t - mn.a1d[axis];
+				hi = Asteroid_field.max_bound.a1d[axis] - t - mx.a1d[axis];
+			}
+			if (lo <= hi) {
+				d = std::clamp(d, std::min(lo, 0.0f), std::max(hi, 0.0f));
+			}
+		}
+		mn.a1d[axis] += d;
+		mx.a1d[axis] += d;
+		applied.a1d[axis] = d;
 	}
-	setAstBound(box, mn, mx);
-}
-
-void translateAst(AstBox box, const vec3d& delta) {
-	vec3d mn, mx;
-	getAstBound(box, &mn, &mx);
-	vm_vec_add2(&mn, &delta);
-	vm_vec_add2(&mx, &delta);
-	setAstBound(box, mn, mx);
-}
-
-// Model-aware wrappers. While the Asteroid Field editor is open its model owns
-// the working copy that apply() writes back, so a drag must go through the
-// model (which clamps identically and pushes live to Asteroid_field for the
-// visualizer). With the dialog closed there is no working copy and the global
-// helpers above are the whole story.
-dialogs::AsteroidEditorDialogModel::BoundBox toModelBox(AstBox box) {
-	return box == AstBox::Outer ? dialogs::AsteroidEditorDialogModel::BoundBox::Outer
-	                            : dialogs::AsteroidEditorDialogModel::BoundBox::Inner;
-}
-
-dialogs::AsteroidEditorDialogModel::BoundCorner toModelCorner(AstCorner corner) {
-	return corner == AstCorner::Min ? dialogs::AsteroidEditorDialogModel::BoundCorner::Min
-	                                : dialogs::AsteroidEditorDialogModel::BoundCorner::Max;
-}
-
-void nudgeAst(EditorViewport* vp, AstBox box, AstCorner corner, int axis, float delta) {
-	if (auto* m = vp->asteroidEditModel()) {
-		m->nudgeBoundComponent(toModelBox(box), toModelCorner(corner), axis, delta);
-	} else {
-		nudgeAstComponent(box, corner, axis, delta);
-	}
-}
-
-void translateAstBox(EditorViewport* vp, AstBox box, const vec3d& delta) {
-	if (auto* m = vp->asteroidEditModel()) {
-		m->translateBound(toModelBox(box), delta);
-	} else {
-		translateAst(box, delta);
-	}
+	return applied;
 }
 
 } // anonymous namespace
@@ -2471,10 +2452,12 @@ void EditorViewport::refreshAsteroidHandles() {
 			}
 		};
 	};
-	auto markChanged = [this]() {
-		if (editor != nullptr) {
-			editor->missionChanged();
+	// Only a real change dirties the mission (a clamped-out drag changes nothing).
+	auto afterEdit = [this](const vec3d& applied) {
+		if (applied.xyz.x != 0.0f || applied.xyz.y != 0.0f || applied.xyz.z != 0.0f) {
+			envGizmoChanged(EnvironmentObject::AsteroidField);
 		}
+		return applied;
 	};
 
 	auto buildBox = [&](AstBox box, const vec3d& mn, const vec3d& mx, bool isOuter,
@@ -2504,9 +2487,10 @@ void EditorViewport::refreshAsteroidHandles() {
 			h.is_enabled = axisAllowed(f.axis);
 			const AstCorner corner = f.is_max ? AstCorner::Max : AstCorner::Min;
 			const int axis = f.axis;
-			h.on_drag = [this, box, corner, axis, markChanged](const vec3d& delta) {
-				nudgeAst(this, box, corner, axis, delta.a1d[axis]);
-				markChanged();
+			h.on_drag = [box, corner, axis, afterEdit](const vec3d& delta) {
+				vec3d applied = vmd_zero_vector;
+				applied.a1d[axis] = nudgeAstComponent(box, corner, axis, delta.a1d[axis]);
+				return afterEdit(applied);
 			};
 			handles.push_back(std::move(h));
 		}
@@ -2526,11 +2510,12 @@ void EditorViewport::refreshAsteroidHandles() {
 					const AstCorner cx = xi ? AstCorner::Max : AstCorner::Min;
 					const AstCorner cy = yi ? AstCorner::Max : AstCorner::Min;
 					const AstCorner cz = zi ? AstCorner::Max : AstCorner::Min;
-					h.on_drag = [this, box, cx, cy, cz, markChanged](const vec3d& delta) {
-						nudgeAst(this, box, cx, 0, delta.xyz.x);
-						nudgeAst(this, box, cy, 1, delta.xyz.y);
-						nudgeAst(this, box, cz, 2, delta.xyz.z);
-						markChanged();
+					h.on_drag = [box, cx, cy, cz, afterEdit](const vec3d& delta) {
+						vec3d applied;
+						applied.xyz.x = nudgeAstComponent(box, cx, 0, delta.xyz.x);
+						applied.xyz.y = nudgeAstComponent(box, cy, 1, delta.xyz.y);
+						applied.xyz.z = nudgeAstComponent(box, cz, 2, delta.xyz.z);
+						return afterEdit(applied);
 					};
 					handles.push_back(std::move(h));
 				}
@@ -2550,9 +2535,8 @@ void EditorViewport::refreshAsteroidHandles() {
 				h.info_label = "Asteroid Field";  // name shown only for the main center
 				_asteroid_center_index = static_cast<int>(handles.size());
 			}
-			h.on_drag = [this, box, markChanged](const vec3d& delta) {
-				translateAstBox(this, box, delta);
-				markChanged();
+			h.on_drag = [box, afterEdit](const vec3d& delta) {
+				return afterEdit(translateAst(box, delta));
 			};
 			handles.push_back(std::move(h));
 		}
@@ -2625,14 +2609,101 @@ void EditorViewport::applyAsteroidSpinbox(const vec3d& new_pos) {
 	if (idx < 0 || idx >= static_cast<int>(group.size())) {
 		return;
 	}
-	// Copy before invoking: on_drag marks the mission changed, which triggers a
-	// rebuild that replaces the group (and this callback).
+	// Copy before invoking: on_drag can rebuild the group (and this callback).
 	auto on_drag_copy = group[idx].on_drag;
 	vec3d delta;
 	vm_vec_sub(&delta, &new_pos, &group[idx].world_pos);
 	if (on_drag_copy) {
 		on_drag_copy(delta);
 	}
+}
+
+namespace {
+QByteArray captureEnvGizmoState(EnvironmentObject env) {
+	switch (env) {
+	case EnvironmentObject::VolumetricNebula: return dialogs::VolumetricNebulaDialogModel::captureGizmoState();
+	case EnvironmentObject::AsteroidField:    return dialogs::AsteroidEditorDialogModel::captureGizmoState();
+	default:                                  return {};
+	}
+}
+} // anonymous namespace
+
+void EditorViewport::envGizmoChanged(EnvironmentObject env) {
+	if (env == EnvironmentObject::VolumetricNebula && _volEditModel != nullptr) {
+		_volEditModel->syncGizmoFromGlobals(false);
+	} else if (env == EnvironmentObject::AsteroidField && _astEditModel != nullptr) {
+		_astEditModel->syncGizmoFromGlobals(false);
+	}
+	if (editor != nullptr) {
+		editor->missionChanged();
+	}
+	needsUpdate();
+}
+
+bool EditorViewport::moveVolumetricTo(const vec3d& pos) {
+	if (!The_mission.volumetrics || The_mission.volumetrics->getPos() == pos) {
+		return false;
+	}
+	The_mission.volumetrics->setPos(pos);
+	envGizmoChanged(EnvironmentObject::VolumetricNebula);
+	return true;
+}
+
+void EditorViewport::beginEnvEdit(EnvironmentObject env) {
+	_env_edit_kind = env;
+	_env_edit_before = captureEnvGizmoState(env);
+}
+
+void EditorViewport::commitEnvEdit(const QString& text) {
+	if (!envEditActive()) {
+		return;
+	}
+	const auto env = _env_edit_kind;
+	const QByteArray before = _env_edit_before;
+	_env_edit_kind = EnvironmentObject::None;
+	_env_edit_before.clear();
+
+	const QByteArray after = captureEnvGizmoState(env);
+	if (after == before) {
+		return;
+	}
+
+	// With the dialog open the edit belongs to its session, so it goes on the
+	// dialog's stack: OK keeps it, Cancel drops it with everything else.
+	if (env == EnvironmentObject::VolumetricNebula && _volEditModel != nullptr) {
+		Q_EMIT _volEditModel->gizmoEditCommitted(before, after, text);
+		return;
+	}
+	if (env == EnvironmentObject::AsteroidField && _astEditModel != nullptr) {
+		Q_EMIT _astEditModel->gizmoEditCommitted(before, after, text);
+		return;
+	}
+
+	if (editor != nullptr && editor->undoStack() != nullptr) {
+		const auto kind = (env == EnvironmentObject::VolumetricNebula) ? dialogs::EnvEditCommand::Kind::VolumetricNebula
+		                                                               : dialogs::EnvEditCommand::Kind::AsteroidField;
+		editor->undoStack()->push(new dialogs::EnvEditCommand(kind, this, before, after, text));
+	}
+}
+
+void EditorViewport::cancelEnvEdit() {
+	if (!envEditActive()) {
+		return;
+	}
+	const auto env = _env_edit_kind;
+	const QByteArray before = _env_edit_before;
+	_env_edit_kind = EnvironmentObject::None;
+	_env_edit_before.clear();
+
+	if (captureEnvGizmoState(env) == before) {
+		return;
+	}
+	if (env == EnvironmentObject::VolumetricNebula) {
+		dialogs::VolumetricNebulaDialogModel::restoreGizmoState(before);
+	} else {
+		dialogs::AsteroidEditorDialogModel::restoreGizmoState(before);
+	}
+	envGizmoChanged(env);
 }
 
 void EditorViewport::refreshVolumetricHandle() {
@@ -2687,24 +2758,13 @@ void EditorViewport::refreshVolumetricHandle() {
 		h.show_coords = true;
 		h.show_grid_position = true;
 		h.on_drag = [this](const vec3d& delta) {
-			// Dual path. With the editor open, go through its model so the drag
-			// lands in the working copy apply() writes back (a direct global
-			// edit would be clobbered by a later OK). With it closed there is no
-			// working copy, so edit the mission directly. Mark modified here
-			// (not on_release) so a select-click that never moves doesn't dirty
-			// the mission.
-			if (auto* m = volumetricEditModel()) {
-				m->setPosX(m->getPosX() + delta.xyz.x);
-				m->setPosY(m->getPosY() + delta.xyz.y);
-				m->setPosZ(m->getPosZ() + delta.xyz.z);
-			} else if (The_mission.volumetrics) {
-				vec3d p = The_mission.volumetrics->getPos();
-				vm_vec_add2(&p, &delta);
-				The_mission.volumetrics->setPos(p);
+			if (!The_mission.volumetrics) {
+				return vmd_zero_vector;
 			}
-			if (editor != nullptr) {
-				editor->missionChanged();
-			}
+			vec3d p = The_mission.volumetrics->getPos();
+			vm_vec_add2(&p, &delta);
+			moveVolumetricTo(p);
+			return delta;
 		};
 		handles.push_back(std::move(h));
 	}

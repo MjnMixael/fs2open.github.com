@@ -3,6 +3,7 @@
 // working copy.
 
 #include <mission/dialogs/AsteroidEditorDialogModel.h>
+#include <mission/EditorViewport.h>
 
 #include <asteroid/asteroid.h>
 
@@ -117,7 +118,36 @@ void AsteroidEditorDialogModel::restoreGlobalState(const QByteArray& state)
 	}
 }
 
-} // namespace fso::fred::dialogs
+QByteArray AsteroidEditorDialogModel::captureGizmoState()
+{
+	QByteArray data;
+	QDataStream ds(&data, QIODevice::WriteOnly);
+	serializeVec3d(ds, Asteroid_field.min_bound);
+	serializeVec3d(ds, Asteroid_field.max_bound);
+	serializeVec3d(ds, Asteroid_field.inner_min_bound);
+	serializeVec3d(ds, Asteroid_field.inner_max_bound);
+	return data;
+}
+
+void AsteroidEditorDialogModel::restoreGizmoState(const QByteArray& state)
+{
+	QDataStream ds(state);
+	deserializeVec3d(ds, Asteroid_field.min_bound);
+	deserializeVec3d(ds, Asteroid_field.max_bound);
+	deserializeVec3d(ds, Asteroid_field.inner_min_bound);
+	deserializeVec3d(ds, Asteroid_field.inner_max_bound);
+}
+
+QByteArray AsteroidEditorDialogModel::captureOriginalState() const
+{
+	// The globals hold this dialog's live preview, so swap the open-time
+	// snapshot in just long enough to serialize it.
+	const asteroid_field live = Asteroid_field;
+	Asteroid_field = _original_a_field;
+	QByteArray data = captureGlobalState();
+	Asteroid_field = live;
+	return data;
+}
 
 // The AbstractDialogModel overrides just delegate: the snapshot is of the
 // mission globals, not of this model's working copy, so an undo command can
@@ -130,14 +160,14 @@ QByteArray AsteroidEditorDialogModel::captureState() const
 void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
 {
 	restoreGlobalState(state);
-	resyncFromGlobals();
+
+	// This model belongs to a closed dialog's undo command. If an asteroid
+	// dialog is open now, its working copy is stale, so reload it.
+	if (_viewport != nullptr) {
+		if (auto* open = _viewport->asteroidEditModel()) {
+			open->reloadFromGlobals();
+		}
+	}
 }
 
-// Re-read the working copy (and the reject() baseline) from the globals after
-// an undo/redo wrote them behind this dialog's back, so a later OK applies the
-// restored state instead of a stale one.
-void AsteroidEditorDialogModel::resyncFromGlobals()
-{
-	initializeData();
-	modelChanged();
-}
+} // namespace fso::fred::dialogs

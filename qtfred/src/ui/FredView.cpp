@@ -1844,30 +1844,26 @@ void FredView::onUpdateTransformBar() {
 void FredView::onTransformEditingFinished() {
 	const int  curObj      = fred->currentObject;
 
-	// Environment entity: write its position straight into the mission (no
-	// orientation, so nothing to do in Rotate mode). Direct edit, like dragging
-	// the handle or moving an object via the spinboxes.
-	if (fred->currentEnvironment == EnvironmentObject::VolumetricNebula && The_mission.volumetrics.has_value()) {
+	// Environment entity: move it through the same path as a gizmo drag (no
+	// orientation, so nothing to do in Rotate mode). That clamps, syncs an open
+	// dialog, and records one undo step, on the dialog's stack if it's open.
+	const EnvironmentObject env = fred->currentEnvironment;
+	if (env == EnvironmentObject::VolumetricNebula || env == EnvironmentObject::AsteroidField) {
 		if (_viewport->Editing_mode != CursorMode::Rotating) {
 			vec3d p;
 			p.xyz.x = static_cast<float>(_transformA->value());
 			p.xyz.y = static_cast<float>(_transformB->value());
 			p.xyz.z = static_cast<float>(_transformC->value());
-			The_mission.volumetrics->setPos(p);
-			fred->missionChanged();
-		}
-		return;
-	}
-	if (fred->currentEnvironment == EnvironmentObject::AsteroidField) {
-		// Move the selected asteroid handle to the spinbox position. The handle's
-		// on_drag clamps and marks the mission modified. Disabled (locked) axes
-		// keep the handle's current value, so their delta is zero.
-		if (_viewport->Editing_mode != CursorMode::Rotating) {
-			vec3d p;
-			p.xyz.x = static_cast<float>(_transformA->value());
-			p.xyz.y = static_cast<float>(_transformB->value());
-			p.xyz.z = static_cast<float>(_transformC->value());
-			_viewport->applyAsteroidSpinbox(p);
+			_viewport->beginEnvEdit(env);
+			if (env == EnvironmentObject::VolumetricNebula) {
+				_viewport->moveVolumetricTo(p);
+				_viewport->commitEnvEdit(tr("Move Volumetric Nebula"));
+			} else {
+				// Moves the selected asteroid handle. Locked axes keep the handle's
+				// current value, so their delta is zero.
+				_viewport->applyAsteroidSpinbox(p);
+				_viewport->commitEnvEdit(tr("Resize Asteroid Field"));
+			}
 		}
 		return;
 	}
@@ -2187,17 +2183,14 @@ void FredView::showContextMenu(const QPoint& globalPos) {
 		_editPopup->exec(globalPos);
 	} else {
 		// No object under the cursor. Offer the environment menu when an
-		// environment handle is here, or an environment entity is already
-		// selected (analogous to right-clicking a selected object → "Edit ...").
+		// environment handle is here. Empty space gets the normal menu even with
+		// an environment entity selected, as it does with an object selected.
 		auto handlePick = _viewport->pick_handle(localPos.x() * this->devicePixelRatio(),
 			localPos.y() * this->devicePixelRatio());
-		const EnvironmentObject handleEnv = _viewport->handleEnvironment(handlePick);
-		const EnvironmentObject env = (handleEnv != EnvironmentObject::None) ? handleEnv : fred->currentEnvironment;
+		const EnvironmentObject env = _viewport->handleEnvironment(handlePick);
 		if (env != EnvironmentObject::None) {
-			if (handleEnv != EnvironmentObject::None) {
-				fred->selectEnvironment(handleEnv);
-				_viewport->setSelectedHandle(handlePick);
-			}
+			fred->selectEnvironment(env);
+			_viewport->setSelectedHandle(handlePick);
 			QMenu menu(this);
 			QAction* editAction = nullptr;
 			if (env == EnvironmentObject::VolumetricNebula) {
@@ -2746,6 +2739,8 @@ void FredView::windowActivated() {
 }
 void FredView::windowDeactivated() {
 	_viewport->Cursor_over = -1;
+	_viewport->setHoveredHandle({}); // drop the gizmo hover balloon too
+	_viewport->needsUpdate();
 }
 void FredView::on_actionLock_Marked_Objects_triggered(bool  /*enabled*/) {
 	fred->lockMarkedObjects();

@@ -10,6 +10,9 @@
 
 #include <object/object.h>
 
+#include <QByteArray>
+#include <QString>
+
 namespace fso::fred {
 
 namespace dialogs {
@@ -161,14 +164,25 @@ class EditorViewport {
 
 	// --- Environment gizmo editing ---------------------------------------
 	// Set while the corresponding editor dialog is open. The always-on
-	// volumetric/asteroid handles route their drags through the open dialog's
-	// model (which owns the working copy apply() writes back) instead of
-	// editing the mission globals directly, so an OK press can't clobber a
-	// drag with a stale working copy. Null = dialog closed = direct edit.
+	// volumetric/asteroid gizmos edit the mission globals directly either way;
+	// with a dialog open they also sync the result into its model, so OK
+	// applies the edit and Cancel reverts it.
 	dialogs::VolumetricNebulaDialogModel* volumetricEditModel() const { return _volEditModel; }
 	void setVolumetricEditModel(dialogs::VolumetricNebulaDialogModel* model);
 	dialogs::AsteroidEditorDialogModel* asteroidEditModel() const { return _astEditModel; }
 	void setAsteroidEditModel(dialogs::AsteroidEditorDialogModel* model);
+
+	// One gizmo edit (a drag, or a transform-toolbar change) as a transaction.
+	// begin snapshots the fields gizmos can change; commit records one undo step
+	// if anything changed: on the open dialog's stack if there is one, else on
+	// the main stack. cancel restores the snapshot and records nothing.
+	void beginEnvEdit(EnvironmentObject env);
+	void commitEnvEdit(const QString& text);
+	void cancelEnvEdit();
+	bool envEditActive() const { return !_env_edit_before.isEmpty(); }
+
+	// Move the volumetric nebula (transform toolbar). Returns true if it moved.
+	bool moveVolumetricTo(const vec3d& pos);
 
 	// Pick the background element (sun or bitmap) whose projected handle is
 	// nearest the cursor. Returns true and fills isSun/index on a hit.
@@ -181,8 +195,8 @@ class EditorViewport {
 	void rotate_background_element(int mouse_dx);
 	void end_background_drag();
 
-	// Viewport handle (non-object selectable marker) API. Dialogs register a
-	// group of handles while open; the picking pre-pass below runs before
+	// Viewport handle (non-object selectable marker) API. The environment
+	// gizmos register one group each; the picking pre-pass below runs before
 	// select_object() so a handle click never falls through into normal mission
 	// object selection.
 	HandleGroupId registerHandleGroup(std::vector<ViewportHandle> handles);
@@ -202,10 +216,6 @@ class EditorViewport {
 	bool begin_handle_drag(HandlePick pick, int cx, int cy);
 	bool drag_handle(int cx, int cy);
 	void end_handle_drag();
-	// Genuine mouse-release end: fires the active handle's on_release (if any)
-	// before clearing the drag. Distinct from end_handle_drag(), which is the
-	// cancel path (Escape / right-click) and skips on_release.
-	void commit_handle_drag();
 	bool has_active_handle_drag() const { return _active_handle.group_index >= 0; }
 
 	// Hovered-handle tracking for the in-scene hover balloon. RenderWidget sets
@@ -213,19 +223,19 @@ class EditorViewport {
 	void setHoveredHandle(HandlePick pick) { _hovered_handle = pick; }
 	HandlePick getHoveredHandle() const { return _hovered_handle; }
 
-	// Viewport-owned volumetric nebula gizmo. Unlike the asteroid handles (owned
-	// by their dialog), this one is always present whenever the mission has an
-	// enabled volumetric with a hull, so the nebula can be dragged with no
-	// dialog open. refreshVolumetricHandle() rebuilds it from The_mission when
-	// its state actually changes (cheap no-op otherwise); it is called each
-	// frame from the renderer. Dragging is a direct edit that marks the mission
-	// modified; the editor dialog is modal, so it cannot overlap a drag.
+	// Viewport-owned volumetric nebula gizmo, present whenever the mission has
+	// an enabled volumetric with a hull, so the nebula can be dragged with or
+	// without its dialog open. refreshVolumetricHandle() rebuilds it from
+	// The_mission when its state actually changes (cheap no-op otherwise); it
+	// is called each frame from the renderer.
 	void refreshVolumetricHandle();
 
 	// Viewport-owned asteroid-field gizmos (outer box, and inner box when
 	// enabled): 6 face + 8 corner + 1 center handle per box, rebuilt from
-	// Asteroid_field. Same always-on / direct-edit / modal-dialog model as the
-	// volumetric handle. Called each frame from the renderer (dirty-checked).
+	// Asteroid_field. Always on, like the volumetric handle. Drags keep each box
+	// at least 400 thick and the inner box 400 inside the outer one, the same
+	// rules the dialog checks on OK. Called each frame from the renderer
+	// (dirty-checked).
 	void refreshAsteroidHandles();
 
 	// Which environment entity (if any) a picked handle belongs to. The
@@ -371,6 +381,12 @@ private:
 	dialogs::BackgroundEditorDialogModel* _bgEditModel = nullptr;
 	dialogs::VolumetricNebulaDialogModel* _volEditModel = nullptr;
 	dialogs::AsteroidEditorDialogModel* _astEditModel = nullptr;
+	// The open gizmo edit transaction (see beginEnvEdit). Empty = none.
+	EnvironmentObject _env_edit_kind{}; // None; only forward-declared here, so no enumerator names
+	QByteArray _env_edit_before;
+	// After a gizmo changed the mission: sync the open dialog (if any), mark the
+	// mission changed and repaint.
+	void envGizmoChanged(EnvironmentObject env);
 	// Active background drag: -1 = none, else index into suns/bitmaps of the
 	// active background (which list is chosen by _bgDragIsSun).
 	int  _bgDragIndex = -1;
@@ -387,9 +403,9 @@ private:
 	void lockControls();
 	void unlockControls();
 
-	// Handle registry. _handle_group_generations[i] increments every time slot
-	// i is freed so a stale HandleGroupId pointing at the recycled slot fails
-	// the generation check in unregisterHandleGroup / updateHandleGroup.
+	// Handle registry. Slots are never reused; _handle_group_generations[i]
+	// increments when slot i is unregistered, so a stale HandleGroupId (or an
+	// in-progress drag on that group) fails the generation check.
 	std::vector<std::vector<ViewportHandle>> _handle_groups;
 	std::vector<int> _handle_group_generations;
 

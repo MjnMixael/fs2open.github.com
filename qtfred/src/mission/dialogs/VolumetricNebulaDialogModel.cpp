@@ -205,6 +205,23 @@ void VolumetricNebulaDialogModel::setPosZ(float z)
 	pushLivePos();
 }
 
+void VolumetricNebulaDialogModel::syncGizmoFromGlobals(bool includeBaseline)
+{
+	if (!The_mission.volumetrics) {
+		return;
+	}
+	modify(_volumetrics.pos, The_mission.volumetrics->pos);
+	if (includeBaseline && _had_original_volumetrics) {
+		_original_volumetrics.pos = The_mission.volumetrics->pos;
+	}
+}
+
+void VolumetricNebulaDialogModel::reloadFromGlobals()
+{
+	initializeData();
+	modelChanged();
+}
+
 void VolumetricNebulaDialogModel::pushLivePos()
 {
 	// Only push when the dialog itself is showing the hull (enabled + a real

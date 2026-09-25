@@ -29,10 +29,21 @@ VolumetricNebulaDialog::VolumetricNebulaDialog(FredView* parent, EditorViewport*
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Volumetric Nebula"));
 
 	// Non-modal, like every other direct-edit dialog. The viewport gizmo stays
-	// live while this is open; its drags route through _model (see
-	// EditorViewport::setVolumetricEditModel) so they land in the working copy
-	// apply() writes back, instead of being clobbered by a stale one on OK.
+	// live while this is open: it moves The_mission.volumetrics and the viewport
+	// syncs the result into _model (see EditorViewport::setVolumetricEditModel),
+	// so OK applies it and Cancel reverts it.
 	_viewport->setVolumetricEditModel(_model.get());
+
+	// A finished gizmo edit belongs to this dialog's session: record it here,
+	// not on the main stack, so Cancel doesn't leave a stale entry behind.
+	connect(_model.get(), &VolumetricNebulaDialogModel::gizmoEditCommitted, this,
+		[this](const QByteArray& before, const QByteArray& after, const QString& text) {
+			_dialogStack->push(new DialogSnapshotCommand(before, after, [this](const QByteArray& snapshot) {
+				VolumetricNebulaDialogModel::restoreGizmoState(snapshot);
+				_model->syncGizmoFromGlobals(false);
+				_viewport->needsUpdate();
+			}, text));
+		});
 
 	ui->setModelLineEdit->setMaxLength(MAX_FILENAME_LEN - 1);
 
@@ -47,9 +58,9 @@ VolumetricNebulaDialog::VolumetricNebulaDialog(FredView* parent, EditorViewport*
 
 VolumetricNebulaDialog::~VolumetricNebulaDialog()
 {
-	// Unregister only on destruction, not on hide: a merely-hidden dialog still
-	// owns the working copy its OK would apply, so handle drags must keep
-	// routing through it.
+	// Unregister on destruction (or in accept()), not on hide: a hidden dialog
+	// still owns the working copy its OK would apply, so gizmo edits must keep
+	// syncing into it. After accept() _model is empty and this is a no-op.
 	if (_viewport->volumetricEditModel() == _model.get()) {
 		_viewport->setVolumetricEditModel(nullptr);
 	}
@@ -57,9 +68,14 @@ VolumetricNebulaDialog::~VolumetricNebulaDialog()
 
 void VolumetricNebulaDialog::accept()
 {
-	QByteArray stateBefore = _model->captureState();
+	// The globals already hold the live preview, so the undo "before" has to
+	// come from the open-time snapshot.
+	QByteArray stateBefore = _model->captureOriginalState();
 	if (_model->apply()) {
 		QByteArray stateAfter = _model->captureState();
+		// Unregister before the model moves into the undo command; the
+		// destructor can't, because _model is empty by then.
+		_viewport->setVolumetricEditModel(nullptr);
 		_model->setParent(nullptr);
 		_fredView->mainUndoStack()->push(
 			new ApplyDialogCommand(std::move(_model), stateBefore, stateAfter,
@@ -131,7 +147,12 @@ void VolumetricNebulaDialog::updateUi()
 
 	ui->enabled->setChecked(_model->getEnabled());
 	
-	ui->setModelLineEdit->setText(QString::fromStdString(_model->getHullPof()));
+	// Only when it differs: setText() moves the cursor even for the same text,
+	// and this runs on every model change, including while the user types.
+	const QString hullPof = QString::fromStdString(_model->getHullPof());
+	if (ui->setModelLineEdit->text() != hullPof) {
+		ui->setModelLineEdit->setText(hullPof);
+	}
 	ui->positionXSpinBox->setValue(_model->getPosX());
 	ui->positionYSpinBox->setValue(_model->getPosY());
 	ui->positionZSpinBox->setValue(_model->getPosZ());

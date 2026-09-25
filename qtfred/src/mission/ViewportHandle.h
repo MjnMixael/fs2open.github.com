@@ -7,9 +7,9 @@
 
 namespace fso::fred {
 
-// Opaque id returned when a dialog registers a group of handles with
-// EditorViewport. Wraps a small generation counter so a stale id from a
-// previously-closed dialog never accidentally addresses a new group.
+// Opaque id returned when a group of handles is registered with EditorViewport.
+// Wraps a generation counter so a stale id for an unregistered group never
+// addresses whatever group replaced it.
 struct HandleGroupId {
 	int index = -1;
 	int generation = 0;
@@ -44,14 +44,10 @@ struct ViewportHandle {
 	int color_b = 255;
 
 	// Called per mouse-move tick with the constrained world-space delta from
-	// the previous tick. Implementors should route writes through their dialog
-	// model so live UI refresh and apply/reject continue to work.
-	std::function<void(const vec3d& delta_world)> on_drag;
-
-	// Optional. Called once when a genuine mouse-release ends the drag (NOT on
-	// Escape/right-click cancel). Direct-edit handles use this to mark the
-	// mission modified exactly once per drag, matching object-drag behavior.
-	std::function<void()> on_release;
+	// the previous tick. Returns the delta actually applied, which is less than
+	// the requested one when a clamp stopped the move; the drag anchors on it so
+	// the handle stays under the cursor once the cursor comes back.
+	std::function<vec3d(const vec3d& delta_world)> on_drag;
 
 	// Optional. Return false to render this handle as inert (grayed out, not
 	// pickable). Used to honor the toolbar axis-lock for Face handles whose

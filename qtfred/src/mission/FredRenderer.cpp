@@ -172,7 +172,7 @@ static void draw_viewport_handles(fso::fred::EditorViewport* viewport,
 					strcat_s(buf, pos_str);
 				}
 				gr_set_color_fast(handle.is_selected ? &colour_green : &colour_white);
-				gr_string(x + half + 3, y - half, buf);
+				gr_string(x + half + 3, y - half, buf, GR_RESIZE_FULL, view.Label_font_scale);
 			}
 
 			// Hover balloon on the handle under the cursor — same infobox ships
@@ -191,6 +191,9 @@ static void draw_viewport_handles(fso::fred::EditorViewport* viewport,
 				}
 				int w, h;
 				gr_get_string_size(&w, &h, info);
+				// scale the box to match the scaled label text, like the object infobox
+				w = fl2i(w * view.Label_font_scale);
+				h = fl2i(h * view.Label_font_scale);
 				int bx = x;
 				int by = y + 20;
 				gr_set_color_fast(&colour_white);
@@ -198,7 +201,7 @@ static void draw_viewport_handles(fso::fred::EditorViewport* viewport,
 				gr_set_color_fast(&colour_black);
 				gr_rect(bx - 5, by - 5, w + 5, h + 5);
 				gr_set_color_fast(&colour_white);
-				gr_string(bx, by, info);
+				gr_string(bx, by, info, GR_RESIZE_FULL, view.Label_font_scale);
 			}
 		}
 	}

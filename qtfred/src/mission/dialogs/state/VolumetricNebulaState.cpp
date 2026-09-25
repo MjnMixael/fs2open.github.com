@@ -4,6 +4,7 @@
 // No sexp fields — serialization is complete.
 
 #include <mission/dialogs/VolumetricNebulaDialogModel.h>
+#include <mission/EditorViewport.h>
 
 #include <mission/missionparse.h>
 
@@ -149,7 +150,44 @@ void VolumetricNebulaDialogModel::restoreGlobalState(const QByteArray& state)
 	ds >> v.enabled;
 }
 
-} // namespace fso::fred::dialogs
+QByteArray VolumetricNebulaDialogModel::captureGizmoState()
+{
+	QByteArray data;
+	QDataStream ds(&data, QIODevice::WriteOnly);
+	const bool hasVol = The_mission.volumetrics.has_value();
+	ds << hasVol;
+	if (hasVol) {
+		const vec3d& p = The_mission.volumetrics->pos;
+		ds << p.xyz.x << p.xyz.y << p.xyz.z;
+	}
+	return data;
+}
+
+void VolumetricNebulaDialogModel::restoreGizmoState(const QByteArray& state)
+{
+	QDataStream ds(state);
+	bool hasVol;
+	ds >> hasVol;
+	if (!hasVol || !The_mission.volumetrics) {
+		return;
+	}
+	vec3d& p = The_mission.volumetrics->pos;
+	ds >> p.xyz.x >> p.xyz.y >> p.xyz.z;
+}
+
+QByteArray VolumetricNebulaDialogModel::captureOriginalState() const
+{
+	// Position is the only live-previewed field, so swapping the open-time
+	// position in is enough to serialize the pre-dialog state.
+	if (!_had_original_volumetrics || !The_mission.volumetrics) {
+		return captureGlobalState();
+	}
+	const vec3d live = The_mission.volumetrics->pos;
+	The_mission.volumetrics->pos = _original_volumetrics.pos;
+	QByteArray data = captureGlobalState();
+	The_mission.volumetrics->pos = live;
+	return data;
+}
 
 // The AbstractDialogModel overrides just delegate: the snapshot is of the
 // mission globals, not of this model's working copy, so an undo command can
@@ -162,14 +200,14 @@ QByteArray VolumetricNebulaDialogModel::captureState() const
 void VolumetricNebulaDialogModel::restoreState(const QByteArray& state)
 {
 	restoreGlobalState(state);
-	resyncFromGlobals();
+
+	// This model belongs to a closed dialog's undo command. If a volumetric
+	// dialog is open now, its working copy is stale, so reload it.
+	if (_viewport != nullptr) {
+		if (auto* open = _viewport->volumetricEditModel()) {
+			open->reloadFromGlobals();
+		}
+	}
 }
 
-// Re-read the working copy (and the reject() baseline) from the globals after
-// an undo/redo wrote them behind this dialog's back, so a later OK applies the
-// restored state instead of a stale one.
-void VolumetricNebulaDialogModel::resyncFromGlobals()
-{
-	initializeData();
-	modelChanged();
-}
+} // namespace fso::fred::dialogs

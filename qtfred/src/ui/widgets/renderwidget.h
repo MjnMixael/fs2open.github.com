@@ -67,11 +67,9 @@ class RenderWidget: public QWidget {
 	// normal object selection and dragging are bypassed entirely.
 	bool _handleGrabbed = false;
 
-	// Which environment entity the grabbed handle belongs to, and the global
-	// snapshot taken at grab time. Consumed on release to push one undo command
-	// per drag gesture (mirrors the background-drag tracking below).
+	// Which environment entity the grabbed handle belongs to. The viewport holds
+	// the undo snapshot (see EditorViewport::beginEnvEdit).
 	EnvironmentObject _handleDragEnv = EnvironmentObject::None;
-	QByteArray _handleDragBefore;
 
 	// True iff the cursor is hovering a pickable viewport handle (and the
 	// editor is in Moving mode). updateCursor() consults this to show the
@@ -94,10 +92,11 @@ class RenderWidget: public QWidget {
 	// the release handler and the "button released off-widget" recovery path.
 	void finalizeBackgroundDrag();
 
-	// Commit an in-progress viewport-handle drag: fire the handle's on_release
-	// and push one undo command for the gesture. Shared by the release handler,
-	// the Escape/right-click cancels and the lost-release recovery path.
+	// End an in-progress viewport-handle drag. finalize keeps it and records one
+	// undo step (release, and the lost-release recovery path); cancel reverts it
+	// (Escape, right-click).
 	void finalizeHandleDrag();
+	void cancelHandleDrag();
 
 	// Ctrl+drag clone tracking — set on press, consumed on release.
 	bool            _wasDupDrag              = false;

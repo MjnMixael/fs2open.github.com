@@ -109,7 +109,9 @@ void AsteroidEditorDialogModel::initializeData()
 	_field_asteroid_type = _a_field.field_asteroid_type;
 	_field_target_names = _a_field.target_names;
 
-	// Initialize asteroid options
+	// Initialize asteroid options (cleared first: an undo can reload the model)
+	asteroidOptions.clear();
+	debrisOptions.clear();
 	const auto& list = get_list_valid_asteroid_subtypes();
 	for (const auto& name : list) {
 		asteroidOptions.push_back(name);
@@ -148,21 +150,16 @@ void AsteroidEditorDialogModel::update_internal_field()
 	_a_field.num_initial_asteroids = num_asteroids;
 	_a_field.vel = vel_vec;
 
-	// save the box coords
-	_a_field.min_bound.xyz.x = _min_x.toFloat();
-	_a_field.min_bound.xyz.y = _min_y.toFloat();
-	_a_field.min_bound.xyz.z = _min_z.toFloat();
-	_a_field.max_bound.xyz.x = _max_x.toFloat();
-	_a_field.max_bound.xyz.y = _max_y.toFloat();
-	_a_field.max_bound.xyz.z = _max_z.toFloat();
+	// save the box coords. Asteroid_field holds them live (typing pushes each
+	// component, gizmo drags write it directly) at full precision; the strings
+	// are the same values rounded to one decimal for display, and rounding a
+	// box that a drag clamped to exactly the 400 margin could fail validation.
+	_a_field.min_bound = Asteroid_field.min_bound;
+	_a_field.max_bound = Asteroid_field.max_bound;
 
 	if (_enable_inner_bounds) {
-		_a_field.inner_min_bound.xyz.x = _inner_min_x.toFloat();
-		_a_field.inner_min_bound.xyz.y = _inner_min_y.toFloat();
-		_a_field.inner_min_bound.xyz.z = _inner_min_z.toFloat();
-		_a_field.inner_max_bound.xyz.x = _inner_max_x.toFloat();
-		_a_field.inner_max_bound.xyz.y = _inner_max_y.toFloat();
-		_a_field.inner_max_bound.xyz.z = _inner_max_z.toFloat();
+		_a_field.inner_min_bound = Asteroid_field.inner_min_bound;
+		_a_field.inner_max_bound = Asteroid_field.inner_max_bound;
 	}
 
 	// clear the lists
@@ -431,148 +428,71 @@ QString& AsteroidEditorDialogModel::getAvgSpeed()
 
 void AsteroidEditorDialogModel::setBoxText(const QString &text, _box_line_edits type)
 {
-	BoundBox box = (type >= _I_MIN_X) ? BoundBox::Inner : BoundBox::Outer;
-	switch (type) {
-		case _O_MIN_X: modify(_min_x, text); break;
-		case _O_MIN_Y: modify(_min_y, text); break;
-		case _O_MIN_Z: modify(_min_z, text); break;
-		case _O_MAX_X: modify(_max_x, text); break;
-		case _O_MAX_Y: modify(_max_y, text); break;
-		case _O_MAX_Z: modify(_max_z, text); break;
-		case _I_MIN_X: modify(_inner_min_x, text); break;
-		case _I_MIN_Y: modify(_inner_min_y, text); break;
-		case _I_MIN_Z: modify(_inner_min_z, text); break;
-		case _I_MAX_X: modify(_inner_max_x, text); break;
-		case _I_MAX_Y: modify(_inner_max_y, text); break;
-		case _I_MAX_Z: modify(_inner_max_z, text); break;
-		default:
-			Error(LOCATION, "Get a coder! Unknown enum value found! %i", type);
-			return;
+	if (type < _O_MIN_X || type > _I_MAX_Z) {
+		Error(LOCATION, "Get a coder! Unknown enum value found! %i", type);
+		return;
 	}
+	modify(getBoxText(type), text);
 
-	// Push the new bound straight to Asteroid_field so the wireframe visualizer
-	// reflects what the user is typing or dragging in real time. The working
-	// copy strings remain the source of truth for apply()/validate_data().
-	pushLiveBound(box);
+	// Push just this component to Asteroid_field so the wireframe visualizer and
+	// the gizmos follow what the user types. Pushing the whole box would round
+	// the other five components to the string's one decimal.
+	pushLiveBoundComponent(type);
+}
+
+void AsteroidEditorDialogModel::pushLiveBoundComponent(_box_line_edits type)
+{
+	const int axis = (type - _O_MIN_X) % 3;
+	const float value = getBoxText(type).toFloat();
+	switch (type) {
+		case _O_MIN_X: case _O_MIN_Y: case _O_MIN_Z: Asteroid_field.min_bound.a1d[axis] = value; break;
+		case _O_MAX_X: case _O_MAX_Y: case _O_MAX_Z: Asteroid_field.max_bound.a1d[axis] = value; break;
+		case _I_MIN_X: case _I_MIN_Y: case _I_MIN_Z: Asteroid_field.inner_min_bound.a1d[axis] = value; break;
+		case _I_MAX_X: case _I_MAX_Y: case _I_MAX_Z: Asteroid_field.inner_max_bound.a1d[axis] = value; break;
+		default: break;
+	}
 }
 
 void AsteroidEditorDialogModel::pushLiveBound(BoundBox box)
 {
-	if (box == BoundBox::Outer) {
-		Asteroid_field.min_bound.xyz.x = _min_x.toFloat();
-		Asteroid_field.min_bound.xyz.y = _min_y.toFloat();
-		Asteroid_field.min_bound.xyz.z = _min_z.toFloat();
-		Asteroid_field.max_bound.xyz.x = _max_x.toFloat();
-		Asteroid_field.max_bound.xyz.y = _max_y.toFloat();
-		Asteroid_field.max_bound.xyz.z = _max_z.toFloat();
-	} else {
-		Asteroid_field.inner_min_bound.xyz.x = _inner_min_x.toFloat();
-		Asteroid_field.inner_min_bound.xyz.y = _inner_min_y.toFloat();
-		Asteroid_field.inner_min_bound.xyz.z = _inner_min_z.toFloat();
-		Asteroid_field.inner_max_bound.xyz.x = _inner_max_x.toFloat();
-		Asteroid_field.inner_max_bound.xyz.y = _inner_max_y.toFloat();
-		Asteroid_field.inner_max_bound.xyz.z = _inner_max_z.toFloat();
+	const int first = (box == BoundBox::Outer) ? _O_MIN_X : _I_MIN_X;
+	for (int i = first; i < first + 6; ++i) {
+		pushLiveBoundComponent(static_cast<_box_line_edits>(i));
 	}
 }
 
-void AsteroidEditorDialogModel::getBound(BoundBox box, vec3d* out_min, vec3d* out_max) const
+void AsteroidEditorDialogModel::syncGizmoFromGlobals(bool includeBaseline)
 {
-	if (box == BoundBox::Outer) {
-		out_min->xyz.x = _min_x.toFloat();
-		out_min->xyz.y = _min_y.toFloat();
-		out_min->xyz.z = _min_z.toFloat();
-		out_max->xyz.x = _max_x.toFloat();
-		out_max->xyz.y = _max_y.toFloat();
-		out_max->xyz.z = _max_z.toFloat();
-	} else {
-		out_min->xyz.x = _inner_min_x.toFloat();
-		out_min->xyz.y = _inner_min_y.toFloat();
-		out_min->xyz.z = _inner_min_z.toFloat();
-		out_max->xyz.x = _inner_max_x.toFloat();
-		out_max->xyz.y = _inner_max_y.toFloat();
-		out_max->xyz.z = _inner_max_z.toFloat();
-	}
-}
-
-void AsteroidEditorDialogModel::nudgeBoundComponent(BoundBox box, BoundCorner corner, int axis_index, float delta_world)
-{
-	if (delta_world == 0.0f) {
-		return;
-	}
-	vec3d mn, mx;
-	getBound(box, &mn, &mx);
-
-	float* target = nullptr;
-	float other = 0.0f; // the opposing min/max on this axis, used for clamping
-	if (corner == BoundCorner::Min) {
-		switch (axis_index) {
-		case 0: target = &mn.xyz.x; other = mx.xyz.x; break;
-		case 1: target = &mn.xyz.y; other = mx.xyz.y; break;
-		case 2: target = &mn.xyz.z; other = mx.xyz.z; break;
-		default: return;
-		}
-	} else {
-		switch (axis_index) {
-		case 0: target = &mx.xyz.x; other = mn.xyz.x; break;
-		case 1: target = &mx.xyz.y; other = mn.xyz.y; break;
-		case 2: target = &mx.xyz.z; other = mn.xyz.z; break;
-		default: return;
+	const vec3d* bounds[4] = {&Asteroid_field.min_bound, &Asteroid_field.max_bound,
+		&Asteroid_field.inner_min_bound, &Asteroid_field.inner_max_bound};
+	// One modelChanged for the batch, not one per component: this runs on
+	// every drag tick.
+	bool changed = false;
+	for (int i = _O_MIN_X; i <= _I_MAX_Z; ++i) {
+		const QString text = QString::number(bounds[i / 3]->a1d[i % 3], 'f', 1);
+		QString& current = getBoxText(static_cast<_box_line_edits>(i));
+		if (current != text) {
+			current = text;
+			changed = true;
 		}
 	}
-
-	float new_val = *target + delta_world;
-
-	// Keep the box non-degenerate. Use _MIN_BOX_THICKNESS as the minimum gap
-	// between min and max to avoid producing a zero- or negative-thickness
-	// box on a fast drag; matches the validation threshold the dialog enforces
-	// at apply time anyway.
-	const float pad = static_cast<float>(_MIN_BOX_THICKNESS);
-	if (corner == BoundCorner::Min) {
-		new_val = std::min(new_val, other - pad);
-	} else {
-		new_val = std::max(new_val, other + pad);
+	if (changed) {
+		set_modified();
+		modelChanged();
 	}
 
-	if (new_val == *target) {
-		return;
+	if (includeBaseline) {
+		_original_a_field.min_bound = Asteroid_field.min_bound;
+		_original_a_field.max_bound = Asteroid_field.max_bound;
+		_original_a_field.inner_min_bound = Asteroid_field.inner_min_bound;
+		_original_a_field.inner_max_bound = Asteroid_field.inner_max_bound;
 	}
-	*target = new_val;
-
-	// Re-stringify the moved component and write back through setBoxText so
-	// the modify() / modelChanged() / spinbox-refresh path runs exactly as if
-	// the user had typed the new value.
-	QString s = QString::number(new_val, 'f', 1);
-	int edit_index = -1;
-	if (box == BoundBox::Outer) {
-		if (corner == BoundCorner::Min) edit_index = _O_MIN_X + axis_index;
-		else                            edit_index = _O_MAX_X + axis_index;
-	} else {
-		if (corner == BoundCorner::Min) edit_index = _I_MIN_X + axis_index;
-		else                            edit_index = _I_MAX_X + axis_index;
-	}
-	setBoxText(s, static_cast<_box_line_edits>(edit_index));
 }
 
-void AsteroidEditorDialogModel::translateBound(BoundBox box, const vec3d& delta_world)
+void AsteroidEditorDialogModel::reloadFromGlobals()
 {
-	// Translate is just six nudges, but applied atomically so we don't trip
-	// the per-axis clamp when sliding the box wholesale.
-	vec3d mn, mx;
-	getBound(box, &mn, &mx);
-	vm_vec_add2(&mn, &delta_world);
-	vm_vec_add2(&mx, &delta_world);
-
-	// Push each component via setBoxText so all the usual signals fire.
-	int base_min, base_max;
-	if (box == BoundBox::Outer) { base_min = _O_MIN_X; base_max = _O_MAX_X; }
-	else                        { base_min = _I_MIN_X; base_max = _I_MAX_X; }
-
-	setBoxText(QString::number(mn.xyz.x, 'f', 1), static_cast<_box_line_edits>(base_min + 0));
-	setBoxText(QString::number(mn.xyz.y, 'f', 1), static_cast<_box_line_edits>(base_min + 1));
-	setBoxText(QString::number(mn.xyz.z, 'f', 1), static_cast<_box_line_edits>(base_min + 2));
-	setBoxText(QString::number(mx.xyz.x, 'f', 1), static_cast<_box_line_edits>(base_max + 0));
-	setBoxText(QString::number(mx.xyz.y, 'f', 1), static_cast<_box_line_edits>(base_max + 1));
-	setBoxText(QString::number(mx.xyz.z, 'f', 1), static_cast<_box_line_edits>(base_max + 2));
+	initializeData();
+	modelChanged();
 }
 
 QString & AsteroidEditorDialogModel::getBoxText(_box_line_edits type)

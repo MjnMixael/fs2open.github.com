@@ -13,6 +13,17 @@
 
 namespace fso::fred::dialogs {
 
+namespace {
+// updateUi() runs on every model change, including while the user types, and
+// setText() moves the cursor to the end even when the text is unchanged.
+void setTextIfChanged(QLineEdit* edit, const QString& text)
+{
+	if (edit->text() != text) {
+		edit->setText(text);
+	}
+}
+} // namespace
+
 AsteroidEditorDialog::AsteroidEditorDialog(FredView *parent, EditorViewport* viewport) :
 	QDialog(parent),
 	_viewport(viewport),
@@ -29,10 +40,21 @@ AsteroidEditorDialog::AsteroidEditorDialog(FredView *parent, EditorViewport* vie
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Asteroid Field"));
 
 	// Non-modal, like every other direct-edit dialog. The viewport gizmos stay
-	// live while this is open; their drags route through _model (see
-	// EditorViewport::setAsteroidEditModel) so they land in the working copy
-	// apply() writes back, instead of being clobbered by a stale one on OK.
+	// live while this is open: they edit Asteroid_field and the viewport syncs
+	// the result into _model (see EditorViewport::setAsteroidEditModel), so OK
+	// applies it and Cancel reverts it.
 	_viewport->setAsteroidEditModel(_model.get());
+
+	// A finished gizmo edit belongs to this dialog's session: record it here,
+	// not on the main stack, so Cancel doesn't leave a stale entry behind.
+	connect(_model.get(), &AsteroidEditorDialogModel::gizmoEditCommitted, this,
+		[this](const QByteArray& before, const QByteArray& after, const QString& text) {
+			_dialogStack->push(new DialogSnapshotCommand(before, after, [this](const QByteArray& snapshot) {
+				AsteroidEditorDialogModel::restoreGizmoState(snapshot);
+				_model->syncGizmoFromGlobals(false);
+				_viewport->needsUpdate();
+			}, text));
+		});
 
 	// set our internal values, update the UI
 	initializeUi();
@@ -64,9 +86,9 @@ AsteroidEditorDialog::AsteroidEditorDialog(FredView *parent, EditorViewport* vie
 
 AsteroidEditorDialog::~AsteroidEditorDialog()
 {
-	// Unregister only on destruction, not on hide: a merely-hidden dialog still
-	// owns the working copy its OK would apply, so handle drags must keep
-	// routing through it.
+	// Unregister on destruction (or in accept()), not on hide: a hidden dialog
+	// still owns the working copy its OK would apply, so gizmo edits must keep
+	// syncing into it. After accept() _model is empty and this is a no-op.
 	if (_viewport->asteroidEditModel() == _model.get()) {
 		_viewport->setAsteroidEditModel(nullptr);
 	}
@@ -74,9 +96,14 @@ AsteroidEditorDialog::~AsteroidEditorDialog()
 
 void AsteroidEditorDialog::accept()
 {
-	QByteArray stateBefore = _model->captureState();
+	// The globals already hold the live preview, so the undo "before" has to
+	// come from the open-time snapshot.
+	QByteArray stateBefore = _model->captureOriginalState();
 	if (_model->apply()) {
 		QByteArray stateAfter = _model->captureState();
+		// Unregister before the model moves into the undo command; the
+		// destructor can't, because _model is empty by then.
+		_viewport->setAsteroidEditModel(nullptr);
 		_model->setParent(nullptr);
 		_fredView->mainUndoStack()->push(
 			new ApplyDialogCommand(std::move(_model), stateBefore, stateAfter,
@@ -138,23 +165,23 @@ void AsteroidEditorDialog::initializeUi()
 	ui->spinBoxNumber->setValue(_model->getNumAsteroids());
 
 	// Average speed
-	ui->lineEditAvgSpeed->setText(_model->getAvgSpeed());
+	setTextIfChanged(ui->lineEditAvgSpeed, _model->getAvgSpeed());
 
 	// Outer box
-	ui->lineEdit_obox_minX->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MIN_X));
-	ui->lineEdit_obox_minY->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MIN_Y));
-	ui->lineEdit_obox_minZ->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MIN_Z));
-	ui->lineEdit_obox_maxX->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MAX_X));
-	ui->lineEdit_obox_maxY->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MAX_Y));
-	ui->lineEdit_obox_maxZ->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MAX_Z));
+	setTextIfChanged(ui->lineEdit_obox_minX, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MIN_X));
+	setTextIfChanged(ui->lineEdit_obox_minY, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MIN_Y));
+	setTextIfChanged(ui->lineEdit_obox_minZ, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MIN_Z));
+	setTextIfChanged(ui->lineEdit_obox_maxX, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MAX_X));
+	setTextIfChanged(ui->lineEdit_obox_maxY, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MAX_Y));
+	setTextIfChanged(ui->lineEdit_obox_maxZ, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_O_MAX_Z));
 
 	// Inner box
-	ui->lineEdit_ibox_minX->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MIN_X));
-	ui->lineEdit_ibox_minY->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MIN_Y));
-	ui->lineEdit_ibox_minZ->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MIN_Z));
-	ui->lineEdit_ibox_maxX->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MAX_X));
-	ui->lineEdit_ibox_maxY->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MAX_Y));
-	ui->lineEdit_ibox_maxZ->setText(_model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MAX_Z));
+	setTextIfChanged(ui->lineEdit_ibox_minX, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MIN_X));
+	setTextIfChanged(ui->lineEdit_ibox_minY, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MIN_Y));
+	setTextIfChanged(ui->lineEdit_ibox_minZ, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MIN_Z));
+	setTextIfChanged(ui->lineEdit_ibox_maxX, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MAX_X));
+	setTextIfChanged(ui->lineEdit_ibox_maxY, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MAX_Y));
+	setTextIfChanged(ui->lineEdit_ibox_maxZ, _model->getBoxText(AsteroidEditorDialogModel::_box_line_edits::_I_MAX_Z));
 
 	// Housekeeping
 	ui->spinBoxNumber->setRange(1, MAX_ASTEROIDS);

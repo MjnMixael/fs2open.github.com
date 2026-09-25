@@ -76,6 +76,10 @@ void SceneBrowserPanel::rememberExpansionState()
 {
 	for (int li = 0; li < _tree->topLevelItemCount(); li++) {
 		auto* layerItem = _tree->topLevelItem(li);
+		if (!layerItem->data(0, IsEnvironmentRootRole).isNull()) {
+			_expansionState[QStringLiteral("E")] = layerItem->isExpanded();
+			continue;
+		}
 		const auto layerName = layerItem->data(0, LayerNameRole).toString();
 		if (layerName.isEmpty()) continue;
 
@@ -131,7 +135,7 @@ void SceneBrowserPanel::rebuildTree()
 		// hides/shows every environment entity (nebula, field) in the viewport.
 		envItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
 		envItem->setCheckState(0, _model->environmentVisible() ? Qt::Checked : Qt::Unchecked);
-		envItem->setExpanded(true);
+		envItem->setExpanded(expandedStateOrDefault(QStringLiteral("E"), true));
 
 		if (hasVol) {
 			auto* volItem = new QTreeWidgetItem(envItem);
@@ -468,6 +472,9 @@ void SceneBrowserPanel::onItemSelectionChanged()
 		_model->multiSelectFromBrowser(selectedObjNums);
 	} else if (!selectedObjNums.isEmpty()) {
 		_model->multiSelectFromBrowser(selectedObjNums);
+	} else if (_model->currentEnvironment() != EnvironmentObject::None) {
+		// The selected environment entity was ctrl+clicked off.
+		_model->selectEnvironmentFromBrowser(EnvironmentObject::None);
 	} else {
 		_model->multiSelectFromBrowser({});
 	}

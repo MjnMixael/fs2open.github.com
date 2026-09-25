@@ -694,8 +694,9 @@ void Editor::setShowEnvironment(bool show) {
 		return;
 	}
 	show_environment = show;
-	if (!show_environment) {
-		// Hidden: nothing to select, so drop any environment selection.
+	if (!show_environment && currentEnvironment != EnvironmentObject::None) {
+		// Hidden: nothing to select, so drop any environment selection. Only when
+		// there is one: clearEnvironment() also clears the object selection.
 		clearEnvironment();
 	}
 	environmentVisibilityChanged();

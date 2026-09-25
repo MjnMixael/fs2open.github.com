@@ -64,11 +64,11 @@ class FredView: public QMainWindow, public IDialogProvider {
 	void showWingContextMenu(int wingIndex, const QPoint& globalPos);
 	void showWaypointPathContextMenu(int pathIndex, const QPoint& globalPos);
 
-	// Opens the (modal) Volumetric Nebula editor. Shared by the menu action,
+	// Opens the Volumetric Nebula editor. Shared by the menu action,
 	// the handle double-click, and the environment context menu.
 	void editVolumetricNebula();
 
-	// Opens the (modal) Asteroid Field editor. Shared by the menu action, the
+	// Opens the Asteroid Field editor. Shared by the menu action, the
 	// handle double-click, and the environment context menu.
 	void editAsteroidField();
 
