@@ -125,8 +125,8 @@ void SceneBrowserPanel::rebuildTree()
 	// "Environment" node: a top-level sibling of the layers, always first, no
 	// checkbox. Its children are non-object entities (volumetric nebula,
 	// asteroid field). Only shown when at least one such entity exists.
-	const bool hasVol = _model->hasVolumetricNebula();
-	const bool hasAst = _model->hasAsteroidField();
+	const bool hasVol = dialogs::SceneBrowserModel::hasVolumetricNebula();
+	const bool hasAst = dialogs::SceneBrowserModel::hasAsteroidField();
 	if (hasVol || hasAst) {
 		auto* envItem = new QTreeWidgetItem(_tree);
 		envItem->setText(0, tr("Environment"));
