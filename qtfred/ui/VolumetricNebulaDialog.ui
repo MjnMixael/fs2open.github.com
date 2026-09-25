@@ -2,9 +2,6 @@
 <ui version="4.0">
  <class>fso::fred::dialogs::VolumetricNebulaDialog</class>
  <widget class="QDialog" name="fso::fred::dialogs::VolumetricNebulaDialog">
-  <property name="windowModality">
-   <enum>Qt::WindowModal</enum>
-  </property>
   <property name="geometry">
    <rect>
     <x>0</x>
@@ -69,6 +66,9 @@
            </item>
            <item>
             <widget class="QSpinBox" name="positionXSpinBox">
+             <property name="minimum">
+              <number>-16777215</number>
+             </property>
              <property name="maximum">
               <number>16777215</number>
              </property>
@@ -86,6 +86,9 @@
            </item>
            <item>
             <widget class="QSpinBox" name="positionYSpinBox">
+             <property name="minimum">
+              <number>-16777215</number>
+             </property>
              <property name="maximum">
               <number>16777215</number>
              </property>
@@ -103,6 +106,9 @@
            </item>
            <item>
             <widget class="QSpinBox" name="positionZSpinBox">
+             <property name="minimum">
+              <number>-16777215</number>
+             </property>
              <property name="maximum">
               <number>16777215</number>
              </property>

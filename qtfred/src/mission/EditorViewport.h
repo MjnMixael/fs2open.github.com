@@ -6,13 +6,19 @@
 #include "Editor.h"
 #include "IDialogProvider.h"
 #include "ui/ThemeMode.h"
+#include "ViewportHandle.h"
 
 #include <object/object.h>
+
+#include <QByteArray>
+#include <QString>
 
 namespace fso::fred {
 
 namespace dialogs {
 class BackgroundEditorDialogModel;
+class VolumetricNebulaDialogModel;
+class AsteroidEditorDialogModel;
 }
 
 // Eye-space distance at which background-element handles are placed for
@@ -21,6 +27,12 @@ class BackgroundEditorDialogModel;
 // the picker (EditorViewport) and the renderer (FredRenderer) use this so the
 // drawn handle and its click target stay in sync.
 constexpr float BG_HANDLE_DISTANCE = 1000.0f;
+
+// Defined in Editor.h. Forward-declared here because Editor.h and
+// EditorViewport.h include each other: when a TU enters Editor.h first, this
+// header is pulled in before Editor.h's full enum definition. Only used as a
+// return type in a declaration below, so a forward declaration suffices.
+enum class EnvironmentObject;
 
 struct Marking_box {
 	int x1 = 0;
@@ -150,6 +162,28 @@ class EditorViewport {
 	dialogs::BackgroundEditorDialogModel* backgroundEditModel() const { return _bgEditModel; }
 	void setBackgroundEditModel(dialogs::BackgroundEditorDialogModel* model);
 
+	// --- Environment gizmo editing ---------------------------------------
+	// Set while the corresponding editor dialog is open. The always-on
+	// volumetric/asteroid gizmos edit the mission globals directly either way;
+	// with a dialog open they also sync the result into its model, so OK
+	// applies the edit and Cancel reverts it.
+	dialogs::VolumetricNebulaDialogModel* volumetricEditModel() const { return _volEditModel; }
+	void setVolumetricEditModel(dialogs::VolumetricNebulaDialogModel* model);
+	dialogs::AsteroidEditorDialogModel* asteroidEditModel() const { return _astEditModel; }
+	void setAsteroidEditModel(dialogs::AsteroidEditorDialogModel* model);
+
+	// One gizmo edit (a drag, or a transform-toolbar change) as a transaction.
+	// begin snapshots the fields gizmos can change; commit records one undo step
+	// if anything changed: on the open dialog's stack if there is one, else on
+	// the main stack. cancel restores the snapshot and records nothing.
+	void beginEnvEdit(EnvironmentObject env);
+	void commitEnvEdit(const QString& text);
+	void cancelEnvEdit();
+	bool envEditActive() const { return !_env_edit_before.isEmpty(); }
+
+	// Move the volumetric nebula (transform toolbar). Returns true if it moved.
+	bool moveVolumetricTo(const vec3d& pos);
+
 	// Pick the background element (sun or bitmap) whose projected handle is
 	// nearest the cursor. Returns true and fills isSun/index on a hit.
 	bool select_background_element(int cx, int cy, bool& isSun, int& index) const;
@@ -160,6 +194,69 @@ class EditorViewport {
 	void drag_background_element(int x, int y);
 	void rotate_background_element(int mouse_dx);
 	void end_background_drag();
+
+	// Viewport handle (non-object selectable marker) API. The environment
+	// gizmos register one group each; the picking pre-pass below runs before
+	// select_object() so a handle click never falls through into normal mission
+	// object selection.
+	HandleGroupId registerHandleGroup(std::vector<ViewportHandle> handles);
+	void updateHandleGroup(HandleGroupId id, std::vector<ViewportHandle> handles);
+	void unregisterHandleGroup(HandleGroupId id);
+	const std::vector<std::vector<ViewportHandle>>& getHandleGroups() const { return _handle_groups; }
+
+	// Returns {group_index, handle_index} or {-1, -1} if nothing within pick
+	// radius. group_index is the slot in _handle_groups, NOT the generation id.
+	struct HandlePick { int group_index = -1; int handle_index = -1; };
+	HandlePick pick_handle(int cx, int cy) const;
+
+	// Begin/continue/end a handle drag. begin_handle_drag records the anchor
+	// point on the constraint plane; drag_handle delivers per-tick deltas via
+	// the handle's on_drag callback. Returns false if the active handle was
+	// invalidated (e.g. its group was unregistered mid-drag).
+	bool begin_handle_drag(HandlePick pick, int cx, int cy);
+	bool drag_handle(int cx, int cy);
+	void end_handle_drag();
+	bool has_active_handle_drag() const { return _active_handle.group_index >= 0; }
+
+	// Hovered-handle tracking for the in-scene hover balloon. RenderWidget sets
+	// this on mouse-move; FredRenderer reads it to draw the infobox.
+	void setHoveredHandle(HandlePick pick) { _hovered_handle = pick; }
+	HandlePick getHoveredHandle() const { return _hovered_handle; }
+
+	// Viewport-owned volumetric nebula gizmo, present whenever the mission has
+	// an enabled volumetric with a hull, so the nebula can be dragged with or
+	// without its dialog open. refreshVolumetricHandle() rebuilds it from
+	// The_mission when its state actually changes (cheap no-op otherwise); it
+	// is called each frame from the renderer.
+	void refreshVolumetricHandle();
+
+	// Viewport-owned asteroid-field gizmos (outer box, and inner box when
+	// enabled): 6 face + 8 corner + 1 center handle per box, rebuilt from
+	// Asteroid_field. Always on, like the volumetric handle. Drags keep each box
+	// at least 400 thick and the inner box 400 inside the outer one, the same
+	// rules the dialog checks on OK. Called each frame from the renderer
+	// (dirty-checked).
+	void refreshAsteroidHandles();
+
+	// Which environment entity (if any) a picked handle belongs to. The
+	// viewport-owned volumetric and asteroid gizmos map to one; anything else
+	// returns None. Used by the widget to drive environment selection.
+	EnvironmentObject handleEnvironment(HandlePick pick) const;
+
+	// The specific handle the transform-toolbar spinboxes act on (for the
+	// asteroid field, which has many handles). Set on a viewport handle click;
+	// cleared to fall back to the field's outer-box center.
+	void setSelectedHandle(HandlePick pick) { _selected_handle = pick; }
+	void clearSelectedHandle() { _selected_handle = HandlePick{}; }
+
+	// Read/write the currently targeted asteroid handle for the spinboxes.
+	// asteroidSpinboxTarget fills the handle's world position and its editable
+	// axis bitmask, defaulting to the outer-box center; returns false if there
+	// is no asteroid field. applyAsteroidSpinbox moves that handle so its
+	// position becomes new_pos (delta routed through the handle's on_drag, so
+	// clamping and mission-modified marking happen there).
+	bool asteroidSpinboxTarget(vec3d* out_pos, int* out_movable_axes) const;
+	void applyAsteroidSpinbox(const vec3d& new_pos);
 
 	SCP_vector<SCP_string> getLayerNames() const;
 	bool addLayer(const SCP_string& name, SCP_string* errorMessage = nullptr);
@@ -282,6 +379,14 @@ class EditorViewport {
 private:
 	// Background editor integration (non-owning; valid only while the dialog lives)
 	dialogs::BackgroundEditorDialogModel* _bgEditModel = nullptr;
+	dialogs::VolumetricNebulaDialogModel* _volEditModel = nullptr;
+	dialogs::AsteroidEditorDialogModel* _astEditModel = nullptr;
+	// The open gizmo edit transaction (see beginEnvEdit). Empty = none.
+	EnvironmentObject _env_edit_kind{}; // None; only forward-declared here, so no enumerator names
+	QByteArray _env_edit_before;
+	// After a gizmo changed the mission: sync the open dialog (if any), mark the
+	// mission changed and repaint.
+	void envGizmoChanged(EnvironmentObject env);
 	// Active background drag: -1 = none, else index into suns/bitmaps of the
 	// active background (which list is chosen by _bgDragIsSun).
 	int  _bgDragIndex = -1;
@@ -297,6 +402,53 @@ private:
 
 	void lockControls();
 	void unlockControls();
+
+	// Handle registry. Slots are never reused; _handle_group_generations[i]
+	// increments when slot i is unregistered, so a stale HandleGroupId (or an
+	// in-progress drag on that group) fails the generation check.
+	std::vector<std::vector<ViewportHandle>> _handle_groups;
+	std::vector<int> _handle_group_generations;
+
+	// Active handle drag state. group_index = -1 means no drag in progress.
+	HandlePick _active_handle{};
+	int _active_handle_generation = 0;
+	vec3d _active_handle_last_world = vmd_zero_vector;
+
+	// Handle currently under the cursor (for the hover balloon). {-1,-1} = none.
+	// _last_hovered_handle lets game_do_frame schedule a repaint when the hover
+	// changes, mirroring Cursor_over / Last_cursor_over for objects.
+	HandlePick _hovered_handle{};
+	HandlePick _last_hovered_handle{};
+
+	// Viewport-owned volumetric gizmo state.
+	HandleGroupId _volumetric_handle_group;
+	// Cache so refreshVolumetricHandle() only touches the registry (and thus
+	// requests a repaint) when the rendered state actually changes; otherwise
+	// per-frame refresh would loop forever via needsUpdate().
+	bool _vol_handle_cached_present = false;
+	vec3d _vol_handle_cached_pos = vmd_zero_vector;
+	SCP_string _vol_handle_cached_label;
+	int _vol_handle_cached_color = -1;
+	bool _vol_handle_cached_selected = false;
+
+	// Viewport-owned asteroid gizmo state, plus a dirty cache (bounds + toggles
+	// + selected) to avoid the per-frame repaint loop, and the outer-box center
+	// handle index (spinbox default target).
+	HandleGroupId _asteroid_handle_group;
+	int _asteroid_center_index = -1;
+	bool _ast_handle_cached_present = false;
+	bool _ast_handle_cached_inner = false;
+	bool _ast_handle_cached_selected = false;
+	int _ast_handle_cached_target = -1;
+	vec3d _ast_handle_cached_bounds[4] = {vmd_zero_vector, vmd_zero_vector, vmd_zero_vector, vmd_zero_vector};
+
+	// The transform-toolbar's target handle across all groups. {-1,-1} = none.
+	HandlePick _selected_handle{};
+
+	// Compute the world-space point under the mouse cursor on the same
+	// constraint plane that drag_objects() uses (centered on `anchor`).
+	// Returns false if the intersection is behind the camera or invalid.
+	bool screen_to_constraint_plane(int cx, int cy, const vec3d& anchor, vec3d* out_world) const;
 };
 
 } // namespace fso::fred

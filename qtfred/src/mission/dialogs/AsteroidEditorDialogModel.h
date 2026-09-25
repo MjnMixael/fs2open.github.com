@@ -38,6 +38,23 @@ public:
 	QByteArray captureState() const override;
 	void restoreState(const QByteArray& state) override;
 
+	// Snapshot/restore of the mission globals this dialog edits. Static so an
+	// undo command can restore them with no dialog instance alive.
+	static QByteArray captureGlobalState();
+	static void restoreGlobalState(const QByteArray& state);
+	// The globals as they were when the dialog opened, before any live preview.
+	// This is the "before" of the dialog's OK.
+	QByteArray captureOriginalState() const;
+
+	// The viewport gizmos only ever change the box bounds. These snapshot just
+	// those, so undoing a drag can't clobber the dialog's other live previews.
+	static QByteArray captureGizmoState();
+	static void restoreGizmoState(const QByteArray& state);
+	// Re-read the box bounds from Asteroid_field after a gizmo edited them.
+	// includeBaseline also moves the Cancel baseline, for edits that happened
+	// outside this dialog (a main-stack undo).
+	void syncGizmoFromGlobals(bool includeBaseline);
+
 	// toggles
 	void setFieldEnabled(bool enabled);
 	bool getFieldEnabled() const;
@@ -81,12 +98,28 @@ public:
 	const SCP_vector<SCP_string>& getShipTargetNames() const { return _field_target_names; }
 	void setShipTargetNames(const SCP_vector<SCP_string>& names);
 
+signals:
+	// A viewport gizmo edit finished while this dialog is open. The dialog
+	// records it on its own undo stack, so OK keeps it and Cancel drops it.
+	void gizmoEditCommitted(const QByteArray& before, const QByteArray& after, const QString& text);
+
 private:
+	enum class BoundBox { Outer, Inner };
+
+	// Re-read the whole working copy after an undo rewrote the globals behind
+	// this dialog's back.
+	void reloadFromGlobals();
 
 	void initializeData();
 	void update_internal_field();
 	bool validate_data();
 	void showErrorDialogNoCancel(const SCP_string& message);
+
+	// Push the working-copy bounds for the given box (or one component of them)
+	// into the global Asteroid_field, so the visualizer and the viewport gizmos
+	// preview the edit live.
+	void pushLiveBound(BoundBox box);
+	void pushLiveBoundComponent(_box_line_edits type);
 
 	// boilerplate
 	bool _bypass_errors;
@@ -94,6 +127,11 @@ private:
 
 	// working copy of the asteroid field
 	asteroid_field _a_field;
+
+	// Snapshot taken in initializeData(), restored by reject() so cancelling
+	// the dialog undoes any live preview the user produced by dragging
+	// handles or typing into the spinboxes.
+	asteroid_field _original_a_field;
 
 	// toggles
 	bool  _enable_asteroids;

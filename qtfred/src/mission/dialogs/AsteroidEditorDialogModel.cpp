@@ -1,5 +1,7 @@
 #include "mission/dialogs/AsteroidEditorDialogModel.h"
 
+#include <algorithm>
+
 namespace fso::fred::dialogs {
 
 AsteroidEditorDialogModel::AsteroidEditorDialogModel(QObject* parent, EditorViewport* viewport) :
@@ -35,17 +37,41 @@ bool AsteroidEditorDialogModel::apply()
 		return false;
 	}
 	Asteroid_field = _a_field;
+
+	// If the field was just disabled while it was the selected environment
+	// entity, drop that now-dangling selection.
+	if (Asteroid_field.num_initial_asteroids <= 0 && _editor != nullptr &&
+		_editor->currentEnvironment == EnvironmentObject::AsteroidField) {
+		_editor->clearEnvironment();
+	}
+
+	// Enabling an environment entity forces the environment "layer" visible, so
+	// it can't be enabled yet invisibly hidden (which would be confusing).
+	if (Asteroid_field.num_initial_asteroids > 0 && _editor != nullptr) {
+		_editor->setShowEnvironment(true);
+	}
+
+	// Notify: marks the mission modified and lets dependents refresh — notably
+	// the Scene Browser rebuilds so its "Environment" node's asteroid child
+	// appears/disappears as the field is enabled/disabled.
+	if (_editor != nullptr) {
+		_editor->missionChanged();
+	}
 	return true;
 }
 
 void AsteroidEditorDialogModel::reject()
 {
-	//do nothing - only here because parent class reject() function is virtual
+	// Restore the global Asteroid_field to the snapshot taken in
+	// initializeData(). This undoes any live preview produced by handle drags
+	// or by typing into the bound spinboxes (which also push live now).
+	Asteroid_field = _original_a_field;
 }
 
 void AsteroidEditorDialogModel::initializeData()
 {
 	_a_field = Asteroid_field; // copy the current asteroid field data
+	_original_a_field = Asteroid_field; // snapshot for reject() to restore
 
 	// Now initialize the model data from the asteroid field
 	_enable_asteroids = (_a_field.num_initial_asteroids > 0);
@@ -83,7 +109,9 @@ void AsteroidEditorDialogModel::initializeData()
 	_field_asteroid_type = _a_field.field_asteroid_type;
 	_field_target_names = _a_field.target_names;
 
-	// Initialize asteroid options
+	// Initialize asteroid options (cleared first: an undo can reload the model)
+	asteroidOptions.clear();
+	debrisOptions.clear();
 	const auto& list = get_list_valid_asteroid_subtypes();
 	for (const auto& name : list) {
 		asteroidOptions.push_back(name);
@@ -122,21 +150,16 @@ void AsteroidEditorDialogModel::update_internal_field()
 	_a_field.num_initial_asteroids = num_asteroids;
 	_a_field.vel = vel_vec;
 
-	// save the box coords
-	_a_field.min_bound.xyz.x = _min_x.toFloat();
-	_a_field.min_bound.xyz.y = _min_y.toFloat();
-	_a_field.min_bound.xyz.z = _min_z.toFloat();
-	_a_field.max_bound.xyz.x = _max_x.toFloat();
-	_a_field.max_bound.xyz.y = _max_y.toFloat();
-	_a_field.max_bound.xyz.z = _max_z.toFloat();
+	// save the box coords. Asteroid_field holds them live (typing pushes each
+	// component, gizmo drags write it directly) at full precision; the strings
+	// are the same values rounded to one decimal for display, and rounding a
+	// box that a drag clamped to exactly the 400 margin could fail validation.
+	_a_field.min_bound = Asteroid_field.min_bound;
+	_a_field.max_bound = Asteroid_field.max_bound;
 
 	if (_enable_inner_bounds) {
-		_a_field.inner_min_bound.xyz.x = _inner_min_x.toFloat();
-		_a_field.inner_min_bound.xyz.y = _inner_min_y.toFloat();
-		_a_field.inner_min_bound.xyz.z = _inner_min_z.toFloat();
-		_a_field.inner_max_bound.xyz.x = _inner_max_x.toFloat();
-		_a_field.inner_max_bound.xyz.y = _inner_max_y.toFloat();
-		_a_field.inner_max_bound.xyz.z = _inner_max_z.toFloat();
+		_a_field.inner_min_bound = Asteroid_field.inner_min_bound;
+		_a_field.inner_max_bound = Asteroid_field.inner_max_bound;
 	}
 
 	// clear the lists
@@ -320,6 +343,16 @@ void AsteroidEditorDialogModel::showErrorDialogNoCancel(const SCP_string& messag
 void AsteroidEditorDialogModel::setFieldEnabled(bool enabled)
 {
 	modify(_enable_asteroids, enabled);
+	// Live-push so the visualizer (which gates on num_initial_asteroids > 0)
+	// shows or hides the box immediately as the user toggles the checkbox.
+	// Reject restores the snapshot.
+	Asteroid_field.num_initial_asteroids = enabled ? std::max(1, _num_asteroids) : 0;
+	if (enabled) {
+		pushLiveBound(BoundBox::Outer);
+		if (_enable_inner_bounds) {
+			pushLiveBound(BoundBox::Inner);
+		}
+	}
 }
 
 bool AsteroidEditorDialogModel::getFieldEnabled() const
@@ -330,6 +363,12 @@ bool AsteroidEditorDialogModel::getFieldEnabled() const
 void AsteroidEditorDialogModel::setInnerBoxEnabled(bool enabled)
 {
 	modify(_enable_inner_bounds, enabled);
+	// Live-push so the inner wireframe (and the inner-box viewport handles)
+	// appear/disappear as the user toggles the checkbox.
+	Asteroid_field.has_inner_bound = enabled;
+	if (enabled) {
+		pushLiveBound(BoundBox::Inner);
+	}
 }
 
 bool AsteroidEditorDialogModel::getInnerBoxEnabled() const
@@ -389,23 +428,71 @@ QString& AsteroidEditorDialogModel::getAvgSpeed()
 
 void AsteroidEditorDialogModel::setBoxText(const QString &text, _box_line_edits type)
 {
-	switch (type) {
-		case _O_MIN_X: modify(_min_x, text); break;
-		case _O_MIN_Y: modify(_min_y, text); break;
-		case _O_MIN_Z: modify(_min_z, text); break;
-		case _O_MAX_X: modify(_max_x, text); break;
-		case _O_MAX_Y: modify(_max_y, text); break;
-		case _O_MAX_Z: modify(_max_z, text); break;
-		case _I_MIN_X: modify(_inner_min_x, text); break;
-		case _I_MIN_Y: modify(_inner_min_y, text); break;
-		case _I_MIN_Z: modify(_inner_min_z, text); break;
-		case _I_MAX_X: modify(_inner_max_x, text); break;
-		case _I_MAX_Y: modify(_inner_max_y, text); break;
-		case _I_MAX_Z: modify(_inner_max_z, text); break;
-		default:
-			Error(LOCATION, "Get a coder! Unknown enum value found! %i", type);
-			break;
+	if (type < _O_MIN_X || type > _I_MAX_Z) {
+		Error(LOCATION, "Get a coder! Unknown enum value found! %i", type);
+		return;
 	}
+	modify(getBoxText(type), text);
+
+	// Push just this component to Asteroid_field so the wireframe visualizer and
+	// the gizmos follow what the user types. Pushing the whole box would round
+	// the other five components to the string's one decimal.
+	pushLiveBoundComponent(type);
+}
+
+void AsteroidEditorDialogModel::pushLiveBoundComponent(_box_line_edits type)
+{
+	const int axis = (type - _O_MIN_X) % 3;
+	const float value = getBoxText(type).toFloat();
+	switch (type) {
+		case _O_MIN_X: case _O_MIN_Y: case _O_MIN_Z: Asteroid_field.min_bound.a1d[axis] = value; break;
+		case _O_MAX_X: case _O_MAX_Y: case _O_MAX_Z: Asteroid_field.max_bound.a1d[axis] = value; break;
+		case _I_MIN_X: case _I_MIN_Y: case _I_MIN_Z: Asteroid_field.inner_min_bound.a1d[axis] = value; break;
+		case _I_MAX_X: case _I_MAX_Y: case _I_MAX_Z: Asteroid_field.inner_max_bound.a1d[axis] = value; break;
+		default: break;
+	}
+}
+
+void AsteroidEditorDialogModel::pushLiveBound(BoundBox box)
+{
+	const int first = (box == BoundBox::Outer) ? _O_MIN_X : _I_MIN_X;
+	for (int i = first; i < first + 6; ++i) {
+		pushLiveBoundComponent(static_cast<_box_line_edits>(i));
+	}
+}
+
+void AsteroidEditorDialogModel::syncGizmoFromGlobals(bool includeBaseline)
+{
+	const vec3d* bounds[4] = {&Asteroid_field.min_bound, &Asteroid_field.max_bound,
+		&Asteroid_field.inner_min_bound, &Asteroid_field.inner_max_bound};
+	// One modelChanged for the batch, not one per component: this runs on
+	// every drag tick.
+	bool changed = false;
+	for (int i = _O_MIN_X; i <= _I_MAX_Z; ++i) {
+		const QString text = QString::number(bounds[i / 3]->a1d[i % 3], 'f', 1);
+		QString& current = getBoxText(static_cast<_box_line_edits>(i));
+		if (current != text) {
+			current = text;
+			changed = true;
+		}
+	}
+	if (changed) {
+		set_modified();
+		modelChanged();
+	}
+
+	if (includeBaseline) {
+		_original_a_field.min_bound = Asteroid_field.min_bound;
+		_original_a_field.max_bound = Asteroid_field.max_bound;
+		_original_a_field.inner_min_bound = Asteroid_field.inner_min_bound;
+		_original_a_field.inner_max_bound = Asteroid_field.inner_max_bound;
+	}
+}
+
+void AsteroidEditorDialogModel::reloadFromGlobals()
+{
+	initializeData();
+	modelChanged();
 }
 
 QString & AsteroidEditorDialogModel::getBoxText(_box_line_edits type)

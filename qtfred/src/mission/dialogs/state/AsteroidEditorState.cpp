@@ -3,6 +3,7 @@
 // working copy.
 
 #include <mission/dialogs/AsteroidEditorDialogModel.h>
+#include <mission/EditorViewport.h>
 
 #include <asteroid/asteroid.h>
 
@@ -23,7 +24,7 @@ static void deserializeVec3d(QDataStream& ds, vec3d& v)
 	ds >> v.xyz.x >> v.xyz.y >> v.xyz.z;
 }
 
-QByteArray AsteroidEditorDialogModel::captureState() const
+QByteArray AsteroidEditorDialogModel::captureGlobalState()
 {
 	QByteArray data;
 	QDataStream ds(&data, QIODevice::WriteOnly);
@@ -62,7 +63,7 @@ QByteArray AsteroidEditorDialogModel::captureState() const
 	return data;
 }
 
-void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
+void AsteroidEditorDialogModel::restoreGlobalState(const QByteArray& state)
 {
 	QDataStream ds(state);
 
@@ -114,6 +115,58 @@ void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
 		QString s;
 		ds >> s;
 		f.target_names.emplace_back(s.toUtf8().constData());
+	}
+}
+
+QByteArray AsteroidEditorDialogModel::captureGizmoState()
+{
+	QByteArray data;
+	QDataStream ds(&data, QIODevice::WriteOnly);
+	serializeVec3d(ds, Asteroid_field.min_bound);
+	serializeVec3d(ds, Asteroid_field.max_bound);
+	serializeVec3d(ds, Asteroid_field.inner_min_bound);
+	serializeVec3d(ds, Asteroid_field.inner_max_bound);
+	return data;
+}
+
+void AsteroidEditorDialogModel::restoreGizmoState(const QByteArray& state)
+{
+	QDataStream ds(state);
+	deserializeVec3d(ds, Asteroid_field.min_bound);
+	deserializeVec3d(ds, Asteroid_field.max_bound);
+	deserializeVec3d(ds, Asteroid_field.inner_min_bound);
+	deserializeVec3d(ds, Asteroid_field.inner_max_bound);
+}
+
+QByteArray AsteroidEditorDialogModel::captureOriginalState() const
+{
+	// The globals hold this dialog's live preview, so swap the open-time
+	// snapshot in just long enough to serialize it.
+	const asteroid_field live = Asteroid_field;
+	Asteroid_field = _original_a_field;
+	QByteArray data = captureGlobalState();
+	Asteroid_field = live;
+	return data;
+}
+
+// The AbstractDialogModel overrides just delegate: the snapshot is of the
+// mission globals, not of this model's working copy, so an undo command can
+// restore it with no dialog alive.
+QByteArray AsteroidEditorDialogModel::captureState() const
+{
+	return captureGlobalState();
+}
+
+void AsteroidEditorDialogModel::restoreState(const QByteArray& state)
+{
+	restoreGlobalState(state);
+
+	// This model belongs to a closed dialog's undo command. If an asteroid
+	// dialog is open now, its working copy is stale, so reload it.
+	if (_viewport != nullptr) {
+		if (auto* open = _viewport->asteroidEditModel()) {
+			open->reloadFromGlobals();
+		}
 	}
 }
 

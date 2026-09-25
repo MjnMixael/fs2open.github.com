@@ -111,7 +111,6 @@ private: // NOLINT(readability-redundant-access-specifiers)
 		});
 		_dialogStack->push(cmd);
 	}
-
 	// Boilerplate
 	EditorViewport* _viewport = nullptr;
 	std::unique_ptr<Ui::VolumetricNebulaDialog> ui;

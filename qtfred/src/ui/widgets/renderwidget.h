@@ -5,6 +5,7 @@
 #include <QWindow>
 #include <QWidget>
 #include <QByteArray>
+#include <mission/Editor.h>
 #include <mission/EditorViewport.h>
 
 #include "osapi/osapi.h"
@@ -61,6 +62,20 @@ class RenderWidget: public QWidget {
 	bool _usingMarkingBox = false;
 	Marking_box _markingBox;
 
+	// Set when a viewport handle was grabbed on the most recent left-press
+	// pre-pass; consumed in mouseMoveEvent / mouseReleaseEvent. While true,
+	// normal object selection and dragging are bypassed entirely.
+	bool _handleGrabbed = false;
+
+	// Which environment entity the grabbed handle belongs to. The viewport holds
+	// the undo snapshot (see EditorViewport::beginEnvEdit).
+	EnvironmentObject _handleDragEnv = EnvironmentObject::None;
+
+	// True iff the cursor is hovering a pickable viewport handle (and the
+	// editor is in Moving mode). updateCursor() consults this to show the
+	// move cursor, matching the affordance for hovering a real object.
+	bool _hoveringHandle = false;
+
 	QPoint _lastMouse;
 
 	// Orbit camera drag state
@@ -76,6 +91,12 @@ class RenderWidget: public QWidget {
 	// revert if the dialog closed mid-drag) and clear the drag state. Shared by
 	// the release handler and the "button released off-widget" recovery path.
 	void finalizeBackgroundDrag();
+
+	// End an in-progress viewport-handle drag. finalize keeps it and records one
+	// undo step (release, and the lost-release recovery path); cancel reverts it
+	// (Escape, right-click).
+	void finalizeHandleDrag();
+	void cancelHandleDrag();
 
 	// Ctrl+drag clone tracking — set on press, consumed on release.
 	bool            _wasDupDrag              = false;

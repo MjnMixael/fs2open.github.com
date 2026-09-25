@@ -76,6 +76,10 @@ void SceneBrowserPanel::rememberExpansionState()
 {
 	for (int li = 0; li < _tree->topLevelItemCount(); li++) {
 		auto* layerItem = _tree->topLevelItem(li);
+		if (!layerItem->data(0, IsEnvironmentRootRole).isNull()) {
+			_expansionState[QStringLiteral("E")] = layerItem->isExpanded();
+			continue;
+		}
 		const auto layerName = layerItem->data(0, LayerNameRole).toString();
 		if (layerName.isEmpty()) continue;
 
@@ -117,6 +121,35 @@ void SceneBrowserPanel::rebuildTree()
 
 	const auto& layers = _model->getTree();
 	const auto marked = dialogs::SceneBrowserModel::getMarkedSet();
+
+	// "Environment" node: a top-level sibling of the layers, always first, no
+	// checkbox. Its children are non-object entities (volumetric nebula,
+	// asteroid field). Only shown when at least one such entity exists.
+	const bool hasVol = dialogs::SceneBrowserModel::hasVolumetricNebula();
+	const bool hasAst = dialogs::SceneBrowserModel::hasAsteroidField();
+	if (hasVol || hasAst) {
+		auto* envItem = new QTreeWidgetItem(_tree);
+		envItem->setText(0, tr("Environment"));
+		envItem->setData(0, IsEnvironmentRootRole, true);
+		// Header row: not selectable, but a layer-style visibility checkbox that
+		// hides/shows every environment entity (nebula, field) in the viewport.
+		envItem->setFlags(Qt::ItemIsEnabled | Qt::ItemIsUserCheckable);
+		envItem->setCheckState(0, _model->environmentVisible() ? Qt::Checked : Qt::Unchecked);
+		envItem->setExpanded(expandedStateOrDefault(QStringLiteral("E"), true));
+
+		if (hasVol) {
+			auto* volItem = new QTreeWidgetItem(envItem);
+			volItem->setText(0, tr("Volumetric Nebula"));
+			volItem->setData(0, EnvKindRole, static_cast<int>(EnvironmentObject::VolumetricNebula));
+			volItem->setSelected(_model->currentEnvironment() == EnvironmentObject::VolumetricNebula);
+		}
+		if (hasAst) {
+			auto* astItem = new QTreeWidgetItem(envItem);
+			astItem->setText(0, tr("Asteroid Field"));
+			astItem->setData(0, EnvKindRole, static_cast<int>(EnvironmentObject::AsteroidField));
+			astItem->setSelected(_model->currentEnvironment() == EnvironmentObject::AsteroidField);
+		}
+	}
 
 	for (const auto& layer : layers) {
 		// Count total objects across all categories
@@ -205,6 +238,15 @@ void SceneBrowserPanel::syncSelection()
 	QTreeWidgetItemIterator it(_tree);
 	QTreeWidgetItem* firstSelected = nullptr;
 	while (*it) {
+		auto varEnv = (*it)->data(0, EnvKindRole);
+		if (!varEnv.isNull()) {
+			bool sel = (_model->currentEnvironment() == static_cast<EnvironmentObject>(varEnv.toInt()));
+			(*it)->setSelected(sel);
+			if (sel && !firstSelected)
+				firstSelected = *it;
+			++it;
+			continue;
+		}
 		auto varObjNum = (*it)->data(0, ObjNumRole);
 		if (!varObjNum.isNull()) {
 			bool sel = marked.contains(varObjNum.toInt());
@@ -246,6 +288,10 @@ void SceneBrowserPanel::syncLayerVisibility()
 
 	for (int i = 0; i < _tree->topLevelItemCount(); i++) {
 		auto* item = _tree->topLevelItem(i);
+		if (!item->data(0, IsEnvironmentRootRole).isNull()) {
+			item->setCheckState(0, _model->environmentVisible() ? Qt::Checked : Qt::Unchecked);
+			continue;
+		}
 		auto layerName = item->data(0, LayerNameRole).toString();
 		for (const auto& layer : layers) {
 			if (layer.name == layerName) {
@@ -284,6 +330,9 @@ void SceneBrowserPanel::applyFilter(const QString& filter)
 	// Walk bottom-up: leaves are already handled, now handle wings, paths, categories, layers
 	for (int li = 0; li < _tree->topLevelItemCount(); li++) {
 		auto* layerItem = _tree->topLevelItem(li);
+		// The Environment node has a different (2-level) shape than a layer and
+		// is never hidden by the name filter.
+		if (!layerItem->data(0, IsEnvironmentRootRole).isNull()) continue;
 		bool anyLayerVisible = false;
 		for (int ci = 0; ci < layerItem->childCount(); ci++) {
 			auto* catItem = layerItem->child(ci);
@@ -356,6 +405,14 @@ void SceneBrowserPanel::onTreeStructureChanged()
 void SceneBrowserPanel::onItemChanged(QTreeWidgetItem* item, int column)
 {
 	if (column != 0) return;
+
+	// Environment visibility checkbox (top-level node).
+	auto varEnvRoot = item->data(0, IsEnvironmentRootRole);
+	if (!varEnvRoot.isNull() && varEnvRoot.toBool()) {
+		_model->setEnvironmentVisible(item->checkState(0) == Qt::Checked);
+		return;
+	}
+
 	auto varLayer = item->data(0, IsLayerItemRole);
 	if (varLayer.isNull() || !varLayer.toBool()) return;
 
@@ -366,6 +423,19 @@ void SceneBrowserPanel::onItemChanged(QTreeWidgetItem* item, int column)
 void SceneBrowserPanel::onItemSelectionChanged()
 {
 	if (_model->isUpdatingFromBrowser()) return;
+
+	// Environment entities are single-select and mutually exclusive with
+	// objects: if one is in the selection, select it and ignore the rest.
+	for (auto* item : _tree->selectedItems()) {
+		auto varEnv = item->data(0, EnvKindRole);
+		if (!varEnv.isNull()) {
+			_model->selectEnvironmentFromBrowser(static_cast<EnvironmentObject>(varEnv.toInt()));
+			// Reconcile the tree with the single-select model (objects were
+			// unmarked); harmless for a plain click, collapses a ctrl+click mix.
+			syncSelection();
+			return;
+		}
+	}
 
 	QVector<int> selectedObjNums;
 	QVector<int> selectedWings;
@@ -402,6 +472,9 @@ void SceneBrowserPanel::onItemSelectionChanged()
 		_model->multiSelectFromBrowser(selectedObjNums);
 	} else if (!selectedObjNums.isEmpty()) {
 		_model->multiSelectFromBrowser(selectedObjNums);
+	} else if (_model->currentEnvironment() != EnvironmentObject::None) {
+		// The selected environment entity was ctrl+clicked off.
+		_model->selectEnvironmentFromBrowser(EnvironmentObject::None);
 	} else {
 		_model->multiSelectFromBrowser({});
 	}
@@ -413,6 +486,30 @@ void SceneBrowserPanel::onCustomContextMenuRequested(const QPoint& pos)
 	if (!item) return;
 
 	const auto globalPos = _tree->viewport()->mapToGlobal(pos);
+
+	// Environment child (volumetric nebula, asteroid later): select it, then
+	// offer its editor, mirroring an object's right-click "Edit ...".
+	auto varEnv = item->data(0, EnvKindRole);
+	if (!varEnv.isNull()) {
+		const auto kind = static_cast<EnvironmentObject>(varEnv.toInt());
+		_model->selectEnvironmentFromBrowser(kind);
+		syncSelection();
+		QMenu menu(this);
+		QAction* editAction = nullptr;
+		if (kind == EnvironmentObject::VolumetricNebula) {
+			editAction = menu.addAction(tr("Edit Volumetric Nebula"));
+		} else if (kind == EnvironmentObject::AsteroidField) {
+			editAction = menu.addAction(tr("Edit Asteroid Field"));
+		}
+		if (editAction != nullptr && menu.exec(globalPos) == editAction) {
+			if (kind == EnvironmentObject::VolumetricNebula) {
+				_fredView->editVolumetricNebula();
+			} else if (kind == EnvironmentObject::AsteroidField) {
+				_fredView->editAsteroidField();
+			}
+		}
+		return;
+	}
 
 	// Layer header item: offer a small menu to rename the layer
 	auto varLayer = item->data(0, IsLayerItemRole);

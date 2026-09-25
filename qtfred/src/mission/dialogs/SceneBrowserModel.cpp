@@ -5,9 +5,12 @@
 #include "mission/commands/FredCommands.h"
 #include "mission/object.h"
 
+#include <asteroid/asteroid.h>
 #include <globalincs/linklist.h>
 #include <iff_defs/iff_defs.h>
 #include <jumpnode/jumpnode.h>
+#include <mission/missionparse.h>
+#include <nebula/volumetrics.h>
 #include <object/object.h>
 #include <object/waypoint.h>
 #include <coordinate_points/coordinate_point.h>
@@ -25,6 +28,12 @@ SceneBrowserModel::SceneBrowserModel(QObject* parent, EditorViewport* viewport)
 	connect(_rebuildTimer, &QTimer::timeout, this, &SceneBrowserModel::onRebuildTimer);
 
 	connect(_editor, &Editor::currentObjectChanged, this, &SceneBrowserModel::onCurrentObjectChanged);
+	connect(_editor, &Editor::currentEnvironmentChanged, this, &SceneBrowserModel::onCurrentEnvironmentChanged);
+	connect(_editor, &Editor::environmentVisibilityChanged, this, [this]() {
+		if (!_updatingFromBrowser) {
+			modelChanged();  // re-sync the Environment checkbox (fast, no rebuild)
+		}
+	});
 	connect(_editor, &Editor::objectMarkingChanged, this, &SceneBrowserModel::onObjectMarkingChanged);
 	connect(_editor, &Editor::layerVisibilityChanged, this, &SceneBrowserModel::onLayerVisibilityChanged);
 	connect(_editor, &Editor::layerStructureChanged, this, &SceneBrowserModel::onLayerStructureChanged);
@@ -292,6 +301,45 @@ void SceneBrowserModel::selectObjectFromBrowser(int objNum)
 	_updatingFromBrowser = false;
 }
 
+bool SceneBrowserModel::hasVolumetricNebula()
+{
+	// Same test as the viewport gizmo: without a hull there is nothing to show.
+	return The_mission.volumetrics.has_value() && The_mission.volumetrics->get_enabled() &&
+		!The_mission.volumetrics->getHullPof().empty();
+}
+
+bool SceneBrowserModel::hasAsteroidField()
+{
+	return Asteroid_field.num_initial_asteroids > 0;
+}
+
+EnvironmentObject SceneBrowserModel::currentEnvironment() const
+{
+	return _editor->currentEnvironment;
+}
+
+bool SceneBrowserModel::environmentVisible() const
+{
+	return _editor->showEnvironment();
+}
+
+void SceneBrowserModel::setEnvironmentVisible(bool visible)
+{
+	_editor->setShowEnvironment(visible);
+}
+
+void SceneBrowserModel::selectEnvironmentFromBrowser(EnvironmentObject env)
+{
+	_updatingFromBrowser = true;
+	_editor->selectEnvironment(env);
+	// Selecting from the browser targets the field's default handle (its
+	// outer-box center), not whatever handle was last clicked in the viewport.
+	if (_viewport != nullptr) {
+		_viewport->clearSelectedHandle();
+	}
+	_updatingFromBrowser = false;
+}
+
 void SceneBrowserModel::multiSelectFromBrowser(const QVector<int>& objNums)
 {
 	if (objNums.isEmpty()) return;
@@ -362,6 +410,13 @@ void SceneBrowserModel::onCurrentObjectChanged(int /*newObj*/)
 {
 	if (_updatingFromBrowser) return;
 	scheduleSelectionSync();
+}
+void SceneBrowserModel::onCurrentEnvironmentChanged()
+{
+	if (_updatingFromBrowser) return;
+	// Selection-only change: fast sync (the Environment node already exists; its
+	// presence is handled by the structural rebuild on missionChanged).
+	modelChanged();
 }
 
 void SceneBrowserModel::onObjectMarkingChanged(int /*obj*/, bool /*marked*/)
@@ -463,6 +518,9 @@ void SceneBrowserModel::clearSelection()
 {
 	_updatingFromBrowser = true;
 	_editor->unmark_all();
+	if (_editor->currentEnvironment != EnvironmentObject::None) {
+		_editor->clearEnvironment();
+	}
 	_updatingFromBrowser = false;
 	modelChanged();
 }

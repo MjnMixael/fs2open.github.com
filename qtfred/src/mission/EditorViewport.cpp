@@ -15,10 +15,18 @@
 #include <coordinate_points/coordinate_point.h>
 #include <coordinate_points/coordinate_point_render.h>
 #include <jumpnode/jumpnode.h>
+#include <asteroid/asteroid.h>
 #include <mission/missionparse.h>
+#include <nebula/volumetrics.h>
 #include <prop/prop.h>
 #include <FredApplication.h>
 #include "mission/dialogs/BackgroundEditorDialogModel.h"
+#include "mission/dialogs/VolumetricNebulaDialogModel.h"
+#include "mission/dialogs/AsteroidEditorDialogModel.h"
+#include "mission/dialogs/EnvEditCommand.h"
+
+#include <algorithm>
+#include <cfloat>
 
 namespace {
 
@@ -538,6 +546,15 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 
 	if (Cursor_over != Last_cursor_over) {
 		Last_cursor_over = Cursor_over;
+		needsUpdate();
+	}
+
+	// Same change-detection for the hovered viewport handle, so its hover
+	// balloon appears/updates on mouse-move exactly like an object's Cursor_over
+	// infobox (mouse-move sets the state but does not itself schedule a frame).
+	if (_hovered_handle.group_index != _last_hovered_handle.group_index ||
+		_hovered_handle.handle_index != _last_hovered_handle.handle_index) {
+		_last_hovered_handle = _hovered_handle;
 		needsUpdate();
 	}
 
@@ -1918,6 +1935,18 @@ void EditorViewport::setBackgroundEditModel(dialogs::BackgroundEditorDialogModel
 	needsUpdate();
 }
 
+void EditorViewport::setVolumetricEditModel(dialogs::VolumetricNebulaDialogModel* model)
+{
+	_volEditModel = model;
+	needsUpdate();
+}
+
+void EditorViewport::setAsteroidEditModel(dialogs::AsteroidEditorDialogModel* model)
+{
+	_astEditModel = model;
+	needsUpdate();
+}
+
 bool EditorViewport::select_background_element(int cx, int cy, bool& isSun, int& index) const
 {
 	if (_bgEditModel == nullptr) {
@@ -2027,6 +2056,728 @@ void EditorViewport::end_background_drag()
 {
 	_bgDragIndex = -1;
 	_bgDragIsSun = false;
+}
+
+// ---------------------------------------------------------------------------
+// Viewport handle subsystem
+// ---------------------------------------------------------------------------
+
+// Pick radius for handles, in squared screen pixels. The existing object
+// fallback in select_object() uses 8 (~2.8px); handles get a more generous
+// radius so they feel grabbable even at distance.
+static constexpr double kHandlePickRadiusSquared = 144.0; // 12px
+
+HandleGroupId EditorViewport::registerHandleGroup(std::vector<ViewportHandle> handles) {
+	// Always a new slot. An empty slot can't be told apart from a registered
+	// group that currently has no handles (a gizmo whose entity went away), so
+	// reusing one would make two groups share an index.
+	_handle_groups.push_back(std::move(handles));
+	_handle_group_generations.push_back(1);
+	HandleGroupId id;
+	id.index = static_cast<int>(_handle_groups.size() - 1);
+	id.generation = 1;
+	needsUpdate();
+	return id;
+}
+
+void EditorViewport::updateHandleGroup(HandleGroupId id, std::vector<ViewportHandle> handles) {
+	if (id.index < 0 || id.index >= static_cast<int>(_handle_groups.size())) {
+		return;
+	}
+	if (_handle_group_generations[id.index] != id.generation) {
+		return; // stale id
+	}
+	_handle_groups[id.index] = std::move(handles);
+	needsUpdate();
+}
+
+void EditorViewport::unregisterHandleGroup(HandleGroupId id) {
+	if (id.index < 0 || id.index >= static_cast<int>(_handle_groups.size())) {
+		return;
+	}
+	if (_handle_group_generations[id.index] != id.generation) {
+		return; // stale id; already replaced
+	}
+	// If a drag is in progress on this group, cancel it.
+	if (_active_handle.group_index == id.index && _active_handle_generation == id.generation) {
+		end_handle_drag();
+	}
+	_handle_groups[id.index].clear();
+	// Bump generation so any leftover id pointing at this slot is now stale.
+	_handle_group_generations[id.index]++;
+	needsUpdate();
+}
+
+EditorViewport::HandlePick EditorViewport::pick_handle(int cx, int cy) const {
+	HandlePick best{};
+	double best_dist = kHandlePickRadiusSquared;
+
+	if (g3_in_frame() != 1) {
+		return best;
+	}
+
+	for (size_t gi = 0; gi < _handle_groups.size(); ++gi) {
+		const auto& group = _handle_groups[gi];
+		for (size_t hi = 0; hi < group.size(); ++hi) {
+			const auto& handle = group[hi];
+			if (handle.is_enabled && !handle.is_enabled()) {
+				continue;
+			}
+			vertex vt;
+			vec3d pos_copy = handle.world_pos;
+			g3_rotate_vertex(&vt, &pos_copy);
+			if (vt.codes & CC_BEHIND) {
+				continue;
+			}
+			if (g3_project_vertex(&vt) & PF_OVERFLOW) {
+				continue;
+			}
+			double dx = static_cast<double>(vt.screen.xyw.x) - cx;
+			double dy = static_cast<double>(vt.screen.xyw.y) - cy;
+			double dist = dx * dx + dy * dy;
+			if (dist < best_dist) {
+				best_dist = dist;
+				best.group_index = static_cast<int>(gi);
+				best.handle_index = static_cast<int>(hi);
+			}
+		}
+	}
+	return best;
+}
+
+bool EditorViewport::screen_to_constraint_plane(int cx, int cy, const vec3d& anchor, vec3d* out_world) const {
+	vec3d cursor_dir, int_pnt, vec1, vec2;
+	g3_point_to_vec_delayed(&cursor_dir, cx, cy);
+
+	float r;
+	if (Single_axis_constraint) {
+		// Same trick drag_objects() uses: zero the X-component of Anticonstraint
+		// so the plane stays roughly perpendicular to the view's right.
+		vec3d tmpAnticonstraint = Anticonstraint;
+		tmpAnticonstraint.xyz.x = 0.0f;
+		vec3d tmpAnchor = anchor;
+		r = fvi_ray_plane(&int_pnt, &tmpAnchor, &tmpAnticonstraint, &camera.view_pos, &cursor_dir, 0.0f);
+	} else {
+		r = fvi_ray_plane(&int_pnt, &anchor, &Anticonstraint, &camera.view_pos, &cursor_dir, 0.0f);
+	}
+
+	if (r < 0.0f) {
+		return false;
+	}
+	vm_vec_sub(&vec1, &int_pnt, &camera.view_pos);
+	vm_vec_sub(&vec2, &anchor, &camera.view_pos);
+	if (vm_vec_dot(&vec1, &vec2) < 0.0f) {
+		// Intersection landed behind the viewer; ignore.
+		return false;
+	}
+
+	if (Single_axis_constraint) {
+		// Re-apply the single-axis component mask drag_objects() applies.
+		vec3d tmp;
+		vm_vec_sub(&tmp, &int_pnt, &anchor);
+		tmp.xyz.x *= Constraint.xyz.x;
+		tmp.xyz.y *= Constraint.xyz.y;
+		tmp.xyz.z *= Constraint.xyz.z;
+		vm_vec_add(&int_pnt, &anchor, &tmp);
+	}
+
+	*out_world = int_pnt;
+	return true;
+}
+
+bool EditorViewport::begin_handle_drag(HandlePick pick, int cx, int cy) {
+	if (pick.group_index < 0 || pick.group_index >= static_cast<int>(_handle_groups.size())) {
+		return false;
+	}
+	const auto& group = _handle_groups[pick.group_index];
+	if (pick.handle_index < 0 || pick.handle_index >= static_cast<int>(group.size())) {
+		return false;
+	}
+	const auto& handle = group[pick.handle_index];
+	if (!handle.on_drag) {
+		return false;
+	}
+
+	vec3d anchor;
+	if (!screen_to_constraint_plane(cx, cy, handle.world_pos, &anchor)) {
+		return false;
+	}
+	_active_handle = pick;
+	_active_handle_generation = _handle_group_generations[pick.group_index];
+	_active_handle_last_world = anchor;
+	return true;
+}
+
+bool EditorViewport::drag_handle(int cx, int cy) {
+	if (_active_handle.group_index < 0) {
+		return false;
+	}
+	if (_active_handle.group_index >= static_cast<int>(_handle_groups.size())) {
+		end_handle_drag();
+		return false;
+	}
+	if (_handle_group_generations[_active_handle.group_index] != _active_handle_generation) {
+		end_handle_drag();
+		return false;
+	}
+	auto& group = _handle_groups[_active_handle.group_index];
+	if (_active_handle.handle_index < 0 || _active_handle.handle_index >= static_cast<int>(group.size())) {
+		end_handle_drag();
+		return false;
+	}
+	const auto& handle = group[_active_handle.handle_index];
+	if (!handle.on_drag) {
+		end_handle_drag();
+		return false;
+	}
+
+	// IMPORTANT: the on_drag callback edits the mission, which can rebuild the
+	// handle group and destroy the ViewportHandle (and its std::function!) we're
+	// holding a reference to. So copy everything we need into locals up front
+	// before invoking the callback.
+	auto on_drag_copy = handle.on_drag;
+	const auto handle_kind = handle.kind;
+	const vec3d handle_axis = handle.axis;
+
+	vec3d new_world;
+	if (!screen_to_constraint_plane(cx, cy, _active_handle_last_world, &new_world)) {
+		return true; // keep the drag alive; the user will move back into a valid region
+	}
+
+	vec3d delta;
+	vm_vec_sub(&delta, &new_world, &_active_handle_last_world);
+
+	// Face handles snap motion to their single axis so dragging the +X face
+	// only changes max_bound.x even with no toolbar lock. The on_drag callback
+	// may further reject the move (e.g. clamping min < max).
+	if (handle_kind == ViewportHandle::Kind::Face) {
+		float along = vm_vec_dot(&delta, &handle_axis);
+		vm_vec_copy_scale(&delta, &handle_axis, along);
+	}
+
+	if (delta.xyz.x == 0.0f && delta.xyz.y == 0.0f && delta.xyz.z == 0.0f) {
+		return true;
+	}
+
+	const vec3d applied = on_drag_copy(delta);
+	// Do NOT touch `handle` past here — the rebuild from on_drag may have
+	// invalidated it. The active-handle indices themselves are still valid
+	// (the rebuild produces a same-shape vector) so the next tick re-looks it
+	// up by index from the top.
+	//
+	// Anchor on what was actually applied, not on the cursor: when a clamp
+	// stops the handle, the unapplied part stays pending, so the handle waits
+	// for the cursor to come back to it instead of moving off immediately.
+	vm_vec_add2(&_active_handle_last_world, &applied);
+	needsUpdate();
+	return true;
+}
+
+void EditorViewport::end_handle_drag() {
+	_active_handle = {};
+	_active_handle_generation = 0;
+}
+
+EnvironmentObject EditorViewport::handleEnvironment(HandlePick pick) const {
+	if (pick.group_index >= 0 && _volumetric_handle_group.valid() &&
+		pick.group_index == _volumetric_handle_group.index) {
+		return EnvironmentObject::VolumetricNebula;
+	}
+	if (pick.group_index >= 0 && _asteroid_handle_group.valid() &&
+		pick.group_index == _asteroid_handle_group.index) {
+		return EnvironmentObject::AsteroidField;
+	}
+	return EnvironmentObject::None;
+}
+
+// ---------------------------------------------------------------------------
+// Asteroid-field gizmos (edit the global Asteroid_field; an open dialog is
+// synced afterwards by the caller)
+// ---------------------------------------------------------------------------
+
+namespace {
+
+enum class AstBox { Outer, Inner };
+enum class AstCorner { Min, Max };
+
+// The rules AsteroidEditorDialogModel::validate_data() checks on OK: each box
+// at least this thick on every axis, and the inner box at least this far
+// inside the outer one. Enforced while dragging so a drag can't produce a
+// field the dialog would then refuse.
+constexpr float kAstMinThickness = 400.0f;
+
+vec3d& astMin(AstBox box) { return box == AstBox::Outer ? Asteroid_field.min_bound : Asteroid_field.inner_min_bound; }
+vec3d& astMax(AstBox box) { return box == AstBox::Outer ? Asteroid_field.max_bound : Asteroid_field.inner_max_bound; }
+
+// The range one min/max component may take. When the current field already
+// breaks the rules on this axis (a hand-edited mission, say), only the box's
+// own thickness is enforced.
+void astComponentRange(AstBox box, AstCorner corner, int axis, float* lo, float* hi) {
+	const float t = kAstMinThickness;
+	const bool inner = Asteroid_field.has_inner_bound;
+	*lo = -FLT_MAX;
+	*hi = FLT_MAX;
+	if (box == AstBox::Outer) {
+		if (corner == AstCorner::Min) {
+			*hi = astMax(AstBox::Outer).a1d[axis] - t;
+			if (inner) *hi = std::min(*hi, Asteroid_field.inner_min_bound.a1d[axis] - t);
+		} else {
+			*lo = astMin(AstBox::Outer).a1d[axis] + t;
+			if (inner) *lo = std::max(*lo, Asteroid_field.inner_max_bound.a1d[axis] + t);
+		}
+	} else {
+		if (corner == AstCorner::Min) {
+			*lo = Asteroid_field.min_bound.a1d[axis] + t;
+			*hi = astMax(AstBox::Inner).a1d[axis] - t;
+		} else {
+			*lo = astMin(AstBox::Inner).a1d[axis] + t;
+			*hi = Asteroid_field.max_bound.a1d[axis] - t;
+		}
+	}
+	if (*lo > *hi) {
+		*lo = -FLT_MAX;
+		*hi = FLT_MAX;
+		if (corner == AstCorner::Min) *hi = astMax(box).a1d[axis] - t;
+		else                          *lo = astMin(box).a1d[axis] + t;
+	}
+}
+
+// Move one min/max component of a box by delta, clamped. Returns the delta
+// actually applied.
+float nudgeAstComponent(AstBox box, AstCorner corner, int axis, float delta) {
+	if (delta == 0.0f || axis < 0 || axis > 2) {
+		return 0.0f;
+	}
+	float& value = (corner == AstCorner::Min) ? astMin(box).a1d[axis] : astMax(box).a1d[axis];
+	float lo, hi;
+	astComponentRange(box, corner, axis, &lo, &hi);
+	// Never let the clamp itself move the face the other way.
+	const float target = std::clamp(value + delta, std::min(lo, value), std::max(hi, value));
+	const float applied = target - value;
+	value = target;
+	return applied;
+}
+
+// Translate a whole box by delta. The inner box is part of the outer one, so
+// moving the outer box carries the inner box along, unclamped. That includes a
+// disabled inner box's stored bounds, so enabling it later puts it where it
+// was relative to the outer box. Moving the inner
+// box alone is clamped per axis so it stays inside the outer one. Returns the
+// delta actually applied.
+vec3d translateAst(AstBox box, const vec3d& delta) {
+	if (box == AstBox::Outer) {
+		vm_vec_add2(&Asteroid_field.min_bound, &delta);
+		vm_vec_add2(&Asteroid_field.max_bound, &delta);
+		vm_vec_add2(&Asteroid_field.inner_min_bound, &delta);
+		vm_vec_add2(&Asteroid_field.inner_max_bound, &delta);
+		return delta;
+	}
+
+	vec3d applied = vmd_zero_vector;
+	vec3d& mn = astMin(AstBox::Inner);
+	vec3d& mx = astMax(AstBox::Inner);
+	for (int axis = 0; axis < 3; ++axis) {
+		const float t = kAstMinThickness;
+		const float lo = Asteroid_field.min_bound.a1d[axis] + t - mn.a1d[axis];
+		const float hi = Asteroid_field.max_bound.a1d[axis] - t - mx.a1d[axis];
+		float d = delta.a1d[axis];
+		if (lo <= hi) {
+			d = std::clamp(d, std::min(lo, 0.0f), std::max(hi, 0.0f));
+		}
+		mn.a1d[axis] += d;
+		mx.a1d[axis] += d;
+		applied.a1d[axis] = d;
+	}
+	return applied;
+}
+
+} // anonymous namespace
+
+void EditorViewport::refreshAsteroidHandles() {
+	// Gated on the Scene Browser "Environment" visibility toggle, like the
+	// volumetric gizmo — hidden means no handles (and nothing to pick/drag).
+	const bool present = editor != nullptr && editor->showEnvironment() &&
+		Asteroid_field.num_initial_asteroids > 0;
+	const bool inner = present && Asteroid_field.has_inner_bound;
+	const bool selected = present && editor != nullptr &&
+		editor->currentEnvironment == EnvironmentObject::AsteroidField;
+
+	// Only the single selected/spinbox-target handle renders green. Its index is
+	// deterministic: the outer box occupies [0..14] (6 faces, 8 corners, then
+	// center at 14); the inner box, when present, follows. Default target is the
+	// outer center; a viewport click overrides it via _selected_handle.
+	constexpr int kOuterCenterIndex = 14;
+	const int astCount = present ? (inner ? 30 : 15) : 0;
+	int target = -1;
+	if (selected && astCount > 0) {
+		target = kOuterCenterIndex;
+		const int astGroupIdx = _asteroid_handle_group.valid() ? _asteroid_handle_group.index : -1;
+		if (_selected_handle.group_index == astGroupIdx &&
+			_selected_handle.handle_index >= 0 && _selected_handle.handle_index < astCount) {
+			target = _selected_handle.handle_index;
+		}
+	}
+
+	// Dirty check: bounds + toggles + selection + which handle is the target.
+	// Only touch the registry when something changed, or the per-frame refresh
+	// would spin needsUpdate().
+	const vec3d bounds[4] = {Asteroid_field.min_bound, Asteroid_field.max_bound,
+		Asteroid_field.inner_min_bound, Asteroid_field.inner_max_bound};
+	bool boundsSame = true;
+	for (int i = 0; i < 4; ++i) {
+		if (!(bounds[i] == _ast_handle_cached_bounds[i])) {
+			boundsSame = false;
+			break;
+		}
+	}
+	if (present == _ast_handle_cached_present && inner == _ast_handle_cached_inner &&
+		selected == _ast_handle_cached_selected && target == _ast_handle_cached_target &&
+		(!present || boundsSame)) {
+		return;
+	}
+	_ast_handle_cached_present = present;
+	_ast_handle_cached_inner = inner;
+	_ast_handle_cached_selected = selected;
+	_ast_handle_cached_target = target;
+	for (int i = 0; i < 4; ++i) {
+		_ast_handle_cached_bounds[i] = bounds[i];
+	}
+
+	std::vector<ViewportHandle> handles;
+	_asteroid_center_index = -1;
+
+	auto axisAllowed = [this](int axis) {
+		return [this, axis]() {
+			switch (axis) {
+			case 0: return Constraint.xyz.x != 0.0f;
+			case 1: return Constraint.xyz.y != 0.0f;
+			case 2: return Constraint.xyz.z != 0.0f;
+			default: return true;
+			}
+		};
+	};
+	// Only a real change dirties the mission (a clamped-out drag changes nothing).
+	auto afterEdit = [this](const vec3d& applied) {
+		if (applied.xyz.x != 0.0f || applied.xyz.y != 0.0f || applied.xyz.z != 0.0f) {
+			envGizmoChanged(EnvironmentObject::AsteroidField);
+		}
+		return applied;
+	};
+
+	auto buildBox = [&](AstBox box, const vec3d& mn, const vec3d& mx, bool isOuter,
+	                    int fr, int fg, int fb, int cr, int cg, int cb, int mr, int mg, int mb) {
+		const vec3d center{{{(mn.xyz.x + mx.xyz.x) * 0.5f, (mn.xyz.y + mx.xyz.y) * 0.5f,
+			(mn.xyz.z + mx.xyz.z) * 0.5f}}};
+
+		// Six faces — each editable only along its normal axis.
+		struct FaceSpec { int axis; bool is_max; vec3d pos; vec3d normal; };
+		const FaceSpec faces[6] = {
+			{0, false, {{{mn.xyz.x, center.xyz.y, center.xyz.z}}}, {{{-1.0f, 0.0f, 0.0f}}}},
+			{0, true,  {{{mx.xyz.x, center.xyz.y, center.xyz.z}}}, {{{ 1.0f, 0.0f, 0.0f}}}},
+			{1, false, {{{center.xyz.x, mn.xyz.y, center.xyz.z}}}, {{{0.0f, -1.0f, 0.0f}}}},
+			{1, true,  {{{center.xyz.x, mx.xyz.y, center.xyz.z}}}, {{{0.0f,  1.0f, 0.0f}}}},
+			{2, false, {{{center.xyz.x, center.xyz.y, mn.xyz.z}}}, {{{0.0f, 0.0f, -1.0f}}}},
+			{2, true,  {{{center.xyz.x, center.xyz.y, mx.xyz.z}}}, {{{0.0f, 0.0f,  1.0f}}}},
+		};
+		for (const auto& f : faces) {
+			ViewportHandle h;
+			h.kind = ViewportHandle::Kind::Face;
+			h.world_pos = f.pos;
+			h.axis = f.normal;
+			h.color_r = fr; h.color_g = fg; h.color_b = fb;
+			h.is_selected = (static_cast<int>(handles.size()) == target);
+			h.show_coords = true;
+			h.movable_axes = 1 << f.axis;
+			h.is_enabled = axisAllowed(f.axis);
+			const AstCorner corner = f.is_max ? AstCorner::Max : AstCorner::Min;
+			const int axis = f.axis;
+			h.on_drag = [box, corner, axis, afterEdit](const vec3d& delta) {
+				vec3d applied = vmd_zero_vector;
+				applied.a1d[axis] = nudgeAstComponent(box, corner, axis, delta.a1d[axis]);
+				return afterEdit(applied);
+			};
+			handles.push_back(std::move(h));
+		}
+
+		// Eight corners — resize the three adjacent faces together.
+		for (int xi = 0; xi < 2; ++xi) {
+			for (int yi = 0; yi < 2; ++yi) {
+				for (int zi = 0; zi < 2; ++zi) {
+					ViewportHandle h;
+					h.kind = ViewportHandle::Kind::Corner;
+					h.world_pos = vec3d{{{xi ? mx.xyz.x : mn.xyz.x, yi ? mx.xyz.y : mn.xyz.y,
+						zi ? mx.xyz.z : mn.xyz.z}}};
+					h.axis = vec3d{{{xi ? 1.0f : -1.0f, yi ? 1.0f : -1.0f, zi ? 1.0f : -1.0f}}};
+					h.color_r = cr; h.color_g = cg; h.color_b = cb;
+					h.is_selected = (static_cast<int>(handles.size()) == target);
+					h.show_coords = true;
+					const AstCorner cx = xi ? AstCorner::Max : AstCorner::Min;
+					const AstCorner cy = yi ? AstCorner::Max : AstCorner::Min;
+					const AstCorner cz = zi ? AstCorner::Max : AstCorner::Min;
+					h.on_drag = [box, cx, cy, cz, afterEdit](const vec3d& delta) {
+						vec3d applied;
+						applied.xyz.x = nudgeAstComponent(box, cx, 0, delta.xyz.x);
+						applied.xyz.y = nudgeAstComponent(box, cy, 1, delta.xyz.y);
+						applied.xyz.z = nudgeAstComponent(box, cz, 2, delta.xyz.z);
+						return afterEdit(applied);
+					};
+					handles.push_back(std::move(h));
+				}
+			}
+		}
+
+		// Center — translates the whole box.
+		{
+			ViewportHandle h;
+			h.kind = ViewportHandle::Kind::Center;
+			h.world_pos = center;
+			h.color_r = mr; h.color_g = mg; h.color_b = mb;
+			h.is_selected = (static_cast<int>(handles.size()) == target);
+			h.show_coords = true;
+			h.show_grid_position = true;  // both centers drop a grid line
+			if (isOuter) {
+				h.info_label = "Asteroid Field";  // name shown only for the main center
+				_asteroid_center_index = static_cast<int>(handles.size());
+			}
+			h.on_drag = [box, afterEdit](const vec3d& delta) {
+				return afterEdit(translateAst(box, delta));
+			};
+			handles.push_back(std::move(h));
+		}
+	};
+
+	if (present) {
+		vec3d mn = Asteroid_field.min_bound, mx = Asteroid_field.max_bound;
+		buildBox(AstBox::Outer, mn, mx, true, 255, 160, 64, 255, 200, 64, 255, 220, 96);
+		if (inner) {
+			vec3d imn = Asteroid_field.inner_min_bound, imx = Asteroid_field.inner_max_bound;
+			buildBox(AstBox::Inner, imn, imx, false, 64, 220, 120, 96, 240, 140, 128, 255, 160);
+		}
+	}
+
+	// A rebuild that changed the handle set can invalidate the spinbox target.
+	if (_selected_handle.group_index >= 0 && _asteroid_handle_group.valid() &&
+		_selected_handle.group_index == _asteroid_handle_group.index &&
+		_selected_handle.handle_index >= static_cast<int>(handles.size())) {
+		_selected_handle = HandlePick{};
+	}
+
+	if (_asteroid_handle_group.valid()) {
+		updateHandleGroup(_asteroid_handle_group, std::move(handles));
+	} else {
+		_asteroid_handle_group = registerHandleGroup(std::move(handles));
+	}
+}
+
+bool EditorViewport::asteroidSpinboxTarget(vec3d* out_pos, int* out_movable_axes) const {
+	if (!_asteroid_handle_group.valid() ||
+		_asteroid_handle_group.index >= static_cast<int>(_handle_groups.size())) {
+		return false;
+	}
+	const auto& group = _handle_groups[_asteroid_handle_group.index];
+	if (group.empty()) {
+		return false;
+	}
+
+	int idx = _asteroid_center_index;
+	// Prefer the explicitly clicked handle when it belongs to this field.
+	if (_selected_handle.group_index == _asteroid_handle_group.index &&
+		_selected_handle.handle_index >= 0 &&
+		_selected_handle.handle_index < static_cast<int>(group.size())) {
+		idx = _selected_handle.handle_index;
+	}
+	if (idx < 0 || idx >= static_cast<int>(group.size())) {
+		return false;
+	}
+	if (out_pos != nullptr) {
+		*out_pos = group[idx].world_pos;
+	}
+	if (out_movable_axes != nullptr) {
+		*out_movable_axes = group[idx].movable_axes;
+	}
+	return true;
+}
+
+void EditorViewport::applyAsteroidSpinbox(const vec3d& new_pos) {
+	if (!_asteroid_handle_group.valid() ||
+		_asteroid_handle_group.index >= static_cast<int>(_handle_groups.size())) {
+		return;
+	}
+	const auto& group = _handle_groups[_asteroid_handle_group.index];
+	int idx = _asteroid_center_index;
+	if (_selected_handle.group_index == _asteroid_handle_group.index &&
+		_selected_handle.handle_index >= 0 &&
+		_selected_handle.handle_index < static_cast<int>(group.size())) {
+		idx = _selected_handle.handle_index;
+	}
+	if (idx < 0 || idx >= static_cast<int>(group.size())) {
+		return;
+	}
+	// Copy before invoking: on_drag can rebuild the group (and this callback).
+	auto on_drag_copy = group[idx].on_drag;
+	vec3d delta;
+	vm_vec_sub(&delta, &new_pos, &group[idx].world_pos);
+	if (on_drag_copy) {
+		on_drag_copy(delta);
+	}
+}
+
+namespace {
+QByteArray captureEnvGizmoState(EnvironmentObject env) {
+	switch (env) {
+	case EnvironmentObject::VolumetricNebula: return dialogs::VolumetricNebulaDialogModel::captureGizmoState();
+	case EnvironmentObject::AsteroidField:    return dialogs::AsteroidEditorDialogModel::captureGizmoState();
+	default:                                  return {};
+	}
+}
+} // anonymous namespace
+
+void EditorViewport::envGizmoChanged(EnvironmentObject env) {
+	if (env == EnvironmentObject::VolumetricNebula && _volEditModel != nullptr) {
+		_volEditModel->syncGizmoFromGlobals(false);
+	} else if (env == EnvironmentObject::AsteroidField && _astEditModel != nullptr) {
+		_astEditModel->syncGizmoFromGlobals(false);
+	}
+	if (editor != nullptr) {
+		editor->missionChanged();
+	}
+	needsUpdate();
+}
+
+bool EditorViewport::moveVolumetricTo(const vec3d& pos) {
+	if (!The_mission.volumetrics || The_mission.volumetrics->getPos() == pos) {
+		return false;
+	}
+	The_mission.volumetrics->setPos(pos);
+	envGizmoChanged(EnvironmentObject::VolumetricNebula);
+	return true;
+}
+
+void EditorViewport::beginEnvEdit(EnvironmentObject env) {
+	_env_edit_kind = env;
+	_env_edit_before = captureEnvGizmoState(env);
+}
+
+void EditorViewport::commitEnvEdit(const QString& text) {
+	if (!envEditActive()) {
+		return;
+	}
+	const auto env = _env_edit_kind;
+	const QByteArray before = _env_edit_before;
+	_env_edit_kind = EnvironmentObject::None;
+	_env_edit_before.clear();
+
+	const QByteArray after = captureEnvGizmoState(env);
+	if (after == before) {
+		return;
+	}
+
+	// With the dialog open the edit belongs to its session, so it goes on the
+	// dialog's stack: OK keeps it, Cancel drops it with everything else.
+	if (env == EnvironmentObject::VolumetricNebula && _volEditModel != nullptr) {
+		Q_EMIT _volEditModel->gizmoEditCommitted(before, after, text);
+		return;
+	}
+	if (env == EnvironmentObject::AsteroidField && _astEditModel != nullptr) {
+		Q_EMIT _astEditModel->gizmoEditCommitted(before, after, text);
+		return;
+	}
+
+	if (editor != nullptr && editor->undoStack() != nullptr) {
+		const auto kind = (env == EnvironmentObject::VolumetricNebula) ? dialogs::EnvEditCommand::Kind::VolumetricNebula
+		                                                               : dialogs::EnvEditCommand::Kind::AsteroidField;
+		editor->undoStack()->push(new dialogs::EnvEditCommand(kind, this, before, after, text));
+	}
+}
+
+void EditorViewport::cancelEnvEdit() {
+	if (!envEditActive()) {
+		return;
+	}
+	const auto env = _env_edit_kind;
+	const QByteArray before = _env_edit_before;
+	_env_edit_kind = EnvironmentObject::None;
+	_env_edit_before.clear();
+
+	if (captureEnvGizmoState(env) == before) {
+		return;
+	}
+	if (env == EnvironmentObject::VolumetricNebula) {
+		dialogs::VolumetricNebulaDialogModel::restoreGizmoState(before);
+	} else {
+		dialogs::AsteroidEditorDialogModel::restoreGizmoState(before);
+	}
+	envGizmoChanged(env);
+}
+
+void EditorViewport::refreshVolumetricHandle() {
+	// The gizmo is present whenever the mission has an enabled volumetric with a
+	// hull (matching what the visualizer actually draws) and the environment is
+	// not hidden via the Scene Browser toggle.
+	const bool present = editor != nullptr && editor->showEnvironment() && The_mission.volumetrics &&
+		The_mission.volumetrics->get_enabled() && !The_mission.volumetrics->getHullPof().empty();
+
+	vec3d pos = vmd_zero_vector;
+	SCP_string label;
+	int cr = 255, cg = 255, cb = 255;
+	if (present) {
+		pos = The_mission.volumetrics->getPos();
+		label = The_mission.volumetrics->getHullPof();
+		const auto& col = The_mission.volumetrics->getNebulaColor();
+		// nebulaColor components are 0..1; clamp the low end so the marker is
+		// never near-black against the hull.
+		cr = std::clamp(static_cast<int>(std::get<0>(col) * 255.0f), 64, 255);
+		cg = std::clamp(static_cast<int>(std::get<1>(col) * 255.0f), 64, 255);
+		cb = std::clamp(static_cast<int>(std::get<2>(col) * 255.0f), 64, 255);
+	}
+	const int packed_color = present ? ((cr << 16) | (cg << 8) | cb) : -1;
+	const bool selected = present && editor != nullptr &&
+		editor->currentEnvironment == EnvironmentObject::VolumetricNebula;
+
+	// Only touch the registry when the rendered state actually changed —
+	// updateHandleGroup calls needsUpdate(), and this runs every frame, so an
+	// unconditional rebuild would spin the repaint loop.
+	if (present == _vol_handle_cached_present &&
+		(!present ||
+			(pos == _vol_handle_cached_pos && label == _vol_handle_cached_label &&
+				packed_color == _vol_handle_cached_color && selected == _vol_handle_cached_selected))) {
+		return;
+	}
+	_vol_handle_cached_present = present;
+	_vol_handle_cached_pos = pos;
+	_vol_handle_cached_label = label;
+	_vol_handle_cached_color = packed_color;
+	_vol_handle_cached_selected = selected;
+
+	std::vector<ViewportHandle> handles;
+	if (present) {
+		ViewportHandle h;
+		h.kind = ViewportHandle::Kind::Center;
+		h.world_pos = pos;
+		h.color_r = cr;
+		h.color_g = cg;
+		h.color_b = cb;
+		h.info_label = label;
+		h.is_selected = selected;
+		h.show_coords = true;
+		h.show_grid_position = true;
+		h.on_drag = [this](const vec3d& delta) {
+			if (!The_mission.volumetrics) {
+				return vmd_zero_vector;
+			}
+			vec3d p = The_mission.volumetrics->getPos();
+			vm_vec_add2(&p, &delta);
+			moveVolumetricTo(p);
+			return delta;
+		};
+		handles.push_back(std::move(h));
+	}
+
+	if (_volumetric_handle_group.valid()) {
+		updateHandleGroup(_volumetric_handle_group, std::move(handles));
+	} else {
+		_volumetric_handle_group = registerHandleGroup(std::move(handles));
+	}
 }
 
 } // namespace fso::fred

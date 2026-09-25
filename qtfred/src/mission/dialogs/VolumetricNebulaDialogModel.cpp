@@ -22,12 +22,43 @@ bool VolumetricNebulaDialogModel::apply()
 		}
 		makeVolumetricsCopy(*The_mission.volumetrics, _volumetrics);
 	}
+	// If the volumetric was just disabled while it was the selected environment
+	// entity, drop that now-dangling selection.
+	if (!_volumetrics.enabled && _editor != nullptr &&
+		_editor->currentEnvironment == EnvironmentObject::VolumetricNebula) {
+		_editor->clearEnvironment();
+	}
+
+	// Enabling an environment entity forces the environment "layer" visible, so
+	// it can't be enabled yet invisibly hidden (which would be confusing).
+	if (_volumetrics.enabled && _editor != nullptr) {
+		_editor->setShowEnvironment(true);
+	}
+
+	// Notify: marks the mission modified and lets dependents refresh — notably
+	// the Scene Browser rebuilds so its "Environment" node appears/disappears as
+	// the volumetric is enabled/disabled.
+	if (_editor != nullptr) {
+		_editor->missionChanged();
+	}
 	return true;
 }
 
 void VolumetricNebulaDialogModel::reject()
 {
-	//do nothing - only here because parent class reject() function is virtual
+	// Roll back any live-previewed changes (currently: nebula position).
+	// If a volumetrics existed before, restore its full state; otherwise
+	// remove the one we created for the preview (none currently created here,
+	// but keep this symmetric for future additions).
+	if (_had_original_volumetrics) {
+		if (!The_mission.volumetrics) {
+			The_mission.volumetrics.emplace();
+		}
+		makeVolumetricsCopy(*The_mission.volumetrics, _original_volumetrics);
+	} else {
+		// No volumetrics before the dialog opened, so nothing to live-preview
+		// against in the first place — leave as-is.
+	}
 }
 
 void VolumetricNebulaDialogModel::initializeData()
@@ -35,10 +66,14 @@ void VolumetricNebulaDialogModel::initializeData()
 	if (The_mission.volumetrics) {
 		// Copy authoring fields into our working copy
 		makeVolumetricsCopy(_volumetrics, *The_mission.volumetrics);
+		// Snapshot for reject() to restore live-previewed fields (e.g. pos).
+		_had_original_volumetrics = true;
+		makeVolumetricsCopy(_original_volumetrics, *The_mission.volumetrics);
 	} else {
 		// Start from engine defaults
 		makeVolumetricsCopy(_volumetrics, volumetric_nebula{});
 		_volumetrics.enabled = false;
+		_had_original_volumetrics = false;
 	}
 	_modified = false;
 }
@@ -145,6 +180,7 @@ float VolumetricNebulaDialogModel::getPosX() const
 void VolumetricNebulaDialogModel::setPosX(float x)
 {
 	modify(_volumetrics.pos.xyz.x, x);
+	pushLivePos();
 }
 
 float VolumetricNebulaDialogModel::getPosY() const
@@ -155,6 +191,7 @@ float VolumetricNebulaDialogModel::getPosY() const
 void VolumetricNebulaDialogModel::setPosY(float y)
 {
 	modify(_volumetrics.pos.xyz.y, y);
+	pushLivePos();
 }
 
 float VolumetricNebulaDialogModel::getPosZ() const
@@ -165,6 +202,35 @@ float VolumetricNebulaDialogModel::getPosZ() const
 void VolumetricNebulaDialogModel::setPosZ(float z)
 {
 	modify(_volumetrics.pos.xyz.z, z);
+	pushLivePos();
+}
+
+void VolumetricNebulaDialogModel::syncGizmoFromGlobals(bool includeBaseline)
+{
+	if (!The_mission.volumetrics) {
+		return;
+	}
+	modify(_volumetrics.pos, The_mission.volumetrics->pos);
+	if (includeBaseline && _had_original_volumetrics) {
+		_original_volumetrics.pos = The_mission.volumetrics->pos;
+	}
+}
+
+void VolumetricNebulaDialogModel::reloadFromGlobals()
+{
+	initializeData();
+	modelChanged();
+}
+
+void VolumetricNebulaDialogModel::pushLivePos()
+{
+	// Only push when the dialog itself is showing the hull (enabled + a real
+	// volumetrics object exists). With no volumetrics, the visualizer has
+	// nothing to draw anyway.
+	if (!The_mission.volumetrics) {
+		return;
+	}
+	The_mission.volumetrics->pos = _volumetrics.pos;
 }
 
 int VolumetricNebulaDialogModel::getColorR() const

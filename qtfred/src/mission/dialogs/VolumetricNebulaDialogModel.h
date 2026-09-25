@@ -24,6 +24,23 @@ public:
 	QByteArray captureState() const override;
 	void restoreState(const QByteArray& state) override;
 
+	// Snapshot/restore of the mission globals this dialog edits. Static so an
+	// undo command can restore them with no dialog instance alive.
+	static QByteArray captureGlobalState();
+	static void restoreGlobalState(const QByteArray& state);
+	// The globals as they were when the dialog opened, before any live preview.
+	// This is the "before" of the dialog's OK.
+	QByteArray captureOriginalState() const;
+
+	// The viewport gizmo only ever changes the position. These snapshot just
+	// that, so undoing a drag can't clobber anything else.
+	static QByteArray captureGizmoState();
+	static void restoreGizmoState(const QByteArray& state);
+	// Re-read the position from The_mission.volumetrics after a gizmo moved it.
+	// includeBaseline also moves the Cancel baseline, for edits that happened
+	// outside this dialog (a main-stack undo).
+	void syncGizmoFromGlobals(bool includeBaseline);
+
 	// limits
 	static std::pair<float, float> getOpacityLimit()                { return {0.0001f, 1.0f}; }
 	static std::pair<float, float> getOpacityDistanceLimit()        { return {0.1f, 16777215.0f}; } // Qt max
@@ -126,10 +143,24 @@ public:
     int getNoiseResolution() const;
     void setNoiseResolution(int v);
 
+signals:
+	// A viewport gizmo edit finished while this dialog is open. The dialog
+	// records it on its own undo stack, so OK keeps it and Cancel drops it.
+	void gizmoEditCommitted(const QByteArray& before, const QByteArray& after, const QString& text);
+
 private:
+	// Re-read the whole working copy after an undo rewrote the globals behind
+	// this dialog's back.
+	void reloadFromGlobals();
+
 	void initializeData();
 	bool validate_data();
 	void showErrorDialogNoCancel(const SCP_string& message);
+
+	// Push the working position into The_mission.volumetrics so the
+	// translucent hull and the gizmo follow the spinboxes. reject() restores
+	// the original.
+	void pushLivePos();
 
 	static void makeVolumetricsCopy(volumetric_nebula& dest, const volumetric_nebula& src);
 
@@ -137,6 +168,11 @@ private:
 	bool _bypass_errors;
 
 	volumetric_nebula _volumetrics;
+
+	// Snapshot of the original mission volumetrics state at dialog-open time
+	// so reject() can roll back live-preview changes (currently: position).
+	bool _had_original_volumetrics = false;
+	volumetric_nebula _original_volumetrics;
 };
 
 } // namespace fso::fred::dialogs

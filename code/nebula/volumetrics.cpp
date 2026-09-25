@@ -235,6 +235,10 @@ const vec3d& volumetric_nebula::getPos() const {
 	return pos;
 }
 
+void volumetric_nebula::setPos(const vec3d& new_pos) {
+	pos = new_pos;
+}
+
 const vec3d& volumetric_nebula::getSize() const {
 	return size;
 }

@@ -76,7 +76,6 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	// merging command per box field that also restores the line edit on undo.
 	void changeBoxText(QLineEdit* edit, AsteroidEditorDialogModel::_box_line_edits type, const QString& text);
 	void changeFieldType(field_type_t type, debris_genre_t genre);
-
 	// Boilerplate
 	EditorViewport* _viewport    = nullptr;
 	Editor*         _editor      = nullptr;
