@@ -43077,7 +43077,7 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"Takes 3 or more arguments...\r\n"
 		"\t1: Name of the texture to be replaced.\r\n"
 		"\t2: Name of the texture to be changed to.\r\n"
-		"\tRest: Name of the ship, wing, or prop (a ship/wing does not need to be in-mission; a prop must already exist).\r\n"
+		"\tRest: Name of the ship, wing, or prop (none of them needs to be in-mission yet; a prop that hasn't spawned gets the replacement when it spawns).\r\n"
 	},
 
 	{ OP_REPLACE_TEXTURE_SKYBOX, "replace-skybox-texture\r\n"
