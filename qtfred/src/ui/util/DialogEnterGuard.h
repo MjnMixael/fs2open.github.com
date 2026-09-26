@@ -3,9 +3,7 @@
 class QDialog;
 class QObject;
 
-namespace fso {
-namespace fred {
-namespace util {
+namespace fso::fred::util {
 
 // QDialog presses its default button when Return/Enter reaches it, and nearly
 // every field passes the key on: a line edit after emitting returnPressed, a
@@ -27,6 +25,4 @@ void installDialogEnterGuard(QObject* owner);
 // (OK) button from any field, which is what users expect there.
 void allowEnterToAccept(QDialog* dialog);
 
-}
-}
-}
+} // namespace fso::fred::util

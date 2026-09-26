@@ -11,9 +11,7 @@
 #include <QMessageBox>
 #include <QProgressDialog>
 
-namespace fso {
-namespace fred {
-namespace util {
+namespace fso::fred::util {
 
 namespace {
 
@@ -68,6 +66,4 @@ void allowEnterToAccept(QDialog* dialog)
 	dialog->setProperty(ALLOW_ENTER_PROPERTY, true);
 }
 
-}
-}
-}
+} // namespace fso::fred::util
