@@ -1,4 +1,5 @@
 #include "TemplateBrowserDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "ui_TemplateBrowserDialog.h"
 
@@ -14,6 +15,9 @@ namespace fso::fred::dialogs {
 TemplateBrowserDialog::TemplateBrowserDialog(QWidget* parent, const QString& templatesDir)
 	: QDialog(parent), ui(new Ui::TemplateBrowserDialog())
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	ui->setupUi(this);
 
 	// Open button starts disabled until a selection is made

@@ -1,4 +1,5 @@
 #include "SaveAsTemplateDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "ui_SaveAsTemplateDialog.h"
 
@@ -9,6 +10,9 @@ namespace fso::fred::dialogs {
 SaveAsTemplateDialog::SaveAsTemplateDialog(QWidget* parent, const SCP_string& defaultAuthor)
 	: QDialog(parent), ui(new Ui::SaveAsTemplateDialog())
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	ui->setupUi(this);
 
 	ui->authorEdit->setText(QString::fromStdString(defaultAuthor));

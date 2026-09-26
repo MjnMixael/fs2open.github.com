@@ -1,4 +1,5 @@
 #include "CameraCoordinatesDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "mission/dialogs/BriefingEditorDialogModel.h"
 #include "ui/widgets/BriefingMapWidget.h"
@@ -20,6 +21,9 @@ CameraCoordinatesDialog::CameraCoordinatesDialog(QWidget* parent,
 	fso::fred::BriefingMapWidget* mapWidget)
 	: QDialog(parent), _model(model), _mapWidget(mapWidget)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	setWindowTitle("Camera Coordinates");
 	setupUi();
 
@@ -69,6 +73,7 @@ void CameraCoordinatesDialog::setupUi()
 	// Apply button
 	auto* buttonLayout = new QHBoxLayout();
 	auto* okBtn = new QPushButton("OK", this);
+	okBtn->setDefault(true); // Enter presses OK, not whichever button comes first
 	auto* cancelBtn = new QPushButton("Cancel", this);
 	buttonLayout->addStretch();
 	buttonLayout->addWidget(okBtn);

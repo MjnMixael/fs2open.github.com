@@ -339,6 +339,8 @@ add_file_folder("Source/UI/Panels"
 add_file_folder("Source/UI/Util"
 	src/ui/util/default_dir.cpp
 	src/ui/util/default_dir.h
+	src/ui/util/DialogEnterGuard.cpp
+	src/ui/util/DialogEnterGuard.h
 	src/ui/util/DialogUndo.cpp
 	src/ui/util/DialogUndo.h
 	src/ui/util/ErrorChecker.cpp

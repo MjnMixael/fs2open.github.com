@@ -398,12 +398,6 @@ void MissionEventsDialog::initViewToggle()
 	fso::fred::bindStandardIcon(ui->btnFindPrev, QStyle::SP_ArrowUp);
 	fso::fred::bindStandardIcon(ui->btnFindNext, QStyle::SP_ArrowDown);
 
-	// QLineEdit passes Return on to the dialog, which presses the default OK button
-	// and closes the editor. eventFilter() consumes it on both search boxes and
-	// raises returnPressed itself, so the find below still runs.
-	ui->eventSearchEdit->installEventFilter(this);
-	ui->messageSearchEdit->installEventFilter(this);
-
 	connect(ui->eventSearchEdit, &QLineEdit::returnPressed, this, [this] {
 		if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
 			findInAdvancedText(/*forward=*/true, /*incremental=*/false);
@@ -1110,21 +1104,6 @@ void MissionEventsDialog::closeEvent(QCloseEvent* e)
 	} else {
 		e->accept();
 	}
-}
-
-bool MissionEventsDialog::eventFilter(QObject* watched, QEvent* event)
-{
-	if (event->type() == QEvent::KeyPress &&
-		(watched == ui->eventSearchEdit || watched == ui->messageSearchEdit)) {
-		const int key = static_cast<QKeyEvent*>(event)->key();
-		if (key == Qt::Key_Return || key == Qt::Key_Enter) {
-			// Consuming the key here means the line edit never sees it either, so
-			// raise its returnPressed (the find-next hookup) ourselves.
-			Q_EMIT static_cast<QLineEdit*>(watched)->returnPressed();
-			return true;
-		}
-	}
-	return QDialog::eventFilter(watched, event);
 }
 
 void MissionEventsDialog::initMessageWidgets() {

@@ -45,8 +45,6 @@ class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface {
 
   protected:
 	void closeEvent(QCloseEvent* event) override;
-	// Keeps Return in the search boxes from reaching the dialog, which would press OK.
-	bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
 	void on_okAndCancelButtons_accepted();

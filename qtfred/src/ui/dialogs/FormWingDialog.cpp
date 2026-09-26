@@ -2,6 +2,7 @@
 //
 
 #include "FormWingDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "ui_FormWingDialog.h"
 
@@ -11,6 +12,9 @@ namespace dialogs {
 
 FormWingDialog::FormWingDialog(QWidget* parent, EditorViewport* viewport) :
 	QDialog(parent), ui(new Ui::FormWingDialog), _model(new FormWingDialogModel(this, viewport)) {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	ui->setupUi(this);
 	ui->nameEdit->setMaxLength(NAME_LENGTH - 4);
 
