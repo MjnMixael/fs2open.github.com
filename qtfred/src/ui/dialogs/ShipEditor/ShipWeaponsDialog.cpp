@@ -107,10 +107,16 @@ ShipWeaponsDialog::ShipWeaponsDialog(QDialog* parent, EditorViewport* viewport, 
 	initTab(_primary, Primary);
 	initTab(_secondary, Secondary);
 
-	// Default to the first tab that has banks.
-	if (_model->getPrimaryBanks().empty() && !_model->getSecondaryBanks().empty()) {
-		ui->tabWidget->setCurrentIndex(1);
-	}
+	// Pick the first tab that has banks, then disable the empty ones. This has to happen here,
+	// not inside initTab(): its SignalBlockers also blocks the tab widget's internal QTabBar,
+	// and QTabWidget only switches the visible page on that bar's currentChanged signal. With it
+	// blocked, disabling the current Primary tab moved the bar to Secondary while the disabled
+	// Primary page stayed on screen, so Secondary looked greyed out.
+	const bool hasPrimary = !_model->getPrimaryBanks().empty();
+	const bool hasSecondary = !_model->getSecondaryBanks().empty();
+	ui->tabWidget->setCurrentIndex((!hasPrimary && hasSecondary) ? 1 : 0);
+	ui->tabWidget->setTabEnabled(0, hasPrimary);
+	ui->tabWidget->setTabEnabled(1, hasSecondary);
 
 	updateUI();
 }
@@ -175,10 +181,6 @@ void ShipWeaponsDialog::initTab(TabState& tab, Mode mode)
 		[this, &tab](const QModelIndex& target, int weaponId, int sourceBanksId, int sourceBankId, bool isCopy) {
 			onWeaponMoved(tab, target, weaponId, sourceBanksId, sourceBankId, isCopy);
 		});
-
-	const auto banks = banksForMode(mode);
-	const int tabIndex = (mode == Primary) ? 0 : 1;
-	ui->tabWidget->setTabEnabled(tabIndex, !banks.empty());
 }
 
 SCP_vector<Banks*> ShipWeaponsDialog::banksForMode(Mode mode) const
