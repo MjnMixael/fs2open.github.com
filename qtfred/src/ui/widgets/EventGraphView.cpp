@@ -1385,7 +1385,7 @@ void EventGraphView::rebuildSettingsMenu()
 			wa->setDefaultWidget(panel);
 			m_settingsMenu->addAction(wa);
 		}
-		const auto depthLabel = [this](int v) { return v >= kBasicDepthAll ? tr("all") : QString::number(v); };
+		const auto depthLabel = [](int v) { return v >= kBasicDepthAll ? EventGraphView::tr("all") : QString::number(v); };
 		addSlider(tr("Sexp depth"), 0, kBasicDepthAll, s_basicDepth, depthLabel, /*live=*/true,
 			[this, depthLabel](int v, QLabel* value) {
 				s_basicDepth = v;
@@ -3224,7 +3224,7 @@ void EventGraphView::mouseDoubleClickEvent(QMouseEvent* e)
 			// the card, jump to it in the tree as before.
 			const int bulletNode = node->bulletNodeAt(sp);
 			if (bulletNode >= 0)
-				Q_EMIT nodeEditRequested(bulletNode, e->globalPos());
+				Q_EMIT nodeEditRequested(bulletNode, e->globalPosition().toPoint());
 			else
 				Q_EMIT nodeActivated(node->treeNode());
 			e->accept();
