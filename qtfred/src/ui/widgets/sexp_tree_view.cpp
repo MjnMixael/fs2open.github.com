@@ -868,6 +868,16 @@ void sexp_tree_view::changeEvent(QEvent* e)
 		refreshAllIcons();
 }
 
+// A committed edit reaches handleItemChange (via itemChanged) before the editor closes,
+// so clearing the flag here only affects edits that changed nothing: Escape, or a commit
+// of the same text. Without this the flag stuck on and blocked Space, double-click,
+// Ctrl+S and the clipboard shortcuts until some later edit happened to change text.
+void sexp_tree_view::closeEditor(QWidget* editor, QAbstractItemDelegate::EndEditHint hint)
+{
+	QTreeWidget::closeEditor(editor, hint);
+	_currently_editing = false;
+}
+
 void sexp_tree_view::refreshAllIcons()
 {
 	std::function<void(QTreeWidgetItem*)> walk = [&](QTreeWidgetItem* it) {
@@ -2002,6 +2012,11 @@ void sexp_tree_view::beginItemEdit(QTreeWidgetItem* item) {
 		item->setText(0, text); // fires itemChanged -> handleItemChange
 		return;
 	}
+
+	// editItem() silently does nothing on a non-editable item, and nothing would then
+	// clear the flag.
+	if (item == nullptr || !item->flags().testFlag(Qt::ItemIsEditable))
+		return;
 
 	_currently_editing = true;
 	editItem(item);

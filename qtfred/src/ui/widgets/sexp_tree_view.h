@@ -265,6 +265,10 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! theme-adaptive icons (dots, chain, etc.) update while the tree is visible.
 	void changeEvent(QEvent* e) override;
 
+	//! Clears _currently_editing once the inline editor closes. A cancelled or unchanged
+	//! edit fires no itemChanged, so handleItemChange never gets to clear it.
+	void closeEditor(QWidget* editor, QAbstractItemDelegate::EndEditHint hint) override;
+
 	//! Recomputes and re-applies the icon for every item from its stored NodeImageRole.
 	void refreshAllIcons();
 
