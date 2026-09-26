@@ -10170,10 +10170,6 @@ bool check_for_26_1_data()
 {
 	// Graph-view editor metadata on event annotations: saved node positions and
 	// collapsed subtrees.
-	for (const event_annotation& ea : Event_annotations) {
-		if (ea.has_pos || ea.collapsed)
-			return true;
-	}
-
-	return false;
+	return std::any_of(Event_annotations.begin(), Event_annotations.end(),
+		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed; });
 }

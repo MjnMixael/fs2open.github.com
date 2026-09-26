@@ -13,8 +13,6 @@
 
 // Parse globals used by the Advanced Edit round-trip. Not exposed in the
 // public headers, so we declare them here.
-extern char Fred_alt_names[MAX_SHIPS][NAME_LENGTH + 1];
-extern char Fred_callsigns[MAX_SHIPS][NAME_LENGTH + 1];
 extern int Warning_count, Error_count;
 void parse_event(mission* pm);
 
@@ -1681,7 +1679,7 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 
 	try {
 		if (!optional_string("#Events")) {
-			errors.push_back("Missing '#Events' section header.");
+			errors.emplace_back("Missing '#Events' section header.");
 			markLine(1);
 			ok = false;
 		} else {
@@ -1767,8 +1765,14 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 			stuff_sexp_text_string(bad_node_str, bad_node, SEXP_ERROR_CHECK_MODE);
 			if (!bad_node_str.empty())
 				bad_node_str.pop_back();
-			errors.push_back("Error in event '" + evName + "': " + sexp_error_message(z)
-				+ " (bad node: " + bad_node_str + ")");
+			SCP_string msg = "Error in event '";
+			msg += evName;
+			msg += "': ";
+			msg += sexp_error_message(z);
+			msg += " (bad node: ";
+			msg += bad_node_str;
+			msg += ")";
+			errors.push_back(std::move(msg));
 			markLine(evLine);
 			ok = false;
 		}

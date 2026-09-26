@@ -217,7 +217,7 @@ class CardItem : public QGraphicsItem {
 	QRectF boundingRect() const override
 	{
 		const qreal h = contentHeight();
-		return QRectF(-m_width / 2, -h / 2, m_width, h);
+		return {-m_width / 2, -h / 2, m_width, h};
 	}
 
 	// Register an edge attached to this card so it can be redrawn when the card
@@ -269,10 +269,8 @@ class CardItem : public QGraphicsItem {
 		if (m_title.contains(q, Qt::CaseInsensitive) || m_cornerText.contains(q, Qt::CaseInsensitive)
 			|| m_chip.contains(q, Qt::CaseInsensitive) || m_subtitle.contains(q, Qt::CaseInsensitive))
 			return true;
-		for (const QString& l : m_lines)
-			if (l.contains(q, Qt::CaseInsensitive))
-				return true;
-		return false;
+		return std::any_of(m_lines.begin(), m_lines.end(),
+			[&q](const QString& l) { return l.contains(q, Qt::CaseInsensitive); });
 	}
 
 	// Distinct highlight for a swimlanes filter item (independent of selection).
@@ -659,7 +657,7 @@ class SexpNodeItem final : public CardItem {
   public:
 	enum { Type = UserType + 3 };
 	SexpNodeItem(int treeNode, int eventIndex, bool isCond, QString opName, QVector<QString> args,
-		QString eventName, QString fullExpr, const EventGraphStyle& style)
+		QString eventName, const QString& fullExpr, const EventGraphStyle& style)
 		: CardItem(kNodeW, isCond ? style.condFill : style.actionFill, isCond ? style.condChip : style.actionChip,
 			  isCond ? QStringLiteral("cond") : QStringLiteral("action"), std::move(opName), std::move(args),
 			  QString(), std::move(eventName), style.eventBadge, /*expandable=*/true, /*collapsedMax=*/3, style),
@@ -1011,9 +1009,9 @@ class LegendWidget final : public QWidget {
 	}
 
   private:
-	int iconRows() const { return 5; }
+	static int iconRows() { return 5; }
 
-	QString iconLabel(int i) const
+	static QString iconLabel(int i)
 	{
 		switch (i) {
 		case 0: return tr("event");
@@ -1064,7 +1062,7 @@ class LegendWidget final : public QWidget {
 	// event name, and anything else not in the specific groups).
 	bool hasDataKind() const
 	{
-		for (int k : m_kinds) {
+		return std::any_of(m_kinds.begin(), m_kinds.end(), [](int k) {
 			switch (static_cast<RefObjectKind>(k)) {
 			case RefObjectKind::Unknown:
 			case RefObjectKind::Ship:
@@ -1076,12 +1074,11 @@ class LegendWidget final : public QWidget {
 			case RefObjectKind::Message:
 			case RefObjectKind::Variable:
 			case RefObjectKind::Container:
-				continue;
+				return false;
 			default:
 				return true;
 			}
-		}
-		return false;
+		});
 	}
 
 	static constexpr int kTop = 22;
@@ -1279,7 +1276,7 @@ void EventGraphView::rebuildSettingsMenu()
 		col->setContentsMargins(12, 4, 12, 6);
 		col->setSpacing(4);
 
-		auto addCheck = [&](const QString& label, bool checked, std::function<void(bool)> onToggle) {
+		auto addCheck = [&](const QString& label, bool checked, const std::function<void(bool)>& onToggle) {
 			auto* cb = new QCheckBox(label, panel);
 			cb->setChecked(checked);
 			connect(cb, &QCheckBox::toggled, this, [onToggle](bool on) { onToggle(on); });
@@ -1327,8 +1324,8 @@ void EventGraphView::rebuildSettingsMenu()
 	// fmt formats the value label (also for its initial text). With live off, the
 	// label follows the drag but onChange only runs on release, for settings that
 	// rebuild the whole graph.
-	auto addSlider = [this](const QString& title, int lo, int hi, int val, std::function<QString(int)> fmt,
-						 bool live, std::function<void(int, QLabel*)> onChange) {
+	auto addSlider = [this](const QString& title, int lo, int hi, int val, const std::function<QString(int)>& fmt,
+						 bool live, const std::function<void(int, QLabel*)>& onChange) {
 		auto* panel = new QWidget(m_settingsMenu);
 		auto* col = new QVBoxLayout(panel);
 		col->setContentsMargins(10, 4, 10, 6);
@@ -2030,10 +2027,9 @@ void EventGraphView::applyEventStatus(graphdetail::EventNodeItem* card, int even
 
 bool EventGraphView::isEventNodeSelected() const
 {
-	for (QGraphicsItem* it : m_scene->selectedItems())
-		if (qgraphicsitem_cast<graphdetail::EventNodeItem*>(it))
-			return true;
-	return false;
+	const auto sel = m_scene->selectedItems();
+	return std::any_of(sel.begin(), sel.end(),
+		[](QGraphicsItem* it) { return qgraphicsitem_cast<graphdetail::EventNodeItem*>(it) != nullptr; });
 }
 
 // Swimlanes shows an operator card once per object row, so a key can have several
@@ -2050,20 +2046,22 @@ bool EventGraphView::nodeExpandable(int key) const
 {
 	if (key == -1)
 		return false;
-	for (QGraphicsItem* gi : m_scene->items())
-		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key && c->canExpand())
-			return true;
-	return false;
+	const auto all = m_scene->items();
+	return std::any_of(all.begin(), all.end(), [key](QGraphicsItem* gi) {
+		auto* c = dynamic_cast<graphdetail::CardItem*>(gi);
+		return c && c->annotationKey() == key && c->canExpand();
+	});
 }
 
 void EventGraphView::expandNode(int key)
 {
 	bool expanded = false;
-	for (QGraphicsItem* gi : m_scene->items())
+	for (QGraphicsItem* gi : m_scene->items()) {
 		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key && c->canExpand()) {
 			c->setExpanded(true);
 			expanded = true;
 		}
+	}
 	if (expanded && m_minimap)
 		m_minimap->regenerate(); // cards changed size
 }
@@ -2624,7 +2622,7 @@ void EventGraphView::rebuildBasic()
 	QVector<DupPlacement> dups;
 	QVector<QVector<int>> opDupIdx(nOps);
 	if (!combine) {
-		for (int oi = 0; oi < nOps; ++oi)
+		for (int oi = 0; oi < nOps; ++oi) {
 			for (const BasicObjRef& r : g.ops[oi].objectRefs) {
 				DupPlacement d;
 				d.op = oi;
@@ -2636,6 +2634,7 @@ void EventGraphView::rebuildBasic()
 				opDupIdx[oi].push_back(static_cast<int>(dups.size()));
 				dups.push_back(d);
 			}
+		}
 	}
 
 	QVector<double> opSlot(nOps, 0.0);
@@ -2808,19 +2807,22 @@ void EventGraphView::rebuildBasic()
 	// reference is still directly editable (targets that one leaf); only true
 	// multi-reference cards are aggregates with no menu.
 	if (combine) {
-		for (int o = 0; o < nObj; ++o)
+		for (int o = 0; o < nObj; ++o) {
 			if (objVisible[o]) {
 				const BasicObjNode& ob = g.objects[o];
 				const int menuKey = (ob.refTreeNodes.size() == 1) ? ob.refTreeNodes[0] : -1;
 				objItem[o] = makeObjectCard(ob, objPos[o], ob.posKey, menuKey);
 			}
+		}
 	} else {
-		for (int di = 0; di < dups.size(); ++di)
+		for (int di = 0; di < dups.size(); ++di) {
 			// opPlaced[op] is now false for collapsed events, so their dup cards drop.
 			if (dups[di].placed && dups[di].op >= 0 && dups[di].op < nOps && opPlaced[dups[di].op] &&
-				dups[di].objectIndex >= 0 && dups[di].objectIndex < nObj)
+				dups[di].objectIndex >= 0 && dups[di].objectIndex < nObj) {
 				dupItem[di] = makeObjectCard(
 					g.objects[dups[di].objectIndex], dupPos[di], dups[di].leafTreeNode, dups[di].leafTreeNode);
+			}
+		}
 	}
 
 	// Operator cards.
