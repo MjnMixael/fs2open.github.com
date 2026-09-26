@@ -1,4 +1,5 @@
 #include "IconFromShipDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "mission/dialogs/BriefingEditorDialogModel.h"
 
@@ -19,6 +20,9 @@ constexpr int KindWing = 1;
 IconFromShipDialog::IconFromShipDialog(QWidget* parent, BriefingEditorDialogModel* model)
 	: QDialog(parent), _model(model)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	setWindowTitle("Make Icon From Ship");
 	setMinimumSize(350, 450);
 

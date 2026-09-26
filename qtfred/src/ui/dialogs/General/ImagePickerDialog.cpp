@@ -1,4 +1,5 @@
 #include "ImagePickerDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "ui/util/ImageRenderer.h"
 
@@ -11,6 +12,9 @@ using fso::fred::util::loadImageToQImage;
 
 ImagePickerDialog::ImagePickerDialog(QWidget* parent) : QDialog(parent)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	setWindowTitle("Choose Image");
 	resize(720, 520);
 
@@ -33,6 +37,7 @@ ImagePickerDialog::ImagePickerDialog(QWidget* parent) : QDialog(parent)
 	auto* hbox = new QHBoxLayout();
 	hbox->addStretch(1);
 	_okBtn = new QPushButton("OK", this);
+	_okBtn->setDefault(true); // Enter presses OK, not whichever button comes first
 	_cancelBtn = new QPushButton("Cancel", this);
 	hbox->addWidget(_okBtn);
 	hbox->addWidget(_cancelBtn);

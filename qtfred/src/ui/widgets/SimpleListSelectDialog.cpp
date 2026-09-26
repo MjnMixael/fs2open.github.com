@@ -1,4 +1,5 @@
 #include "SimpleListSelectDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include <QHBoxLayout>
 #include <QItemSelectionModel>
@@ -12,6 +13,9 @@
 
 SimpleListSelectDialog::SimpleListSelectDialog(const QStringList& items, QWidget* parent) : QDialog(parent)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	setWindowTitle(QStringLiteral("Select item"));
 	resize(420, 520);
 
@@ -35,6 +39,7 @@ SimpleListSelectDialog::SimpleListSelectDialog(const QStringList& items, QWidget
 	m_list->setUniformItemSizes(true);
 
 	m_okBtn = new QPushButton(QStringLiteral("OK"), this);
+	m_okBtn->setDefault(true); // Enter presses OK, not whichever button comes first
 	m_okBtn->setEnabled(false);
 	m_cancelBtn = new QPushButton(QStringLiteral("Cancel"), this);
 

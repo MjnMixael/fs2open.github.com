@@ -1,4 +1,5 @@
 #include "ui/dialogs/General/CheckBoxListDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "ui_CheckBoxListDialog.h"
 
@@ -6,6 +7,9 @@ namespace fso::fred::dialogs {
 
 CheckBoxListDialog::CheckBoxListDialog(QWidget* parent) : QDialog(parent), ui(new Ui::CheckBoxListDialog)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	ui->setupUi(this);
 	setSizeGripEnabled(true);
 }

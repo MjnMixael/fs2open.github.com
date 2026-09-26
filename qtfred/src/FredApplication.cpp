@@ -15,6 +15,7 @@
 #endif
 
 #include "FredApplication.h"
+#include "ui/util/DialogEnterGuard.h"
 
 namespace fso::fred {
 
@@ -37,6 +38,9 @@ FredApplication::FredApplication() {
 	idleTimer->start(5);
 
 	fredApp = this;
+
+	// Keep Return/Enter in a dialog field from pressing the dialog's default button.
+	fso::fred::util::installDialogEnterGuard(this);
 
 	// When there are issues with event handling, enable this define to see the events in the log and stdout
 #ifdef EVENT_DEBUGGING

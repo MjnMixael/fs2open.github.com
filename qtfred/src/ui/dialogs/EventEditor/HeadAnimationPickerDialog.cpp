@@ -1,4 +1,5 @@
 #include "HeadAnimationPickerDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "ui/util/default_dir.h"
 #include "ui/util/ImageRenderer.h"
@@ -16,6 +17,9 @@ using fso::fred::util::loadHandleToQImage;
 
 HeadAnimationPickerDialog::HeadAnimationPickerDialog(QWidget* parent) : QDialog(parent)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	setWindowTitle("Choose Head Animation");
 	resize(860, 560);
 
@@ -57,6 +61,7 @@ HeadAnimationPickerDialog::HeadAnimationPickerDialog(QWidget* parent) : QDialog(
 	auto* buttons = new QHBoxLayout();
 	_browseBtn = new QPushButton("Browse", this);
 	_okBtn = new QPushButton("OK", this);
+	_okBtn->setDefault(true); // Enter presses OK, not whichever button comes first
 	_cancelBtn = new QPushButton("Cancel", this);
 	buttons->addWidget(_browseBtn);
 	buttons->addStretch(1);

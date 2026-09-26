@@ -1,4 +1,5 @@
 #include "IconCoordinatesDialog.h"
+#include "ui/util/DialogEnterGuard.h"
 
 #include "mission/dialogs/BriefingEditorDialogModel.h"
 
@@ -13,6 +14,9 @@ namespace fso::fred::dialogs {
 IconCoordinatesDialog::IconCoordinatesDialog(QWidget* parent, BriefingEditorDialogModel* model)
 	: QDialog(parent), _model(model)
 {
+	// A picker: Enter in a field accepts, as users expect (see DialogEnterGuard).
+	fso::fred::util::allowEnterToAccept(this);
+
 	setWindowTitle("Icon Coordinates");
 	setupUi();
 
@@ -46,6 +50,7 @@ void IconCoordinatesDialog::setupUi()
 
 	auto* buttonLayout = new QHBoxLayout();
 	auto* okBtn = new QPushButton("OK", this);
+	okBtn->setDefault(true); // Enter presses OK, not whichever button comes first
 	auto* cancelBtn = new QPushButton("Cancel", this);
 	buttonLayout->addStretch();
 	buttonLayout->addWidget(okBtn);
