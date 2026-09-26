@@ -1993,10 +1993,13 @@ void sexp_tree_view::beginItemEdit(QTreeWidgetItem* item) {
 		bool ok = false;
 		const QString text =
 			QInputDialog::getText(this, tr("Edit Data"), tr("Value:"), QLineEdit::Normal, old, &ok);
-		if (!ok)
+		// An unchanged value fires no itemChanged, so nothing would clear
+		// _currently_editing, and that flag blocks every later tree edit. An empty
+		// value is ignored by handleItemChange but would still blank the label.
+		if (!ok || text == old || text.isEmpty())
 			return;
 		_currently_editing = true;
-		item->setText(0, text); // fires itemChanged -> handleItemChange (no-op if unchanged)
+		item->setText(0, text); // fires itemChanged -> handleItemChange
 		return;
 	}
 

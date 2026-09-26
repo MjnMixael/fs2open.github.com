@@ -45,6 +45,8 @@ class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface {
 
   protected:
 	void closeEvent(QCloseEvent* event) override;
+	// Keeps Return in the search boxes from reaching the dialog, which would press OK.
+	bool eventFilter(QObject* watched, QEvent* event) override;
 
 private slots:
 	void on_okAndCancelButtons_accepted();
@@ -167,6 +169,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void jumpToNodeInTree(int treeNode);     // switch to tree view, then hilite the node
 	GraphEventMeta buildEventMeta(int eventIndex) const; // status/annotation-key for one event
 	void syncGraphAfterEventUi();            // reflect property edits on the graph card (or full rebuild)
+	void refreshEventAfterFieldUndo(int eventIndex); // undo/redo of an event field, which may not be the selected event
 
 	EventReferenceIndex _refIndex;
 	bool _graphDirty = true; // graph needs a rebuild (events changed since last build)

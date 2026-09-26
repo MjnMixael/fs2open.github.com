@@ -2084,6 +2084,14 @@ int Fred_mission_save::save_events()
 			fso_comment_push(";;FSO 21.0.0;;");
 			event_annotation default_ea;
 
+			// A record has no start token: the parser reads Comment, Color, Path, Position,
+			// Collapsed in that order and a record ends where the next field would go
+			// backwards. Pre-26.1 records always began with a Comment or Color, so that
+			// was unambiguous. A 26.1 record can hold only a Position or Collapsed, so
+			// every record then writes +Path (empty for an event root) as its anchor;
+			// otherwise the previous record would swallow its fields on reload.
+			const bool always_write_path = The_mission.required_fso_version >= gameversion::version(26, 1);
+
 			// see if there is an annotation for this event
 			for (const auto& ea : Event_annotations) {
 				if (ea.path.empty() || ea.path.front() != i)
@@ -2122,7 +2130,7 @@ int Fred_mission_save::save_events()
 					fout(" %d, %d, %d", ea.r, ea.g, ea.b);
 				}
 
-				if (ea.path.size() > 1) {
+				if (ea.path.size() > 1 || always_write_path) {
 					if (optional_string_fred("+Path:", "$Formula:"))
 						parse_comments();
 					else

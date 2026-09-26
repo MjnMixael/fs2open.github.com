@@ -33,8 +33,24 @@
 #include <prop/prop.h>
 #include <jumpnode/jumpnode.h>
 #include <coordinate_points/coordinate_point.h>
+#include <missioneditor/missionsave.h>
+#include <mod_table/mod_table.h>
 
 namespace fso::fred::dialogs {
+
+// Mission text is Latin-1 unless Unicode text mode is on. The Advanced view
+// rewrites every event when it commits, so decoding its text the wrong way
+// would corrupt every non-ASCII character in the section at once.
+static QString missionTextToQString(const SCP_string& text)
+{
+	return Unicode_text_mode ? QString::fromStdString(text)
+	                         : QString::fromLatin1(text.c_str(), static_cast<qsizetype>(text.size()));
+}
+
+static SCP_string qStringToMissionText(const QString& text)
+{
+	return Unicode_text_mode ? text.toStdString() : text.toLatin1().toStdString();
+}
 
 // Enumerate every first-class object type for the graph's object selector:
 // ships (incl. player starts), wings, props, waypoint paths, jump nodes,
@@ -369,6 +385,12 @@ void MissionEventsDialog::initViewToggle()
 	fso::fred::bindStandardIcon(ui->btnFindPrev, QStyle::SP_ArrowUp);
 	fso::fred::bindStandardIcon(ui->btnFindNext, QStyle::SP_ArrowDown);
 
+	// QLineEdit passes Return on to the dialog, which presses the default OK button
+	// and closes the editor. eventFilter() consumes it on both search boxes and
+	// raises returnPressed itself, so the find below still runs.
+	ui->eventSearchEdit->installEventFilter(this);
+	ui->messageSearchEdit->installEventFilter(this);
+
 	connect(ui->eventSearchEdit, &QLineEdit::returnPressed, this, [this] {
 		if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
 			findInAdvancedText(/*forward=*/true, /*incremental=*/false);
@@ -386,7 +408,7 @@ void MissionEventsDialog::initViewToggle()
 	});
 
 	// Restore the view used last time this session. A view whose button is
-	// disabled (currently the graph view) can't be restored into.
+	// disabled can't be restored into.
 	int view = s_lastEventViewIndex;
 	auto* btn = _viewGroup->button(view);
 	if (!btn || !btn->isEnabled())
@@ -431,7 +453,7 @@ bool MissionEventsDialog::canLeaveEventView(int index)
 	const QByteArray before = _model->captureEventWorkingState();
 
 	_suppressTreeUndo = true;
-	const bool ok = _model->applyEventsText(text.toUtf8().constData(), /*dryRun=*/false, errors, warnings);
+	const bool ok = _model->applyEventsText(qStringToMissionText(text), /*dryRun=*/false, errors, warnings);
 	_suppressTreeUndo = false;
 
 	showAdvancedResults(errors, warnings);
@@ -755,8 +777,12 @@ void MissionEventsDialog::jumpToNodeInTree(int treeNode)
 // its baseline and native undo history.
 void MissionEventsDialog::loadAdvancedText()
 {
-	const SCP_string text = _model->generateEventsSectionText(_fredView->missionSaveFormat());
-	_advancedBaseline = QString::fromStdString(text);
+	// Always Standard: this is an editing view, not the mission's output. Retail
+	// drops every FSO-only field (annotations, log flags), which a commit would
+	// then discard for real, and a Retail save also rewrites special tags in the
+	// global messages and briefings.
+	const SCP_string text = _model->generateEventsSectionText(MissionFormat::STANDARD);
+	_advancedBaseline = missionTextToQString(text);
 
 	QSignalBlocker blocker(ui->advancedTextEdit);
 	ui->advancedTextEdit->setPlainText(_advancedBaseline);
@@ -779,7 +805,7 @@ void MissionEventsDialog::showAdvancedResults(const SCP_vector<SCP_string>& erro
 void MissionEventsDialog::on_btnValidateEvents_clicked()
 {
 	SCP_vector<SCP_string> errors, warnings;
-	_model->applyEventsText(ui->advancedTextEdit->toPlainText().toUtf8().constData(),
+	_model->applyEventsText(qStringToMissionText(ui->advancedTextEdit->toPlainText()),
 		/*dryRun=*/true, errors, warnings);
 	showAdvancedResults(errors, warnings);
 }
@@ -907,8 +933,22 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
 				loadAdvancedText();
 			// Likewise keep the relationship graph in sync on undo/redo.
-			if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+			if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
 				refreshGraphView();
+				// The restore cleared the current event, but the rebuild quietly
+				// re-selects cards by their old event index. Push the graph's pick
+				// back through the tree so the fields, Delete and the graph agree.
+				const int graphEvent = ui->eventGraph->selectedEventIndex();
+				if (graphEvent >= 0) {
+					selectEventInTree(graphEvent);
+					// If that tree row was already current, no selection signal fired.
+					if (_model->getCurrentlySelectedEvent() != graphEvent) {
+						_model->setCurrentlySelectedEvent(graphEvent);
+						updateEventUi();
+					}
+				}
+				updateEventCreateButtons();
+			}
 			_suppressTreeUndo = false;
 		},
 		label));
@@ -957,6 +997,21 @@ void MissionEventsDialog::closeEvent(QCloseEvent* e)
 	} else {
 		e->accept();
 	}
+}
+
+bool MissionEventsDialog::eventFilter(QObject* watched, QEvent* event)
+{
+	if (event->type() == QEvent::KeyPress &&
+		(watched == ui->eventSearchEdit || watched == ui->messageSearchEdit)) {
+		const int key = static_cast<QKeyEvent*>(event)->key();
+		if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+			// Consuming the key here means the line edit never sees it either, so
+			// raise its returnPressed (the find-next hookup) ourselves.
+			Q_EMIT static_cast<QLineEdit*>(watched)->returnPressed();
+			return true;
+		}
+	}
+	return QDialog::eventFilter(watched, event);
 }
 
 void MissionEventsDialog::initMessageWidgets() {
@@ -1193,6 +1248,16 @@ void MissionEventsDialog::updateEventUi() {
 	ui->checkLogLastTrigger->setChecked(_model->getLogLastTrigger());
 
 	syncGraphAfterEventUi();
+}
+
+// For an undo/redo of an event field: the event it changes needn't be the
+// selected one, and syncGraphAfterEventUi() only refreshes the selected card.
+void MissionEventsDialog::refreshEventAfterFieldUndo(int eventIndex)
+{
+	updateEventUi();
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex && eventIndex >= 0 &&
+		eventIndex < static_cast<int>(_model->getEventList().size()))
+		ui->eventGraph->updateEventCard(eventIndex, buildEventMeta(eventIndex));
 }
 
 // Reflect event-property edits onto the graph while it's the current view: a
@@ -1698,7 +1763,7 @@ void MissionEventsDialog::on_repeatCountBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_RepeatCount + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Repeat Count"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setRepeatCountAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setRepeatCountAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1718,7 +1783,7 @@ void MissionEventsDialog::on_triggerCountBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_TriggerCount + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Trigger Count"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setTriggerCountAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setTriggerCountAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1737,7 +1802,7 @@ void MissionEventsDialog::on_intervalTimeBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_Interval + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Interval Time"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setIntervalTimeAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setIntervalTimeAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1764,7 +1829,7 @@ void MissionEventsDialog::on_chainedCheckBox_toggled(bool checked)
 	cmd->addEntry(before, after, [this, index](const int& v) {
 		_model->setChainDelayRawAt(index, v);
 		updateEventBitmapAt(index);
-		updateEventUi();
+		refreshEventAfterFieldUndo(index);
 	});
 	_dialogStack->push(cmd);
 }
@@ -1784,7 +1849,7 @@ void MissionEventsDialog::on_chainDelayBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_ChainDelay + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Chain Delay"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setChainDelayAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setChainDelayAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1803,7 +1868,7 @@ void MissionEventsDialog::on_useMsecsCheckBox_toggled(bool checked)
 	auto* cmd = new FieldEditCommand<bool>(
 	    FieldId::Event_UseMsecs + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Toggle Interval In Milliseconds"), true);
-	cmd->addEntry(before, checked, [this, index](const bool& v) { _model->setUseMsecsAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, checked, [this, index](const bool& v) { _model->setUseMsecsAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1822,7 +1887,7 @@ void MissionEventsDialog::on_scoreBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_Score + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Event Score"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setEventScoreAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setEventScoreAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1841,7 +1906,7 @@ void MissionEventsDialog::on_teamCombo_currentIndexChanged(int index)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_Team + eventIndex * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Event Team"), true);
-	cmd->addEntry(before, after, [this, eventIndex](const int& v) { _model->setEventTeamAt(eventIndex, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, eventIndex](const int& v) { _model->setEventTeamAt(eventIndex, v); refreshEventAfterFieldUndo(eventIndex); });
 	_dialogStack->push(cmd);
 }
 
@@ -1868,7 +1933,7 @@ void MissionEventsDialog::on_editDirectiveText_textChanged(const QString& text)
 	cmd->addEntry(before, after, [this, index](const SCP_string& v) {
 		_model->setEventDirectiveTextAt(index, v);
 		updateEventBitmapAt(index);
-		updateEventUi();
+		refreshEventAfterFieldUndo(index);
 	});
 	_dialogStack->push(cmd);
 }
@@ -1890,7 +1955,7 @@ void MissionEventsDialog::on_editDirectiveKeypressText_textChanged(const QString
 	    nullptr, tr("Change Directive Keypress Text"), true);
 	cmd->addEntry(before, after, [this, index](const SCP_string& v) {
 		_model->setEventDirectiveKeyTextAt(index, v);
-		updateEventUi();
+		refreshEventAfterFieldUndo(index);
 	});
 	_dialogStack->push(cmd);
 }
@@ -1911,7 +1976,7 @@ void MissionEventsDialog::pushEventLogFlagCommand(int fieldConst, int mask, bool
 	auto* cmd = new FieldEditCommand<bool>(
 	    fieldConst + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Toggle Event Log Flag"), true);
-	cmd->addEntry(before, checked, [this, index, mask](const bool& v) { _model->setEventLogFlagAt(index, mask, v); updateEventUi(); });
+	cmd->addEntry(before, checked, [this, index, mask](const bool& v) { _model->setEventLogFlagAt(index, mask, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 

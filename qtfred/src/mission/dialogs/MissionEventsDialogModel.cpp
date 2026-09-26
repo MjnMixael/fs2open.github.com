@@ -1707,6 +1707,20 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 	} catch (const parse::ParseException& e) {
 		errors.push_back(SCP_string("Parse error: ") + e.what());
 		ok = false;
+	} catch (...) {
+		// Anything else is unexpected. Put the live globals and the parse state back
+		// before letting it propagate, or the editor keeps working on swapped event
+		// lists and a Parse_text that points into a buffer about to be freed.
+		for (const auto& ev : Mission_events)
+			fso::fred::state::freeSexpFormula(ev.formula);
+		std::swap(Mission_events, tempEvents);
+		std::swap(Event_annotations, tempAnn);
+		if (Mission_parse_warnings.size() > warnBaseline)
+			Mission_parse_warnings.resize(warnBaseline);
+		Parse_text = savedParseText;
+		unpause_parse();
+		Cmdline_noparseerrors = savedNoParseErrors;
+		throw;
 	}
 
 	// New qtFRED-recorded warnings are advisory, not blocking.

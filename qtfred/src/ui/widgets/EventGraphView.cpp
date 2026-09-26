@@ -10,6 +10,7 @@
 #include <QComboBox>
 #include <QContextMenuEvent>
 #include <QFileDialog>
+#include <QMessageBox>
 #include <QGraphicsItem>
 #include <QGraphicsScene>
 #include <QGraphicsSceneHoverEvent>
@@ -70,7 +71,8 @@ static RefLineMode s_refMode = RefLineMode::Always; // relationship/flow edge vi
 static bool s_focusFade = false;    // dim nodes/edges not connected to the selection
 static bool s_showLegend = false;   // color-key panel
 static bool s_showMinimap = true;   // bottom-left overview
-static int  s_basicDepth = 8;       // Basic: max operator nesting depth to render (8 ~= all)
+static int  s_basicDepth = 8;       // Basic: max operator nesting depth to render
+static constexpr int kBasicDepthAll = 8; // the slider's top stop, labelled "all": no limit
 static bool s_basicCombineObjects = true; // Basic: one shared node per object vs. duplicate per reference
 
 // Stable identity key for a swimlanes object row (kind + case-insensitive name).
@@ -345,9 +347,14 @@ class CardItem : public QGraphicsItem {
 		const QRectF inner = r.adjusted(metric::padX, metric::padTop, -10.0, -metric::padBottom);
 		qreal y = inner.top();
 
+		// Every text section sizes itself from this one base font. Deriving each from
+		// p->font() would chain off whichever optional section drew last, so a card
+		// with a badge or order marker got a smaller title and body than one without.
+		const QFont base = p->font();
+
 		// Top-right event badge.
 		if (!m_cornerText.isEmpty()) {
-			QFont bf = p->font();
+			QFont bf = base;
 			bf.setPointSizeF(std::max(6.0, bf.pointSizeF() - 2.0));
 			QFontMetricsF fm(bf);
 			const qreal maxW = m_width * 0.55;
@@ -368,7 +375,7 @@ class CardItem : public QGraphicsItem {
 		qreal chipX = inner.left();
 		if (m_aggregate || m_order > 0) {
 			const QString mark = m_aggregate ? QStringLiteral("*") : QString::number(m_order);
-			QFont mf = p->font();
+			QFont mf = base;
 			mf.setBold(true);
 			mf.setPointSizeF(std::max(6.0, mf.pointSizeF() - 1.0));
 			p->setFont(mf);
@@ -379,8 +386,8 @@ class CardItem : public QGraphicsItem {
 		}
 
 		// Chip (role/kind) top-left (after the order marker, if any).
-		QFont chipFont = p->font();
-		chipFont.setPointSizeF(std::max(6.0, chipFont.pointSizeF() - 1.5));
+		QFont chipFont = base;
+		chipFont.setPointSizeF(std::max(6.0, base.pointSizeF() - 1.5));
 		p->setFont(chipFont);
 		p->setPen(m_chipColor);
 		p->drawText(QRectF(chipX, y, inner.left() + inner.width() * 0.45 - chipX, metric::chipH),
@@ -389,9 +396,9 @@ class CardItem : public QGraphicsItem {
 
 		// Title.
 		if (!m_title.isEmpty()) {
-			QFont titleFont = p->font();
+			QFont titleFont = base;
 			titleFont.setBold(true);
-			titleFont.setPointSizeF(titleFont.pointSizeF() + 1.0);
+			titleFont.setPointSizeF(std::max(6.0, base.pointSizeF() - 0.5));
 			p->setFont(titleFont);
 			p->setPen(m_style.nodeText);
 			const QString t = QFontMetricsF(titleFont).elidedText(m_title, Qt::ElideRight, inner.width());
@@ -401,8 +408,8 @@ class CardItem : public QGraphicsItem {
 		}
 
 		// Bulleted body lines.
-		QFont lineFont = p->font();
-		lineFont.setBold(false);
+		QFont lineFont = base;
+		lineFont.setPointSizeF(std::max(6.0, base.pointSizeF() - 0.5));
 		p->setFont(lineFont);
 		p->setPen(m_style.nodeSubText);
 		QFontMetricsF lfm(lineFont);
@@ -1317,8 +1324,11 @@ void EventGraphView::rebuildSettingsMenu()
 	}
 
 	// --- Slider helper (label + value + range) as a QWidgetAction ---
-	auto addSlider = [this](const QString& title, int lo, int hi, int val,
-						 std::function<void(int, QLabel*)> onChange) {
+	// fmt formats the value label (also for its initial text). With live off, the
+	// label follows the drag but onChange only runs on release, for settings that
+	// rebuild the whole graph.
+	auto addSlider = [this](const QString& title, int lo, int hi, int val, std::function<QString(int)> fmt,
+						 bool live, std::function<void(int, QLabel*)> onChange) {
 		auto* panel = new QWidget(m_settingsMenu);
 		auto* col = new QVBoxLayout(panel);
 		col->setContentsMargins(10, 4, 10, 6);
@@ -1329,12 +1339,15 @@ void EventGraphView::rebuildSettingsMenu()
 		slider->setRange(lo, hi);
 		slider->setValue(val);
 		slider->setMinimumWidth(160);
-		auto* value = new QLabel(QString::number(val), panel);
+		auto* value = new QLabel(fmt(val), panel);
 		value->setMinimumWidth(28);
 		row->addWidget(slider);
 		row->addWidget(value);
 		col->addLayout(row);
 
+		slider->setTracking(live);
+		if (!live)
+			connect(slider, &QSlider::sliderMoved, value, [value, fmt](int v) { value->setText(fmt(v)); });
 		connect(slider, &QSlider::valueChanged, this,
 			[value, onChange](int v) { onChange(v, value); });
 
@@ -1346,11 +1359,13 @@ void EventGraphView::rebuildSettingsMenu()
 	// --- Mode-specific ---
 	if (m_mode == Mode::Radial) {
 		m_settingsMenu->addSection(tr("Radial"));
-		addSlider(tr("Ring spacing"), 120, 600, static_cast<int>(s_ringSpacing), [this](int v, QLabel* value) {
-			s_ringSpacing = v;
-			value->setText(QString::number(v));
-			rebuildRadial();
-		});
+		const auto plain = [](int v) { return QString::number(v); };
+		addSlider(tr("Ring spacing"), 120, 600, static_cast<int>(s_ringSpacing), plain, /*live=*/false,
+			[this, plain](int v, QLabel* value) {
+				s_ringSpacing = v;
+				value->setText(plain(v));
+				rebuildRadial();
+			});
 	} else if (m_mode == Mode::Basic) {
 		m_settingsMenu->addSection(tr("Basic"));
 		{
@@ -1370,11 +1385,13 @@ void EventGraphView::rebuildSettingsMenu()
 			wa->setDefaultWidget(panel);
 			m_settingsMenu->addAction(wa);
 		}
-		addSlider(tr("Sexp depth"), 0, 8, s_basicDepth, [this](int v, QLabel* value) {
-			s_basicDepth = v;
-			value->setText(v >= 8 ? tr("all") : QString::number(v));
-			rebuildBasic();
-		});
+		const auto depthLabel = [this](int v) { return v >= kBasicDepthAll ? tr("all") : QString::number(v); };
+		addSlider(tr("Sexp depth"), 0, kBasicDepthAll, s_basicDepth, depthLabel, /*live=*/true,
+			[this, depthLabel](int v, QLabel* value) {
+				s_basicDepth = v;
+				value->setText(depthLabel(v));
+				rebuildBasic();
+			});
 	}
 
 	// --- Export (all modes) ---
@@ -1387,8 +1404,20 @@ void EventGraphView::rebuildSettingsMenu()
 // they aren't included.
 void EventGraphView::exportImage()
 {
-	if (!m_scene || m_scene->items().isEmpty())
+	// The empty-state message is itself a scene item, so test for real cards.
+	bool hasCards = false;
+	if (m_scene) {
+		for (QGraphicsItem* gi : m_scene->items()) {
+			if (dynamic_cast<graphdetail::CardItem*>(gi)) {
+				hasCards = true;
+				break;
+			}
+		}
+	}
+	if (!hasCards) {
+		QMessageBox::information(this, tr("Export Graph Image"), tr("There is nothing in the graph to export."));
 		return;
+	}
 
 	const QString path = QFileDialog::getSaveFileName(this, tr("Export Graph Image"),
 		QStringLiteral("events-graph.png"), tr("PNG Image (*.png)"));
@@ -1407,13 +1436,19 @@ void EventGraphView::exportImage()
 		scale *= maxDim / longest;
 
 	QImage image(QSize(qCeil(rect.width() * scale), qCeil(rect.height() * scale)), QImage::Format_ARGB32);
+	if (image.isNull()) {
+		// Up to 8000x8000 ARGB is ~256 MB, which can fail to allocate.
+		QMessageBox::warning(this, tr("Export Graph Image"), tr("Not enough memory to render the graph image."));
+		return;
+	}
 	image.fill(m_style.bgColor);
 	QPainter painter(&image);
 	painter.setRenderHint(QPainter::Antialiasing, true);
 	painter.setRenderHint(QPainter::TextAntialiasing, true);
 	m_scene->render(&painter, QRectF(image.rect()), rect);
 	painter.end();
-	image.save(path, "PNG");
+	if (!image.save(path, "PNG"))
+		QMessageBox::warning(this, tr("Export Graph Image"), tr("Could not save the image to:\n%1").arg(path));
 }
 
 // Keep the overlay hugging the top-left corner, sized to its (variable-width)
@@ -1430,12 +1465,17 @@ void EventGraphView::positionOverlay()
 	if (m_minimap) {
 		m_minimap->move(8, viewport()->height() - m_minimap->height() - 8);
 		m_minimap->raise();
+		// Visibility only. This runs on every scroll step, and the minimap draws the
+		// viewport rectangle live in its paintEvent; its cached scene render is
+		// refreshed on real content changes (rebuilds, drags, card expand) and when
+		// the minimap is switched back on (updateChromeVisibility).
+		m_minimap->setVisible(s_showMinimap);
 	}
 	if (m_legend) {
 		m_legend->move(viewport()->width() - m_legend->width() - 8, 8);
 		m_legend->raise();
+		m_legend->setVisible(s_showLegend);
 	}
-	updateChromeVisibility();
 }
 
 void EventGraphView::updateChromeVisibility()
@@ -1447,6 +1487,19 @@ void EventGraphView::updateChromeVisibility()
 	}
 	if (m_legend)
 		m_legend->setVisible(s_showLegend);
+}
+
+void EventGraphView::setObjects(QVector<GraphObject> objects)
+{
+	// The combo stores m_objects indices, and a new list can reorder them (a ship
+	// added in the viewport shifts everything after it). Capture the current
+	// object against the old list before replacing it.
+	const int row = selectedObjectRow();
+	if (row >= 0) {
+		m_selectorIdentity = m_objects[row];
+		m_hasSelectorIdentity = true;
+	}
+	m_objects = std::move(objects);
 }
 
 int EventGraphView::selectedObjectRow() const
@@ -1468,13 +1521,21 @@ void EventGraphView::populateSelector()
 		return m_index ? m_index->eventReferenceCount(o.kind, SCP_string(o.name.toUtf8().constData())) : 0;
 	};
 
-	// Remember the current object's identity so a rebuild doesn't reset it.
+	// Remember the current object's identity so a rebuild doesn't reset it. If
+	// setObjects() replaced the list since, the combo's indices point into the old
+	// one, so use the identity it captured instead.
 	GraphObject prev;
 	bool hadPrev = false;
-	const int prevIdx = selectedObjectRow();
-	if (prevIdx >= 0) {
-		prev = m_objects[prevIdx];
+	if (m_hasSelectorIdentity) {
+		prev = m_selectorIdentity;
 		hadPrev = true;
+		m_hasSelectorIdentity = false;
+	} else {
+		const int prevIdx = selectedObjectRow();
+		if (prevIdx >= 0) {
+			prev = m_objects[prevIdx];
+			hadPrev = true;
+		}
 	}
 
 	QSignalBlocker blocker(m_objectCombo);
@@ -1975,23 +2036,36 @@ bool EventGraphView::isEventNodeSelected() const
 	return false;
 }
 
+// Swimlanes shows an operator card once per object row, so a key can have several
+// cards. They are the same node, so both of these act on every copy.
+int EventGraphView::selectedEventIndex() const
+{
+	for (QGraphicsItem* it : m_scene->selectedItems())
+		if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(it))
+			return ev->eventIndex();
+	return -1;
+}
+
 bool EventGraphView::nodeExpandable(int key) const
 {
 	if (key == -1)
 		return false;
 	for (QGraphicsItem* gi : m_scene->items())
-		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key)
-			return c->canExpand();
+		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key && c->canExpand())
+			return true;
 	return false;
 }
 
 void EventGraphView::expandNode(int key)
 {
+	bool expanded = false;
 	for (QGraphicsItem* gi : m_scene->items())
-		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key) {
+		if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi); c && c->annotationKey() == key && c->canExpand()) {
 			c->setExpanded(true);
-			return;
+			expanded = true;
 		}
+	if (expanded && m_minimap)
+		m_minimap->regenerate(); // cards changed size
 }
 
 // Pan/zoom to an event's card and select it (e.g. right after creating it).
@@ -2014,8 +2088,15 @@ void EventGraphView::focusEvent(int eventIndex)
 // toggled). No full rebuild, so positions and the rest of the scene are kept.
 void EventGraphView::updateEventCard(int eventIndex, GraphEventMeta meta)
 {
-	if (eventIndex >= 0 && eventIndex < m_eventMeta.size())
+	if (eventIndex >= 0 && eventIndex < m_eventMeta.size()) {
+		// This runs after every event-UI refresh, including plain selection clicks.
+		// Nothing to redraw unless the event's status actually changed.
+		const GraphEventMeta& old = m_eventMeta[eventIndex];
+		if (old.chained == meta.chained && old.directive == meta.directive && old.repeats == meta.repeats &&
+			old.logging == meta.logging && old.annotationKey == meta.annotationKey)
+			return;
 		m_eventMeta[eventIndex] = meta;
+	}
 	const auto it = m_eventCards.constFind(eventIndex);
 	if (it != m_eventCards.constEnd())
 		it.value()->setStatusIcons(meta.chained, meta.directive, meta.repeats, meta.logging);
@@ -2570,7 +2651,8 @@ void EventGraphView::rebuildBasic()
 		const BasicOpNode& op = g.ops[oi];
 		const bool expandObjs = !combine && !op.objectRefs.empty();
 		// Sexp-depth collapse: at the limit, render this node but not its subtree.
-		if ((op.childOps.empty() && !expandObjs) || depth >= s_basicDepth) {
+		const bool atDepthLimit = s_basicDepth < kBasicDepthAll && depth >= s_basicDepth;
+		if ((op.childOps.empty() && !expandObjs) || atDepthLimit) {
 			const double s = slotCursor;
 			slotCursor += 1.0;
 			opSlot[oi] = s;
@@ -2860,7 +2942,11 @@ void EventGraphView::rebuildBasic()
 void EventGraphView::zoomStep(bool zoomIn)
 {
 	const qreal step = zoomIn ? 1.10 : (1.0 / 1.10);
-	const qreal next = qBound(kMinScale, m_currentScale * step, kMaxScale);
+	// A fit-to-view can land outside [kMinScale, kMaxScale], and clamping from there
+	// would jump the wrong way (a "zoom out" from 0.05 would snap up to 0.2). Widen
+	// the range to include the current scale so a step only moves toward it.
+	const qreal next =
+		qBound(std::min(kMinScale, m_currentScale), m_currentScale * step, std::max(kMaxScale, m_currentScale));
 	const qreal factor = next / m_currentScale;
 	if (qFuzzyCompare(factor, 1.0))
 		return;
@@ -2902,7 +2988,8 @@ void EventGraphView::wheelEvent(QWheelEvent* e)
 		return;
 	}
 	const qreal step = (deg.y() > 0) ? 1.10 : (1.0 / 1.10);
-	const qreal next = qBound(kMinScale, m_currentScale * step, kMaxScale);
+	const qreal next = // widened like zoomStep(): never jump away from the range
+		qBound(std::min(kMinScale, m_currentScale), m_currentScale * step, std::max(kMaxScale, m_currentScale));
 	const qreal factor = next / m_currentScale;
 	if (!qFuzzyCompare(factor, 1.0)) {
 		scale(factor, factor);
@@ -2994,6 +3081,8 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 				return;
 			}
 			if (card->handleToggleClick(sp)) {
+				if (m_minimap)
+					m_minimap->regenerate(); // the card changed size
 				e->accept();
 				return;
 			}
@@ -3057,27 +3146,38 @@ void EventGraphView::mouseReleaseEvent(QMouseEvent* e)
 		QGraphicsView::mouseReleaseEvent(e); // let the item finish its move first
 		const QPointF now = item->pos();
 		if ((now - m_dragStartPos).manhattanLength() > 2) {
-			// Qt moves the whole selection with the grabbed card, so persist every
-			// selected card's new position - as one undo step for a group drag.
 			QVector<QPair<int, QPointF>> moves;
-			const auto sel = m_scene->selectedItems();
-			if (sel.size() > 1) {
-				for (QGraphicsItem* gi : sel)
-					if (auto* c = dynamic_cast<graphdetail::CardItem*>(gi)) {
-						bool ok = false;
-						const int key = c->data(0).toInt(&ok);
-						if (ok)
-							moves.push_back({key, c->pos()});
-					}
-			} else {
+			QSet<int> seen;
+			auto addCard = [&moves, &seen](QGraphicsItem* gi) {
+				auto* c = dynamic_cast<graphdetail::CardItem*>(gi);
+				if (c == nullptr)
+					return;
 				bool ok = false;
-				const int key = item->data(0).toInt(&ok);
-				if (ok)
-					moves.push_back({key, now});
+				const int key = c->data(0).toInt(&ok);
+				if (ok && !seen.contains(key)) {
+					seen.insert(key);
+					moves.push_back({key, c->pos()});
+				}
+			};
+			if (s_basicLayout != BasicLayout::Custom) {
+				// Leaving a computed layout (Auto/Compact) for Custom. The other cards
+				// sit at computed positions that were never saved, so the next rebuild
+				// in Custom would move them. Persist every card, not just the dragged ones.
+				for (QGraphicsItem* gi : m_scene->items())
+					addCard(gi);
+			} else {
+				// Qt moves the grabbed card together with the whole selection, even when
+				// a Ctrl+press left the grabbed card itself unselected, so persist both.
+				addCard(item);
+				for (QGraphicsItem* gi : m_scene->selectedItems())
+					addCard(gi);
 			}
+			// One undo step for the whole drag.
 			if (!moves.isEmpty())
 				Q_EMIT nodesMoved(moves);
 			setBasicLayoutToCustom(); // a manual move puts us in the Custom arrangement
+			if (m_minimap)
+				m_minimap->regenerate(); // the cards moved
 		}
 		return;
 	}

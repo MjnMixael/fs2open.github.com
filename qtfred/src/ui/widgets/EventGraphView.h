@@ -1,9 +1,9 @@
 #pragma once
 
-// Events editor graph view -- a relationship visualizer over the working sexps.
-// Milestone 1 renders the "Radial" mode: pick a ship/wing and see every event
-// that references it. Modeled on CampaignMissionGraph (the existing QGraphicsView
-// node editor). Read-only for now; no graph editing.
+// Events editor graph view -- a visualizer over the working sexps, with Radial
+// (one object and every event that references it), Swimlanes, and the editable
+// Basic (dataflow) modes. Modeled on CampaignMissionGraph. It never changes mission
+// data itself: edits go out as signals, and the dialog applies them with undo.
 
 #include "mission/dialogs/EventReferenceIndex.h"
 
@@ -113,7 +113,7 @@ class EventGraphView final : public QGraphicsView {
 	// Data feeds (owned by the dialog). Call reload() after any of these change.
 	void setReferenceIndex(const EventReferenceIndex* index) { m_index = index; }
 	void setEventNames(QVector<QString> names) { m_eventNames = std::move(names); }
-	void setObjects(QVector<GraphObject> objects) { m_objects = std::move(objects); }
+	void setObjects(QVector<GraphObject> objects);
 	// Per-event status flags (indexed by event) and the node comment/color
 	// snapshot (keyed by annotation key). Both fed on every refresh.
 	void setEventMeta(QVector<GraphEventMeta> meta) { m_eventMeta = std::move(meta); }
@@ -130,6 +130,8 @@ class EventGraphView final : public QGraphicsView {
 	// True when a currently-selected node is an event card (gates the property
 	// controls in the dialog).
 	bool isEventNodeSelected() const;
+	// The event index of the selected event card, or -1 if none is selected.
+	int selectedEventIndex() const;
 	// The card with this annotation key has collapsed bullets to reveal (gates the
 	// graph's "Expand Card" menu item); expandNode reveals them.
 	bool nodeExpandable(int key) const;
@@ -277,6 +279,10 @@ class EventGraphView final : public QGraphicsView {
 	const EventReferenceIndex* m_index = nullptr;
 	QVector<QString> m_eventNames;
 	QVector<GraphObject> m_objects;
+	// The Radial object picked before setObjects() replaced the list, so
+	// populateSelector() can find it again by identity (the combo stores indices).
+	GraphObject m_selectorIdentity;
+	bool m_hasSelectorIdentity = false;
 	QVector<GraphEventMeta> m_eventMeta;      // per-event status flags (event icons)
 	QHash<int, GraphAnnotation> m_annotations; // node comment/color by annotation key
 	QHash<int, int> m_siblingOrders;           // tree node -> 1-based sibling order (corner marker)
