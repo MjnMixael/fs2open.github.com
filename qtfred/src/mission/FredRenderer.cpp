@@ -1280,6 +1280,10 @@ void FredRenderer::render_frame(int cur_object_index,
 			if (!_viewport->isObjectVisibleInLayer(&Objects[cp.objnum])) {
 				continue;
 			}
+			// Grid-position stalk (line to the grid plus the X), like every other
+			// object; drawn first so the shape sits on top. Self-gates on
+			// Show_grid_positions.
+			render_model_x_htl(&Objects[cp.objnum].pos, _viewport->The_grid);
 			draw_coordinate_point_shape(cp, &_viewport->camera.eye_pos, &_viewport->camera.eye_orient);
 		}
 		disable_htl();
