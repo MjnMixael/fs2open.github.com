@@ -177,7 +177,11 @@ private: // NOLINT(readability-redundant-access-specifiers)
 
 	// Advanced Edit view helpers.
 	void loadAdvancedText();
-	void showAdvancedResults(const SCP_vector<SCP_string>& errors, const SCP_vector<SCP_string>& warnings);
+	void showAdvancedResults(const SCP_vector<SCP_string>& errors, const SCP_vector<SCP_string>& warnings,
+		const SCP_vector<int>& errorLines = {});
+	// Extra selections on the advanced editor: the Validate error markers and the
+	// bracket matching the one at the cursor.
+	void updateAdvancedSelections();
 	// Find-in-text for the advanced editor. incremental=true re-searches from
 	// the start of the current match (used while typing) so the selection
 	// refines in place; otherwise it steps to the next/previous match.
@@ -186,6 +190,13 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	// Baseline text shown when the Advanced view was last (re)loaded; an
 	// unchanged editor commits nothing.
 	QString _advancedBaseline;
+	// Lines (1-based) the last Validate/commit reported errors on; cleared on edit.
+	SCP_vector<int> _advancedErrorLines;
+	// Cached text and code mask (outside strings/comments) for bracket matching,
+	// recomputed after an edit.
+	QString _advancedText;
+	QVector<bool> _advancedCodeMask;
+	bool _advancedMaskDirty = true;
 
 	void applyEventFilter();
 	void applyMessageFilter();

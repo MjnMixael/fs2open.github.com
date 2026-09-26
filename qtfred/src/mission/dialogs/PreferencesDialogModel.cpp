@@ -29,6 +29,7 @@ PreferencesDialogModel::PreferencesDialogModel(QObject* parent, EditorViewport* 
 	, _toolbarIconSize(viewport->toolbar_icon_size)
 	, _outlineLod(viewport->view.Outline_lod)
 	, _labelFontScale(viewport->view.Label_font_scale)
+	, _syntax(SyntaxColorScheme::instance().settings())
 	, _invertOrbitX(viewport->camera.getInvertOrbitX())
 	, _invertOrbitY(viewport->camera.getInvertOrbitY())
 	, _gridCenterX(static_cast<int>(viewport->The_grid->center.xyz.x))
@@ -76,6 +77,9 @@ bool PreferencesDialogModel::apply() {
 	_viewport->view.Label_font_scale            = _labelFontScale;
 	_viewport->camera.setInvertOrbitX(_invertOrbitX);
 	_viewport->camera.setInvertOrbitY(_invertOrbitY);
+
+	// Saves them and restyles any open highlighter (a no-op when unchanged).
+	SyntaxColorScheme::instance().setSettings(_syntax);
 
 	_viewport->saveSettings();
 	if (themeModeChanged) {
@@ -192,6 +196,44 @@ int  PreferencesDialogModel::getOutlineLod() const { return _outlineLod; }
 void PreferencesDialogModel::setOutlineLod(int value) { modify(_outlineLod, value); }
 
 double PreferencesDialogModel::getLabelFontScale() const { return _labelFontScale; }
+
+SyntaxStyle PreferencesDialogModel::getSyntaxStyle(SyntaxRole role, bool dark) const
+{
+	const auto& over = _syntax.overrides[dark ? 1 : 0][static_cast<int>(role)];
+	return over ? *over : SyntaxColorScheme::defaultStyle(role, dark);
+}
+
+bool PreferencesDialogModel::isSyntaxStyleCustom(SyntaxRole role, bool dark) const
+{
+	return _syntax.overrides[dark ? 1 : 0][static_cast<int>(role)].has_value();
+}
+
+void PreferencesDialogModel::setSyntaxStyle(SyntaxRole role, bool dark, const SyntaxStyle& style)
+{
+	auto& over = _syntax.overrides[dark ? 1 : 0][static_cast<int>(role)];
+	// Picking exactly the default stores no override, so the role keeps following
+	// future default changes.
+	std::optional<SyntaxStyle> next;
+	if (style != SyntaxColorScheme::defaultStyle(role, dark))
+		next = style;
+	modify(over, next);
+}
+
+void PreferencesDialogModel::resetSyntaxStyle(SyntaxRole role, bool dark)
+{
+	modify(_syntax.overrides[dark ? 1 : 0][static_cast<int>(role)], std::optional<SyntaxStyle>());
+}
+
+void PreferencesDialogModel::resetAllSyntaxStyles(bool dark)
+{
+	auto cleared = _syntax.overrides;
+	for (auto& over : cleared[dark ? 1 : 0])
+		over.reset();
+	modify(_syntax.overrides, cleared);
+}
+
+bool PreferencesDialogModel::getRainbowParens() const { return _syntax.rainbowParens; }
+void PreferencesDialogModel::setRainbowParens(bool value) { modify(_syntax.rainbowParens, value); }
 void PreferencesDialogModel::setLabelFontScale(double value) { modify(_labelFontScale, static_cast<float>(value)); }
 
 QKeySequence PreferencesDialogModel::getControlKey(ControlAction action) const {

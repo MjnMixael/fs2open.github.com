@@ -1633,10 +1633,19 @@ SCP_string MissionEventsDialogModel::generateEventsSectionText(MissionFormat fmt
 }
 
 bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryRun,
-	SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings)
+	SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings, SCP_vector<int>* errorLines)
 {
 	errors.clear();
 	warnings.clear();
+	if (errorLines != nullptr)
+		errorLines->clear();
+	auto markLine = [errorLines](int line) {
+		if (errorLines != nullptr && line > 0)
+			errorLines->push_back(line);
+	};
+	// The line each parsed event's $Formula: starts on, so a sexp error found
+	// after parsing can still be pointed at its event.
+	SCP_vector<int> eventLines;
 
 	// Comment-strip / version-tag process the user's text into our own buffers,
 	// never the global Parse_text/Parse_text_raw the real save/load rely on.
@@ -1673,14 +1682,18 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 	try {
 		if (!optional_string("#Events")) {
 			errors.push_back("Missing '#Events' section header.");
+			markLine(1);
 			ok = false;
 		} else {
 			int ordinal = 0;
 			while (check_for_string("$Formula:")) {
 				const int wBefore = Warning_count;
 				const int eBefore = Error_count;
+				const int eventLine = get_line_num();
 
 				parse_event(&The_mission); // appends to global Mission_events
+				while (eventLines.size() < Mission_events.size())
+					eventLines.push_back(eventLine);
 
 				const bool hadEvent = !Mission_events.empty();
 				const SCP_string evName = hadEvent && !Mission_events.back().name.empty()
@@ -1688,8 +1701,10 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 					: SCP_string("<event ") + std::to_string(ordinal + 1) + ">";
 
 				if (Warning_count > wBefore || Error_count > eBefore) {
+					const int line = get_line_num();
 					errors.push_back("Problem parsing event '" + evName + "' near line "
-						+ std::to_string(get_line_num()) + ".");
+						+ std::to_string(line) + ".");
+					markLine(line);
 					ok = false;
 				}
 				++ordinal;
@@ -1699,13 +1714,16 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 			// "#Goals" header) is stray text the user shouldn't have added.
 			ignore_white_space();
 			if (!check_for_string("#Goals") && *Mp != '\0') {
+				const int line = get_line_num();
 				errors.push_back("Unexpected text after the last event near line "
-					+ std::to_string(get_line_num()) + ".");
+					+ std::to_string(line) + ".");
+				markLine(line);
 				ok = false;
 			}
 		}
 	} catch (const parse::ParseException& e) {
 		errors.push_back(SCP_string("Parse error: ") + e.what());
+		markLine(get_line_num());
 		ok = false;
 	} catch (...) {
 		// Anything else is unexpected. Put the live globals and the parse state back
@@ -1733,8 +1751,10 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 		const int formula = Mission_events[i].formula;
 		const SCP_string evName = !Mission_events[i].name.empty()
 			? Mission_events[i].name : SCP_string("<event ") + std::to_string(i + 1) + ">";
+		const int evLine = (i < eventLines.size()) ? eventLines[i] : 0;
 		if (formula < 0) {
 			errors.push_back("Event '" + evName + "' has no valid formula.");
+			markLine(evLine);
 			ok = false;
 			continue;
 		}
@@ -1749,6 +1769,7 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 				bad_node_str.pop_back();
 			errors.push_back("Error in event '" + evName + "': " + sexp_error_message(z)
 				+ " (bad node: " + bad_node_str + ")");
+			markLine(evLine);
 			ok = false;
 		}
 	}

@@ -4,6 +4,7 @@
 #include <QShortcut>
 #include "ui/Theme.h"
 #include "ui/widgets/EventGraphView.h"
+#include "ui/widgets/MissionTextHighlighter.h"
 #include "ui/util/default_dir.h"
 #include "ui/util/SignalBlockers.h"
 #include "ui/dialogs/EventEditor/HeadAnimationPickerDialog.h"
@@ -19,6 +20,7 @@
 #include <QButtonGroup>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QTextBlock>
 #include <QTextCursor>
 #include <QFileDialog>
 #include <QFileInfo>
@@ -380,6 +382,17 @@ void MissionEventsDialog::initViewToggle()
 	ui->advancedTextEdit->setFont(mono);
 	ui->advancedErrorList->setFont(mono);
 
+	// Syntax highlighting (owned by the document). Error markers from the last
+	// Validate stay until the text changes; bracket matching follows the cursor.
+	new fso::fred::MissionTextHighlighter(ui->advancedTextEdit);
+	connect(ui->advancedTextEdit, &QPlainTextEdit::textChanged, this, [this] {
+		_advancedErrorLines.clear();
+		_advancedMaskDirty = true;
+		updateAdvancedSelections();
+	});
+	connect(ui->advancedTextEdit, &QPlainTextEdit::cursorPositionChanged, this,
+		&MissionEventsDialog::updateAdvancedSelections);
+
 	// Find controls: the search box is dual-purpose (filter in tree view,
 	// find-in-text in advanced view); the arrows step through matches.
 	fso::fred::bindStandardIcon(ui->btnFindPrev, QStyle::SP_ArrowUp);
@@ -453,10 +466,12 @@ bool MissionEventsDialog::canLeaveEventView(int index)
 	const QByteArray before = _model->captureEventWorkingState();
 
 	_suppressTreeUndo = true;
-	const bool ok = _model->applyEventsText(qStringToMissionText(text), /*dryRun=*/false, errors, warnings);
+	SCP_vector<int> errorLines;
+	const bool ok =
+		_model->applyEventsText(qStringToMissionText(text), /*dryRun=*/false, errors, warnings, &errorLines);
 	_suppressTreeUndo = false;
 
-	showAdvancedResults(errors, warnings);
+	showAdvancedResults(errors, warnings, errorLines);
 
 	if (!ok)
 		return false;
@@ -787,11 +802,18 @@ void MissionEventsDialog::loadAdvancedText()
 	QSignalBlocker blocker(ui->advancedTextEdit);
 	ui->advancedTextEdit->setPlainText(_advancedBaseline);
 	ui->advancedErrorList->clear();
+	// textChanged was blocked above, so reset the markers and match cache here.
+	_advancedErrorLines.clear();
+	_advancedMaskDirty = true;
+	updateAdvancedSelections();
 }
 
 void MissionEventsDialog::showAdvancedResults(const SCP_vector<SCP_string>& errors,
-	const SCP_vector<SCP_string>& warnings)
+	const SCP_vector<SCP_string>& warnings, const SCP_vector<int>& errorLines)
 {
+	_advancedErrorLines = errorLines;
+	updateAdvancedSelections();
+
 	QString out;
 	for (const auto& e : errors)
 		out += QStringLiteral("ERROR: ") + QString::fromStdString(e) + QLatin1Char('\n');
@@ -805,9 +827,90 @@ void MissionEventsDialog::showAdvancedResults(const SCP_vector<SCP_string>& erro
 void MissionEventsDialog::on_btnValidateEvents_clicked()
 {
 	SCP_vector<SCP_string> errors, warnings;
+	SCP_vector<int> errorLines;
 	_model->applyEventsText(qStringToMissionText(ui->advancedTextEdit->toPlainText()),
-		/*dryRun=*/true, errors, warnings);
-	showAdvancedResults(errors, warnings);
+		/*dryRun=*/true, errors, warnings, &errorLines);
+	showAdvancedResults(errors, warnings, errorLines);
+}
+
+void MissionEventsDialog::updateAdvancedSelections()
+{
+	auto* edit = ui->advancedTextEdit;
+	QList<QTextEdit::ExtraSelection> selections;
+	const QColor errorColor(220, 50, 50);
+
+	// Validate markers: a faint full-width tint plus a wavy underline under the text.
+	for (int line : _advancedErrorLines) {
+		const QTextBlock block = edit->document()->findBlockByNumber(line - 1);
+		if (!block.isValid())
+			continue;
+		QTextEdit::ExtraSelection tint;
+		tint.format.setBackground(QColor(errorColor.red(), errorColor.green(), errorColor.blue(), 40));
+		tint.format.setProperty(QTextFormat::FullWidthSelection, true);
+		tint.cursor = QTextCursor(block);
+		selections.push_back(tint);
+
+		QTextEdit::ExtraSelection underline;
+		underline.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+		underline.format.setUnderlineColor(errorColor);
+		underline.cursor = QTextCursor(block);
+		underline.cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+		selections.push_back(underline);
+	}
+
+	// Bracket matching for a parenthesis at or just before the cursor. Parens in
+	// strings and comments don't count, using the highlighter's own lexing rules.
+	const QTextCursor cursor = edit->textCursor();
+	if (!cursor.hasSelection()) {
+		if (_advancedMaskDirty) {
+			_advancedText = edit->toPlainText();
+			_advancedCodeMask = fso::fred::MissionTextHighlighter::codeMask(_advancedText);
+			_advancedMaskDirty = false;
+		}
+		const QString& text = _advancedText;
+		auto isParen = [this, &text](int p) {
+			return p >= 0 && p < text.size() && _advancedCodeMask[p] &&
+				(text[p] == QLatin1Char('(') || text[p] == QLatin1Char(')'));
+		};
+		const int pos = cursor.position();
+		const int at = isParen(pos) ? pos : (isParen(pos - 1) ? pos - 1 : -1);
+		if (at >= 0) {
+			const bool open = text[at] == QLatin1Char('(');
+			int depth = 0;
+			int match = -1;
+			for (int p = at; p >= 0 && p < text.size(); p += open ? 1 : -1) {
+				if (!_advancedCodeMask[p])
+					continue;
+				if (text[p] == QLatin1Char('('))
+					depth += open ? 1 : -1;
+				else if (text[p] == QLatin1Char(')'))
+					depth += open ? -1 : 1;
+				if (depth == 0) {
+					match = p;
+					break;
+				}
+			}
+			QColor matchColor = edit->palette().highlight().color();
+			matchColor.setAlpha(90);
+			auto addBracket = [&selections, edit](int p, const QColor& color) {
+				QTextEdit::ExtraSelection s;
+				s.format.setBackground(color);
+				s.cursor = QTextCursor(edit->document());
+				s.cursor.setPosition(p);
+				s.cursor.setPosition(p + 1, QTextCursor::KeepAnchor);
+				selections.push_back(s);
+			};
+			if (match >= 0) {
+				addBracket(at, matchColor);
+				addBracket(match, matchColor);
+			} else {
+				// No partner: flag the unbalanced bracket.
+				addBracket(at, QColor(errorColor.red(), errorColor.green(), errorColor.blue(), 110));
+			}
+		}
+	}
+
+	edit->setExtraSelections(selections);
 }
 
 // Each view declares which of the surrounding event controls make sense. Per

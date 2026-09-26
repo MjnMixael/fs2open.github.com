@@ -5,7 +5,12 @@
 #include "mission/dialogs/PreferencesDialogModel.h"
 #include "ui/FredView.h"
 
+#include <array>
+
+class QCheckBox;
 class QKeySequenceEdit;
+class QLabel;
+class QToolButton;
 
 namespace fso::fred::dialogs {
 
@@ -60,13 +65,30 @@ private slots:
 	void on_invertOrbitY_toggled(bool checked);
 	void on_resetDefaultsButton_clicked();
 
+protected:
+	// Refreshes the syntax color rows when the light/dark palette flips.
+	void changeEvent(QEvent* event) override;
+
 private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeUi();
 	void updateUi();
+	void buildSyntaxColorsUi();
+	void updateSyntaxColorsUi();
 
 	std::unique_ptr<Ui::PreferencesDialog> ui;
 	std::unique_ptr<PreferencesDialogModel> _model;
 	std::map<ControlAction, QKeySequenceEdit*> _controlEditors;
+
+	// Syntax Colors group, built in code from the role list.
+	struct SyntaxRow {
+		QToolButton* color = nullptr;
+		QToolButton* bold = nullptr;
+		QToolButton* italic = nullptr;
+		QToolButton* reset = nullptr;
+	};
+	std::array<SyntaxRow, SyntaxRoleCount> _syntaxRows;
+	QLabel* _syntaxThemeLabel = nullptr;
+	QCheckBox* _rainbowParensCheck = nullptr;
 	FredView* _fredView = nullptr;
 	EditorViewport* _viewport = nullptr;
 };

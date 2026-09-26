@@ -42,8 +42,11 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	// on success (and !dryRun) it rebuilds the working events/tree from it.
 	// Both leave the mission globals untouched (swapped in and out internally).
 	SCP_string generateEventsSectionText(MissionFormat fmt);
+	// errorLines, if given, receives the 1-based text line of each error (for the
+	// editor's error markers).
 	bool applyEventsText(const SCP_string& text, bool dryRun,
-		SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings);
+		SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings,
+		SCP_vector<int>* errorLines = nullptr);
 
 	bool eventIsValid() const;
 	bool messageIsValid() const;

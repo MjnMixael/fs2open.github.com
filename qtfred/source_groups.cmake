@@ -191,6 +191,8 @@ add_file_folder("Source/UI"
     src/ui/Theme.cpp
     src/ui/Theme.h
     src/ui/ThemeMode.h
+    src/ui/SyntaxColors.cpp
+    src/ui/SyntaxColors.h
     src/ui/QtGraphicsOperations.cpp
     src/ui/QtGraphicsOperations.h
 )
@@ -358,6 +360,8 @@ add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/CampaignMissionGraph.h
 	src/ui/widgets/EventGraphView.cpp
 	src/ui/widgets/EventGraphView.h
+	src/ui/widgets/MissionTextHighlighter.cpp
+	src/ui/widgets/MissionTextHighlighter.h
 	src/ui/widgets/ObjectComboBox.cpp
 	src/ui/widgets/ObjectComboBox.h
 	src/ui/widgets/LineEditDelegate.cpp

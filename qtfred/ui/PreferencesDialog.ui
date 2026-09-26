@@ -25,170 +25,6 @@
       </attribute>
       <layout class="QVBoxLayout" name="generalLayout">
        <item>
-        <widget class="QGroupBox" name="appearanceGroup">
-         <property name="title">
-          <string>Appearance</string>
-         </property>
-         <layout class="QFormLayout" name="appearanceLayout">
-          <item row="0" column="0">
-           <widget class="QLabel" name="themeLabel">
-            <property name="text">
-             <string>Theme:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="0" column="1">
-           <widget class="QComboBox" name="themeCombo">
-            <property name="toolTip">
-             <string>Overall color theme for the QtFRED interface. Follow system tracks your operating system's light/dark setting and switches automatically when it changes.</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Follow system</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Light</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Dark</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="1" column="0">
-           <widget class="QLabel" name="toolbarIconSizeLabel">
-            <property name="text">
-             <string>Toolbar icon size:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="1" column="1">
-           <widget class="QComboBox" name="toolbarIconSizeCombo">
-            <property name="toolTip">
-             <string>Size of the icons shown on the editor toolbars.</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Small (16px)</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Medium (24px)</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Large (32px)</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="2" column="0">
-           <widget class="QLabel" name="outlineLodLabel">
-            <property name="text">
-             <string>Outline detail:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="2" column="1">
-           <widget class="QComboBox" name="outlineLodCombo">
-            <property name="toolTip">
-             <string>Level of detail used when drawing model outlines in the viewport. Lower detail draws faster.</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>LOD 0 (highest detail)</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>LOD 1</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>LOD 2</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>LOD 3</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>LOD 4 (lowest detail)</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="3" column="0">
-           <widget class="QLabel" name="dataMenuStyleLabel">
-            <property name="text">
-             <string>Long list menu style:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="3" column="1">
-           <widget class="QComboBox" name="dataMenuStyleCombo">
-            <property name="toolTip">
-             <string>Controls how menus with long lists are presented: SEXP &quot;Add Data&quot; / &quot;Replace Data&quot; submenus, object Select menus, and the Create Ship/Prop submenus. Auto uses Columns for short lists and Searchable once a list would fill more than half the screen.</string>
-            </property>
-            <item>
-             <property name="text">
-              <string>Auto</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Columns</string>
-             </property>
-            </item>
-            <item>
-             <property name="text">
-              <string>Searchable</string>
-             </property>
-            </item>
-           </widget>
-          </item>
-          <item row="4" column="0">
-           <widget class="QLabel" name="labelFontScaleLabel">
-            <property name="text">
-             <string>Viewport label size:</string>
-            </property>
-           </widget>
-          </item>
-          <item row="4" column="1">
-           <widget class="QDoubleSpinBox" name="labelFontScaleSpin">
-            <property name="toolTip">
-             <string>Scale factor applied to text labels drawn in the viewport (ship names, ship classes, coordinates, distances, and subsystem labels). 1.0 is the default size.</string>
-            </property>
-            <property name="decimals">
-             <number>1</number>
-            </property>
-            <property name="minimum">
-             <double>0.500000000000000</double>
-            </property>
-            <property name="maximum">
-             <double>4.000000000000000</double>
-            </property>
-            <property name="singleStep">
-             <double>0.100000000000000</double>
-            </property>
-            <property name="value">
-             <double>1.000000000000000</double>
-            </property>
-           </widget>
-          </item>
-         </layout>
-        </widget>
-       </item>
-       <item>
         <widget class="QGroupBox" name="missionEditingGroup">
          <property name="title">
           <string>Mission Editing</string>
@@ -409,6 +245,198 @@
        </item>
        <item>
         <spacer name="generalSpacer">
+         <property name="orientation">
+          <enum>Qt::Vertical</enum>
+         </property>
+         <property name="sizeHint" stdset="0">
+          <size>
+           <width>20</width>
+           <height>40</height>
+          </size>
+         </property>
+        </spacer>
+       </item>
+      </layout>
+     </widget>
+     <widget class="QWidget" name="appearanceTab">
+      <attribute name="title">
+       <string>Appearance</string>
+      </attribute>
+      <layout class="QVBoxLayout" name="appearanceTabLayout">
+       <item>
+        <widget class="QGroupBox" name="appearanceGroup">
+         <property name="title">
+          <string>Appearance</string>
+         </property>
+         <layout class="QFormLayout" name="appearanceLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="themeLabel">
+            <property name="text">
+             <string>Theme:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="themeCombo">
+            <property name="toolTip">
+             <string>Overall color theme for the QtFRED interface. Follow system tracks your operating system's light/dark setting and switches automatically when it changes.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Follow system</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Light</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Dark</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="toolbarIconSizeLabel">
+            <property name="text">
+             <string>Toolbar icon size:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="toolbarIconSizeCombo">
+            <property name="toolTip">
+             <string>Size of the icons shown on the editor toolbars.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Small (16px)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Medium (24px)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Large (32px)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="outlineLodLabel">
+            <property name="text">
+             <string>Outline detail:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="outlineLodCombo">
+            <property name="toolTip">
+             <string>Level of detail used when drawing model outlines in the viewport. Lower detail draws faster.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>LOD 0 (highest detail)</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LOD 1</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LOD 2</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LOD 3</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>LOD 4 (lowest detail)</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="3" column="0">
+           <widget class="QLabel" name="dataMenuStyleLabel">
+            <property name="text">
+             <string>Long list menu style:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="3" column="1">
+           <widget class="QComboBox" name="dataMenuStyleCombo">
+            <property name="toolTip">
+             <string>Controls how menus with long lists are presented: SEXP &quot;Add Data&quot; / &quot;Replace Data&quot; submenus, object Select menus, and the Create Ship/Prop submenus. Auto uses Columns for short lists and Searchable once a list would fill more than half the screen.</string>
+            </property>
+            <item>
+             <property name="text">
+              <string>Auto</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Columns</string>
+             </property>
+            </item>
+            <item>
+             <property name="text">
+              <string>Searchable</string>
+             </property>
+            </item>
+           </widget>
+          </item>
+          <item row="4" column="0">
+           <widget class="QLabel" name="labelFontScaleLabel">
+            <property name="text">
+             <string>Viewport label size:</string>
+            </property>
+           </widget>
+          </item>
+          <item row="4" column="1">
+           <widget class="QDoubleSpinBox" name="labelFontScaleSpin">
+            <property name="toolTip">
+             <string>Scale factor applied to text labels drawn in the viewport (ship names, ship classes, coordinates, distances, and subsystem labels). 1.0 is the default size.</string>
+            </property>
+            <property name="decimals">
+             <number>1</number>
+            </property>
+            <property name="minimum">
+             <double>0.500000000000000</double>
+            </property>
+            <property name="maximum">
+             <double>4.000000000000000</double>
+            </property>
+            <property name="singleStep">
+             <double>0.100000000000000</double>
+            </property>
+            <property name="value">
+             <double>1.000000000000000</double>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
+        <widget class="QGroupBox" name="syntaxColorsGroup">
+         <property name="title">
+          <string>Syntax Colors (Events Advanced Edit)</string>
+         </property>
+         <layout class="QVBoxLayout" name="syntaxColorsLayout"/>
+        </widget>
+       </item>
+       <item>
+        <spacer name="appearanceSpacer">
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
