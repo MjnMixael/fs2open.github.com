@@ -490,15 +490,16 @@ bool FFMPEGDecoder::initialize(const SCP_string& fileName, const PlaybackPropert
 		baseName.resize(dotPos);
 	}
 
-	// If the caller passed a filename that already carries an extension, honor that
-	// exact file first. generic_anim resolves a specific movie (e.g. "intro.mp4") before
-	// calling us, and we must open that exact file rather than re-probing
+	// generic_anim resolves a specific movie (e.g. "intro.mp4") before calling us and
+	// passes search_dirs, so honor that exact file first rather than re-probing
 	// CHECKED_EXTENSIONS, which could otherwise pick a same-named file with a different
 	// extension. openStream returns null if the exact file is missing or is not a movie
-	// FFmpeg can open, so we fall through cleanly to the probe below. Fullscreen cutscenes
-	// pass a bare base name (no dot), so this exact try is skipped entirely.
+	// FFmpeg can open, so we fall through cleanly to the probe below.
+	// Fullscreen cutscenes leave search_dirs empty and often name a retail extension
+	// ("intro.mve", cutscenes.tbl entries). They must always probe by base name, so a
+	// mod's intro.mp4 or .webm wins over the retail .mve exactly as in upstream.
 	std::unique_ptr<InputStream> input;
-	if (dotPos != SCP_string::npos) {
+	if (dotPos != SCP_string::npos && !properties.search_dirs.empty()) {
 		input = openStream(movieName, properties.search_dirs);
 	}
 	if (!input) {
