@@ -892,9 +892,9 @@ void MissionEventsDialog::updateAdvancedSelections()
 			}
 			QColor matchColor = edit->palette().highlight().color();
 			matchColor.setAlpha(90);
-			auto addBracket = [&selections, edit](int p, const QColor& color) {
+			auto addBracket = [&selections, edit](int p, const QColor& background) {
 				QTextEdit::ExtraSelection s;
-				s.format.setBackground(color);
+				s.format.setBackground(background);
 				s.cursor = QTextCursor(edit->document());
 				s.cursor.setPosition(p);
 				s.cursor.setPosition(p + 1, QTextCursor::KeepAnchor);

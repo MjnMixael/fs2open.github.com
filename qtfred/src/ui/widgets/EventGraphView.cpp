@@ -280,9 +280,9 @@ class CardItem : public QGraphicsItem {
 
 	// A node's comment/color annotation: color draws a thin edge stripe, a comment
 	// shows a small badge and is folded into the tooltip.
-	void setAnnotation(const QColor& color, const QString& comment)
+	void setAnnotation(const QColor& annColor, const QString& comment)
 	{
-		m_annColor = color;
+		m_annColor = annColor;
 		m_hasComment = !comment.isEmpty();
 		if (m_hasComment) {
 			const QString existing = toolTip();
@@ -681,12 +681,12 @@ class SexpNodeItem final : public CardItem {
 
 class RefEdgeItem final : public QGraphicsPathItem {
   public:
-	RefEdgeItem(const QPointF& a, const QPointF& b, QColor color, const EventGraphStyle& style, bool chain = false)
+	RefEdgeItem(const QPointF& a, const QPointF& b, QColor edgeColor, const EventGraphStyle& style, bool chain = false)
 		: m_isChain(chain)
 	{
 		// Chain (event-order) lines are solid and a touch heavier; reference/flow
 		// edges are the lighter dashed default.
-		QPen pen(color, chain ? style.edgeWidth + 0.7 : style.edgeWidth,
+		QPen pen(edgeColor, chain ? style.edgeWidth + 0.7 : style.edgeWidth,
 			chain ? Qt::SolidLine : Qt::DashLine, Qt::RoundCap, Qt::RoundJoin);
 		setPen(pen);
 		setZValue(chain ? -0.5 : -1.0);
@@ -2875,9 +2875,9 @@ void EventGraphView::rebuildBasic()
 
 	// Edges, carrying their endpoint card items for the selection-emphasis pass.
 	if (s_refMode != RefLineMode::Off) {
-		auto addEdge = [&](const QPointF& a, const QPointF& b, const QColor& color, graphdetail::CardItem* ia,
+		auto addEdge = [&](const QPointF& a, const QPointF& b, const QColor& edgeColor, graphdetail::CardItem* ia,
 						   graphdetail::CardItem* ib) {
-			auto* edge = new graphdetail::RefEdgeItem(a, b, color, m_style);
+			auto* edge = new graphdetail::RefEdgeItem(a, b, edgeColor, m_style);
 			edge->setEndpoints(ia, ib);
 			m_scene->addItem(edge);
 		};

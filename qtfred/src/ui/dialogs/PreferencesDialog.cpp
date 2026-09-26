@@ -143,8 +143,8 @@ void PreferencesDialog::buildSyntaxColorsUi()
 	layout->addWidget(_syntaxThemeLabel);
 
 	// Two columns of rows: name, color swatch, bold, italic, reset.
-	auto* grid = new QGridLayout;
-	grid->setHorizontalSpacing(4);
+	auto* roleGrid = new QGridLayout;
+	roleGrid->setHorizontalSpacing(4);
 	constexpr int perColumn = (SyntaxRoleCount + 1) / 2;
 	constexpr int columnWidth = 6; // five widgets plus a gap column
 	for (int r = 0; r < SyntaxRoleCount; ++r) {
@@ -153,11 +153,11 @@ void PreferencesDialog::buildSyntaxColorsUi()
 		const int col = (r / perColumn) * columnWidth;
 		auto& w = _syntaxRows[r];
 
-		grid->addWidget(new QLabel(SyntaxColorScheme::roleLabel(role), group), row, col);
+		roleGrid->addWidget(new QLabel(SyntaxColorScheme::roleLabel(role), group), row, col);
 
 		w.color = new QToolButton(group);
 		w.color->setToolTip(tr("Choose a color"));
-		grid->addWidget(w.color, row, col + 1);
+		roleGrid->addWidget(w.color, row, col + 1);
 
 		w.bold = new QToolButton(group);
 		w.bold->setText(QStringLiteral("B"));
@@ -166,7 +166,7 @@ void PreferencesDialog::buildSyntaxColorsUi()
 		QFont boldFont = w.bold->font();
 		boldFont.setBold(true);
 		w.bold->setFont(boldFont);
-		grid->addWidget(w.bold, row, col + 2);
+		roleGrid->addWidget(w.bold, row, col + 2);
 
 		w.italic = new QToolButton(group);
 		w.italic->setText(QStringLiteral("I"));
@@ -175,12 +175,12 @@ void PreferencesDialog::buildSyntaxColorsUi()
 		QFont italicFont = w.italic->font();
 		italicFont.setItalic(true);
 		w.italic->setFont(italicFont);
-		grid->addWidget(w.italic, row, col + 3);
+		roleGrid->addWidget(w.italic, row, col + 3);
 
 		w.reset = new QToolButton(group);
 		w.reset->setText(tr("Reset"));
 		w.reset->setToolTip(tr("Use the theme's default"));
-		grid->addWidget(w.reset, row, col + 4);
+		roleGrid->addWidget(w.reset, row, col + 4);
 
 		// Every edit applies to the theme that's showing right now.
 		connect(w.color, &QToolButton::clicked, this, [this, role]() {
@@ -208,9 +208,9 @@ void PreferencesDialog::buildSyntaxColorsUi()
 			_model->resetSyntaxStyle(role, SyntaxColorScheme::paletteIsDark());
 		});
 	}
-	grid->setColumnMinimumWidth(columnWidth - 1, 16);
-	grid->setColumnStretch(columnWidth * 2 - 1, 1);
-	layout->addLayout(grid);
+	roleGrid->setColumnMinimumWidth(columnWidth - 1, 16);
+	roleGrid->setColumnStretch(columnWidth * 2 - 1, 1);
+	layout->addLayout(roleGrid);
 
 	auto* optionsRow = new QHBoxLayout;
 	_rainbowParensCheck = new QCheckBox(tr("Rainbow parentheses"), group);
