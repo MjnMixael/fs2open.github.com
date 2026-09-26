@@ -840,8 +840,28 @@ void sexp_tree_view::keyPressEvent(QKeyEvent* e)
 
 // Event filter installed on the operator popup frame. Clears popup state (active flag, node index)
 // and returns focus to the tree when the popup is hidden, closed, or loses focus.
+// Also installed on the popup's filter field: Up/Down/PageUp/PageDown move the list
+// selection while focus (and typing) stays in the field.
 bool sexp_tree_view::eventFilter(QObject* obj, QEvent* ev)
 {
+	if (obj == _opEdit && ev->type() == QEvent::KeyPress) {
+		const auto* key = static_cast<QKeyEvent*>(ev);
+		switch (key->key()) {
+		case Qt::Key_Up:
+		case Qt::Key_Down:
+		case Qt::Key_PageUp:
+		case Qt::Key_PageDown: {
+			const int before = _opList->currentRow();
+			QCoreApplication::sendEvent(_opList, ev);
+			if (_opList->currentRow() != before)
+				_opUserPicked = true;
+			return true;
+		}
+		default:
+			break;
+		}
+	}
+
 	if (obj == _opPopup) {
 		switch (ev->type()) {
 		case QEvent::Hide:
@@ -1679,6 +1699,7 @@ void sexp_tree_view::startOperatorQuickSearch(QTreeWidgetItem* item, const QStri
 		auto* layout = new QVBoxLayout(_opPopup);
 		layout->setContentsMargins(4, 4, 4, 4);
 		_opEdit = new QLineEdit(_opPopup);
+		_opEdit->installEventFilter(this); // arrow keys drive the list
 		_opList = new QListWidget(_opPopup);
 		_opList->setSelectionMode(QAbstractItemView::SingleSelection);
 		_opList->setUniformItemSizes(true);
@@ -1690,6 +1711,7 @@ void sexp_tree_view::startOperatorQuickSearch(QTreeWidgetItem* item, const QStri
 		connect(_opList, &QListWidget::itemClicked, [this](QListWidgetItem*) { endOperatorQuickSearch(true); });
 	}
 
+	_opUserPicked = false;
 	_opList->clear();
 	_opList->addItems(_opAll);
 	if (!seed.isEmpty()) {
@@ -1727,9 +1749,13 @@ void sexp_tree_view::startOperatorQuickSearch(QTreeWidgetItem* item, const QStri
 }
 
 // Filters the operator list widget as the user types. Clears and repopulates _opList with
-// operators from _opAll that contain the text (case-insensitive). Selects the first match.
+// operators from _opAll that contain the text (case-insensitive). Selects the first match,
+// unless the user arrowed to an operator that still matches, which stays selected.
 void sexp_tree_view::filterOperatorPopup(const QString& text)
 {
+	const QString picked =
+		(_opUserPicked && _opList->currentItem()) ? _opList->currentItem()->text() : QString();
+
 	_opList->clear();
 	SCP_set<QString> found_list;
 
@@ -1748,8 +1774,19 @@ void sexp_tree_view::filterOperatorPopup(const QString& text)
 				_opList->addItem(s);
 		}
 	}
-	if (_opList->count() > 0)
-		_opList->setCurrentRow(0);
+	if (_opList->count() == 0)
+		return;
+
+	if (!picked.isEmpty()) {
+		const auto matches = _opList->findItems(picked, Qt::MatchExactly);
+		if (!matches.isEmpty()) {
+			_opList->setCurrentItem(matches.front());
+			return;
+		}
+	}
+	// The pick was filtered out (or there wasn't one): back to the best match.
+	_opUserPicked = false;
+	_opList->setCurrentRow(0);
 }
 
 // Closes the operator quick-search popup and commits the result if confirm is true.
