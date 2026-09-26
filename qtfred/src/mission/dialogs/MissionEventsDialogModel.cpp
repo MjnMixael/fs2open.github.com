@@ -8,6 +8,7 @@
 #include <parse/sexp.h>
 #include <cmdline/cmdline.h>
 
+#include <QCoreApplication>
 #include <QDir>
 #include <QFile>
 
@@ -1533,8 +1534,10 @@ void MissionEventsDialogModel::setModified() {
 // Advanced Edit view: text <-> working events round-trip
 // ---------------------------------------------------------------------------
 
-SCP_string MissionEventsDialogModel::generateEventsSectionText(MissionFormat fmt)
+bool MissionEventsDialogModel::generateEventsSectionText(MissionFormat fmt, SCP_string& out)
 {
+	out.clear();
+
 	// Materialize working events with real Sexp_nodes formulas (as apply() and
 	// captureEventWorkingState do), in dialog order.
 	SCP_vector<mission_event> tempEvents;
@@ -1572,29 +1575,35 @@ SCP_string MissionEventsDialogModel::generateEventsSectionText(MissionFormat fmt
 	const auto savedVersion = The_mission.required_fso_version;
 
 	SCP_string sectionText;
+	bool saved = false;
 
 	{
 		std::swap(Mission_events, tempEvents);
 		std::swap(Event_annotations, tempAnn);
 
 		// A scratch path outside the mission tree; save_autosave_file writes to
-		// an absolute path with no .bak dance.
-		const QString scratch = QDir(QDir::tempPath()).filePath(QStringLiteral("qtfred_events_preview.fs2"));
+		// an absolute path with no .bak dance. Per process, so two qtfred instances
+		// can't read each other's file, and cleared first, so a failed save can't
+		// leave us reading a stale one.
+		const QString scratch = QDir(QDir::tempPath())
+			.filePath(QStringLiteral("qtfred_events_preview_%1.fs2").arg(QCoreApplication::applicationPid()));
 		const QByteArray scratchUtf8 = scratch.toUtf8();
+		QFile::remove(scratch);
 
 		Fred_mission_save save;
 		save.set_save_format(fmt);
 		save.set_fred_alt_names(Fred_alt_names);
 		save.set_fred_callsigns(Fred_callsigns);
-		save.save_autosave_file(scratchUtf8.constData());
+		const int saveErr = save.save_autosave_file(scratchUtf8.constData());
 
 		std::swap(Mission_events, tempEvents);
 		std::swap(Event_annotations, tempAnn);
 
 		QFile f(scratch);
-		if (f.open(QIODevice::ReadOnly | QIODevice::Text)) {
+		if (saveErr == 0 && f.open(QIODevice::ReadOnly | QIODevice::Text)) {
 			sectionText = f.readAll().constData();
 			f.close();
+			saved = true;
 		}
 		f.remove();
 	}
@@ -1621,13 +1630,14 @@ SCP_string MissionEventsDialogModel::generateEventsSectionText(MissionFormat fmt
 		return SCP_string::npos;
 	};
 
+	if (!saved)
+		return false;
 	const size_t start = lineStartFind("#Events", 0);
 	if (start == SCP_string::npos)
-		return sectionText; // fallback: return whatever we got
+		return false;
 	const size_t end = lineStartFind("#Goals", start + 1);
-	if (end == SCP_string::npos)
-		return sectionText.substr(start);
-	return sectionText.substr(start, end - start);
+	out = (end == SCP_string::npos) ? sectionText.substr(start) : sectionText.substr(start, end - start);
+	return true;
 }
 
 bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryRun,

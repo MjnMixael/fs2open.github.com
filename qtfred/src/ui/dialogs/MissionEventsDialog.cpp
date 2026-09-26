@@ -796,12 +796,22 @@ void MissionEventsDialog::loadAdvancedText()
 	// drops every FSO-only field (annotations, log flags), which a commit would
 	// then discard for real, and a Retail save also rewrites special tags in the
 	// global messages and briefings.
-	const SCP_string text = _model->generateEventsSectionText(MissionFormat::STANDARD);
+	SCP_string text;
+	const bool generated = _model->generateEventsSectionText(MissionFormat::STANDARD, text);
 	_advancedBaseline = missionTextToQString(text);
 
 	QSignalBlocker blocker(ui->advancedTextEdit);
 	ui->advancedTextEdit->setPlainText(_advancedBaseline);
+	// Without the real text there's nothing safe to edit: committing a blank or
+	// partial section would replace the mission's events. Read-only keeps the
+	// text equal to its (empty) baseline, so leaving the view commits nothing.
+	ui->advancedTextEdit->setReadOnly(!generated);
 	ui->advancedErrorList->clear();
+	if (!generated) {
+		ui->advancedErrorList->setPlainText(
+			tr("ERROR: Couldn't generate the event text (the scratch save to the temp folder failed). "
+			   "Use the Tree or Graph view to edit events."));
+	}
 	// textChanged was blocked above, so reset the markers and match cache here.
 	_advancedErrorLines.clear();
 	_advancedMaskDirty = true;

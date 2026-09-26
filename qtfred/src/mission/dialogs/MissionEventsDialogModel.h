@@ -41,7 +41,9 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	// line up to, but excluding, "#Goals"). applyEventsText validates the text;
 	// on success (and !dryRun) it rebuilds the working events/tree from it.
 	// Both leave the mission globals untouched (swapped in and out internally).
-	SCP_string generateEventsSectionText(MissionFormat fmt);
+	// Returns false (and leaves out empty) if the scratch save or read-back fails,
+	// so the caller never shows stale or missing text as the mission's events.
+	bool generateEventsSectionText(MissionFormat fmt, SCP_string& out);
 	// errorLines, if given, receives the 1-based text line of each error (for the
 	// editor's error markers).
 	bool applyEventsText(const SCP_string& text, bool dryRun,

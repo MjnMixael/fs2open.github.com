@@ -151,7 +151,7 @@ void lexLine(const QString& text, LineState& st, const QSet<QString>* operators,
 				const QString token = text.mid(k, end - k);
 				const QChar first = token[0];
 				if (first != QLatin1Char('@') && first != QLatin1Char('&') && !isNumber(token)) {
-					sink(k, end - k, operators->contains(token.toLower()) ? Tok::Operator : Tok::UnknownOperator, 0);
+					sink(k, end - k, operators->contains(token) ? Tok::Operator : Tok::UnknownOperator, 0);
 					i = end;
 				}
 			}
@@ -199,7 +199,7 @@ QTextCharFormat makeFormat(const SyntaxStyle& style)
 MissionTextHighlighter::MissionTextHighlighter(QPlainTextEdit* editor) : QSyntaxHighlighter(editor->document())
 {
 	for (const auto& op : Operators)
-		m_operators.insert(QString::fromStdString(op.text).toLower());
+		m_operators.insert(QString::fromStdString(op.text));
 
 	// The editor gets PaletteChange when the theme changes; watching it (not qApp)
 	// means one restyle per change.

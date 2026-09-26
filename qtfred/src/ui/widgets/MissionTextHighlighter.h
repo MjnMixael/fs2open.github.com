@@ -43,7 +43,7 @@ class MissionTextHighlighter final : public QSyntaxHighlighter {
 	std::array<QTextCharFormat, SyntaxRoleCount> m_formats;
 	QVector<QTextCharFormat> m_parenFormats;
 	bool m_rainbow = false;
-	QSet<QString> m_operators; // lower case
+	QSet<QString> m_operators; // exact names: the parser matches operators case-sensitively
 };
 
 } // namespace fso::fred
