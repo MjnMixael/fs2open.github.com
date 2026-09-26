@@ -2084,6 +2084,14 @@ int Fred_mission_save::save_events()
 			fso_comment_push(";;FSO 21.0.0;;");
 			event_annotation default_ea;
 
+			// A record has no start token: the parser reads Comment, Color, Path, Position,
+			// Collapsed in that order and a record ends where the next field would go
+			// backwards. Pre-26.1 records always began with a Comment or Color, so that
+			// was unambiguous. A 26.1 record can hold only a Position or Collapsed, so
+			// every record then writes +Path (empty for an event root) as its anchor;
+			// otherwise the previous record would swallow its fields on reload.
+			const bool always_write_path = The_mission.required_fso_version >= gameversion::version(26, 1);
+
 			// see if there is an annotation for this event
 			for (const auto& ea : Event_annotations) {
 				if (ea.path.empty() || ea.path.front() != i)
@@ -2122,7 +2130,7 @@ int Fred_mission_save::save_events()
 					fout(" %d, %d, %d", ea.r, ea.g, ea.b);
 				}
 
-				if (ea.path.size() > 1) {
+				if (ea.path.size() > 1 || always_write_path) {
 					if (optional_string_fred("+Path:", "$Formula:"))
 						parse_comments();
 					else
@@ -2136,6 +2144,27 @@ int Fred_mission_save::save_events()
 						comma = true;
 						fout(" %d", *it);
 					}
+				}
+
+				// Graph-view editor metadata (26.1). check_for_26_1_data() bumps the
+				// required version when any annotation carries it, so it's written
+				// plainly and only in a format new enough to support it.
+				if (ea.has_pos && The_mission.required_fso_version >= gameversion::version(26, 1)) {
+					if (optional_string_fred("+Position:", "$Formula:"))
+						parse_comments();
+					else
+						fout_version("\n+Position:");
+
+					fout(" %f, %f", ea.pos_x, ea.pos_y);
+				}
+
+				if (ea.collapsed && The_mission.required_fso_version >= gameversion::version(26, 1)) {
+					if (optional_string_fred("+Collapsed:", "$Formula:"))
+						parse_comments();
+					else
+						fout_version("\n+Collapsed:");
+
+					fout(" %d", 1);
 				}
 			}
 
@@ -3186,7 +3215,15 @@ void Fred_mission_save::save_mission_internal(const char* pathname)
 	auto version_24_1 = gameversion::version(24, 1);
 	auto version_24_3 = gameversion::version(24, 3);
 	auto version_25_1 = gameversion::version(25, 1);
-	if (MISSION_VERSION >= version_25_1) {
+	auto version_26_1 = gameversion::version(26, 1);
+	if (MISSION_VERSION >= version_26_1) {
+		Warning(LOCATION,
+			"Notify an SCP coder: now that the required mission version is at least 26.1, the check_for_26_1_data(), "
+			"check_for_25_1_data(), check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can be "
+			"removed");
+	} else if (check_for_26_1_data()) {
+		The_mission.required_fso_version = version_26_1;
+	} else if (MISSION_VERSION >= version_25_1) {
 		Warning(LOCATION,
 			"Notify an SCP coder: now that the required mission version is at least 25.1, the check_for_25_1_data(), "
 			"check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can be removed");

@@ -6195,7 +6195,7 @@ void parse_event(mission *pm)
 	if (optional_string("$Annotations Start")) {
 		// annotations are only used in FRED
 		if (Fred_running) {
-			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:")) {
+			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:") || check_for_string("+Position:") || check_for_string("+Collapsed:")) {
 				event_annotation ea;
 				ea.path.push_back((int)(event - &Mission_events[0]));
 
@@ -6221,6 +6221,19 @@ void parse_event(mission *pm)
 						}
 						ea.path.push_back(num);
 					}
+				}
+
+				if (optional_string("+Position:")) {
+					stuff_float(&ea.pos_x);
+					check_first_non_grayspace_char(Mp, ',', &Mp);
+					stuff_float(&ea.pos_y);
+					ea.has_pos = true;
+				}
+
+				if (optional_string("+Collapsed:")) {
+					int collapsed_val;
+					stuff_int(&collapsed_val);
+					ea.collapsed = (collapsed_val != 0);
 				}
 
 				Event_annotations.push_back(std::move(ea));
@@ -10151,4 +10164,12 @@ bool check_for_25_1_data()
 	}
 
 	return false;
+}
+
+bool check_for_26_1_data()
+{
+	// Graph-view editor metadata on event annotations: saved node positions and
+	// collapsed subtrees.
+	return std::any_of(Event_annotations.begin(), Event_annotations.end(),
+		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed; });
 }

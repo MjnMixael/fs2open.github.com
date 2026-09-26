@@ -29,6 +29,9 @@ void SexpAnnotationModel::loadFromGlobal(const SCP_vector<sexp_tree_item>& tree_
 			// Reset to default so it will be pruned on save.
 			ea.comment.clear();
 			ea.r = ea.g = ea.b = 255;
+			ea.pos_x = ea.pos_y = 0.0f;
+			ea.has_pos = false;
+			ea.collapsed = false;
 			ea.node_index = -1;
 		}
 	}
@@ -64,6 +67,9 @@ void SexpAnnotationModel::saveToGlobal(const SCP_vector<sexp_tree_item>& tree_no
 		if (ea.path.empty()) {
 			ea.comment.clear();
 			ea.r = ea.g = ea.b = 255;
+			ea.pos_x = ea.pos_y = 0.0f;
+			ea.has_pos = false;
+			ea.collapsed = false;
 		}
 
 		// Reset transient field.
@@ -125,10 +131,11 @@ event_annotation& SexpAnnotationModel::ensureByKey(int key)
 // Predicates
 // -----------------------------------------------------------------------
 
-// True if the annotation has default values (empty comment, white color).
+// True if the annotation has default values (empty comment, white color, no saved
+// position, not collapsed).
 bool SexpAnnotationModel::isDefault(const event_annotation& ea)
 {
-	return ea.comment.empty() && ea.r == 255 && ea.g == 255 && ea.b == 255;
+	return ea.comment.empty() && ea.r == 255 && ea.g == 255 && ea.b == 255 && !ea.has_pos && !ea.collapsed;
 }
 
 // -----------------------------------------------------------------------

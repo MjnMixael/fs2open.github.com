@@ -37,10 +37,223 @@
         <number>0</number>
        </property>
        <item>
-        <widget class="fso::fred::sexp_tree_view" name="eventTree">
-         <attribute name="headerVisible">
-          <bool>false</bool>
-         </attribute>
+        <layout class="QHBoxLayout" name="eventViewToggleLayout">
+         <item>
+          <widget class="QPushButton" name="btnViewTree">
+           <property name="text">
+            <string>Tree</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+           <property name="checked">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnViewGraph">
+           <property name="toolTip">
+            <string>Relationship graph view</string>
+           </property>
+           <property name="text">
+            <string>Graph</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnViewAdvanced">
+           <property name="text">
+            <string>Advanced</string>
+           </property>
+           <property name="checkable">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <spacer name="eventViewToggleSpacer">
+           <property name="orientation">
+            <enum>Qt::Horizontal</enum>
+           </property>
+           <property name="sizeHint" stdset="0">
+            <size>
+             <width>40</width>
+             <height>20</height>
+            </size>
+           </property>
+          </spacer>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <layout class="QHBoxLayout" name="eventSearchLayout">
+         <property name="spacing">
+          <number>2</number>
+         </property>
+         <item>
+          <widget class="QLineEdit" name="eventSearchEdit">
+           <property name="placeholderText">
+            <string>Filter by name...</string>
+           </property>
+           <property name="clearButtonEnabled">
+            <bool>true</bool>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnFindPrev">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Previous match</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QPushButton" name="btnFindNext">
+           <property name="enabled">
+            <bool>false</bool>
+           </property>
+           <property name="sizePolicy">
+            <sizepolicy hsizetype="Fixed" vsizetype="Fixed">
+             <horstretch>0</horstretch>
+             <verstretch>0</verstretch>
+            </sizepolicy>
+           </property>
+           <property name="toolTip">
+            <string>Next match</string>
+           </property>
+           <property name="text">
+            <string/>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </item>
+       <item>
+        <widget class="QStackedWidget" name="eventViewStack">
+         <widget class="QWidget" name="treeViewPage">
+          <layout class="QVBoxLayout" name="treeViewPageLayout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="fso::fred::sexp_tree_view" name="eventTree">
+             <attribute name="headerVisible">
+              <bool>false</bool>
+             </attribute>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="graphViewPage">
+          <layout class="QVBoxLayout" name="graphViewPageLayout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="fso::fred::EventGraphView" name="eventGraph"/>
+           </item>
+          </layout>
+         </widget>
+         <widget class="QWidget" name="advancedViewPage">
+          <layout class="QVBoxLayout" name="advancedViewPageLayout">
+           <property name="leftMargin">
+            <number>0</number>
+           </property>
+           <property name="topMargin">
+            <number>0</number>
+           </property>
+           <property name="rightMargin">
+            <number>0</number>
+           </property>
+           <property name="bottomMargin">
+            <number>0</number>
+           </property>
+           <item>
+            <widget class="QPlainTextEdit" name="advancedTextEdit">
+             <property name="lineWrapMode">
+              <enum>QPlainTextEdit::NoWrap</enum>
+             </property>
+             <property name="placeholderText">
+              <string>The #Events section text appears here.</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <layout class="QHBoxLayout" name="advancedButtonLayout">
+             <item>
+              <widget class="QPushButton" name="btnValidateEvents">
+               <property name="text">
+                <string>Validate</string>
+               </property>
+              </widget>
+             </item>
+             <item>
+              <spacer name="advancedButtonSpacer">
+               <property name="orientation">
+                <enum>Qt::Horizontal</enum>
+               </property>
+               <property name="sizeHint" stdset="0">
+                <size>
+                 <width>40</width>
+                 <height>20</height>
+                </size>
+               </property>
+              </spacer>
+             </item>
+            </layout>
+           </item>
+           <item>
+            <widget class="QPlainTextEdit" name="advancedErrorList">
+             <property name="maximumSize">
+              <size>
+               <width>16777215</width>
+               <height>140</height>
+              </size>
+             </property>
+             <property name="readOnly">
+              <bool>true</bool>
+             </property>
+             <property name="placeholderText">
+              <string>Validation results appear here...</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
         </widget>
        </item>
        <item>
@@ -566,6 +779,16 @@ in Milliseconds</string>
            </widget>
           </item>
           <item row="0" column="0" colspan="2">
+           <widget class="QLineEdit" name="messageSearchEdit">
+            <property name="placeholderText">
+             <string>Filter by name...</string>
+            </property>
+            <property name="clearButtonEnabled">
+             <bool>true</bool>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0" colspan="2">
            <widget class="QListWidget" name="messageList">
             <property name="editTriggers">
              <set>QAbstractItemView::NoEditTriggers</set>
@@ -575,7 +798,7 @@ in Milliseconds</string>
             </property>
            </widget>
           </item>
-          <item row="4" column="0" colspan="2">
+          <item row="5" column="0" colspan="2">
            <widget class="QPlainTextEdit" name="messageContent">
             <property name="statusTip">
              <string>Message Text</string>
@@ -588,7 +811,7 @@ in Milliseconds</string>
             </property>
            </widget>
           </item>
-          <item row="2" column="0" colspan="2">
+          <item row="3" column="0" colspan="2">
            <layout class="QHBoxLayout" name="horizontalLayout_2">
             <property name="spacing">
              <number>0</number>
@@ -634,7 +857,7 @@ in Milliseconds</string>
             </item>
            </layout>
           </item>
-          <item row="1" column="0" colspan="2">
+          <item row="2" column="0" colspan="2">
            <layout class="QHBoxLayout" name="msgMoveButtonsLayout">
             <property name="leftMargin">
              <number>4</number>
@@ -734,7 +957,7 @@ in Milliseconds</string>
             </item>
            </layout>
           </item>
-          <item row="3" column="0" colspan="2">
+          <item row="4" column="0" colspan="2">
            <layout class="QHBoxLayout" name="horizontalLayout_3">
             <item>
              <widget class="QLabel" name="label_9">
@@ -796,6 +1019,11 @@ in Milliseconds</string>
    <class>fso::fred::sexp_tree_view</class>
    <extends>QTreeView</extends>
    <header>ui/widgets/sexp_tree_view.h</header>
+  </customwidget>
+  <customwidget>
+   <class>fso::fred::EventGraphView</class>
+   <extends>QGraphicsView</extends>
+   <header>ui/widgets/EventGraphView.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>

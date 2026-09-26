@@ -1,11 +1,23 @@
 #include "PreferencesDialog.h"
 #include "ui_PreferencesDialog.h"
 
+#include <QCheckBox>
+#include <QColorDialog>
+#include <QEvent>
+#include <QFontDatabase>
 #include <QFormLayout>
+#include <QGridLayout>
+#include <QHBoxLayout>
 #include <QKeyEvent>
 #include <QKeySequenceEdit>
+#include <QLabel>
+#include <QPixmap>
+#include <QPlainTextEdit>
+#include <QPushButton>
+#include <QToolButton>
 
 #include "ui/util/SignalBlockers.h"
+#include "ui/widgets/MissionTextHighlighter.h"
 #include "ui/widgets/sexp_tree_view.h"
 
 namespace fso::fred::dialogs {
@@ -105,10 +117,161 @@ void PreferencesDialog::initializeUi() {
 			_model->setControlKey(action, seq);
 		});
 	}
+
+	buildSyntaxColorsUi();
+}
+
+namespace {
+// Sample event for the Syntax Colors preview; touches every color role.
+const char* const SyntaxPreviewText =
+	"#Events\t\t; a comment\n"
+	"$Formula: ( when\n"
+	"   ( is-destroyed-delay 0 \"Alpha 1\" )\n"
+	"   ( modify-variable @Score ( + @Score 10 ) )\n"
+	"   ( not-an-operator )\n"
+	")\n"
+	"+Name: Example\n"
+	";;FSO 21.0.0;; +Event Log Flags: ( \"true\" )\n";
+} // namespace
+
+void PreferencesDialog::buildSyntaxColorsUi()
+{
+	auto* group = ui->syntaxColorsGroup;
+	auto* layout = ui->syntaxColorsLayout;
+
+	_syntaxThemeLabel = new QLabel(group);
+	layout->addWidget(_syntaxThemeLabel);
+
+	// Two columns of rows: name, color swatch, bold, italic, reset.
+	auto* roleGrid = new QGridLayout;
+	roleGrid->setHorizontalSpacing(4);
+	constexpr int perColumn = (SyntaxRoleCount + 1) / 2;
+	constexpr int columnWidth = 6; // five widgets plus a gap column
+	for (int r = 0; r < SyntaxRoleCount; ++r) {
+		const auto role = static_cast<SyntaxRole>(r);
+		const int row = r % perColumn;
+		const int col = (r / perColumn) * columnWidth;
+		auto& w = _syntaxRows[r];
+
+		roleGrid->addWidget(new QLabel(SyntaxColorScheme::roleLabel(role), group), row, col);
+
+		w.color = new QToolButton(group);
+		w.color->setToolTip(tr("Choose a color"));
+		roleGrid->addWidget(w.color, row, col + 1);
+
+		w.bold = new QToolButton(group);
+		w.bold->setText(QStringLiteral("B"));
+		w.bold->setCheckable(true);
+		w.bold->setToolTip(tr("Bold"));
+		QFont boldFont = w.bold->font();
+		boldFont.setBold(true);
+		w.bold->setFont(boldFont);
+		roleGrid->addWidget(w.bold, row, col + 2);
+
+		w.italic = new QToolButton(group);
+		w.italic->setText(QStringLiteral("I"));
+		w.italic->setCheckable(true);
+		w.italic->setToolTip(tr("Italic"));
+		QFont italicFont = w.italic->font();
+		italicFont.setItalic(true);
+		w.italic->setFont(italicFont);
+		roleGrid->addWidget(w.italic, row, col + 3);
+
+		w.reset = new QToolButton(group);
+		w.reset->setText(tr("Reset"));
+		w.reset->setToolTip(tr("Use the theme's default"));
+		roleGrid->addWidget(w.reset, row, col + 4);
+
+		// Every edit applies to the theme that's showing right now.
+		connect(w.color, &QToolButton::clicked, this, [this, role]() {
+			const bool dark = SyntaxColorScheme::paletteIsDark();
+			SyntaxStyle style = _model->getSyntaxStyle(role, dark);
+			const QColor picked = QColorDialog::getColor(style.color, this, SyntaxColorScheme::roleLabel(role));
+			if (!picked.isValid())
+				return;
+			style.color = picked;
+			_model->setSyntaxStyle(role, dark, style);
+		});
+		connect(w.bold, &QToolButton::toggled, this, [this, role](bool on) {
+			const bool dark = SyntaxColorScheme::paletteIsDark();
+			SyntaxStyle style = _model->getSyntaxStyle(role, dark);
+			style.bold = on;
+			_model->setSyntaxStyle(role, dark, style);
+		});
+		connect(w.italic, &QToolButton::toggled, this, [this, role](bool on) {
+			const bool dark = SyntaxColorScheme::paletteIsDark();
+			SyntaxStyle style = _model->getSyntaxStyle(role, dark);
+			style.italic = on;
+			_model->setSyntaxStyle(role, dark, style);
+		});
+		connect(w.reset, &QToolButton::clicked, this, [this, role]() {
+			_model->resetSyntaxStyle(role, SyntaxColorScheme::paletteIsDark());
+		});
+	}
+	roleGrid->setColumnMinimumWidth(columnWidth - 1, 16);
+	roleGrid->setColumnStretch(columnWidth * 2 - 1, 1);
+	layout->addLayout(roleGrid);
+
+	auto* optionsRow = new QHBoxLayout;
+	_rainbowParensCheck = new QCheckBox(tr("Rainbow parentheses"), group);
+	_rainbowParensCheck->setToolTip(tr("Color each nesting level of parentheses differently."));
+	connect(_rainbowParensCheck, &QCheckBox::toggled, this, [this](bool on) { _model->setRainbowParens(on); });
+	auto* resetAll = new QPushButton(tr("Reset All Colors"), group);
+	resetAll->setToolTip(tr("Return every color for this theme to its default"));
+	connect(resetAll, &QPushButton::clicked, this,
+		[this]() { _model->resetAllSyntaxStyles(SyntaxColorScheme::paletteIsDark()); });
+	optionsRow->addWidget(_rainbowParensCheck);
+	optionsRow->addStretch(1);
+	optionsRow->addWidget(resetAll);
+	layout->addLayout(optionsRow);
+
+	// Live preview. Preferences apply as they change, so the highlighter here
+	// (like the one in an open Events editor) restyles right away.
+	auto* preview = new QPlainTextEdit(group);
+	preview->setReadOnly(true);
+	preview->setLineWrapMode(QPlainTextEdit::NoWrap);
+	preview->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
+	preview->setPlainText(QString::fromLatin1(SyntaxPreviewText));
+	const int lines = static_cast<int>(QString::fromLatin1(SyntaxPreviewText).count(QLatin1Char('\n'))) + 1;
+	preview->setFixedHeight(preview->fontMetrics().lineSpacing() * lines + 2 * preview->frameWidth() + 8);
+	new fso::fred::MissionTextHighlighter(preview);
+	layout->addWidget(preview);
+}
+
+void PreferencesDialog::updateSyntaxColorsUi()
+{
+	if (_syntaxThemeLabel == nullptr)
+		return;
+	util::SignalBlockers blockers(this);
+
+	const bool dark = SyntaxColorScheme::paletteIsDark();
+	_syntaxThemeLabel->setText(dark ? tr("Colors for the dark theme:") : tr("Colors for the light theme:"));
+	for (int r = 0; r < SyntaxRoleCount; ++r) {
+		const auto role = static_cast<SyntaxRole>(r);
+		const SyntaxStyle style = _model->getSyntaxStyle(role, dark);
+		auto& w = _syntaxRows[r];
+		QPixmap swatch(16, 16);
+		swatch.fill(style.color);
+		w.color->setIcon(QIcon(swatch));
+		w.bold->setChecked(style.bold);
+		w.italic->setChecked(style.italic);
+		w.reset->setEnabled(_model->isSyntaxStyleCustom(role, dark));
+	}
+	_rainbowParensCheck->setChecked(_model->getRainbowParens());
+}
+
+void PreferencesDialog::changeEvent(QEvent* event)
+{
+	// A theme change (from this dialog or the OS) swaps which color set is shown.
+	if (event->type() == QEvent::PaletteChange)
+		updateSyntaxColorsUi();
+	QDialog::changeEvent(event);
 }
 
 void PreferencesDialog::updateUi() {
 	util::SignalBlockers blockers(this);
+
+	updateSyntaxColorsUi();
 
 	// General
 	ui->offerAutosaveRecovery->setChecked(_model->getOfferAutosaveRecovery());

@@ -9,6 +9,9 @@
 #include <mission/missionmessage.h>
 #include <mission/missionparse.h>
 
+// Defined in missioneditor/missionsave.h; only the name is needed here.
+enum class MissionFormat;
+
 namespace fso::fred::dialogs {
 
 class MissionEventsDialogModel : public AbstractDialogModel {
@@ -31,6 +34,21 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void restoreEventWorkingState(const QByteArray& state);
 	QByteArray captureMessageWorkingState() const;
 	void restoreMessageWorkingState(const QByteArray& state);
+
+	// Advanced Edit view: generate the #Events section exactly as a real save
+	// would print it, and parse hand-edited text back into the working events.
+	// generateEventsSectionText returns the section body (from the "#Events"
+	// line up to, but excluding, "#Goals"). applyEventsText validates the text;
+	// on success (and !dryRun) it rebuilds the working events/tree from it.
+	// Both leave the mission globals untouched (swapped in and out internally).
+	// Returns false (and leaves out empty) if the scratch save or read-back fails,
+	// so the caller never shows stale or missing text as the mission's events.
+	bool generateEventsSectionText(MissionFormat fmt, SCP_string& out);
+	// errorLines, if given, receives the 1-based text line of each error (for the
+	// editor's error markers).
+	bool applyEventsText(const SCP_string& text, bool dryRun,
+		SCP_vector<SCP_string>& errors, SCP_vector<SCP_string>& warnings,
+		SCP_vector<int>* errorLines = nullptr);
 
 	bool eventIsValid() const;
 	bool messageIsValid() const;
@@ -114,6 +132,22 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	// for an annotation on a labeled root.
 	void setNodeAnnotation(int key, const SCP_string& note);
 	void setNodeBgColor(int key, int r, int g, int b, bool has_color);
+
+	// Graph-view node positions, stored on the same per-node annotation as the
+	// comment/color. setNodeGraphPos does not emit annotationApplied (positions
+	// don't affect the tree rendering). getNodeGraphPos returns false if the node
+	// has no saved position.
+	void setNodeGraphPos(int key, float x, float y);
+	bool getNodeGraphPos(int key, float& x, float& y) const;
+
+	// Graph-view collapse state (event subtree hidden), stored on the event's
+	// annotation like the position, and persisted the same way.
+	void setNodeCollapsed(int key, bool collapsed);
+	bool getNodeCollapsed(int key) const;
+
+	// The current working annotations (comment/color/position), keyed internally
+	// by node_index. Read-only view for the graph to render comment + color.
+	const SCP_vector<event_annotation>& nodeAnnotations() const { return m_annotation_model.annotations(); }
 
 	// Message Management
 	void createMessage();

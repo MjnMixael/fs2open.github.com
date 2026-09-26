@@ -3,6 +3,8 @@
 
 #include <QShortcut>
 #include "ui/Theme.h"
+#include "ui/widgets/EventGraphView.h"
+#include "ui/widgets/MissionTextHighlighter.h"
 #include "ui/util/default_dir.h"
 #include "ui/util/SignalBlockers.h"
 #include "ui/dialogs/EventEditor/HeadAnimationPickerDialog.h"
@@ -15,15 +17,84 @@
 
 #include <ui/util/DialogUndo.h>
 
+#include <QButtonGroup>
 #include <QInputDialog>
 #include <QMessageBox>
+#include <QTextBlock>
+#include <QTextCursor>
 #include <QFileDialog>
 #include <QFileInfo>
 #include <QDebug>
 #include <QKeyEvent>
+#include <QVector>
 #include <mission/missionmessage.h>
+#include <globalincs/linklist.h>
+#include <object/object.h>
+#include <object/waypoint.h>
+#include <ship/ship.h>
+#include <prop/prop.h>
+#include <jumpnode/jumpnode.h>
+#include <coordinate_points/coordinate_point.h>
+#include <missioneditor/missionsave.h>
+#include <mod_table/mod_table.h>
 
 namespace fso::fred::dialogs {
+
+// Mission text is Latin-1 unless Unicode text mode is on. The Advanced view
+// rewrites every event when it commits, so decoding its text the wrong way
+// would corrupt every non-ASCII character in the section at once.
+static QString missionTextToQString(const SCP_string& text)
+{
+	return Unicode_text_mode ? QString::fromStdString(text)
+	                         : QString::fromLatin1(text.c_str(), static_cast<qsizetype>(text.size()));
+}
+
+static SCP_string qStringToMissionText(const QString& text)
+{
+	return Unicode_text_mode ? text.toStdString() : text.toLatin1().toStdString();
+}
+
+// Enumerate every first-class object type for the graph's object selector:
+// ships (incl. player starts), wings, props, waypoint paths, jump nodes,
+// coordinate points. The selector then hides any with zero references.
+static QVector<GraphObject> buildGraphObjects()
+{
+	QVector<GraphObject> objs;
+	auto add = [&objs](RefObjectKind kind, const QString& name) {
+		GraphObject o;
+		o.kind = kind;
+		o.name = name;
+		objs.push_back(o);
+	};
+
+	for (object* objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list);
+	     objp = GET_NEXT(objp)) {
+		if (objp->instance < 0)
+			continue;
+		// OBJ_START = player-start markers (Alpha 1, etc.); they are ships too,
+		// indexing Ships[] just like OBJ_SHIP. Mirrors get_listing_opf_ship.
+		if (objp->type == OBJ_SHIP || objp->type == OBJ_START)
+			add(RefObjectKind::Ship, QString::fromUtf8(Ships[objp->instance].ship_name));
+		else if (objp->type == OBJ_PROP && Props[objp->instance].has_value())
+			add(RefObjectKind::Prop, QString::fromUtf8(Props[objp->instance]->prop_name));
+	}
+	for (int i = 0; i < Num_wings; ++i) {
+		if (Wings[i].wave_count > 0)
+			add(RefObjectKind::Wing, QString::fromUtf8(Wings[i].name));
+	}
+	for (const auto& wl : Waypoint_lists)
+		add(RefObjectKind::Waypoint, QString::fromUtf8(wl.get_name()));
+	for (const auto& jn : Jump_nodes)
+		add(RefObjectKind::JumpNode, QString::fromUtf8(jn.GetName()));
+	for (const auto& cp : Coordinate_points)
+		add(RefObjectKind::CoordinatePoint, QString::fromStdString(cp.name));
+
+	return objs;
+}
+
+// The events-side view (tree/graph/advanced) chosen last time the dialog was
+// open; persists for the qtFRED session only.
+static int s_lastEventViewIndex = 0; // MissionEventsDialog::TreeViewIndex
 
 // Compute the annotation key for a Qt tree item. For regular tree nodes this is
 // the tree_nodes[] index; for root labels (event name rows, which aren't stored
@@ -204,6 +275,10 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 
 	initEventWidgets();
 
+	initGraphView();
+
+	initViewToggle();
+
 	// The before-state for the next tree edit: the tree mutates before
 	// modified() fires, so a fresh capture at handler time would already
 	// contain the edit. indexChanged fires on every push/undo/redo, keeping
@@ -214,6 +289,9 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 		// the stack, which emits indexChanged with no model left.
 		if (_model)
 			_workingStateCache = _model->captureEventWorkingState();
+		// Any edit/undo/redo invalidates the relationship graph; it will
+		// rebuild next time the graph view is shown (or now if it's current).
+		_graphDirty = true;
 	});
 }
 
@@ -254,6 +332,7 @@ void MissionEventsDialog::initEventWidgets() {
 			const QByteArray before = _model->captureEventWorkingState();
 			_model->setNodeAnnotation(key, text);
 			pushEventStateSnapshot(before, tr("Edit Node Note"));
+			refreshGraphIfCurrent();
 		}
 	});
 
@@ -263,6 +342,7 @@ void MissionEventsDialog::initEventWidgets() {
 			const QByteArray before = _model->captureEventWorkingState();
 			_model->setNodeBgColor(key, c.red(), c.green(), c.blue(), c.isValid());
 			pushEventStateSnapshot(before, tr("Change Node Color"));
+			refreshGraphIfCurrent();
 		}
 	});
 
@@ -287,6 +367,609 @@ void MissionEventsDialog::initEventWidgets() {
 	updateEventUi();
 }
 
+void MissionEventsDialog::initViewToggle()
+{
+	_viewGroup = new QButtonGroup(this);
+	_viewGroup->setExclusive(true);
+	_viewGroup->addButton(ui->btnViewTree, TreeViewIndex);
+	_viewGroup->addButton(ui->btnViewGraph, GraphViewIndex);
+	_viewGroup->addButton(ui->btnViewAdvanced, AdvancedViewIndex);
+
+	connect(_viewGroup, &QButtonGroup::idClicked, this, &MissionEventsDialog::requestViewChange);
+
+	// Monospace, matching the sexp help boxes, so the mission-file text lines up.
+	const QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
+	ui->advancedTextEdit->setFont(mono);
+	ui->advancedErrorList->setFont(mono);
+
+	// Syntax highlighting (owned by the document). Error markers from the last
+	// Validate stay until the text changes; bracket matching follows the cursor.
+	new fso::fred::MissionTextHighlighter(ui->advancedTextEdit);
+	connect(ui->advancedTextEdit, &QPlainTextEdit::textChanged, this, [this] {
+		_advancedErrorLines.clear();
+		_advancedMaskDirty = true;
+		updateAdvancedSelections();
+	});
+	connect(ui->advancedTextEdit, &QPlainTextEdit::cursorPositionChanged, this,
+		&MissionEventsDialog::updateAdvancedSelections);
+
+	// Find controls: the search box is dual-purpose (filter in tree view,
+	// find-in-text in advanced view); the arrows step through matches.
+	fso::fred::bindStandardIcon(ui->btnFindPrev, QStyle::SP_ArrowUp);
+	fso::fred::bindStandardIcon(ui->btnFindNext, QStyle::SP_ArrowDown);
+
+	// QLineEdit passes Return on to the dialog, which presses the default OK button
+	// and closes the editor. eventFilter() consumes it on both search boxes and
+	// raises returnPressed itself, so the find below still runs.
+	ui->eventSearchEdit->installEventFilter(this);
+	ui->messageSearchEdit->installEventFilter(this);
+
+	connect(ui->eventSearchEdit, &QLineEdit::returnPressed, this, [this] {
+		if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
+			findInAdvancedText(/*forward=*/true, /*incremental=*/false);
+		else if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+			ui->eventGraph->focusNextMatch(/*forward=*/true);
+	});
+
+	// Ctrl+F focuses the search box for whichever view is active.
+	auto* findShortcut = new QShortcut(QKeySequence::Find, this);
+	connect(findShortcut, &QShortcut::activated, this, [this] {
+		if (ui->eventSearchEdit->isEnabled()) {
+			ui->eventSearchEdit->setFocus();
+			ui->eventSearchEdit->selectAll();
+		}
+	});
+
+	// Restore the view used last time this session. A view whose button is
+	// disabled can't be restored into.
+	int view = s_lastEventViewIndex;
+	auto* btn = _viewGroup->button(view);
+	if (!btn || !btn->isEnabled())
+		view = TreeViewIndex;
+	setCurrentEventView(view);
+}
+
+void MissionEventsDialog::requestViewChange(int index)
+{
+	const int current = ui->eventViewStack->currentIndex();
+	if (index == current)
+		return;
+
+	if (!canLeaveEventView(current)) {
+		// Veto: the clicked button already took the checked state, give it
+		// back to the current view's button.
+		if (auto* btn = _viewGroup->button(current)) {
+			QSignalBlocker blocker(_viewGroup);
+			btn->setChecked(true);
+		}
+		return;
+	}
+
+	setCurrentEventView(index);
+}
+
+// Gate for leaving a view. The advanced edit view refuses to yield (and to
+// accept the dialog) until its hand-edited text parses and validates cleanly;
+// a clean parse is committed to the working events as a single undo step.
+bool MissionEventsDialog::canLeaveEventView(int index)
+{
+	if (index != AdvancedViewIndex)
+		return true;
+
+	const QString text = ui->advancedTextEdit->toPlainText();
+
+	// Unchanged text: nothing to commit, always allowed to leave.
+	if (text == _advancedBaseline)
+		return true;
+
+	SCP_vector<SCP_string> errors, warnings;
+	const QByteArray before = _model->captureEventWorkingState();
+
+	_suppressTreeUndo = true;
+	SCP_vector<int> errorLines;
+	const bool ok =
+		_model->applyEventsText(qStringToMissionText(text), /*dryRun=*/false, errors, warnings, &errorLines);
+	_suppressTreeUndo = false;
+
+	showAdvancedResults(errors, warnings, errorLines);
+
+	if (!ok)
+		return false;
+
+	// Commit the whole hand-edit as one undo entry, then refresh the baseline
+	// so a subsequent no-op leave doesn't re-commit.
+	pushEventStateSnapshot(before, tr("Advanced Edit Events"));
+	_advancedBaseline = text;
+	m_last_message_node = -1;
+	applyEventFilter();
+	updateEventUi();
+	return true;
+}
+
+void MissionEventsDialog::setCurrentEventView(int index)
+{
+	ui->eventViewStack->setCurrentIndex(index);
+
+	if (auto* btn = _viewGroup->button(index)) {
+		QSignalBlocker blocker(_viewGroup);
+		btn->setChecked(true);
+	}
+
+	// The search box is per-view (filter vs. find), so start each view visit
+	// with an empty box rather than carrying the other view's term over.
+	// Blocked so this doesn't run a filter/find before the view is set up.
+	{
+		QSignalBlocker blocker(ui->eventSearchEdit);
+		ui->eventSearchEdit->clear();
+	}
+	applyEventFilter();
+
+	// Regenerate the section text whenever the advanced view becomes current.
+	if (index == AdvancedViewIndex)
+		loadAdvancedText();
+
+	// Rebuild the relationship graph when the graph view becomes current, but
+	// only if the events changed since we last built it -- otherwise leave the
+	// widget untouched so its zoom/scroll/selection carry over.
+	if (index == GraphViewIndex) {
+		ui->eventGraph->setSearchText(QString()); // start with no highlight
+		if (_graphDirty)
+			refreshGraphView();
+	}
+
+	s_lastEventViewIndex = index;
+	applyViewChrome(index);
+}
+
+void MissionEventsDialog::initGraphView()
+{
+	ui->eventGraph->setReferenceIndex(&_refIndex);
+	// Single-click selects the event in the tree (kept in sync for when the
+	// tree view is next shown); double-click switches to the tree view.
+	connect(ui->eventGraph, &EventGraphView::eventSelected, this, &MissionEventsDialog::selectEventInTree);
+	connect(ui->eventGraph, &EventGraphView::eventActivated, this, &MissionEventsDialog::jumpToEventInTree);
+	connect(ui->eventGraph, &EventGraphView::nodeActivated, this, &MissionEventsDialog::jumpToNodeInTree);
+	// Re-evaluate the event-property controls whenever the graph selection changes
+	// (they're live only while an event card is selected).
+	connect(ui->eventGraph, &EventGraphView::graphSelectionChanged, this, &MissionEventsDialog::updateEventUi);
+	// The New/Insert/Delete buttons depend on the graph sub-mode (New is Basic-only).
+	connect(ui->eventGraph, &EventGraphView::modeChanged, this, &MissionEventsDialog::updateEventCreateButtons);
+	// Right-click a node -> comment/color annotation menu (same undo path as the
+	// tree's note/color edits).
+	connect(ui->eventGraph, &EventGraphView::nodeContextMenuRequested, this, &MissionEventsDialog::showGraphNodeMenu);
+	// Double-click an inline literal-arg bullet -> open its editor (number: quick-search; string: dialog).
+	connect(ui->eventGraph, &EventGraphView::nodeEditRequested, this, &MissionEventsDialog::editGraphNode);
+	// Collapse/expand an event's subtree (Basic view).
+	connect(ui->eventGraph, &EventGraphView::eventCollapseToggled, this, &MissionEventsDialog::toggleEventCollapse);
+	// Basic view: persist a dragged node's position on its annotation, as one
+	// undo step (the same before/after snapshot pattern as note/color edits).
+	connect(ui->eventGraph, &EventGraphView::nodesMoved, this, [this](const QVector<QPair<int, QPointF>>& moves) {
+		if (moves.isEmpty())
+			return;
+		const QByteArray before = _model->captureEventWorkingState();
+		for (const auto& m : moves)
+			_model->setNodeGraphPos(m.first, static_cast<float>(m.second.x()), static_cast<float>(m.second.y()));
+		pushEventStateSnapshot(before, moves.size() > 1 ? tr("Move Graph Nodes") : tr("Move Graph Node"));
+	});
+	// Data is (re)loaded when the graph view is first shown (refreshGraphView),
+	// mirroring how the advanced view loads its text on entry. Like the tree view,
+	// the graph is a working-copy view and does not react to external mission edits.
+}
+
+void MissionEventsDialog::rebuildReferenceIndex()
+{
+	_refIndex.rebuild(ui->eventTree->_model, _model->getEventList());
+}
+
+void MissionEventsDialog::refreshGraphView()
+{
+	rebuildReferenceIndex();
+
+	QVector<QString> names;
+	const auto& events = _model->getEventList();
+	names.reserve(static_cast<int>(events.size()));
+	for (const auto& e : events)
+		names.push_back(QString::fromStdString(e.name));
+
+	ui->eventGraph->setEventNames(std::move(names));
+	ui->eventGraph->setObjects(buildGraphObjects());
+
+	// Basic view: build the whole-mission dataflow graph and resolve each node's
+	// saved position from the annotations (operator nodes key on their own tree
+	// node; shared object nodes key on a representative reference, falling back to
+	// any surviving reference if that one was deleted).
+	BasicGraph bg = _refIndex.buildBasicGraph(ui->eventTree->_model, events);
+	for (auto& en : bg.events) {
+		float x = 0.0f, y = 0.0f;
+		if (_model->getNodeGraphPos(en.posKey, x, y)) {
+			en.hasPos = true;
+			en.posX = x;
+			en.posY = y;
+		}
+	}
+	for (auto& op : bg.ops) {
+		float x = 0.0f, y = 0.0f;
+		if (_model->getNodeGraphPos(op.posKey, x, y)) {
+			op.hasPos = true;
+			op.posX = x;
+			op.posY = y;
+		}
+		// Per-reference positions (used when the view duplicates object nodes).
+		for (auto& r : op.objectRefs) {
+			float rx = 0.0f, ry = 0.0f;
+			if (_model->getNodeGraphPos(r.leafTreeNode, rx, ry)) {
+				r.hasPos = true;
+				r.posX = rx;
+				r.posY = ry;
+			}
+		}
+	}
+	for (auto& ob : bg.objects) {
+		float x = 0.0f, y = 0.0f;
+		if (_model->getNodeGraphPos(ob.posKey, x, y)) {
+			ob.hasPos = true;
+			ob.posX = x;
+			ob.posY = y;
+		} else {
+			for (int rn : ob.refTreeNodes) {
+				if (_model->getNodeGraphPos(rn, x, y)) {
+					ob.hasPos = true;
+					ob.posX = x;
+					ob.posY = y;
+					ob.posKey = rn;
+					break;
+				}
+			}
+		}
+	}
+	ui->eventGraph->setBasicGraph(std::move(bg));
+
+	// Per-event status flags (shown as icons on event cards).
+	QVector<GraphEventMeta> meta;
+	meta.reserve(static_cast<int>(events.size()));
+	for (int i = 0; i < static_cast<int>(events.size()); ++i)
+		meta.push_back(buildEventMeta(i));
+	ui->eventGraph->setEventMeta(std::move(meta));
+	_graphEventCount = static_cast<int>(events.size());
+
+	// Node comment/color snapshot, keyed by annotation key.
+	QHash<int, GraphAnnotation> annotations;
+	for (const event_annotation& ea : _model->nodeAnnotations()) {
+		if (ea.node_index == -1)
+			continue;
+		GraphAnnotation ga;
+		ga.comment = QString::fromStdString(ea.comment);
+		if (ea.r != 255 || ea.g != 255 || ea.b != 255)
+			ga.color = QColor(ea.r, ea.g, ea.b);
+		if (ga.comment.isEmpty() && !ga.color.isValid())
+			continue; // e.g. a position-only annotation
+		annotations.insert(ea.node_index, ga);
+	}
+	ui->eventGraph->setAnnotations(std::move(annotations));
+
+	// Corner order markers: each sexp node's 1-based position among its siblings.
+	QHash<int, int> siblingOrders;
+	const auto& nodes = ui->eventTree->_model.tree_nodes;
+	for (int p = 0; p < static_cast<int>(nodes.size()); ++p) {
+		if (nodes[p].type == SEXPT_UNUSED) // skip free slots (stale child/next links)
+			continue;
+		int order = 1;
+		for (int c = nodes[p].child; c != -1; c = nodes[c].next)
+			siblingOrders.insert(c, order++);
+	}
+	ui->eventGraph->setSiblingOrders(std::move(siblingOrders));
+
+	// Collapsed events (Basic view), from the saved per-event collapse annotations.
+	QSet<int> collapsedEvents;
+	for (int i = 0; i < static_cast<int>(events.size()); ++i)
+		if (_model->getNodeCollapsed(SexpAnnotationModel::rootKey(events[i].formula)))
+			collapsedEvents.insert(i);
+	ui->eventGraph->setCollapsedEvents(std::move(collapsedEvents));
+
+	ui->eventGraph->reload();
+
+	_graphDirty = false;
+}
+
+// Map a graph card's annotation key to the tree item to target. Regular nodes use
+// the key directly as a tree_nodes[] index; an event root's rootKey resolves
+// through its formula to the top-level (labeled) item, which is not in
+// tree_nodes[]. Null when it can't be resolved.
+QTreeWidgetItem* MissionEventsDialog::treeItemForAnnotationKey(int key) const
+{
+	if (key >= 0)
+		return ui->eventTree->handle(key);
+	if (!SexpAnnotationModel::isRootKey(key))
+		return nullptr;
+	const int formula = SexpAnnotationModel::formulaFromRootKey(key);
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* it = ui->eventTree->topLevelItem(i);
+		if (it && it->data(0, sexp_tree_view::FormulaDataRole).toInt() == formula)
+			return it;
+	}
+	return nullptr;
+}
+
+// Right-click a graph card: reuse the tree's own context menu at the matching
+// node (add/replace/insert/delete/data, comment/color, and for event roots the
+// name and event options), with irrelevant items disabled exactly as in the tree.
+// The tree stays populated behind the graph, so its handlers operate normally.
+void MissionEventsDialog::showGraphNodeMenu(int key, const QPoint& globalPos)
+{
+	QTreeWidgetItem* h = treeItemForAnnotationKey(key);
+	if (h == nullptr)
+		return;
+
+	// In the graph, "Expand All" is repurposed to expand the clicked card's bullets.
+	// The edit itself redraws the graph through the modification handlers (which is
+	// necessary anyway, since the inline "Edit Data" editor commits asynchronously
+	// after this returns).
+	ui->eventTree->showContextMenuForItem(h, globalPos,
+		[this, key]() { ui->eventGraph->expandNode(key); },
+		ui->eventGraph->nodeExpandable(key));
+}
+
+// Double-clicking an inline literal-arg bullet: open that arg node's editor
+// directly (the tree routes numeric slots to the quick-search, strings to the
+// text dialog). The commit refreshes the graph via the modification handlers.
+void MissionEventsDialog::editGraphNode(int treeNode, const QPoint& globalPos)
+{
+	QTreeWidgetItem* h = treeItemForAnnotationKey(treeNode); // treeNode >= 0 -> tree item
+	if (h)
+		ui->eventTree->editNodeExternally(h, globalPos);
+}
+
+// Toggle whether an event's subtree is collapsed in the Basic graph view. The
+// state lives on the event's annotation, so it persists with the mission.
+void MissionEventsDialog::toggleEventCollapse(int eventIndex)
+{
+	const auto& events = _model->getEventList();
+	if (eventIndex < 0 || eventIndex >= static_cast<int>(events.size()))
+		return;
+	const int key = SexpAnnotationModel::rootKey(events[eventIndex].formula);
+	const QByteArray before = _model->captureEventWorkingState();
+	_model->setNodeCollapsed(key, !_model->getNodeCollapsed(key));
+	pushEventStateSnapshot(before, tr("Toggle Event Collapse"));
+	refreshGraphView();
+}
+
+// Redraw the relationship graph if it's the current view. Called after tree
+// edits (structural, rename, annotation) so the cards reflect the change - even
+// when the edit commits asynchronously, past the context menu's exec().
+void MissionEventsDialog::refreshGraphIfCurrent()
+{
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+		refreshGraphView();
+}
+
+// Select an event's root item in the tree without changing the current view.
+// Keeps the tree selection (and the model's current event) in sync with a
+// graph selection, so switching to the tree view lands on the same event.
+void MissionEventsDialog::selectEventInTree(int eventIndex)
+{
+	const auto& events = _model->getEventList();
+	if (eventIndex < 0 || eventIndex >= static_cast<int>(events.size()))
+		return;
+	const int formula = events[eventIndex].formula;
+
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* it = ui->eventTree->topLevelItem(i);
+		if (it && it->data(0, sexp_tree_view::FormulaDataRole).toInt() == formula) {
+			ui->eventTree->setCurrentItem(it);
+			ui->eventTree->scrollToItem(it);
+			break;
+		}
+	}
+}
+
+// Double-clicking an event in the graph brings the tree view forward and
+// selects that event.
+void MissionEventsDialog::jumpToEventInTree(int eventIndex)
+{
+	// Switch to the tree view (through the veto gate, though graph never vetoes).
+	if (ui->eventViewStack->currentIndex() != TreeViewIndex) {
+		requestViewChange(TreeViewIndex);
+		if (ui->eventViewStack->currentIndex() != TreeViewIndex)
+			return;
+	}
+	selectEventInTree(eventIndex);
+}
+
+// Double-clicking a condition/action node in the graph brings the tree view
+// forward and highlights that exact sexp node.
+void MissionEventsDialog::jumpToNodeInTree(int treeNode)
+{
+	if (ui->eventViewStack->currentIndex() != TreeViewIndex) {
+		requestViewChange(TreeViewIndex);
+		if (ui->eventViewStack->currentIndex() != TreeViewIndex)
+			return;
+	}
+	if (treeNode >= 0)
+		ui->eventTree->hilite_item(treeNode);
+}
+
+// (Re)populate the advanced editor from the current working events and reset
+// its baseline and native undo history.
+void MissionEventsDialog::loadAdvancedText()
+{
+	// Always Standard: this is an editing view, not the mission's output. Retail
+	// drops every FSO-only field (annotations, log flags), which a commit would
+	// then discard for real, and a Retail save also rewrites special tags in the
+	// global messages and briefings.
+	SCP_string text;
+	const bool generated = _model->generateEventsSectionText(MissionFormat::STANDARD, text);
+	_advancedBaseline = missionTextToQString(text);
+
+	QSignalBlocker blocker(ui->advancedTextEdit);
+	ui->advancedTextEdit->setPlainText(_advancedBaseline);
+	// Without the real text there's nothing safe to edit: committing a blank or
+	// partial section would replace the mission's events. Read-only keeps the
+	// text equal to its (empty) baseline, so leaving the view commits nothing.
+	ui->advancedTextEdit->setReadOnly(!generated);
+	ui->advancedErrorList->clear();
+	if (!generated) {
+		ui->advancedErrorList->setPlainText(
+			tr("ERROR: Couldn't generate the event text (the scratch save to the temp folder failed). "
+			   "Use the Tree or Graph view to edit events."));
+	}
+	// textChanged was blocked above, so reset the markers and match cache here.
+	_advancedErrorLines.clear();
+	_advancedMaskDirty = true;
+	updateAdvancedSelections();
+}
+
+void MissionEventsDialog::showAdvancedResults(const SCP_vector<SCP_string>& errors,
+	const SCP_vector<SCP_string>& warnings, const SCP_vector<int>& errorLines)
+{
+	_advancedErrorLines = errorLines;
+	updateAdvancedSelections();
+
+	QString out;
+	for (const auto& e : errors)
+		out += QStringLiteral("ERROR: ") + QString::fromStdString(e) + QLatin1Char('\n');
+	for (const auto& w : warnings)
+		out += QStringLiteral("WARNING: ") + QString::fromStdString(w) + QLatin1Char('\n');
+	if (errors.empty() && warnings.empty())
+		out = tr("No problems found.");
+	ui->advancedErrorList->setPlainText(out);
+}
+
+void MissionEventsDialog::on_btnValidateEvents_clicked()
+{
+	SCP_vector<SCP_string> errors, warnings;
+	SCP_vector<int> errorLines;
+	_model->applyEventsText(qStringToMissionText(ui->advancedTextEdit->toPlainText()),
+		/*dryRun=*/true, errors, warnings, &errorLines);
+	showAdvancedResults(errors, warnings, errorLines);
+}
+
+void MissionEventsDialog::updateAdvancedSelections()
+{
+	auto* edit = ui->advancedTextEdit;
+	QList<QTextEdit::ExtraSelection> selections;
+	const QColor errorColor(220, 50, 50);
+
+	// Validate markers: a faint full-width tint plus a wavy underline under the text.
+	for (int line : _advancedErrorLines) {
+		const QTextBlock block = edit->document()->findBlockByNumber(line - 1);
+		if (!block.isValid())
+			continue;
+		QTextEdit::ExtraSelection tint;
+		tint.format.setBackground(QColor(errorColor.red(), errorColor.green(), errorColor.blue(), 40));
+		tint.format.setProperty(QTextFormat::FullWidthSelection, true);
+		tint.cursor = QTextCursor(block);
+		selections.push_back(tint);
+
+		QTextEdit::ExtraSelection underline;
+		underline.format.setUnderlineStyle(QTextCharFormat::WaveUnderline);
+		underline.format.setUnderlineColor(errorColor);
+		underline.cursor = QTextCursor(block);
+		underline.cursor.movePosition(QTextCursor::EndOfBlock, QTextCursor::KeepAnchor);
+		selections.push_back(underline);
+	}
+
+	// Bracket matching for a parenthesis at or just before the cursor. Parens in
+	// strings and comments don't count, using the highlighter's own lexing rules.
+	const QTextCursor cursor = edit->textCursor();
+	if (!cursor.hasSelection()) {
+		if (_advancedMaskDirty) {
+			_advancedText = edit->toPlainText();
+			_advancedCodeMask = fso::fred::MissionTextHighlighter::codeMask(_advancedText);
+			_advancedMaskDirty = false;
+		}
+		const QString& text = _advancedText;
+		auto isParen = [this, &text](int p) {
+			return p >= 0 && p < text.size() && _advancedCodeMask[p] &&
+				(text[p] == QLatin1Char('(') || text[p] == QLatin1Char(')'));
+		};
+		const int pos = cursor.position();
+		const int at = isParen(pos) ? pos : (isParen(pos - 1) ? pos - 1 : -1);
+		if (at >= 0) {
+			const bool open = text[at] == QLatin1Char('(');
+			int depth = 0;
+			int match = -1;
+			for (int p = at; p >= 0 && p < text.size(); p += open ? 1 : -1) {
+				if (!_advancedCodeMask[p])
+					continue;
+				if (text[p] == QLatin1Char('('))
+					depth += open ? 1 : -1;
+				else if (text[p] == QLatin1Char(')'))
+					depth += open ? -1 : 1;
+				if (depth == 0) {
+					match = p;
+					break;
+				}
+			}
+			QColor matchColor = edit->palette().highlight().color();
+			matchColor.setAlpha(90);
+			auto addBracket = [&selections, edit](int p, const QColor& background) {
+				QTextEdit::ExtraSelection s;
+				s.format.setBackground(background);
+				s.cursor = QTextCursor(edit->document());
+				s.cursor.setPosition(p);
+				s.cursor.setPosition(p + 1, QTextCursor::KeepAnchor);
+				selections.push_back(s);
+			};
+			if (match >= 0) {
+				addBracket(at, matchColor);
+				addBracket(match, matchColor);
+			} else {
+				// No partner: flag the unbalanced bracket.
+				addBracket(at, QColor(errorColor.red(), errorColor.green(), errorColor.blue(), 110));
+			}
+		}
+	}
+
+	edit->setExtraSelections(selections);
+}
+
+// Each view declares which of the surrounding event controls make sense. Per
+// the dialog's UI-stability rule the controls are disabled, never hidden, so
+// the layout doesn't shift between views.
+void MissionEventsDialog::applyViewChrome(int index)
+{
+	const bool treeView = (index == TreeViewIndex);
+	const bool advancedView = (index == AdvancedViewIndex);
+	const bool graphView = (index == GraphViewIndex);
+
+	// The search box filters in tree view, finds-in-text in advanced view, and
+	// highlights matching nodes in the graph view; its placeholder follows suit.
+	ui->eventSearchEdit->setEnabled(treeView || advancedView || graphView);
+	ui->eventSearchEdit->setPlaceholderText(advancedView ? tr("Find text...")
+		: graphView         ? tr("Highlight nodes...")
+							  : tr("Filter by name..."));
+
+	// The find arrows step through advanced-text matches or, in the graph view,
+	// through the highlighted nodes; hidden in the tree view. In the graph they're
+	// only live while there is a query to step through.
+	const bool findArrows = advancedView || graphView;
+	ui->btnFindPrev->setVisible(findArrows);
+	ui->btnFindNext->setVisible(findArrows);
+	const bool arrowsEnabled = advancedView || (graphView && !ui->eventSearchEdit->text().isEmpty());
+	ui->btnFindPrev->setEnabled(arrowsEnabled);
+	ui->btnFindNext->setEnabled(arrowsEnabled);
+
+	// The event-controls column acts on the selected event, which the graph view
+	// also tracks (an event-node selection sets m_cur_event just like the tree).
+	// So it's live in tree and graph; the reorder buttons stay tree-only via their
+	// own gate in updateEventMoveButtons.
+	ui->eventControlsContainer->setEnabled(treeView || graphView);
+
+	// The sexp help panels describe the selected tree node, so they're
+	// meaningless outside the tree view: clear them on the way out and
+	// recompute for the current selection when the tree view returns.
+	if (treeView) {
+		ui->eventTree->update_help(ui->eventTree->currentItem());
+	} else {
+		ui->miniHelpBox->clear();
+		ui->helpBox->clear();
+	}
+
+	// The per-event fields key off the tree selection; updateEventUi()
+	// disables them whenever the tree view isn't current.
+	updateEventUi();
+}
+
 int MissionEventsDialog::getRootReturnType() const
 {
 	return OPR_NULL;
@@ -294,6 +977,11 @@ int MissionEventsDialog::getRootReturnType() const
 
 void MissionEventsDialog::accept()
 {
+	// The active view gets to veto OK (e.g. advanced-edit text that doesn't
+	// parse), same as it can veto a view switch.
+	if (!canLeaveEventView(ui->eventViewStack->currentIndex()))
+		return;
+
 	QByteArray stateBefore = _model->captureState();
 	if (_model->apply()) {
 		QByteArray stateAfter = _model->captureState();
@@ -329,6 +1017,7 @@ void MissionEventsDialog::onEventTreeModified()
 		return;
 
 	pushEventStateSnapshot(_workingStateCache, tr("Edit Event Formula"));
+	refreshGraphIfCurrent(); // e.g. an inline "Edit Data" value edit that commits now
 }
 
 void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const QString& label)
@@ -345,8 +1034,34 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			// subtreeAdded/annotationApplied/rootSelected signals.
 			_model->restoreEventWorkingState(blob);
 			ui->eventTree->restoreExpansionState(expanded);
+			// Only the tree view treats eventSearchEdit as a row filter; in graph/advanced
+			// it holds a highlight/find term, and the tree is hidden and re-filtered on the
+			// way back, so don't hide rows by the wrong term here.
+			if (ui->eventViewStack->currentIndex() == TreeViewIndex)
+				applyEventFilter();
 			m_last_message_node = -1;
 			updateEventUi();
+			// If the advanced view is showing, the working events just changed
+			// under it; regenerate the text (discarding any unparsed edits).
+			if (ui->eventViewStack->currentIndex() == AdvancedViewIndex)
+				loadAdvancedText();
+			// Likewise keep the relationship graph in sync on undo/redo.
+			if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+				refreshGraphView();
+				// The restore cleared the current event, but the rebuild quietly
+				// re-selects cards by their old event index. Push the graph's pick
+				// back through the tree so the fields, Delete and the graph agree.
+				const int graphEvent = ui->eventGraph->selectedEventIndex();
+				if (graphEvent >= 0) {
+					selectEventInTree(graphEvent);
+					// If that tree row was already current, no selection signal fired.
+					if (_model->getCurrentlySelectedEvent() != graphEvent) {
+						_model->setCurrentlySelectedEvent(graphEvent);
+						updateEventUi();
+					}
+				}
+				updateEventCreateButtons();
+			}
 			_suppressTreeUndo = false;
 		},
 		label));
@@ -397,6 +1112,21 @@ void MissionEventsDialog::closeEvent(QCloseEvent* e)
 	}
 }
 
+bool MissionEventsDialog::eventFilter(QObject* watched, QEvent* event)
+{
+	if (event->type() == QEvent::KeyPress &&
+		(watched == ui->eventSearchEdit || watched == ui->messageSearchEdit)) {
+		const int key = static_cast<QKeyEvent*>(event)->key();
+		if (key == Qt::Key_Return || key == Qt::Key_Enter) {
+			// Consuming the key here means the line edit never sees it either, so
+			// raise its returnPressed (the find-next hookup) ourselves.
+			Q_EMIT static_cast<QLineEdit*>(watched)->returnPressed();
+			return true;
+		}
+	}
+	return QDialog::eventFilter(watched, event);
+}
+
 void MissionEventsDialog::initMessageWidgets() {
 	initHeadCombo();
 	initWaveFilenames();
@@ -427,6 +1157,7 @@ void MissionEventsDialog::rootNodeDeleted(int node) {
 	const QByteArray before = _model->captureEventWorkingState();
 	_model->deleteRootNode(node);
 	pushEventStateSnapshot(before, tr("Delete Event"));
+	refreshGraphIfCurrent();
 }
 
 void MissionEventsDialog::rootNodeRenamed(int node) {
@@ -466,8 +1197,13 @@ void MissionEventsDialog::rootNodeRenamed(int node) {
 	cmd->addEntry(before, after, [this, index](const SCP_string& v) {
 		_model->setEventNameAt(index, v);
 		syncEventRootLabel(index);
+		refreshGraphIfCurrent(); // undo/redo of a rename should update the graph card
 	});
 	_dialogStack->push(cmd);
+
+	// The new name may change whether the event matches an active filter.
+	applyEventFilter();
+	refreshGraphIfCurrent(); // the inline name edit commits after the menu has closed
 }
 
 void MissionEventsDialog::syncEventRootLabel(int eventIndex)
@@ -484,6 +1220,9 @@ void MissionEventsDialog::syncEventRootLabel(int eventIndex)
 			break;
 		}
 	}
+
+	// The restored name may change whether the event matches an active filter.
+	applyEventFilter();
 }
 
 void MissionEventsDialog::rootNodeFormulaChanged(int old, int node) {
@@ -516,6 +1255,8 @@ void MissionEventsDialog::rebuildMessageList() {
 	if (curRow >= 0 && curRow < ui->messageList->count()) {
 		ui->messageList->setCurrentRow(curRow);
 	}
+
+	applyMessageFilter();
 }
 
 // The log-state checkboxes only apply to a selected event, so gray them out (and
@@ -534,8 +1275,16 @@ void MissionEventsDialog::updateEventUi() {
 	util::SignalBlockers blockers(this);
 
 	updateEventMoveButtons();
+	updateEventCreateButtons();
 
-	if (!_model->eventIsValid()) {
+	// The per-event fields act on the selected event. In the tree, selecting any
+	// node selects its event; in the graph, only an event card counts (selecting an
+	// operator / object / data node leaves the fields disabled, for clarity).
+	const int curView = ui->eventViewStack->currentIndex();
+	const bool controlsActive = (curView == TreeViewIndex)
+		|| (curView == GraphViewIndex && ui->eventGraph->isEventNodeSelected());
+
+	if (!_model->eventIsValid() || !controlsActive) {
 		ui->repeatCountBox->setValue(1);
 		ui->triggerCountBox->setValue(1);
 		ui->intervalTimeBox->setValue(1);
@@ -547,13 +1296,18 @@ void MissionEventsDialog::updateEventUi() {
 		ui->repeatCountBox->setEnabled(false);
 		ui->triggerCountBox->setEnabled(false);
 		ui->intervalTimeBox->setEnabled(false);
+		ui->chainedCheckBox->setChecked(false);
+		ui->chainedCheckBox->setEnabled(false);
 		ui->chainDelayBox->setEnabled(false);
+		ui->scoreBox->setValue(0);
+		ui->scoreBox->setEnabled(false);
 		ui->useMsecsCheckBox->setChecked(false);
 		ui->useMsecsCheckBox->setEnabled(false);
 		ui->teamCombo->setEnabled(false);
 		ui->editDirectiveText->setEnabled(false);
 		ui->editDirectiveKeypressText->setEnabled(false);
 		setEventLogEnabled(false);
+		syncGraphAfterEventUi();
 		return;
 	}
 
@@ -605,6 +1359,52 @@ void MissionEventsDialog::updateEventUi() {
 	ui->checkLogLastRepeat->setChecked(_model->getLogLastRepeat());
 	ui->checkLogFirstTrigger->setChecked(_model->getLogFirstTrigger());
 	ui->checkLogLastTrigger->setChecked(_model->getLogLastTrigger());
+
+	syncGraphAfterEventUi();
+}
+
+// For an undo/redo of an event field: the event it changes needn't be the
+// selected one, and syncGraphAfterEventUi() only refreshes the selected card.
+void MissionEventsDialog::refreshEventAfterFieldUndo(int eventIndex)
+{
+	updateEventUi();
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex && eventIndex >= 0 &&
+		eventIndex < static_cast<int>(_model->getEventList().size()))
+		ui->eventGraph->updateEventCard(eventIndex, buildEventMeta(eventIndex));
+}
+
+// Reflect event-property edits onto the graph while it's the current view: a
+// lightweight per-card status/chain update when only a field changed, or a full
+// rebuild when the event count changed (event added/removed).
+void MissionEventsDialog::syncGraphAfterEventUi()
+{
+	if (ui->eventViewStack->currentIndex() != GraphViewIndex)
+		return;
+	const int count = static_cast<int>(_model->getEventList().size());
+	if (count != _graphEventCount) {
+		refreshGraphView(); // sets _graphEventCount
+		return;
+	}
+	if (_model->eventIsValid()) {
+		const int cur = _model->getCurrentlySelectedEvent();
+		ui->eventGraph->updateEventCard(cur, buildEventMeta(cur));
+	}
+}
+
+// Build the per-event status/annotation-key metadata for one event.
+GraphEventMeta MissionEventsDialog::buildEventMeta(int eventIndex) const
+{
+	GraphEventMeta m;
+	const auto& events = _model->getEventList();
+	if (eventIndex < 0 || eventIndex >= static_cast<int>(events.size()))
+		return m;
+	const mission_event& e = events[eventIndex];
+	m.chained = (e.chain_delay >= 0);
+	m.directive = !e.objective_text.empty();
+	m.repeats = (e.repeat_count != 1) || (e.flags & MEF_USING_TRIGGER_COUNT);
+	m.logging = (e.mission_log_flags != 0);
+	m.annotationKey = SexpAnnotationModel::rootKey(e.formula);
+	return m;
 }
 
 void MissionEventsDialog::updateEventMoveButtons()
@@ -614,9 +1414,16 @@ void MissionEventsDialog::updateEventMoveButtons()
 	const bool isRoot = (cur && !cur->parent());
 	const int count = ui->eventTree->topLevelItemCount();
 
+	// Moving while the tree is filtered would reorder relative to hidden
+	// neighbors, which looks like nothing happened; disable the buttons.
+	const bool filtered = !ui->eventSearchEdit->text().isEmpty();
+
+	// The move buttons act on the tree order, so they need the tree in view.
+	const bool treeViewActive = (ui->eventViewStack->currentIndex() == TreeViewIndex);
+
 	bool canUp = false, canDown = false;
 
-	if (isRoot && count > 1) {
+	if (isRoot && count > 1 && !filtered && treeViewActive) {
 		const int idx = ui->eventTree->indexOfTopLevelItem(cur);
 		canUp = (idx > 0);
 		canDown = (idx >= 0 && idx < count - 1);
@@ -626,6 +1433,21 @@ void MissionEventsDialog::updateEventMoveButtons()
 	ui->eventUpBtn->setEnabled(canUp);
 	ui->eventDownBtn->setEnabled(canDown);
 	ui->eventMoveBottomBtn->setEnabled(canDown);
+}
+
+// New/Insert/Delete enablement per view. In the graph: New only in Basic (the new
+// node needs a spatial home), Insert never (it needs the tree order), Delete in
+// any mode once an event card is selected. The tree keeps them all live.
+void MissionEventsDialog::updateEventCreateButtons()
+{
+	const int view = ui->eventViewStack->currentIndex();
+	const bool tree = (view == TreeViewIndex);
+	const bool graph = (view == GraphViewIndex);
+	const bool basicGraph = graph && ui->eventGraph->isBasicMode();
+
+	ui->btnNewEvent->setEnabled(tree || basicGraph);
+	ui->btnInsertEvent->setEnabled(tree);
+	ui->btnDeleteEvent->setEnabled(tree || (graph && ui->eventGraph->isEventNodeSelected()));
 }
 
 void MissionEventsDialog::initHeadCombo() {
@@ -736,7 +1558,10 @@ void MissionEventsDialog::updateMessageMoveButtons()
 	const int count = ui->messageList->count();
 	const int row = ui->messageList->currentItem() ? ui->messageList->row(ui->messageList->currentItem()) : -1;
 
-	const bool hasSel = (row >= 0);
+	// Same reasoning as updateEventMoveButtons: no reordering while filtered.
+	const bool filtered = !ui->messageSearchEdit->text().isEmpty();
+
+	const bool hasSel = (row >= 0) && !filtered;
 	const bool canUp = hasSel && row > 0;
 	const bool canDown = hasSel && row < count - 1;
 
@@ -744,6 +1569,126 @@ void MissionEventsDialog::updateMessageMoveButtons()
 	ui->msgUpBtn->setEnabled(canUp);
 	ui->msgDownBtn->setEnabled(canDown);
 	ui->msgMoveBottomBtn->setEnabled(canDown);
+}
+
+// Hide top-level event items whose names don't contain the search text.
+// Hidden items keep their top-level indices, so the formula-order reads and
+// move logic that iterate topLevelItem(i) are unaffected.
+void MissionEventsDialog::applyEventFilter()
+{
+	const QString text = ui->eventSearchEdit->text();
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* item = ui->eventTree->topLevelItem(i);
+		item->setHidden(!item->text(0).contains(text, Qt::CaseInsensitive));
+	}
+	updateEventMoveButtons();
+}
+
+// Hide message rows that don't contain the search text. Rows are hidden in
+// place (never removed) so the row == model-index mapping stays intact.
+void MissionEventsDialog::applyMessageFilter()
+{
+	const QString text = ui->messageSearchEdit->text();
+	for (int i = 0; i < ui->messageList->count(); ++i) {
+		auto* item = ui->messageList->item(i);
+		item->setHidden(!item->text().contains(text, Qt::CaseInsensitive));
+	}
+	updateMessageMoveButtons();
+}
+
+void MissionEventsDialog::on_eventSearchEdit_textChanged(const QString& /*text*/)
+{
+	// In the advanced view the box is a find-as-you-type field over the text.
+	if (ui->eventViewStack->currentIndex() == AdvancedViewIndex) {
+		findInAdvancedText(/*forward=*/true, /*incremental=*/true);
+		return;
+	}
+	// In the graph view it highlights matching nodes (dims the rest); the arrows
+	// step through those matches.
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+		const QString q = ui->eventSearchEdit->text();
+		ui->eventGraph->setSearchText(q);
+		ui->btnFindPrev->setEnabled(!q.isEmpty());
+		ui->btnFindNext->setEnabled(!q.isEmpty());
+		return;
+	}
+
+	applyEventFilter();
+
+	// Deselect if the current item's event got filtered out, so the event
+	// controls on the right don't keep editing an invisible event.
+	auto* root = ui->eventTree->currentItem();
+	while (root && root->parent())
+		root = root->parent();
+	if (root && root->isHidden()) {
+		ui->eventTree->setCurrentItem(nullptr);
+		// selectedRootChanged(-1) can't resolve a formula, so clear the model
+		// selection directly.
+		_model->setCurrentlySelectedEvent(-1);
+		updateEventUi();
+	}
+}
+
+void MissionEventsDialog::findInAdvancedText(bool forward, bool incremental)
+{
+	auto* edit = ui->advancedTextEdit;
+	const QString term = ui->eventSearchEdit->text();
+	if (term.isEmpty()) {
+		// Drop any highlighted match so an emptied box doesn't look "stuck".
+		QTextCursor c = edit->textCursor();
+		c.clearSelection();
+		edit->setTextCursor(c);
+		return;
+	}
+
+	// While typing, re-search from the start of the current match so the
+	// selection grows in place instead of jumping to the next occurrence.
+	if (incremental) {
+		QTextCursor c = edit->textCursor();
+		c.setPosition(c.selectionStart());
+		edit->setTextCursor(c);
+	}
+
+	QTextDocument::FindFlags flags;
+	if (!forward)
+		flags |= QTextDocument::FindBackward;
+
+	if (!edit->find(term, flags)) {
+		// Wrap around: retry from the far end.
+		QTextCursor c = edit->textCursor();
+		c.movePosition(forward ? QTextCursor::Start : QTextCursor::End);
+		edit->setTextCursor(c);
+		edit->find(term, flags);
+	}
+}
+
+void MissionEventsDialog::on_btnFindNext_clicked()
+{
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+		ui->eventGraph->focusNextMatch(/*forward=*/true);
+		return;
+	}
+	findInAdvancedText(/*forward=*/true, /*incremental=*/false);
+}
+
+void MissionEventsDialog::on_btnFindPrev_clicked()
+{
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex) {
+		ui->eventGraph->focusNextMatch(/*forward=*/false);
+		return;
+	}
+	findInAdvancedText(/*forward=*/false, /*incremental=*/true);
+}
+
+void MissionEventsDialog::on_messageSearchEdit_textChanged(const QString& /*text*/)
+{
+	applyMessageFilter();
+
+	// Deselect if the selected message got filtered out.
+	const int row = ui->messageList->currentRow();
+	if (row >= 0 && ui->messageList->item(row)->isHidden()) {
+		ui->messageList->setCurrentRow(-1);
+	}
 }
 
 SCP_vector<int> MissionEventsDialog::read_root_formula_order(sexp_tree_view* tree)
@@ -808,17 +1753,26 @@ void MissionEventsDialog::on_okAndCancelButtons_rejected()
 
 void MissionEventsDialog::on_btnNewEvent_clicked()
 {
+	// Clear any active filter so the new event is visible.
+	ui->eventSearchEdit->clear();
+
 	const QByteArray before = _model->captureEventWorkingState();
 	_suppressTreeUndo = true;
 	_model->createEvent();
 	_suppressTreeUndo = false;
 
-	updateEventUi();
+	updateEventUi(); // rebuilds the graph via syncGraphAfterEventUi (event count grew)
+	// In the graph, pan/zoom to the freshly-created event node and select it.
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+		ui->eventGraph->focusEvent(_model->getCurrentlySelectedEvent());
 	pushEventStateSnapshot(before, tr("Add Event"));
 }
 
 void MissionEventsDialog::on_btnInsertEvent_clicked()
 {
+	// Clear any active filter so the new event is visible.
+	ui->eventSearchEdit->clear();
+
 	const QByteArray before = _model->captureEventWorkingState();
 	_suppressTreeUndo = true;
 	_model->insertEvent();
@@ -922,7 +1876,7 @@ void MissionEventsDialog::on_repeatCountBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_RepeatCount + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Repeat Count"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setRepeatCountAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setRepeatCountAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -942,7 +1896,7 @@ void MissionEventsDialog::on_triggerCountBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_TriggerCount + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Trigger Count"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setTriggerCountAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setTriggerCountAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -961,7 +1915,7 @@ void MissionEventsDialog::on_intervalTimeBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_Interval + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Interval Time"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setIntervalTimeAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setIntervalTimeAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -988,7 +1942,7 @@ void MissionEventsDialog::on_chainedCheckBox_toggled(bool checked)
 	cmd->addEntry(before, after, [this, index](const int& v) {
 		_model->setChainDelayRawAt(index, v);
 		updateEventBitmapAt(index);
-		updateEventUi();
+		refreshEventAfterFieldUndo(index);
 	});
 	_dialogStack->push(cmd);
 }
@@ -1008,7 +1962,7 @@ void MissionEventsDialog::on_chainDelayBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_ChainDelay + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Chain Delay"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setChainDelayAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setChainDelayAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1027,7 +1981,7 @@ void MissionEventsDialog::on_useMsecsCheckBox_toggled(bool checked)
 	auto* cmd = new FieldEditCommand<bool>(
 	    FieldId::Event_UseMsecs + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Toggle Interval In Milliseconds"), true);
-	cmd->addEntry(before, checked, [this, index](const bool& v) { _model->setUseMsecsAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, checked, [this, index](const bool& v) { _model->setUseMsecsAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1046,7 +2000,7 @@ void MissionEventsDialog::on_scoreBox_valueChanged(int value)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_Score + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Event Score"), true);
-	cmd->addEntry(before, after, [this, index](const int& v) { _model->setEventScoreAt(index, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, index](const int& v) { _model->setEventScoreAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1065,7 +2019,7 @@ void MissionEventsDialog::on_teamCombo_currentIndexChanged(int index)
 	auto* cmd = new FieldEditCommand<int>(
 	    FieldId::Event_Team + eventIndex * FieldId::Event_FieldStride,
 	    nullptr, tr("Change Event Team"), true);
-	cmd->addEntry(before, after, [this, eventIndex](const int& v) { _model->setEventTeamAt(eventIndex, v); updateEventUi(); });
+	cmd->addEntry(before, after, [this, eventIndex](const int& v) { _model->setEventTeamAt(eventIndex, v); refreshEventAfterFieldUndo(eventIndex); });
 	_dialogStack->push(cmd);
 }
 
@@ -1080,6 +2034,9 @@ void MissionEventsDialog::on_editDirectiveText_textChanged(const QString& text)
 	// The setter localizes the text, so read the stored value back.
 	const SCP_string after = _model->getEventDirectiveText();
 	updateEventBitmap();
+	// Refresh the graph card's directive icon without re-populating the fields
+	// (updateEventUi would reset this text edit's cursor mid-type).
+	syncGraphAfterEventUi();
 	if (before == after)
 		return;
 
@@ -1089,7 +2046,7 @@ void MissionEventsDialog::on_editDirectiveText_textChanged(const QString& text)
 	cmd->addEntry(before, after, [this, index](const SCP_string& v) {
 		_model->setEventDirectiveTextAt(index, v);
 		updateEventBitmapAt(index);
-		updateEventUi();
+		refreshEventAfterFieldUndo(index);
 	});
 	_dialogStack->push(cmd);
 }
@@ -1111,7 +2068,7 @@ void MissionEventsDialog::on_editDirectiveKeypressText_textChanged(const QString
 	    nullptr, tr("Change Directive Keypress Text"), true);
 	cmd->addEntry(before, after, [this, index](const SCP_string& v) {
 		_model->setEventDirectiveKeyTextAt(index, v);
-		updateEventUi();
+		refreshEventAfterFieldUndo(index);
 	});
 	_dialogStack->push(cmd);
 }
@@ -1127,11 +2084,12 @@ void MissionEventsDialog::pushEventLogFlagCommand(int fieldConst, int mask, bool
 		return;
 
 	_model->setEventLogFlagAt(index, mask, checked);
+	updateEventUi(); // refresh dependent UI (and the graph's log icon) like the other field handlers
 
 	auto* cmd = new FieldEditCommand<bool>(
 	    fieldConst + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Toggle Event Log Flag"), true);
-	cmd->addEntry(before, checked, [this, index, mask](const bool& v) { _model->setEventLogFlagAt(index, mask, v); updateEventUi(); });
+	cmd->addEntry(before, checked, [this, index, mask](const bool& v) { _model->setEventLogFlagAt(index, mask, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 
@@ -1186,6 +2144,18 @@ void MissionEventsDialog::on_messageList_itemDoubleClicked(QListWidgetItem* item
 	if (!item || !ui->eventTree)
 		return;
 
+	// The jump targets the tree, so bring the tree view forward first. The
+	// switch can be vetoed by the active view.
+	if (ui->eventViewStack->currentIndex() != TreeViewIndex) {
+		requestViewChange(TreeViewIndex);
+		if (ui->eventViewStack->currentIndex() != TreeViewIndex)
+			return;
+	}
+
+	// This jumps to the message's use in the event tree, so drop any event
+	// filter that might be hiding the target event.
+	ui->eventSearchEdit->clear();
+
 	const QString name = item->text();
 	if (name != m_last_message_name) {
 		m_last_message_name = name;
@@ -1218,6 +2188,9 @@ void MissionEventsDialog::on_messageList_itemDoubleClicked(QListWidgetItem* item
 
 void MissionEventsDialog::on_btnNewMsg_clicked()
 {
+	// Clear any active filter so the new message is visible.
+	ui->messageSearchEdit->clear();
+
 	const QByteArray before = _model->captureMessageWorkingState();
 	_model->createMessage();
 
@@ -1233,6 +2206,9 @@ void MissionEventsDialog::on_btnNewMsg_clicked()
 
 void MissionEventsDialog::on_btnInsertMsg_clicked()
 {
+	// Clear any active filter so the new message is visible.
+	ui->messageSearchEdit->clear();
+
 	const QByteArray before = _model->captureMessageWorkingState();
 	_model->insertMessage();
 

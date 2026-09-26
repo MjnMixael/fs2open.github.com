@@ -2,6 +2,7 @@
 
 #include "mission/dialogs/AbstractDialogModel.h"
 #include "ui/ControlBindings.h"
+#include "ui/SyntaxColors.h"
 #include "ui/ThemeMode.h"
 
 namespace fso::fred::dialogs {
@@ -75,6 +76,16 @@ public:
 	double getLabelFontScale() const;
 	void setLabelFontScale(double value);
 
+	// Syntax colors (the Events editor's Advanced view). Colors are per theme;
+	// dark selects which theme's set is read or written.
+	SyntaxStyle getSyntaxStyle(SyntaxRole role, bool dark) const;
+	bool isSyntaxStyleCustom(SyntaxRole role, bool dark) const;
+	void setSyntaxStyle(SyntaxRole role, bool dark, const SyntaxStyle& style);
+	void resetSyntaxStyle(SyntaxRole role, bool dark);
+	void resetAllSyntaxStyles(bool dark);
+	bool getRainbowParens() const;
+	void setRainbowParens(bool value);
+
 	// Controls
 	QKeySequence getControlKey(ControlAction action) const;
 	void setControlKey(ControlAction action, const QKeySequence& sequence);
@@ -119,6 +130,7 @@ private:
 	int  _toolbarIconSize;
 	int  _outlineLod;
 	float _labelFontScale;
+	SyntaxColorSettings _syntax;
 
 	// Controls
 	std::map<ControlAction, QKeySequence> _controlKeys;

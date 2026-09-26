@@ -11,6 +11,10 @@ struct event_annotation {
 	ubyte r = 255;
 	ubyte g = 255;
 	ubyte b = 255;
+	float pos_x = 0.0f;  // saved graph-view position; 0,0 is a valid coord, so has_pos gates persistence
+	float pos_y = 0.0f;
+	bool has_pos = false;
+	bool collapsed = false; // graph-view: event subtree collapsed to just its event node
 };
 extern SCP_vector<event_annotation> Event_annotations;
 
@@ -49,7 +53,7 @@ public:
 	// Predicates
 	// ---------------------------------------------------------------
 
-	// True if the annotation has default values (empty comment, white color).
+	// True if the annotation has default values (empty comment, white color, no saved position).
 	static bool isDefault(const event_annotation& ea);
 
 	// ---------------------------------------------------------------
