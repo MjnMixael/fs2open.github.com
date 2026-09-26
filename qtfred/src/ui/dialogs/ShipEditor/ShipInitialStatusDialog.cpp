@@ -263,6 +263,12 @@ void ShipInitialStatusDialog::updateDocks()
 	}
 	if (row >= 0 && row < ui->dockpointList->count())
 		ui->dockpointList->setCurrentRow(row);
+
+	// The dockee combo is set below with signals blocked, so its change handler never
+	// runs; take the dockee from the model or updateDockee() lists the dockee points of
+	// a stale ship (none at all on first open).
+	_curDockee = (_curDockerPoint >= 0) ? _model->getDockpointArray()[_curDockerPoint].dockee_shipnum : -1;
+
 	if (_curDockerPoint < 0) {
 		// clear the dropdowns
 		listDockees(-1);
