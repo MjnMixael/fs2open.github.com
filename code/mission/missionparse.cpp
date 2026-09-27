@@ -7231,6 +7231,15 @@ void apply_default_campaign_custom_data(campaign* pc)
 	}
 }
 
+// Ship twin of apply_default_custom_data(), called by the editors when a ship is placed.
+// Ships loaded from a mission keep exactly the keys the file saved.
+void apply_default_ship_custom_data(SCP_map<SCP_string, SCP_string>& custom_data)
+{
+	for (const auto& def : Default_ship_custom_data) {
+		custom_data.emplace(def.key, def.value);
+	}
+}
+
 // parse one #...CustomData section (header already consumed) into the given schema
 static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_data>& dest)
 {
@@ -7251,6 +7260,28 @@ static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_d
 			stuff_string(def.value, F_RAW);
 		} else {
 			def.value.clear();
+		}
+
+		// The editor rejects mistyped values, so a bad default would be seeded into new
+		// missions and then refused by the Custom Data dialog.  Fall back to the type's
+		// zero value instead.
+		if (def.type == "int") {
+			char* endp = nullptr;
+			(void)strtol(def.value.c_str(), &endp, 10);
+			if (def.value.empty() || endp == def.value.c_str() || *endp != '\0') {
+				if (!def.value.empty())
+					Warning(LOCATION, "Editor custom data key '%s' is type int but its default '%s' is not a whole number.  Using 0.", def.key.c_str(), def.value.c_str());
+				def.value = "0";
+			}
+		} else if (def.type == "bool") {
+			if (!stricmp(def.value.c_str(), "true")) {
+				def.value = "true";
+			} else if (!stricmp(def.value.c_str(), "false") || def.value.empty()) {
+				def.value = "false";
+			} else {
+				Warning(LOCATION, "Editor custom data key '%s' is type bool but its default '%s' is not true or false.  Using false.", def.key.c_str(), def.value.c_str());
+				def.value = "false";
+			}
 		}
 
 		if (optional_string("+Description:")) {
@@ -7862,12 +7893,6 @@ void support_ship_info::reset()
  */
 void mission_init(mission *pm, bool quick_init)
 {
-	static bool editor_custom_data_loaded = false;
-	if (!editor_custom_data_loaded) {
-		parse_editor_custom_data_table();
-		editor_custom_data_loaded = true;
-	}
-
 	pm->Reset();
 
 	Player_starts = 0;

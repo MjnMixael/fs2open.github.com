@@ -752,6 +752,8 @@ int Editor::create_ship(matrix* orient, vec3d* pos, int ship_type) {
 	ship* shipp = &Ships[Objects[obj].instance];
 	sip = &Ship_info[shipp->ship_info_index];
 
+	apply_default_ship_custom_data(shipp->custom_data);
+
 	if (query_ship_name_duplicate(Objects[obj].instance)) {
 		fix_ship_name(Objects[obj].instance);
 	}

@@ -494,7 +494,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "cancel-future-waves",			OP_CANCEL_FUTURE_WAVES,					1,	INT_MAX,	SEXP_ACTION_OPERATOR,	}, // naomimyselfandi
 	{ "ship-custom-data-set",			OP_SHIP_CUSTOM_DATA_SET,				3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 	{ "ship-custom-data-set-int",		OP_SHIP_CUSTOM_DATA_SET_INT,			3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
-	{ "ship-custom-data-clear",			OP_SHIP_CUSTOM_DATA_CLEAR,				2,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
+	{ "ship-custom-data-clear",			OP_SHIP_CUSTOM_DATA_CLEAR,				1,	2,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 
 	//Shields, Engines and Weapons Sub-Category
 	{ "set-weapon-energy",				OP_SET_WEAPON_ENERGY,					2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Karajorma
@@ -8470,33 +8470,62 @@ void multi_sexp_set_energy_pct()
 }
 
 // custom data operators - store/query arbitrary key/value strings on a per-ship-instance basis
+
+// Where a custom-data write lands: the live ship, or, for a ship that hasn't arrived yet, its
+// parse object (parse_create_object_sub copies that over on arrival).  Null for exited ships.
+static SCP_map<SCP_string, SCP_string>* ship_custom_data_target(const ship_registry_entry* ship_entry)
+{
+	if (ship_entry == nullptr)
+		return nullptr;
+	if (ship_entry->has_shipp())
+		return &ship_entry->shipp()->custom_data;
+	if (ship_entry->status == ShipStatus::NOT_YET_PRESENT && ship_entry->has_p_objp())
+		return &ship_entry->p_objp()->custom_data;
+	return nullptr;
+}
+
+// set and set-int share one network message: ship name, key, value (already a string)
+static void ship_custom_data_store(const ship_registry_entry* ship_entry, const char* key, const SCP_string& value)
+{
+	auto data = ship_custom_data_target(ship_entry);
+	if (data == nullptr)
+		return;
+	(*data)[key] = value;
+
+	Current_sexp_network_packet.start_callback();
+	Current_sexp_network_packet.send_string(SCP_string(ship_entry->name));
+	Current_sexp_network_packet.send_string(SCP_string(key));
+	Current_sexp_network_packet.send_string(value);
+	Current_sexp_network_packet.end_callback();
+}
+
 void sexp_ship_custom_data_set(int node)
 {
-	auto ship_entry = eval_ship(node);
-	if (!ship_entry || !ship_entry->has_shipp())
-		return;
-	auto shipp = ship_entry->shipp();
-
-	const char *key = CTEXT(CDR(node));
-	const char *value = CTEXT(CDR(CDR(node)));
-	shipp->custom_data[key] = value;
+	ship_custom_data_store(eval_ship(node), CTEXT(CDR(node)), CTEXT(CDR(CDR(node))));
 }
 
 void sexp_ship_custom_data_set_int(int node)
 {
-	auto ship_entry = eval_ship(node);
-	if (!ship_entry || !ship_entry->has_shipp())
-		return;
-	auto shipp = ship_entry->shipp();
-
-	const char *key = CTEXT(CDR(node));
-
-	bool is_nan, is_nan_forever;
+	bool is_nan = false;
+	bool is_nan_forever = false;
 	int value = eval_num(CDR(CDR(node)), is_nan, is_nan_forever);
 	if (is_nan || is_nan_forever)
 		return;
 
-	shipp->custom_data[key] = std::to_string(value);
+	ship_custom_data_store(eval_ship(node), CTEXT(CDR(node)), std::to_string(value));
+}
+
+void multi_sexp_ship_custom_data_set()
+{
+	SCP_string ship_name, key, value;
+	Current_sexp_network_packet.get_string(ship_name);
+	Current_sexp_network_packet.get_string(key);
+	if (!Current_sexp_network_packet.get_string(value))
+		return;
+
+	auto data = ship_custom_data_target(ship_registry_get(ship_name.c_str()));
+	if (data != nullptr)
+		(*data)[key] = value;
 }
 
 int sexp_ship_custom_data_is(int node)
@@ -8556,15 +8585,41 @@ int sexp_ship_custom_data_has_key(int node)
 void sexp_ship_custom_data_clear(int node)
 {
 	auto ship_entry = eval_ship(node);
-	if (!ship_entry || !ship_entry->has_shipp())
+	auto data = ship_custom_data_target(ship_entry);
+	if (data == nullptr)
 		return;
-	auto shipp = ship_entry->shipp();
 
 	int key_node = CDR(node);
 	if (key_node >= 0)
-		shipp->custom_data.erase(CTEXT(key_node));
+		data->erase(CTEXT(key_node));
 	else
-		shipp->custom_data.clear();
+		data->clear();
+
+	Current_sexp_network_packet.start_callback();
+	Current_sexp_network_packet.send_string(SCP_string(ship_entry->name));
+	Current_sexp_network_packet.send_bool(key_node >= 0);
+	if (key_node >= 0)
+		Current_sexp_network_packet.send_string(SCP_string(CTEXT(key_node)));
+	Current_sexp_network_packet.end_callback();
+}
+
+void multi_sexp_ship_custom_data_clear()
+{
+	SCP_string ship_name, key;
+	bool has_key = false;
+	Current_sexp_network_packet.get_string(ship_name);
+	if (!Current_sexp_network_packet.get_bool(has_key))
+		return;
+	if (has_key && !Current_sexp_network_packet.get_string(key))
+		return;
+
+	auto data = ship_custom_data_target(ship_registry_get(ship_name.c_str()));
+	if (data == nullptr)
+		return;
+	if (has_key)
+		data->erase(key);
+	else
+		data->clear();
 }
 
 int sexp_get_energy_pct (int node, int op_num)
@@ -31425,6 +31480,15 @@ void multi_sexp_eval()
 				multi_sexp_alter_point_flag();
 				break;
 
+			case OP_SHIP_CUSTOM_DATA_SET:
+			case OP_SHIP_CUSTOM_DATA_SET_INT:
+				multi_sexp_ship_custom_data_set();
+				break;
+
+			case OP_SHIP_CUSTOM_DATA_CLEAR:
+				multi_sexp_ship_custom_data_clear();
+				break;
+
 			case OP_CLEAR_SUBTITLES:
 				multi_sexp_clear_subtitles();
 				break;
@@ -41254,7 +41318,7 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 
 	// MjnMixael
 	{ OP_SHIP_CUSTOM_DATA_CLEAR, "ship-custom-data-clear\r\n"
-		"\tClears custom data on a ship instance.  If a key is provided, only that key is removed; otherwise all custom data on the ship is cleared.  Takes 2 or 3 arguments...\r\n"
+		"\tClears custom data on a ship instance.  If a key is provided, only that key is removed; otherwise all custom data on the ship is cleared.  Takes 1 or 2 arguments...\r\n"
 		"\t1:\tThe ship on which to clear data\r\n"
 		"\t2:\tThe key to remove (optional)" },
 

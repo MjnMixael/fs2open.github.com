@@ -67,17 +67,25 @@ and any subset may be present:</p>
         or <code>bool</code>. An unrecognized type produces a warning and falls back to
         <code>string</code>.</td></tr>
     <tr><td><code>+Default:</code></td><td>No</td><td>Value used by the dialog's
-        <strong>Reset</strong> button, and &mdash; for mission keys only &mdash; the value
-        seeded into new missions (see below). Omitted defaults are empty.</td></tr>
+        <strong>Reset</strong> button, and the value seeded into new missions, campaigns
+        and ships (see below). Omitted defaults are empty for <code>string</code>,
+        <code>0</code> for <code>int</code> and <code>false</code> for <code>bool</code>.
+        A default that doesn't match its type is replaced by that zero value, with a
+        warning.</td></tr>
     <tr><td><code>+Description:</code></td><td>No</td><td>Shown as help text in the dialog
         when the key is selected.</td></tr>
 </table>
 
-<h2>Mission keys and defaults</h2>
+<h2>Default values</h2>
 <p>When a mission is opened in FRED, any mission-domain key that is not already present
 in the mission is automatically added with its default value, so the expected entries
-exist without the designer creating them by hand. Campaign and ship entries are
-<em>not</em> auto-added; use the dialog's schema assistance to add them where needed.</p>
+exist without the designer creating them by hand. Campaigns work the same way: a new
+campaign, or one opened in the campaign editor, gets any missing campaign-domain keys.
+A newly placed ship starts with every ship-domain key at its default; ships loaded from
+a mission file keep exactly the keys that were saved.</p>
+<p>Defaults are an editor convenience only. The game never reads <code>editor.tbl</code>,
+so at runtime a key exists only if it was saved in the mission or campaign, or set by a
+SEXP or script.</p>
 <p>Scripts can also register mission-domain keys at runtime by calling
 <code>mn.addDefaultCustomData(key, defaultValue, description)</code>. Script-registered
 keys are always treated as <code>string</code>, and, like all defaults, are a FRED-only

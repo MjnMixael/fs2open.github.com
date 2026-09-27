@@ -401,6 +401,10 @@ bool fred_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	asteroid_init();
 	mission_brief_common_init();
 
+	// Editor-only custom-data schemas.  Loaded here, before OnGameInit, so scripts that
+	// call mn.addDefaultCustomData() add to the table instead of being wiped by it.
+	parse_editor_custom_data_table();
+
 	neb2_init();						// fullneb stuff
 	nebl_init();						// neb lightning
 	stars_init();
@@ -608,6 +612,8 @@ int create_ship(matrix *orient, vec3d *pos, int ship_type)
 
 	ship *shipp = &Ships[Objects[obj].instance];
 	sip = &Ship_info[shipp->ship_info_index];
+
+	apply_default_ship_custom_data(shipp->custom_data);
 
 	if (query_ship_name_duplicate(Objects[obj].instance))
 		fix_ship_name(Objects[obj].instance);
