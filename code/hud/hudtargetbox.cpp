@@ -1402,7 +1402,7 @@ void HudGaugeTargetBox::renderTargetCoordinatePoint(object *target_objp)
 	renderTargetIntegrity(1);
 	setGaugeColor();
 
-	renderString(position[0] + Name_offsets[0], position[1] + Name_offsets[1], EG_TBOX_NAME, cp->name.c_str());
+	renderString(position[0] + Name_offsets[0], position[1] + Name_offsets[1], EG_TBOX_NAME, coordinate_point_get_display_name(*cp));
 
 	if (!cp->group.empty()) {
 		renderString(position[0] + Class_offsets[0], position[1] + Class_offsets[1], EG_TBOX_CLASS, cp->group.c_str());

@@ -2135,6 +2135,16 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 				return result;
 			}
 
+			// Coordinate point flag description
+			if (query_operator_argument_type(index, c) == OPF_COORDINATE_POINT_FLAG) {
+				CoordinatePoint::Flags cp_flag = CoordinatePoint::Flags::NUM_VALUES;
+				const char* desc = nullptr;
+				if (get_coordinate_point_flag_by_name(tree_nodes[i].text, cp_flag))
+					desc = get_coordinate_point_flag_description(cp_flag);
+				result.help_text = (desc != nullptr) ? desc : "Unknown flag. Let a coder know!";
+				return result;
+			}
+
 			// Wing flag description
 			if (query_operator_argument_type(index, c) == OPF_WING_FLAG) {
 				Ship::Wing_Flags wing_flag = Ship::Wing_Flags::NUM_VALUES;

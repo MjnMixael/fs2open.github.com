@@ -331,6 +331,7 @@ struct CapturedCoordinatePoint {
 	int    signature = -1; // reapplied on restore; see CapturedShip::signature
 	vec3d  pos       = vmd_zero_vector;
 	SCP_string name;
+	SCP_string display_name;
 	SCP_string group;
 	color      display_color{};
 	CoordinatePointShapeKind shape_kind = CoordinatePointShapeKind::NGon;

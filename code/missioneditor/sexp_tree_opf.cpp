@@ -1288,6 +1288,16 @@ sexp_list_item *SexpTreeOPF::get_listing_opf_wing_flags()
 	return head.next;
 }
 
+sexp_list_item *SexpTreeOPF::get_listing_opf_coordinate_point_flags()
+{
+	sexp_list_item head;
+	for (size_t i = 0; i < Num_parse_coordinate_point_flags; i++) {
+		head.add_data(Parse_coordinate_point_flags[i].name);
+	}
+
+	return head.next;
+}
+
 sexp_list_item *SexpTreeOPF::get_listing_opf_team_colors()
 {
 	sexp_list_item head;
@@ -2411,6 +2421,10 @@ sexp_list_item *SexpTreeOPF::get_listing_opf(int opf, int parent_node, int arg_i
 			list = get_listing_opf_wing_flags();
 			break;
 
+		case OPF_COORDINATE_POINT_FLAG:
+			list = get_listing_opf_coordinate_point_flags();
+			break;
+
 		case OPF_TEAM_COLOR:
 			list = get_listing_opf_team_colors();
 			break;
@@ -2636,6 +2650,7 @@ int SexpTreeOPF::query_default_argument_available(int op, int i) const
 		case OPF_ANIMATION_TYPE:
 		case OPF_SHIP_FLAG:
 		case OPF_WING_FLAG:
+		case OPF_COORDINATE_POINT_FLAG:
 		case OPF_NEBULA_PATTERN:
 		case OPF_NAV_POINT:
 		case OPF_TEAM_COLOR:

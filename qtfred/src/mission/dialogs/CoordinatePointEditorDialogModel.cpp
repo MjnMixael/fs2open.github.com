@@ -37,6 +37,7 @@ mission_coordinate_point* CoordinatePointEditorDialogModel::getSelected(int objn
 void CoordinatePointEditorDialogModel::initializeData()
 {
 	_selectedObjnums.clear();
+	_displayNameMixed = false;
 	_groupMixed = false;
 	_redMixed = _greenMixed = _blueMixed = _alphaMixed = false;
 	_shapeKindMixed = false;
@@ -47,7 +48,6 @@ void CoordinatePointEditorDialogModel::initializeData()
 	_sizeMixed = false;
 	_escortPriorityMixed = false;
 	_multiTeamMixed = false;
-	_visibleInMissionMixed = false;
 
 	// Collect every marked OBJ_COORDINATE_POINT object.
 	for (auto* ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
@@ -60,6 +60,7 @@ void CoordinatePointEditorDialogModel::initializeData()
 		const mission_coordinate_point* first = getSelected(_selectedObjnums.front());
 		if (first != nullptr) {
 			_currentName      = first->name;
+			_displayName      = first->display_name;
 			_group         = first->group;
 			_colorR           = first->display_color.red;
 			_colorG           = first->display_color.green;
@@ -74,11 +75,11 @@ void CoordinatePointEditorDialogModel::initializeData()
 			_size             = first->size_scale;
 			_escortPriority   = first->escort_priority;
 			_multiTeam        = first->multi_team;
-			_visibleInMission = first->flags[CoordinatePoint::Flags::Visible_in_mission];
 
 			for (size_t i = 1; i < _selectedObjnums.size(); ++i) {
 				const auto* other = getSelected(_selectedObjnums[i]);
 				if (other == nullptr) continue;
+				if (other->display_name   != _displayName)   _displayNameMixed = true;
 				if (other->group          != _group)         _groupMixed = true;
 				if (other->display_color.red   != _colorR)         _redMixed = true;
 				if (other->display_color.green != _colorG)         _greenMixed = true;
@@ -98,12 +99,11 @@ void CoordinatePointEditorDialogModel::initializeData()
 				if (other->size_scale        != _size)             _sizeMixed = true;
 				if (other->escort_priority   != _escortPriority)   _escortPriorityMixed = true;
 				if (other->multi_team        != _multiTeam)        _multiTeamMixed = true;
-				if (other->flags[CoordinatePoint::Flags::Visible_in_mission] != _visibleInMission)
-					_visibleInMissionMixed = true;
 			}
 		}
 	} else {
 		_currentName.clear();
+		_displayName.clear();
 		_group.clear();
 		_colorR = _colorG = _colorB = _colorA = 255;
 		_shapeKind = CoordinatePointShapeKind::NGon;
@@ -115,7 +115,6 @@ void CoordinatePointEditorDialogModel::initializeData()
 		_size = 1.0f;
 		_escortPriority = 0;
 		_multiTeam = -1;
-		_visibleInMission = false;
 	}
 
 	Q_EMIT coordinatePointMarkingChanged();
@@ -218,6 +217,23 @@ bool CoordinatePointEditorDialogModel::setCurrentName(const SCP_string& name)
 	set_modified();
 	_suppressRefresh = false;
 	return true;
+}
+
+const SCP_string& CoordinatePointEditorDialogModel::getDisplayName() const { return _displayName; }
+bool CoordinatePointEditorDialogModel::isDisplayNameMixed() const { return _displayNameMixed; }
+
+void CoordinatePointEditorDialogModel::setDisplayName(const SCP_string& displayName)
+{
+	_displayName = displayName;
+	_displayNameMixed = false;
+	for (int objnum : _selectedObjnums) {
+		auto* cp = getSelected(objnum);
+		if (cp != nullptr) cp->display_name = displayName;
+	}
+	_suppressRefresh = true;
+	set_modified();
+	_editor->missionChanged();
+	_suppressRefresh = false;
 }
 
 const SCP_string& CoordinatePointEditorDialogModel::getGroup() const { return _group; }
@@ -548,21 +564,29 @@ void CoordinatePointEditorDialogModel::setMultiTeam(int v)
 	_suppressRefresh = false;
 }
 
-bool CoordinatePointEditorDialogModel::getVisibleInMission() const { return _visibleInMission; }
-
-int CoordinatePointEditorDialogModel::getVisibleInMissionState() const
+int CoordinatePointEditorDialogModel::getFlagState(CoordinatePoint::Flags flag) const
 {
-	if (_visibleInMissionMixed) return Qt::PartiallyChecked;
-	return _visibleInMission ? Qt::Checked : Qt::Unchecked;
+	bool any = false;
+	bool all = true;
+	for (int objnum : _selectedObjnums) {
+		const auto* cp = getSelected(objnum);
+		if (cp == nullptr) continue;
+		if (cp->flags[flag]) any = true;
+		else all = false;
+	}
+	if (!any) return Qt::Unchecked;
+	return all ? Qt::Checked : Qt::PartiallyChecked;
 }
 
-void CoordinatePointEditorDialogModel::setVisibleInMission(bool v)
+void CoordinatePointEditorDialogModel::applyFlagStates(const SCP_vector<std::pair<CoordinatePoint::Flags, int>>& states)
 {
-	_visibleInMission = v;
-	_visibleInMissionMixed = false;
 	for (int objnum : _selectedObjnums) {
 		auto* cp = getSelected(objnum);
-		if (cp != nullptr) cp->flags.set(CoordinatePoint::Flags::Visible_in_mission, v);
+		if (cp == nullptr) continue;
+		for (const auto& [flag, state] : states) {
+			if (state == Qt::Checked) cp->flags.set(flag);
+			else if (state == Qt::Unchecked) cp->flags.remove(flag);
+		}
 	}
 	_suppressRefresh = true;
 	set_modified();

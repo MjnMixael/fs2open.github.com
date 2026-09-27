@@ -351,6 +351,11 @@ extern flag_def_list_new<CoordinatePoint::Flags> Parse_coordinate_point_flags[];
 extern parse_object_flag_description<CoordinatePoint::Flags> Parse_coordinate_point_flag_descriptions[];
 extern const size_t Num_parse_coordinate_point_flags;
 extern const size_t Num_parse_coordinate_point_flag_descriptions;
+
+// Looks up a coordinate point flag by its mission-file name (case-insensitive).
+bool get_coordinate_point_flag_by_name(const char* name, CoordinatePoint::Flags& flag);
+// The flag's description from Parse_coordinate_point_flag_descriptions, or nullptr.
+const char* get_coordinate_point_flag_description(CoordinatePoint::Flags flag);
 extern const char *Icon_names[];
 extern const char *Mission_event_log_flags[];
 

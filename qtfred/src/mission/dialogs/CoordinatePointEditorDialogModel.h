@@ -27,6 +27,11 @@ public:
 	const SCP_string& getCurrentName() const;
 	bool setCurrentName(const SCP_string& name);
 
+	// HUD display name (free-form, need not be unique; empty = show Name).
+	const SCP_string& getDisplayName() const;
+	bool isDisplayNameMixed() const;
+	void setDisplayName(const SCP_string& displayName);
+
 	// Group (free-form string).
 	const SCP_string& getGroup() const;
 	bool isGroupMixed() const;
@@ -90,10 +95,12 @@ public:
 	void setMultiTeam(int v);
 	static bool missionIsMultiTeam();
 
-	// Visible-in-mission flag (tristate when mixed).
-	bool getVisibleInMission() const;
-	int  getVisibleInMissionState() const; // Qt::CheckState as int
-	void setVisibleInMission(bool v);
+	// Per-flag state across the selection as a Qt::CheckState int: Checked when every selected
+	// point has it, Unchecked when none do, PartiallyChecked when mixed.
+	int getFlagState(CoordinatePoint::Flags flag) const;
+	// Applies Checked/Unchecked states to every selected point; PartiallyChecked leaves each
+	// point's own value alone.
+	void applyFlagStates(const SCP_vector<std::pair<CoordinatePoint::Flags, int>>& states);
 
 	// Layer assignment for the editor's view-layer system. Empty / "<mixed>" handling is by
 	// the dialog; the model writes through to every selected point.
@@ -122,6 +129,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	SCP_vector<int> _selectedObjnums;
 
 	SCP_string _currentName;
+	SCP_string _displayName;
 	SCP_string _group;
 	int        _colorR = 255, _colorG = 255, _colorB = 255, _colorA = 255;
 
@@ -135,8 +143,8 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	float      _size = 1.0f;
 	int        _escortPriority = 0;
 	int        _multiTeam = -1;
-	bool       _visibleInMission = false;
 
+	bool _displayNameMixed = false;
 	bool _groupMixed = false;
 	bool _redMixed = false, _greenMixed = false, _blueMixed = false, _alphaMixed = false;
 	bool _shapeKindMixed = false;
@@ -147,7 +155,6 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	bool _sizeMixed = false;
 	bool _escortPriorityMixed = false;
 	bool _multiTeamMixed = false;
-	bool _visibleInMissionMixed = false;
 
 	bool _bypass_errors = false;
 	bool _suppressRefresh = false;

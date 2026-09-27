@@ -30,6 +30,7 @@
 #include "hud/hudscripting.h"
 #include "hud/hudshield.h"
 #include "hud/hudsquadmsg.h"
+#include "coordinate_points/coordinate_point_render.h"
 #include "hud/hudtarget.h"
 #include "hud/hudtargetbox.h"
 #include "hud/hudwingmanstatus.h"
@@ -1844,6 +1845,15 @@ void hud_update_frame(float  /*frametime*/)
 	// Check if can still be seen in Nebula
 	if ( hud_target_invalid_awacs(targetp) ) {
 		stop_targeting_this_thing = true;
+	}
+
+	// A coordinate point hidden while targeted (e.g. by alter-point-flag) vanishes,
+	// so it can't stay targeted either.
+	if ( targetp->type == OBJ_COORDINATE_POINT ) {
+		auto cp = find_coordinate_point_by_objnum(OBJ_INDEX(targetp));
+		if ( cp == nullptr || !coordinate_point_visible_to_local_player(*cp) ) {
+			stop_targeting_this_thing = true;
+		}
 	}
 
 	// If this was found to be something we shouldn't

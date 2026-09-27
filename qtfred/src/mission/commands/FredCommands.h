@@ -1001,7 +1001,8 @@ namespace FieldId {
     constexpr int CP_Size           = 7811;
     constexpr int CP_EscortPriority = 7812;
     constexpr int CP_MultiTeam      = 7813;
-    constexpr int CP_Visible        = 7814;
+    constexpr int CP_Flags          = 7814;
+    constexpr int CP_DisplayName    = 7815;
     // Briefing icon-edit snapshot merge ids (DialogSnapshotCommand): base +
     // (team * MAX_BRIEF_STAGES + stage) + firstSelectedIcon * 80, so edits to
     // a different stage or selection never merge.

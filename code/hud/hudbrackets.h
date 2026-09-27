@@ -46,6 +46,7 @@ public:
 	void renderNavBrackets(vec3d* nav_pos, vertex* nav_point, color* clr, char* string);
 	void renderBoundingBrackets(int x1, int y1, int x2, int y2, int w_correction, int h_correction, float distance, int target_objnum, int flags);
 	void renderBoundingBracketsSubobject();
+	void renderCoordinatePointLabels();
 };
 
 #endif

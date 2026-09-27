@@ -31,6 +31,7 @@
 #include "iff_defs/iff_defs.h"
 #include "io/timer.h"
 #include "coordinate_points/coordinate_point.h"
+#include "coordinate_points/coordinate_point_render.h"
 #include "jumpnode/jumpnode.h"
 #include "localization/localize.h"
 #include "mission/missionhotkey.h"
@@ -2468,9 +2469,9 @@ int object_targetable_in_reticle(object *target_objp)
 	}
 	else if ( obj_type == OBJ_COORDINATE_POINT )
 	{
-		// Only target-in-front-able when the designer marked the point as visible in mission.
+		// Only target-in-front-able when the local player can see the point in mission.
 		auto* cp = find_coordinate_point_by_objnum(OBJ_INDEX(target_objp));
-		if (cp != nullptr && cp->flags[CoordinatePoint::Flags::Visible_in_mission]) {
+		if (cp != nullptr && coordinate_point_visible_to_local_player(*cp)) {
 			return 1;
 		}
 	}

@@ -210,23 +210,25 @@ void draw_coordinate_point_shape(const mission_coordinate_point& cp,
 	g3_render_primitives(&mat, tri_verts, nti, PRIM_TYPE_TRIS, false);
 }
 
+bool coordinate_point_visible_to_local_player(const mission_coordinate_point& cp)
+{
+	if (cp.objnum < 0 || !cp.flags[CoordinatePoint::Flags::Visible_in_mission]) {
+		return false;
+	}
+	// Multiplayer team filter: a point assigned to a specific team is hidden from players on
+	// other teams. Singleplayer and "no team" (team < 0) points are visible to everyone.
+	if (Net_player != nullptr && cp.multi_team >= 0 && cp.multi_team != Net_player->p_info.team) {
+		return false;
+	}
+	return true;
+}
+
 void coordinate_points_render_all_in_mission()
 {
 	bool any_drawn = false;
-	const bool in_multi = (Net_player != nullptr);
-	const int  local_multi_team = in_multi ? Net_player->p_info.team : -1;
 
 	for (const auto& cp : Coordinate_points) {
-		if (cp.objnum < 0) {
-			continue;
-		}
-		if (!cp.flags[CoordinatePoint::Flags::Visible_in_mission]) {
-			continue;
-		}
-		// Multiplayer team filter: if this point is assigned to a specific team and the local
-		// player is on a different team, skip rendering. Singleplayer and "no team" (team < 0)
-		// points always render.
-		if (in_multi && cp.multi_team >= 0 && cp.multi_team != local_multi_team) {
+		if (!coordinate_point_visible_to_local_player(cp)) {
 			continue;
 		}
 		draw_coordinate_point_shape(cp, &Eye_position, &Eye_matrix);

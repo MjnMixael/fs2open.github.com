@@ -5597,6 +5597,16 @@ int Fred_mission_save::save_coordinate_points()
 
 		count++;
 
+		// Display name and group are player-facing, so save them as XSTR for translation.
+		if (!cp.display_name.empty()) {
+			if (optional_string_fred("+Display Name:", "$Location:")) {
+				parse_comments();
+			} else {
+				fout("\n+Display Name:");
+			}
+			fout_ext(" ", "%s", cp.display_name.c_str());
+		}
+
 		required_string_fred("\n$Location:");
 		parse_comments(0);
 		save_vector(Objects[cp.objnum].pos);
@@ -5607,7 +5617,7 @@ int Fred_mission_save::save_coordinate_points()
 			} else {
 				fout("\n+Group:");
 			}
-			fout(" %s", cp.group.c_str());
+			fout_ext(" ", "%s", cp.group.c_str());
 		}
 
 		const bool color_is_default =

@@ -809,6 +809,7 @@ CapturedCoordinatePoint captureCoordinatePoint(int objNum)
 	const mission_coordinate_point* cp = find_coordinate_point_by_objnum(objNum);
 	if (cp != nullptr) {
 		ccp.name               = cp->name;
+		ccp.display_name       = cp->display_name;
 		ccp.group              = cp->group;
 		ccp.display_color      = cp->display_color;
 		ccp.shape_kind         = cp->shape_kind;
@@ -841,6 +842,7 @@ int restoreCoordinatePoint(const CapturedCoordinatePoint& data, Editor* /*editor
 	mission_coordinate_point* cp = find_coordinate_point_by_objnum(newObj);
 	if (cp != nullptr) {
 		cp->name               = data.name;
+		cp->display_name       = data.display_name;
 		cp->group              = data.group;
 		cp->display_color      = data.display_color;
 		cp->shape_kind         = data.shape_kind;

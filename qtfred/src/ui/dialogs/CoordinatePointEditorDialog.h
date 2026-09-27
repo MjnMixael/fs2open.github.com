@@ -23,6 +23,7 @@ private slots:
 	void on_prevPointButton_clicked();
 	void on_nextPointButton_clicked();
 	void on_nameEdit_editingFinished();
+	void on_displayNameEdit_editingFinished();
 	void on_groupEdit_editingFinished();
 	void on_shapeNGonRadio_toggled(bool checked);
 	void on_shapeStarRadio_toggled(bool checked);
@@ -36,7 +37,7 @@ private slots:
 	void on_escortPrioritySpinBox_valueChanged(int value);
 	void on_multiTeamCombo_currentIndexChanged(int index);
 	void on_layerCombo_currentIndexChanged(int index);
-	void on_visibleInMissionCheck_clicked();
+	void on_flagsButton_clicked();
 	void on_colorRSpinBox_valueChanged(int value);
 	void on_colorGSpinBox_valueChanged(int value);
 	void on_colorBSpinBox_valueChanged(int value);

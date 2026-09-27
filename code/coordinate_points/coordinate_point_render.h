@@ -21,6 +21,11 @@ void draw_coordinate_point_shape(const mission_coordinate_point& cp,
 // Exposed for HUD target-bracket sizing so the bracket fits the rendered shape.
 float get_coordinate_point_world_radius(const mission_coordinate_point& cp, const vec3d& camera_eye);
 
+// Whether the local player can see this point in-game: Visible_in_mission is set and, in
+// multiplayer, the point isn't restricted to another team. Gates rendering, targeting and the
+// HUD label.
+bool coordinate_point_visible_to_local_player(const mission_coordinate_point& cp);
+
 // In-game render pass. Iterates Coordinate_points, filters by the Visible_in_mission flag, and
 // draws each visible coord point using the global Eye_position / Eye_matrix.
 void coordinate_points_render_all_in_mission();

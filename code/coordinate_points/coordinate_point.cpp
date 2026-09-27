@@ -123,6 +123,11 @@ mission_coordinate_point* find_coordinate_point_by_objnum(int objnum)
 	return nullptr;
 }
 
+const char* coordinate_point_get_display_name(const mission_coordinate_point& cp)
+{
+	return cp.display_name.empty() ? cp.name.c_str() : cp.display_name.c_str();
+}
+
 void post_process_mission_coordinate_points()
 {
 	for (const auto& parsed : Parse_coordinate_points) {
@@ -137,6 +142,7 @@ void post_process_mission_coordinate_points()
 			continue;
 		}
 
+		cp->display_name       = parsed.display_name;
 		cp->group              = parsed.group;
 		cp->display_color      = parsed.display_color;
 		cp->shape_kind         = parsed.shape_kind;
