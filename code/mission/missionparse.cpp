@@ -665,9 +665,9 @@ bool get_coordinate_point_flag_by_name(const char* name, CoordinatePoint::Flags&
 {
 	if (name == nullptr)
 		return false;
-	for (size_t i = 0; i < Num_parse_coordinate_point_flags; ++i) {
-		if (!stricmp(name, Parse_coordinate_point_flags[i].name)) {
-			flag = Parse_coordinate_point_flags[i].def;
+	for (const auto& def : Parse_coordinate_point_flags) {
+		if (!stricmp(name, def.name)) {
+			flag = def.def;
 			return true;
 		}
 	}
@@ -676,9 +676,9 @@ bool get_coordinate_point_flag_by_name(const char* name, CoordinatePoint::Flags&
 
 const char* get_coordinate_point_flag_description(CoordinatePoint::Flags flag)
 {
-	for (size_t i = 0; i < Num_parse_coordinate_point_flag_descriptions; ++i) {
-		if (Parse_coordinate_point_flag_descriptions[i].def == flag)
-			return Parse_coordinate_point_flag_descriptions[i].flag_desc;
+	for (const auto& desc : Parse_coordinate_point_flag_descriptions) {
+		if (desc.def == flag)
+			return desc.flag_desc;
 	}
 	return nullptr;
 }
