@@ -9,7 +9,7 @@ namespace fso::fred {
 PersonaColorComboBox::PersonaColorComboBox(QWidget* parent) : QComboBox(parent)
 {
 	fredApp->runAfterInit([this]() {
-		setModel(getPersonaModel());
+		setModel(getPersonaModel(this));
 		refreshItemColors();
 	});
 }
@@ -23,9 +23,9 @@ void PersonaColorComboBox::changeEvent(QEvent* event)
 	if (event->type() == QEvent::PaletteChange)
 		refreshItemColors();
 }
-QStandardItemModel* PersonaColorComboBox::getPersonaModel()
+QStandardItemModel* PersonaColorComboBox::getPersonaModel(QObject* parent)
 {
-	auto itemModel = new QStandardItemModel();
+	auto itemModel = new QStandardItemModel(parent);
 	auto topitem = new QStandardItem("<none>");
 	topitem->setData(-1, Qt::UserRole);
 	itemModel->appendRow(topitem);

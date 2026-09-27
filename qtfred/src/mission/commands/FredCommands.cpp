@@ -1846,7 +1846,10 @@ void SexpCueEditCommand::redo()
 		return;
 	}
 	freeCurrentCues();
-	// All owners share one formula, matching the model setters' multi-edit behavior.
+	// Every caller adds a single owner (one prop, one wing, one ship), so this is a
+	// per-owner restore. Do NOT reintroduce multi-owner use with a shared formula:
+	// the model setters now serialize a separate expression per ship, and aliasing
+	// several owners onto one index means freeing one corrupts the rest.
 	const int formula = materializeSexpCue(_afterDup);
 	for (auto& o : _owners)
 		o.setCue(formula);

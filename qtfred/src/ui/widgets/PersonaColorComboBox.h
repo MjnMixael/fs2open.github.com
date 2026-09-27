@@ -14,6 +14,6 @@ class PersonaColorComboBox : public QComboBox {
 
   private:
 	void refreshItemColors();
-	static QStandardItemModel* getPersonaModel();
+	static QStandardItemModel* getPersonaModel(QObject* parent);
 };
 } // namespace fso::fred

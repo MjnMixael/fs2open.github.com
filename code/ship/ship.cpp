@@ -6922,6 +6922,7 @@ void ship::clear()
 
 	ship_guardian_threshold = 0;
 	max_guard_ranges.clear();
+	max_guard_radius = -1.0f;
 
 	ship_name[0] = 0;
 	display_name.clear();
@@ -8187,6 +8188,15 @@ static bool ship_render_player_renderShipModel(const ship_info* sip) {
 		&& (!Viewer_mode || (Viewer_mode & VM_PADLOCK_ANY) || (Viewer_mode & VM_OTHER_SHIP) || (Viewer_mode & VM_TRACK) || !(Viewer_mode & VM_EXTERNAL));
 }
 
+vec3d ship_cockpit_render_offset(const ship_info* sip, const object* objp) {
+	vec3d offset;
+	vm_vec_unrotate(&offset, &sip->cockpit_offset, &objp->orient);
+	if (!Disable_cockpit_sway) {
+		offset += sip->cockpit_sway_val * objp->phys_info.acceleration;
+	}
+	return offset;
+}
+
 bool ship_render_player_ship_casts_shadow_on_cockpit() {
 	if (Viewer_obj == nullptr)
 		return false;
@@ -8218,6 +8228,17 @@ bool ship_render_player_has_closeup_visuals() {
 	const bool renderShipModel = ship_render_player_renderShipModel(sip);
 
 	return renderCockpitModel || renderShipModel;
+}
+
+// Draws one player model. When cockpit shadows are active, `ray` is bound first, because the hull
+// and the cockpit are drawn in different frames.
+static void ship_render_player_model(model_render_params* render_info, int model_num, int model_instance_num,
+	const object* objp, const vec3d* offset, int render_pass, const shadow_ray_params* ray)
+{
+	if (ray != nullptr) {
+		shadow_cascade_params_bind(0, Num_cockpit_shadow_cascades, *ray);
+	}
+	model_render_immediate(render_info, model_num, model_instance_num, &objp->orient, offset, render_pass);
 }
 
 void ship_render_player_ship(object* objp, const vec3d* cam_offset, const matrix* rot_offset, const fov_t* fov_override) {
@@ -8317,13 +8338,26 @@ void ship_render_player_ship(object* objp, const vec3d* cam_offset, const matrix
 	Shadow_view_matrix_render = gr_view_matrix;
 
 	matrix4 shadow_view_light_backup = Shadow_view_matrix_light;
+	bool cockpit_shadow_rendering_active = false;
 	if (shadow_maybe_start_frame(Shadow_disable_overrides.disable_cockpit)) {
 		Shadow_override = false;
 		Shadow_view_matrix_light.a1d[12] = 0;
 		Shadow_view_matrix_light.a1d[13] = 0;
 		Shadow_view_matrix_light.a1d[14] = 0;
-		shadow_cascade_params_bind(0, Num_cockpit_shadow_cascades);
+		cockpit_shadow_rendering_active = true;
 	}
+
+	// Hull and cockpit render in different internal frames, so each needs its own RT shadow
+	// ray state. Both frames are anchored at leaning_position; the hull frame's origin is the
+	// ship position minus eye_offset.
+	shadow_ray_params cockpit_ray = shadow_ray_params_cockpit(objp);
+	shadow_ray_params hull_ray = cockpit_ray;
+	vm_vec_sub2(&hull_ray.view_origin, &eye_offset);
+	if (ship_render_player_ship_casts_shadow_on_cockpit()) {
+		cockpit_ray.cull_mask = TLAS_MASK_ALL;
+	}
+	const shadow_ray_params* hull_ray_ptr = cockpit_shadow_rendering_active ? &hull_ray : nullptr;
+	const shadow_ray_params* cockpit_ray_ptr = cockpit_shadow_rendering_active ? &cockpit_ray : nullptr;
 
 	if (light_deferredcockpit_enabled()) {
 		gr_deferred_lighting_begin(true);
@@ -8343,7 +8377,7 @@ void ship_render_player_ship(object* objp, const vec3d* cam_offset, const matrix
 
 	model_render_params ship_render_info;
 	model_render_params cockpit_render_info;
-	vec3d cockpit_offset = sip->cockpit_offset;
+	vec3d cockpit_offset = vmd_zero_vector;
 
 	//Properly render ship and cockpit model
 	if (deferredRenderShipModel) {
@@ -8354,17 +8388,16 @@ void ship_render_player_ship(object* objp, const vec3d* cam_offset, const matrix
 		if (sip->uses_team_colors)
 			ship_render_info.set_team_color(shipp->team_name, shipp->secondary_team_name, 0, 0);
 
-		model_render_immediate(&ship_render_info, sip->model_num, shipp->model_instance_num, &objp->orient, &eye_offset, MODEL_RENDER_OPAQUE);
+		ship_render_player_model(&ship_render_info, sip->model_num, shipp->model_instance_num, objp, &eye_offset, MODEL_RENDER_OPAQUE, hull_ray_ptr);
 		gr_zbuffer_clear(true);
 	}
 	if (renderCockpitModel) {
 		cockpit_render_info.set_detail_level_lock(0);
 		cockpit_render_info.set_flags(render_flags);
 		cockpit_render_info.set_replacement_textures(Player_cockpit_textures);
-		vm_vec_unrotate(&cockpit_offset, &cockpit_offset, &objp->orient);
-		if (!Disable_cockpit_sway)
-			cockpit_offset += sip->cockpit_sway_val * objp->phys_info.acceleration;
-		model_render_immediate(&cockpit_render_info, sip->cockpit_model_num, shipp->cockpit_model_instance, &objp->orient, &cockpit_offset, MODEL_RENDER_OPAQUE);
+		cockpit_offset = ship_cockpit_render_offset(sip, objp);
+
+		ship_render_player_model(&cockpit_render_info, sip->cockpit_model_num, shipp->cockpit_model_instance, objp, &cockpit_offset, MODEL_RENDER_OPAQUE, cockpit_ray_ptr);
 	}
 
 	if (light_deferredcockpit_enabled()) {
@@ -8392,11 +8425,11 @@ void ship_render_player_ship(object* objp, const vec3d* cam_offset, const matrix
 	gr_zbuffer_set(ZBUFFER_TYPE_READ);
 
 	if (deferredRenderShipModel) {
-		model_render_immediate(&ship_render_info, sip->model_num, shipp->model_instance_num, &objp->orient, &eye_offset, MODEL_RENDER_TRANS);
+		ship_render_player_model(&ship_render_info, sip->model_num, shipp->model_instance_num, objp, &eye_offset, MODEL_RENDER_TRANS, hull_ray_ptr);
 	}
 
 	if (renderCockpitModel) {
-		model_render_immediate(&cockpit_render_info, sip->cockpit_model_num, shipp->cockpit_model_instance, &objp->orient, &cockpit_offset, MODEL_RENDER_TRANS);
+		ship_render_player_model(&cockpit_render_info, sip->cockpit_model_num, shipp->cockpit_model_instance, objp, &cockpit_offset, MODEL_RENDER_TRANS, cockpit_ray_ptr);
 	}
 
 	if (light_deferredcockpit_enabled()) {
@@ -21591,33 +21624,46 @@ int get_nearest_bbox_point(const object *ship_objp, const vec3d *start, vec3d *b
 
 	return inside;
 }
-void set_guard_range_ship(float range, const int target_ship_index, ship* shipp)
+
+void set_guard_range_ship(float range, int guarded_shipnum, ship* guarder_shipp)
 {
-	bool done = false;
-	if (range > 0) {
-		for (auto& exist : shipp->max_guard_ranges) {
-			if (exist.shipnum == target_ship_index) {
-				if (range > 0) {
-					exist.range = range;
-				} else {
-					exist.range = -1.0f;
-				}
-				done = true;
-				break;
-			}
-		}
-		if (!done) {
-			auto item = guard_range_entry(range, target_ship_index);
-			shipp->max_guard_ranges.push_back(item);
-		}
-	} else {
-		for (auto& exist : shipp->max_guard_ranges) {
-			if (exist.shipnum == target_ship_index) {
-				exist.range = -1.0f;
-			}
-		}
+	auto& ranges = guarder_shipp->max_guard_ranges;
+	auto it = std::find_if(ranges.begin(), ranges.end(), [guarded_shipnum](const guard_range_entry& entry) { return entry.shipnum == guarded_shipnum; });
+
+	if (range > 0.0f)
+	{
+		if (it != ranges.end())
+			it->range = range;
+		else
+			ranges.emplace_back(range, guarded_shipnum);
+	}
+	else if (it != ranges.end())
+		ranges.erase(it);
+}
+
+float get_guard_range_ship(int guarded_shipnum, const ship* guarder_shipp)
+{
+	for (const auto& entry : guarder_shipp->max_guard_ranges)
+	{
+		if (entry.shipnum == guarded_shipnum)
+			return entry.range;
+	}
+
+	return -1.0f;
+}
+
+void clear_guard_ranges_for_ship(int guarded_shipnum)
+{
+	for (auto so: list_range(&Ship_obj_list))
+	{
+		if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
+			continue;
+
+		auto& ranges = Ships[Objects[so->objnum].instance].max_guard_ranges;
+		ranges.erase(std::remove_if(ranges.begin(), ranges.end(), [guarded_shipnum](const guard_range_entry& entry) { return entry.shipnum == guarded_shipnum; }), ranges.end());
 	}
 }
+
 void ship_set_thruster_info(mst_info *mst, object *obj, ship *shipp, ship_info *sip)
 {
 	mst->length = obj->phys_info.linear_thrust;

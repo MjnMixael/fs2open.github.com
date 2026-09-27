@@ -9,6 +9,7 @@
 
 #include "weapon/shockwave.h"
 #include "asteroid/asteroid.h"
+#include "cmdline/cmdline.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/linklist.h"
 #include "io/timer.h"
@@ -457,6 +458,19 @@ void shockwave_move(object *shockwave_objp, float frametime)
 	}
 }
 
+// an animated base texture carries its own fade in its frames, timed like the glow map
+static bool shockwave_model_base_is_animated(int model_id)
+{
+	polymodel *pm = model_get(model_id);
+
+	for (int i = 0; i < pm->n_textures; i++) {
+		if (pm->maps[i].textures[TM_BASE_TYPE].GetNumFrames() > 1)
+			return true;
+	}
+
+	return false;
+}
+
 /**
 * Draw the shockwave identified by handle
 *
@@ -491,7 +505,8 @@ void shockwave_render(const object *objp, model_draw_list *scene)
 
 		model_render_params render_info;
 
-		render_info.set_warp_params(-1, 1.0f - (sw->radius/sw->outer_radius), scale);
+		float warp_alpha = shockwave_model_base_is_animated(sw->model_id) ? 1.0f : 1.0f - (sw->radius/sw->outer_radius);
+		render_info.set_warp_params(-1, warp_alpha, scale);
 
 		float dist = vm_vec_dist_quick( &sw->pos, &Eye_position );
 
@@ -562,6 +577,17 @@ int shockwave_load(const char *s_name, bool shock_3D)
 		if ( si->model_id < 0 ) {
 			Shockwave_info.pop_back();
 			return -1;
+		}
+
+		// glow maps are only loaded when enabled, so only check then
+		if (Cmdline_glow || Fred_running) {
+			auto pm = model_get(si->model_id);
+			bool has_glow = std::any_of(pm->maps, pm->maps + pm->n_textures, [](const texture_map &tmap) {
+				return tmap.textures[TM_GLOW_TYPE].GetTexture() >= 0;
+			});
+
+			if (!has_glow)
+				Warning(LOCATION, "3D shockwave model '%s' has no glow map.  For a 3D shockwave, the glow texture typically carries the animation.", si->filename);
 		}
 	} else {
 		si->bitmap_id = bm_load_animation( si->filename, &si->num_frames, &si->fps, nullptr, nullptr, true );

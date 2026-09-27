@@ -2522,14 +2522,21 @@ void ShipEditorDialog::on_arrivalTree_modified()
 {
 	// Multi-edit without "update cue" checked: the model setter is a no-op.
 	if (_model->getIfMultipleShips() && !_model->getArrivalCue()) {
-		_model->setArrivalTreeDirty(ui->arrivalTree->_model.save_tree());
+		_model->setArrivalTreeDirty(ui->arrivalTree->_model);
 		return;
 	}
 
-	auto* cmd = new SexpCueEditCommand(_viewport->editor, tr("Edit Arrival Cue"), true);
+	// The model serializes a separate expression per marked ship, so the after-state
+	// has to be captured per ship: SexpCueEditCommand's redo assigns one formula to
+	// every owner, which would alias all the cues onto a single index (and freeing
+	// one would then corrupt the rest). One command per ship, grouped into a single
+	// undo step, the same shape the texture-replacement path uses.
+	struct Pending { int sig; SexpCueEditCommand* cmd; };
+	SCP_vector<Pending> pending;
 	forEachMarkedShip([&](int sig, int inst) {
 		if (Ships[inst].wingnum >= 0)
 			return;
+		auto* cmd = new SexpCueEditCommand(_viewport->editor, tr("Edit Arrival Cue"), true);
 		cmd->addOwner(Ships[inst].arrival_cue,
 			[sig]() {
 				const int n = obj_get_by_signature(sig);
@@ -2540,17 +2547,24 @@ void ShipEditorDialog::on_arrivalTree_modified()
 				if (n >= 0)
 					Ships[Objects[n].instance].arrival_cue = formula;
 			});
+		pending.push_back({sig, cmd});
 	});
 
-	const int newFormula = ui->arrivalTree->_model.save_tree();
-	_model->setArrivalTreeDirty(newFormula);
+	_model->setArrivalTreeDirty(ui->arrivalTree->_model);
 
-	if (cmd->isEmpty()) {
-		delete cmd;
+	if (pending.empty())
 		return;
+
+	const bool grouped = pending.size() > 1;
+	if (grouped)
+		_fredView->mainUndoStack()->beginMacro(tr("Edit Arrival Cue"));
+	for (auto& p : pending) {
+		const int n = obj_get_by_signature(p.sig);
+		p.cmd->captureAfter(n < 0 ? -1 : Ships[Objects[n].instance].arrival_cue);
+		_fredView->mainUndoStack()->push(p.cmd);
 	}
-	cmd->captureAfter(newFormula);
-	_fredView->mainUndoStack()->push(cmd);
+	if (grouped)
+		_fredView->mainUndoStack()->endMacro();
 }
 
 void ShipEditorDialog::on_arrivalTree_helpChanged(const QString& help)
@@ -2702,14 +2716,21 @@ void fred::dialogs::ShipEditorDialog::on_departureTree_modified()
 {
 	// Multi-edit without "update cue" checked: the model setter is a no-op.
 	if (_model->getIfMultipleShips() && !_model->getDepartureCue()) {
-		_model->setDepartureTreeDirty(ui->departureTree->_model.save_tree());
+		_model->setDepartureTreeDirty(ui->departureTree->_model);
 		return;
 	}
 
-	auto* cmd = new SexpCueEditCommand(_viewport->editor, tr("Edit Departure Cue"), true);
+	// The model serializes a separate expression per marked ship, so the after-state
+	// has to be captured per ship: SexpCueEditCommand's redo assigns one formula to
+	// every owner, which would alias all the cues onto a single index (and freeing
+	// one would then corrupt the rest). One command per ship, grouped into a single
+	// undo step, the same shape the texture-replacement path uses.
+	struct Pending { int sig; SexpCueEditCommand* cmd; };
+	SCP_vector<Pending> pending;
 	forEachMarkedShip([&](int sig, int inst) {
 		if (Ships[inst].wingnum >= 0)
 			return;
+		auto* cmd = new SexpCueEditCommand(_viewport->editor, tr("Edit Departure Cue"), true);
 		cmd->addOwner(Ships[inst].departure_cue,
 			[sig]() {
 				const int n = obj_get_by_signature(sig);
@@ -2720,17 +2741,24 @@ void fred::dialogs::ShipEditorDialog::on_departureTree_modified()
 				if (n >= 0)
 					Ships[Objects[n].instance].departure_cue = formula;
 			});
+		pending.push_back({sig, cmd});
 	});
 
-	const int newFormula = ui->departureTree->_model.save_tree();
-	_model->setDepartureTreeDirty(newFormula);
+	_model->setDepartureTreeDirty(ui->departureTree->_model);
 
-	if (cmd->isEmpty()) {
-		delete cmd;
+	if (pending.empty())
 		return;
+
+	const bool grouped = pending.size() > 1;
+	if (grouped)
+		_fredView->mainUndoStack()->beginMacro(tr("Edit Departure Cue"));
+	for (auto& p : pending) {
+		const int n = obj_get_by_signature(p.sig);
+		p.cmd->captureAfter(n < 0 ? -1 : Ships[Objects[n].instance].departure_cue);
+		_fredView->mainUndoStack()->push(p.cmd);
 	}
-	cmd->captureAfter(newFormula);
-	_fredView->mainUndoStack()->push(cmd);
+	if (grouped)
+		_fredView->mainUndoStack()->endMacro();
 }
 
 void ShipEditorDialog::on_departureTree_helpChanged(const QString& help)

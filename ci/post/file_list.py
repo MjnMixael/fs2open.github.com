@@ -216,8 +216,8 @@ def get_ftp_files(build_type, tag_name, config) -> List[ReleaseFile] :
         # x64 is the name Visual Studio uses but Win64 works better for us since that gets displayed in the nightly post
         if "x64" in group_match:
             group_match = group_match.replace("x64", "Win64")
-        elif "arm64" in group_match:
-            group_match = group_match.replace("arm64", "WinARM64")
+        elif "ARM64" in group_match:
+            group_match = group_match.replace("ARM64", "WinARM64")
 
         # construct the download URL list for all mirrors.  The first listed ftp location is taken as the Primary
         for mirror in config["ftp"]["mirrors"]:

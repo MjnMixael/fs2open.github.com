@@ -2749,8 +2749,10 @@ void FredView::closeEvent(QCloseEvent* event) {
 		return;
 	}
 	disconnect();
-	shutdown();
 	QMainWindow::closeEvent(event);
+
+	// gr_close() destroys this window, so this must be the last thing we do here
+	shutdown();
 }
 void FredView::windowActivated() {
 	_viewport->Cursor_over = -1;
