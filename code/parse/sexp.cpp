@@ -800,7 +800,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "set-jumpnode-model",				OP_JUMP_NODE_SET_JUMPNODE_MODEL,		3,	3,			SEXP_ACTION_OPERATOR,	},
 	{ "show-jumpnode",					OP_JUMP_NODE_SHOW_JUMPNODE,				1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "hide-jumpnode",					OP_JUMP_NODE_HIDE_JUMPNODE,				1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
-	{ "toggle-point-visibility",		OP_TOGGLE_POINT_VISIBILITY,				2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
+	{ "alter-point-flag",				OP_ALTER_POINT_FLAG,					3,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 
 	//Special Effects Sub-Category
 	{ "set-post-effect",				OP_SET_POST_EFFECT,						2,	5,			SEXP_ACTION_OPERATOR,	},	// Hery
@@ -3546,6 +3546,16 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 
 				if (wing_flag == Ship::Wing_Flags::NUM_VALUES) {
 					return SEXP_CHECK_INVALID_WING_FLAG;
+				}
+
+				break;
+			}
+
+			case OPF_COORDINATE_POINT_FLAG:
+			{
+				CoordinatePoint::Flags cp_flag = CoordinatePoint::Flags::NUM_VALUES;
+				if (!get_coordinate_point_flag_by_name(CTEXT(node), cp_flag)) {
+					return SEXP_CHECK_INVALID_COORDINATE_POINT_FLAG;
 				}
 
 				break;
@@ -27270,20 +27280,25 @@ void multi_sexp_show_hide_jumpnode(bool show)
 	}
 }
 
-void sexp_toggle_point_visibility(int node)
+void sexp_alter_point_flag(int node)
 {
-	// first argument is the desired visibility state; the rest are coordinate point names
-	bool visible = is_sexp_true(node);
+	// arguments: flag name, set (true) or clear (false), then coordinate point names
+	CoordinatePoint::Flags flag = CoordinatePoint::Flags::NUM_VALUES;
+	if (!get_coordinate_point_flag_by_name(CTEXT(node), flag))
+		return;
+	node = CDR(node);
+	const bool set = is_sexp_true(node);
 
 	Current_sexp_network_packet.start_callback();
-	Current_sexp_network_packet.send_bool(visible);
+	Current_sexp_network_packet.send_int(static_cast<int>(flag));
+	Current_sexp_network_packet.send_bool(set);
 
 	for (int n = CDR(node); n >= 0; n = CDR(n))
 	{
 		auto cp = find_coordinate_point_by_name(CTEXT(n));
 		if (cp != nullptr)
 		{
-			cp->flags.set(CoordinatePoint::Flags::Visible_in_mission, visible);
+			cp->flags.set(flag, set);
 			Current_sexp_network_packet.send_string(CTEXT(n));
 		}
 	}
@@ -27291,18 +27306,23 @@ void sexp_toggle_point_visibility(int node)
 	Current_sexp_network_packet.end_callback();
 }
 
-void multi_sexp_toggle_point_visibility()
+void multi_sexp_alter_point_flag()
 {
-	bool visible = false;
+	int flag_index = -1;
+	bool set = false;
 	char point_name[TOKEN_LENGTH];
 
-	Current_sexp_network_packet.get_bool(visible);
+	Current_sexp_network_packet.get_int(flag_index);
+	Current_sexp_network_packet.get_bool(set);
+	if (flag_index < 0 || flag_index >= static_cast<int>(CoordinatePoint::Flags::NUM_VALUES))
+		return;
+	const auto flag = static_cast<CoordinatePoint::Flags>(flag_index);
 
 	while (Current_sexp_network_packet.get_string(point_name))
 	{
 		auto cp = find_coordinate_point_by_name(point_name);
 		if (cp != nullptr)
-			cp->flags.set(CoordinatePoint::Flags::Visible_in_mission, visible);
+			cp->flags.set(flag, set);
 	}
 }
 
@@ -30710,8 +30730,8 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
-			case OP_TOGGLE_POINT_VISIBILITY:
-				sexp_toggle_point_visibility(node);
+			case OP_ALTER_POINT_FLAG:
+				sexp_alter_point_flag(node);
 				sexp_val = SEXP_TRUE;
 				break;
 
@@ -31199,8 +31219,8 @@ void multi_sexp_eval()
 				multi_sexp_show_hide_jumpnode(op_num == OP_JUMP_NODE_SHOW_JUMPNODE);
 				break;
 
-			case OP_TOGGLE_POINT_VISIBILITY:
-				multi_sexp_toggle_point_visibility();
+			case OP_ALTER_POINT_FLAG:
+				multi_sexp_alter_point_flag();
 				break;
 
 			case OP_CLEAR_SUBTITLES:
@@ -32106,7 +32126,7 @@ int query_operator_return_type(int op)
 		case OP_JUMP_NODE_SET_JUMPNODE_MODEL:
 		case OP_JUMP_NODE_SHOW_JUMPNODE:
 		case OP_JUMP_NODE_HIDE_JUMPNODE:
-		case OP_TOGGLE_POINT_VISIBILITY:
+		case OP_ALTER_POINT_FLAG:
 		case OP_SET_OBJECT_SPEED_X:
 		case OP_SET_OBJECT_SPEED_Y:
 		case OP_SET_OBJECT_SPEED_Z:
@@ -34867,8 +34887,10 @@ int query_operator_argument_type(int op_index, int argnum)
 		case OP_JUMP_NODE_HIDE_JUMPNODE:
 				return OPF_JUMP_NODE_NAME;
 
-		case OP_TOGGLE_POINT_VISIBILITY:
+		case OP_ALTER_POINT_FLAG:
 			if (argnum == 0)
+				return OPF_COORDINATE_POINT_FLAG;
+			else if (argnum == 1)
 				return OPF_BOOL;
 			else
 				return OPF_COORDINATE_POINT;
@@ -35798,6 +35820,9 @@ const char *sexp_error_message(int num)
 
 		case SEXP_CHECK_INVALID_WING_FLAG:
 			return "Invalid wing flag";
+
+		case SEXP_CHECK_INVALID_COORDINATE_POINT_FLAG:
+			return "Invalid coordinate point flag";
 
 		case SEXP_CHECK_INVALID_TEAM_COLOR:
 			return "Not a valid Team Color setting";
@@ -37263,7 +37288,7 @@ int get_category(int op_id)
 		case OP_JUMP_NODE_SET_JUMPNODE_MODEL:
 		case OP_JUMP_NODE_SHOW_JUMPNODE:
 		case OP_JUMP_NODE_HIDE_JUMPNODE:
-		case OP_TOGGLE_POINT_VISIBILITY:
+		case OP_ALTER_POINT_FLAG:
 		case OP_SHIP_GUARDIAN_THRESHOLD:
 		case OP_SHIP_SUBSYS_GUARDIAN_THRESHOLD:
 		case OP_SET_GUARD_RANGE:
@@ -37810,7 +37835,6 @@ int get_subcategory(int op_id)
 		case OP_SHIP_LAT_MANEUVER:
 		case OP_SET_MOBILE:
 		case OP_SET_IMMOBILE:
-		case OP_TOGGLE_POINT_VISIBILITY:
 			return CHANGE_SUBCATEGORY_COORDINATE_MANIPULATION;
 
 		case OP_INVALIDATE_GOAL:
@@ -37982,6 +38006,7 @@ int get_subcategory(int op_id)
 		case OP_SET_GRAVITY_ACCEL:
 		case OP_FORCE_REARM:
 		case OP_ABORT_REARM:
+		case OP_ALTER_POINT_FLAG:
 			return CHANGE_SUBCATEGORY_SPECIAL_EFFECTS;
 
 		case OP_MODIFY_VARIABLE:
@@ -42663,10 +42688,11 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\tAny:\tJump node to hide\r\n"
 	},
 
-	{ OP_TOGGLE_POINT_VISIBILITY, "toggle-point-visibility\r\n"
-		"\tShows or hides one or more coordinate points in the mission.  Takes 2 or more arguments:\r\n"
-		"\t1:\tWhether the points should be visible (true) or hidden (false).\r\n"
-		"\tRest:\tCoordinate points to show or hide.\r\n"
+	{ OP_ALTER_POINT_FLAG, "alter-point-flag\r\n"
+		"\tSets or clears a flag on one or more coordinate points.  Takes 3 or more arguments:\r\n"
+		"\t1:\tCoordinate point flag name (e.g. visible_in_mission, always_render_labels).\r\n"
+		"\t2:\tTrue to set the flag, false to clear it.\r\n"
+		"\tRest:\tCoordinate points to change.\r\n"
 	},
 
 	// taylor, with modifications by niffiwan and MageKing17

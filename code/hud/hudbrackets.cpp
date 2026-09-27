@@ -357,6 +357,37 @@ void HudGaugeBrackets::initBitmaps(char *fname)
 	}
 }
 
+// Screen-space box around a coordinate point's rendered shape. Coordinate points have no model,
+// so the box matches the shape by using the same world-space radius the renderer uses: project
+// a point offset along the camera right vector and measure the screen-space delta to derive a
+// half-extent. This automatically scales with both distance and the point's size_scale.
+static void coordinate_point_screen_box(object* targetp, int* x1, int* y1, int* x2, int* y2)
+{
+	vertex v_center;
+	g3_rotate_vertex(&v_center, &targetp->pos);
+	g3_project_vertex(&v_center);
+
+	int half_extent = 0;
+	auto* cp = find_coordinate_point_by_objnum(OBJ_INDEX(targetp));
+	if (cp != nullptr) {
+		const float radius = get_coordinate_point_world_radius(*cp, Eye_position);
+		vec3d offset_pos = targetp->pos;
+		vm_vec_scale_add2(&offset_pos, &Eye_matrix.vec.rvec, radius);
+
+		vertex v_offset;
+		g3_rotate_vertex(&v_offset, &offset_pos);
+		g3_project_vertex(&v_offset);
+
+		half_extent = std::abs(static_cast<int>(v_offset.screen.xyw.x) -
+							   static_cast<int>(v_center.screen.xyw.x));
+	}
+
+	*x1 = static_cast<int>(v_center.screen.xyw.x) - half_extent;
+	*x2 = static_cast<int>(v_center.screen.xyw.x) + half_extent;
+	*y1 = static_cast<int>(v_center.screen.xyw.y) - half_extent;
+	*y2 = static_cast<int>(v_center.screen.xyw.y) + half_extent;
+}
+
 void HudGaugeBrackets::render(float  /*frametime*/, bool config)
 {
 	// Brackets are do not support config settings
@@ -381,11 +412,13 @@ void HudGaugeBrackets::render(float  /*frametime*/, bool config)
 					target_display_list[i].correction, target_display_list[i].flags);
 			} else {
 				// no corresponding object so this must represent a nav point.
-				renderNavBrackets(&target_display_list[i].target_pos, &target_display_list[i].target_point, &target_display_list[i].bracket_clr, 
+				renderNavBrackets(&target_display_list[i].target_pos, &target_display_list[i].target_point, &target_display_list[i].bracket_clr,
 					target_display_list[i].name);
 			}
 		}
 	}
+
+	renderCoordinatePointLabels();
 
 	line_draw_list.flush();
 
@@ -458,36 +491,7 @@ void HudGaugeBrackets::renderObjectBrackets(object *targetp, color *clr, int w_c
 			break;
 
 		case OBJ_COORDINATE_POINT:
-			{
-			// Coordinate points have no model. Size the bracket so it matches the rendered
-			// shape: use the same world-space radius the renderer uses, project a point offset
-			// along the camera right vector, and measure the screen-space delta to derive a
-			// half-extent. This automatically scales with both distance and the coord point's
-			// size_scale field.
-			vertex v_center;
-			g3_rotate_vertex(&v_center, &targetp->pos);
-			g3_project_vertex(&v_center);
-
-			int half_extent = 0;
-			auto* cp = find_coordinate_point_by_objnum(OBJ_INDEX(targetp));
-			if (cp != nullptr) {
-				const float radius = get_coordinate_point_world_radius(*cp, Eye_position);
-				vec3d offset_pos = targetp->pos;
-				vm_vec_scale_add2(&offset_pos, &Eye_matrix.vec.rvec, radius);
-
-				vertex v_offset;
-				g3_rotate_vertex(&v_offset, &offset_pos);
-				g3_project_vertex(&v_offset);
-
-				half_extent = std::abs(static_cast<int>(v_offset.screen.xyw.x) -
-									   static_cast<int>(v_center.screen.xyw.x));
-			}
-
-			x1 = static_cast<int>(v_center.screen.xyw.x) - half_extent;
-			x2 = static_cast<int>(v_center.screen.xyw.x) + half_extent;
-			y1 = static_cast<int>(v_center.screen.xyw.y) - half_extent;
-			y2 = static_cast<int>(v_center.screen.xyw.y) + half_extent;
-			}
+			coordinate_point_screen_box(targetp, &x1, &y1, &x2, &y2);
 			break;
 
 		default:
@@ -722,7 +726,7 @@ void HudGaugeBrackets::renderBoundingBrackets(int x1, int y1, int x2, int y2, in
 			case OBJ_COORDINATE_POINT: {
 				auto* cp = find_coordinate_point_by_objnum(target_objnum);
 				if (cp != nullptr) {
-					tinfo_name = cp->name.c_str();
+					tinfo_name = coordinate_point_get_display_name(*cp);
 					if (!cp->group.empty())
 						tinfo_class = cp->group.c_str();
 				}
@@ -740,6 +744,60 @@ void HudGaugeBrackets::renderBoundingBrackets(int x1, int y1, int x2, int y2, in
 
 	// we're done, so bring the scale back to normal
 	gr_reset_screen_scale();
+}
+
+// Labels for coordinate points flagged Always_render_labels: name and group beside the shape,
+// placed where a bracketed target's labels go, whether or not the point is targeted.
+void HudGaugeBrackets::renderCoordinatePointLabels()
+{
+	for (const auto& cp : Coordinate_points) {
+		if (!cp.flags[CoordinatePoint::Flags::Always_render_labels] || !coordinate_point_visible_to_local_player(cp)) {
+			continue;
+		}
+
+		// With -targetinfo the target's own bracket already draws this label.
+		if (Extra_target_info && cp.objnum == Player_ai->target_objnum) {
+			continue;
+		}
+
+		object* objp = &Objects[cp.objnum];
+		vertex v{};
+		g3_rotate_vertex(&v, &objp->pos);
+		g3_project_vertex(&v);
+		if ((v.flags & PF_OVERFLOW) || v.codes != 0) {
+			continue;
+		}
+
+		int x1 = 0;
+		int y1 = 0;
+		int x2 = 0;
+		int y2 = 0;
+		coordinate_point_screen_box(objp, &x1, &y1, &x2, &y2);
+
+		// Same padding, scaling and minimum box size as renderBoundingBrackets.
+		x1 -= 5;
+		y1 -= 5;
+		x2 += 5;
+		y2 += 5;
+		gr_set_screen_scale(base_w, base_h);
+		gr_unsize_screen_pos(&x1, &y1);
+		gr_unsize_screen_pos(&x2, &y2);
+		const int width = x2 - x1;
+		const int height = y2 - y1;
+		if (width < Min_target_box_width) {
+			x2 += (Min_target_box_width - width) / 2;
+		}
+		if (height < Min_target_box_height) {
+			y1 -= (Min_target_box_height - height) / 2;
+		}
+
+		gr_set_color_fast(&cp.display_color);
+		gr_string(x2 + 3, y1, coordinate_point_get_display_name(cp));
+		if (!cp.group.empty()) {
+			gr_string(x2 + 3, y1 + gr_get_font_height(), cp.group.c_str());
+		}
+		gr_reset_screen_scale();
+	}
 }
 
 void HudGaugeBrackets::renderBoundingBracketsSubobject()

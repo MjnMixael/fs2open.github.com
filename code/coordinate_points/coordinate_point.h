@@ -29,6 +29,7 @@ constexpr float STAR_INNER_DEFAULT = 0.382f;  // classic 5-point arm angle
 struct mission_coordinate_point
 {
 	SCP_string name;
+	SCP_string display_name;             // shown on the HUD instead of name when set; need not be unique
 	SCP_string group;
 	color      display_color;
 
@@ -54,6 +55,7 @@ extern SCP_list<mission_coordinate_point> Coordinate_points;
 struct parsed_coordinate_point
 {
 	SCP_string name;
+	SCP_string display_name;
 	SCP_string group;
 	vec3d      position;
 	color      display_color;
@@ -90,3 +92,6 @@ void coordinate_point_delete(int objnum);
 
 mission_coordinate_point* find_coordinate_point_by_name(const char* name);
 mission_coordinate_point* find_coordinate_point_by_objnum(int objnum);
+
+// The name to show on the HUD: display_name when set, otherwise name.
+const char* coordinate_point_get_display_name(const mission_coordinate_point& cp);

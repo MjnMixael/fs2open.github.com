@@ -12,6 +12,7 @@
 
 
 #include "coordinate_points/coordinate_point.h"
+#include "coordinate_points/coordinate_point_render.h"
 #include "gamesnd/gamesnd.h"
 #include "globalincs/alphacolors.h"
 #include "globalincs/linklist.h"
@@ -57,18 +58,35 @@ int Max_escort_ships = 3;
 static int Last_target_index;	// index into Escort_gauges for last targeted via 'Next Escort Target' key
 
 
+// Whether an entry is shown on the escort gauge. Coordinate points the local player can't see
+// (not visible in mission, or restricted to another team) stay in Escort_ships with their
+// priority intact but are skipped wherever the list is displayed or indexed, so they reappear
+// as soon as they become visible again.
+static bool escort_entry_shown(const escort_info& es)
+{
+	if (es.objnum < 0 || Objects[es.objnum].type != OBJ_COORDINATE_POINT) {
+		return true;
+	}
+	auto* cp = find_coordinate_point_by_objnum(es.objnum);
+	return cp != nullptr && coordinate_point_visible_to_local_player(*cp);
+}
+
+// index counts shown entries only; see escort_entry_shown()
 static SCP_list<escort_info>::iterator get_escort_entry_from_index(int index)
 {
 	int e_idx = 0;
 
-	auto it = Escort_ships.begin();
-
-	while ( (e_idx != index) && (it != Escort_ships.end()) ) {
-		++it;
+	for (auto it = Escort_ships.begin(); it != Escort_ships.end(); ++it) {
+		if (!escort_entry_shown(*it)) {
+			continue;
+		}
+		if (e_idx == index) {
+			return it;
+		}
 		++e_idx;
 	}
 
-	return it;
+	return Escort_ships.end();
 }
 
 HudGaugeEscort::HudGaugeEscort():
@@ -244,7 +262,7 @@ void HudGaugeEscort::render(float  /*frametime*/, bool config)
 		return;
 	}
 
-	if (!config && Escort_ships.empty() ) {
+	if (!config && hud_escort_num_ships_on_list() == 0 ) {
 		return;
 	}
 
@@ -342,7 +360,7 @@ void HudGaugeEscort::renderIcon(int x, int y, int index, float scale, bool confi
 		gr_set_color_fast(&cp->display_color);
 
 		char buf[NAME_LENGTH];
-		snprintf(buf, sizeof(buf), "%s", cp->name.c_str());
+		snprintf(buf, sizeof(buf), "%s", coordinate_point_get_display_name(*cp));
 
 		const int w = font::force_fit_string(buf, NAME_LENGTH - 1, fl2i(ship_name_max_width * scale), scale);
 		if (right_align_names) {
@@ -628,7 +646,7 @@ static bool escort_compare(const escort_info &escort1, const escort_info &escort
 			}
 			if (obj.type == OBJ_COORDINATE_POINT) {
 				auto* cp = find_coordinate_point_by_objnum(es.objnum);
-				return (cp != nullptr) ? cp->name.c_str() : "";
+				return (cp != nullptr) ? coordinate_point_get_display_name(*cp) : "";
 			}
 			return "";
 		};
@@ -757,7 +775,7 @@ void hud_setup_escort_list(int level)
 	Escort_ships.sort(escort_compare);
 
 	// then resize the list to fit max
-	if (hud_escort_num_ships_on_list() > MAX_COMPLETE_ESCORT_LIST) {
+	if (static_cast<int>(Escort_ships.size()) > MAX_COMPLETE_ESCORT_LIST) {
 		Escort_ships.resize(MAX_COMPLETE_ESCORT_LIST);
 	}
 
@@ -927,7 +945,7 @@ void hud_add_ship_to_escort(int objnum, int supress_feedback)
 		}
 	}
 
-	if (hud_escort_num_ships_on_list() > MAX_COMPLETE_ESCORT_LIST) {
+	if (static_cast<int>(Escort_ships.size()) > MAX_COMPLETE_ESCORT_LIST) {
 		Escort_ships.resize(MAX_COMPLETE_ESCORT_LIST);
 
 		// maybe do feedback
@@ -943,7 +961,7 @@ void hud_add_ship_to_escort(int objnum, int supress_feedback)
 			}
 
 			if ( !found ) {
-				HUD_sourced_printf(HUD_SOURCE_HIDDEN, XSTR( "Escort list is full with %d ships", 288), hud_escort_num_ships_on_list());
+				HUD_sourced_printf(HUD_SOURCE_HIDDEN, XSTR( "Escort list is full with %d ships", 288), static_cast<int>(Escort_ships.size()));
 				snd_play( gamesnd_get_game_sound(GameSounds::TARGET_FAIL));
 			}
 		}
@@ -1053,7 +1071,7 @@ void hud_escort_target_next()
 {
 	int objnum;
 
-	if ( Escort_ships.empty() ) {
+	if ( hud_escort_num_ships_on_list() == 0 ) {
 		snd_play( gamesnd_get_game_sound(GameSounds::TARGET_FAIL), 0.0f );
 		return;
 	}
@@ -1079,10 +1097,10 @@ void hud_escort_target_next()
 	}
 }
 
-// return the number of ships currently on the escort list
+// return the number of ships currently shown on the escort list (see escort_entry_shown())
 int hud_escort_num_ships_on_list()
 {
-	return static_cast<int>(Escort_ships.size());
+	return static_cast<int>(std::count_if(Escort_ships.begin(), Escort_ships.end(), escort_entry_shown));
 }
 
 // Return the object number for the ship at index position in the escort list
@@ -1133,7 +1151,7 @@ void hud_escort_add_player(short id)
 	Escort_ships.sort(escort_compare);
 
 	// resize the list to fit
-	if (hud_escort_num_ships_on_list() > MAX_COMPLETE_ESCORT_LIST) {
+	if (static_cast<int>(Escort_ships.size()) > MAX_COMPLETE_ESCORT_LIST) {
 		Escort_ships.resize(MAX_COMPLETE_ESCORT_LIST);
 	}
 }

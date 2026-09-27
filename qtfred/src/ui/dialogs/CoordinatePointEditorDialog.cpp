@@ -1,4 +1,5 @@
 #include "ui/dialogs/CoordinatePointEditorDialog.h"
+#include "ui/dialogs/General/CheckBoxListDialog.h"
 #include "ui/util/DialogUndo.h"
 #include "ui/util/SignalBlockers.h"
 #include "ui_CoordinatePointEditorDialog.h"
@@ -204,6 +205,7 @@ void CoordinatePointEditorDialog::initializeUi()
 	const bool multi = _model->hasMultipleSelection();
 
 	ui->nameEdit->setEnabled(enabled && !multi);
+	ui->displayNameEdit->setEnabled(enabled);
 	ui->groupEdit->setEnabled(enabled);
 	// Shape kind radios + the tabled-shape combo are gated in updateUi(): NGon/Star follow the
 	// selection, Custom additionally needs at least one tabled shape, and the combo is only live
@@ -222,7 +224,7 @@ void CoordinatePointEditorDialog::initializeUi()
 	ui->escortPrioritySpinBox->setEnabled(enabled);
 	// Team selector is greyed out when the mission isn't a team mission.
 	ui->multiTeamCombo->setEnabled(enabled && CoordinatePointEditorDialogModel::missionIsMultiTeam());
-	ui->visibleInMissionCheck->setEnabled(enabled);
+	ui->flagsButton->setEnabled(enabled);
 	ui->layerCombo->setEnabled(enabled);
 	ui->colorRSpinBox->setEnabled(enabled);
 	ui->colorGSpinBox->setEnabled(enabled);
@@ -243,6 +245,17 @@ void CoordinatePointEditorDialog::updateUi()
 	util::SignalBlockers blockers(this);
 
 	ui->nameEdit->setText(QString::fromStdString(_model->getCurrentName()));
+
+	if (_model->isDisplayNameMixed()) {
+		ui->displayNameEdit->setPlaceholderText("<mixed>");
+		ui->displayNameEdit->setText("");
+	} else {
+		// Empty means the HUD falls back to Name; show that as the hint.
+		ui->displayNameEdit->setPlaceholderText(_model->hasMultipleSelection()
+			? tr("<Name>")
+			: QString::fromStdString(_model->getCurrentName()));
+		ui->displayNameEdit->setText(QString::fromStdString(_model->getDisplayName()));
+	}
 
 	if (_model->isGroupMixed()) {
 		ui->groupEdit->setPlaceholderText("<mixed>");
@@ -318,10 +331,6 @@ void CoordinatePointEditorDialog::updateUi()
 		ui->multiTeamCombo->setCurrentIndex(ui->multiTeamCombo->findData(_model->getMultiTeam()));
 	}
 
-	const int visState = _model->getVisibleInMissionState();
-	ui->visibleInMissionCheck->setTristate(visState == Qt::PartiallyChecked);
-	ui->visibleInMissionCheck->setCheckState(static_cast<Qt::CheckState>(visState));
-
 	ui->layerCombo->setCurrentIndex(ui->layerCombo->findData(QString::fromStdString(_model->getLayer())));
 
 	ui->colorRSpinBox->setValue(_model->isColorRMixed() ? ui->colorRSpinBox->minimum() : _model->getColorR());
@@ -390,8 +399,24 @@ void CoordinatePointEditorDialog::on_nameEdit_editingFinished()
 	ui->nameEdit->setText(QString::fromStdString(_model->getCurrentName()));
 }
 
+void CoordinatePointEditorDialog::on_displayNameEdit_editingFinished()
+{
+	// editingFinished also fires on plain focus-out; don't let that overwrite a <mixed> field.
+	if (!ui->displayNameEdit->isModified())
+		return;
+	const SCP_string displayName = ui->displayNameEdit->text().trimmed().toUtf8().constData();
+	pushCoordinatePointField<SCP_string>(FieldId::CP_DisplayName, tr("Change Coordinate Point Display Name"),
+		[](mission_coordinate_point& cp) { return cp.display_name; },
+		[](mission_coordinate_point& cp, const SCP_string& v) { cp.display_name = v; },
+		[&] { _model->setDisplayName(displayName); });
+	updateUi();
+}
+
 void CoordinatePointEditorDialog::on_groupEdit_editingFinished()
 {
+	// editingFinished also fires on plain focus-out; don't let that overwrite a <mixed> field.
+	if (!ui->groupEdit->isModified())
+		return;
 	const SCP_string group = ui->groupEdit->text().toUtf8().constData();
 	pushCoordinatePointField<SCP_string>(FieldId::CP_Group, tr("Change Coordinate Point Group"),
 		[](mission_coordinate_point& cp) { return cp.group; },
@@ -535,13 +560,43 @@ void CoordinatePointEditorDialog::on_layerCombo_currentIndexChanged(int index)
 		new MoveLayerCommand(std::move(changes), _viewport, _viewport->editor));
 }
 
-void CoordinatePointEditorDialog::on_visibleInMissionCheck_clicked()
+void CoordinatePointEditorDialog::on_flagsButton_clicked()
 {
-	const bool visible = ui->visibleInMissionCheck->isChecked();
-	pushCoordinatePointField<bool>(FieldId::CP_Visible, tr("Change Coordinate Point Visibility"),
-		[](mission_coordinate_point& cp) { return cp.flags[CoordinatePoint::Flags::Visible_in_mission]; },
-		[](mission_coordinate_point& cp, const bool& v) { cp.flags.set(CoordinatePoint::Flags::Visible_in_mission, v); },
-		[&] { _model->setVisibleInMission(visible); });
+	// Built from the parse tables, so a new CoordinatePoint flag shows up here with no UI work.
+	QVector<std::pair<QString, int>> options;
+	for (size_t i = 0; i < Num_parse_coordinate_point_flags; ++i) {
+		const auto& def = Parse_coordinate_point_flags[i];
+		options.append({QString::fromUtf8(def.name), _model->getFlagState(def.def)});
+	}
+	QVector<std::pair<QString, QString>> descriptions;
+	for (size_t i = 0; i < Num_parse_coordinate_point_flag_descriptions; ++i) {
+		const auto& desc = Parse_coordinate_point_flag_descriptions[i];
+		for (size_t j = 0; j < Num_parse_coordinate_point_flags; ++j) {
+			if (Parse_coordinate_point_flags[j].def == desc.def) {
+				descriptions.append({QString::fromUtf8(Parse_coordinate_point_flags[j].name), QString::fromUtf8(desc.flag_desc)});
+				break;
+			}
+		}
+	}
+
+	CheckBoxListDialog dlg(this);
+	dlg.setCaption(tr("Coordinate Point Flags"));
+	dlg.setTristate(_model->hasMultipleSelection());
+	dlg.setOptions(options);
+	dlg.setOptionDescriptions(descriptions);
+	if (dlg.exec() != QDialog::Accepted)
+		return;
+
+	SCP_vector<std::pair<CoordinatePoint::Flags, int>> states;
+	const auto result = dlg.getFlags();
+	for (int i = 0; i < result.size() && i < static_cast<int>(Num_parse_coordinate_point_flags); ++i) {
+		states.emplace_back(Parse_coordinate_point_flags[i].def, result[i].second);
+	}
+
+	pushCoordinatePointField<flagset<CoordinatePoint::Flags>>(FieldId::CP_Flags, tr("Change Coordinate Point Flags"),
+		[](mission_coordinate_point& cp) { return cp.flags; },
+		[](mission_coordinate_point& cp, const flagset<CoordinatePoint::Flags>& v) { cp.flags = v; },
+		[&] { _model->applyFlagStates(states); });
 	updateUi();
 }
 

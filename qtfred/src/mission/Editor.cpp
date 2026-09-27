@@ -1042,6 +1042,8 @@ int Editor::dup_object(object* objp) {
 			auto* clone = find_coordinate_point_by_objnum(obj);
 			if (clone != nullptr) {
 				// Copy every field except the auto-generated unique name and the objnum.
+				// display_name needn't be unique, so the clone keeps it.
+				clone->display_name       = src->display_name;
 				clone->group              = src->group;
 				clone->display_color      = src->display_color;
 				clone->shape_kind         = src->shape_kind;
@@ -1215,7 +1217,7 @@ int Editor::common_object_delete(int obj) {
 
 	} else if (type == OBJ_COORDINATE_POINT) {
 		// Coordinate points are referenced by name in SEXPs (the widened SHIP_WING_POINT family,
-		// point-targeted, toggle-point-visibility). Prompt if referenced, then bash those
+		// point-targeted, alter-point-flag). Prompt if referenced, then bash those
 		// references to <name> just like ships and waypoints.
 		const mission_coordinate_point* cp = find_coordinate_point_by_objnum(obj);
 		if (cp != nullptr) {

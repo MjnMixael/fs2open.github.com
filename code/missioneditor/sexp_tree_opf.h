@@ -121,6 +121,7 @@ public:
 	static sexp_list_item* get_listing_opf_mission_moods();
 	static sexp_list_item* get_listing_opf_ship_flags();
 	static sexp_list_item* get_listing_opf_wing_flags();
+	static sexp_list_item* get_listing_opf_coordinate_point_flags();
 	static sexp_list_item* get_listing_opf_team_colors();
 	static sexp_list_item* get_listing_opf_nebula_patterns();
 	static sexp_list_item* get_listing_opf_asteroid_types();

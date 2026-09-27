@@ -39,6 +39,32 @@ ADE_VIRTVAR(Name,
 	return ade_set_args(L, "s", cp->name.c_str());
 }
 
+ADE_VIRTVAR(DisplayName,
+	l_CoordinatePoint,
+	"string",
+	"Name shown on the HUD instead of Name. Need not be unique. Set to an empty string to show Name again.",
+	"string",
+	"Coordinate point display name, empty if none is set or the handle is invalid")
+{
+	object_h* objh;
+	const char* s = nullptr;
+	if (!ade_get_args(L, "o|s", l_CoordinatePoint.GetPtr(&objh), &s))
+		return ade_set_error(L, "s", "");
+
+	if (!objh->isValid() || objh->objp()->type != OBJ_COORDINATE_POINT)
+		return ade_set_error(L, "s", "");
+
+	auto* cp = find_coordinate_point_by_objnum(objh->objnum);
+	if (cp == nullptr)
+		return ade_set_error(L, "s", "");
+
+	if (ADE_SETTING_VAR && s != nullptr) {
+		cp->display_name = s;
+	}
+
+	return ade_set_args(L, "s", cp->display_name.c_str());
+}
+
 ADE_VIRTVAR(Group,
 	l_CoordinatePoint,
 	"string",
@@ -115,6 +141,32 @@ ADE_VIRTVAR(VisibleInMission,
 	}
 
 	return ade_set_args(L, "b", cp->flags[CoordinatePoint::Flags::Visible_in_mission]);
+}
+
+ADE_VIRTVAR(AlwaysRenderLabels,
+	l_CoordinatePoint,
+	"boolean",
+	"Whether the HUD draws this coordinate point's name and group even when it isn't targeted. Only has an effect while VisibleInMission is true. Defaults to false.",
+	"boolean",
+	"true if labels always render, false otherwise (also false if handle is invalid)")
+{
+	object_h* objh;
+	bool val = false;
+	if (!ade_get_args(L, "o|b", l_CoordinatePoint.GetPtr(&objh), &val))
+		return ADE_RETURN_FALSE;
+
+	if (!objh->isValid() || objh->objp()->type != OBJ_COORDINATE_POINT)
+		return ADE_RETURN_FALSE;
+
+	auto* cp = find_coordinate_point_by_objnum(objh->objnum);
+	if (cp == nullptr)
+		return ADE_RETURN_FALSE;
+
+	if (ADE_SETTING_VAR) {
+		cp->flags.set(CoordinatePoint::Flags::Always_render_labels, val);
+	}
+
+	return ade_set_args(L, "b", cp->flags[CoordinatePoint::Flags::Always_render_labels]);
 }
 
 ADE_VIRTVAR(MultiTeam,

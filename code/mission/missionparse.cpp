@@ -650,14 +650,38 @@ const size_t Num_parse_prop_flag_descriptions = sizeof(Parse_prop_flag_descripti
 
 flag_def_list_new<CoordinatePoint::Flags> Parse_coordinate_point_flags[] = {
     { "visible_in_mission",				CoordinatePoint::Flags::Visible_in_mission,				true, false },
+    { "always_render_labels",			CoordinatePoint::Flags::Always_render_labels,			true, false },
 };
 
 parse_object_flag_description<CoordinatePoint::Flags> Parse_coordinate_point_flag_descriptions[] = {
     { CoordinatePoint::Flags::Visible_in_mission,					"Render the shape in-game so the player can see and target it, not just in the editor."},
+    { CoordinatePoint::Flags::Always_render_labels,				"While the point is visible in mission, draw its name and group on the HUD even when it isn't targeted."},
 };
 
 const size_t Num_parse_coordinate_point_flags = sizeof(Parse_coordinate_point_flags) / sizeof(flag_def_list_new<CoordinatePoint::Flags>);
 const size_t Num_parse_coordinate_point_flag_descriptions = sizeof(Parse_coordinate_point_flag_descriptions) / sizeof(parse_object_flag_description<CoordinatePoint::Flags>);
+
+bool get_coordinate_point_flag_by_name(const char* name, CoordinatePoint::Flags& flag)
+{
+	if (name == nullptr)
+		return false;
+	for (size_t i = 0; i < Num_parse_coordinate_point_flags; ++i) {
+		if (!stricmp(name, Parse_coordinate_point_flags[i].name)) {
+			flag = Parse_coordinate_point_flags[i].def;
+			return true;
+		}
+	}
+	return false;
+}
+
+const char* get_coordinate_point_flag_description(CoordinatePoint::Flags flag)
+{
+	for (size_t i = 0; i < Num_parse_coordinate_point_flag_descriptions; ++i) {
+		if (Parse_coordinate_point_flag_descriptions[i].def == flag)
+			return Parse_coordinate_point_flag_descriptions[i].flag_desc;
+	}
+	return nullptr;
+}
 
 // These are only the flags that are saved to the mission file.  See the MEF_ #defines.
 flag_def_list Mission_event_flags[] = {
@@ -5515,6 +5539,11 @@ void parse_coordinate_point(mission* /*pm*/)
 
 	required_string("$Name:");
 	stuff_string(cp.name, F_NAME);
+
+	// F_NAME strings are localized, so an XSTR display name or group resolves here.
+	if (optional_string("+Display Name:")) {
+		stuff_string(cp.display_name, F_NAME);
+	}
 
 	required_string("$Location:");
 	stuff_vec3d(&cp.position);
