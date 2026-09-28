@@ -1,0 +1,135 @@
+name: Cut release
+
+# Tags a release candidate or final release and starts the release build, the same way SCP's
+# nightlybuild scheduler does: master keeps its development version (odd minor, e.g. 26.1.0),
+# and the release version lives only in a side "automated build commit" that adds
+# version_override.cmake on top of the source ref. That commit is reachable only through its
+# tag; nothing is pushed to any branch. cmake/version.cmake includes the override before its
+# own defaults, so the build reports the release version.
+#
+#   RC:    version 26.2.0, rc RC1  ->  release_26_2_0-RC1  (GitHub prerelease)
+#   Final: version 26.2.0, rc ""   ->  release_26_2_0      (GitHub full release)
+#
+# Point releases are cut from a point-release branch (e.g. pr_26_2_1) via source_ref.
+# To keep OFP's version meaning "SCP's version plus OFP's changes", merge SCP up to the base of
+# SCP's matching tag first and pass that tag as scp_tag, which checks the source ref contains it.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Release version, MAJOR.MINOR.BUILD (e.g. 26.2.0)
+        type: string
+        required: true
+      rc:
+        description: Release candidate suffix (e.g. RC1). Leave empty for a final release.
+        type: string
+        default: ''
+      source_ref:
+        description: Branch, tag or commit to cut from
+        type: string
+        default: master
+      scp_tag:
+        description: Optional SCP tag this release matches (e.g. release_26_2_0-RC1); the source ref must contain its base commit
+        type: string
+        default: ''
+      dry_run:
+        description: Only report what would be tagged; don't push a tag or start a build
+        type: boolean
+        default: true
+
+jobs:
+  cut_release:
+    name: Tag release and start build
+    # Only run on the OFP repository, not on forks
+    if: github.repository == 'ofp-fs2open/fs2open.github.com'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # push the tag
+      actions: write    # dispatch build-release.yaml
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_ref }}
+          fetch-depth: 0    # full history and tags, for the existence and ancestry checks
+      - name: Create release commit, tag it and dispatch the release build
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ inputs.version }}
+          RC: ${{ inputs.rc }}
+          SOURCE_REF: ${{ inputs.source_ref }}
+          SCP_TAG: ${{ inputs.scp_tag }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          VERSION="${VERSION// /}"
+          RC="${RC// /}"
+          if [[ ! "$VERSION" =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+            echo "::error::version must be MAJOR.MINOR.BUILD (got '$VERSION')"
+            exit 1
+          fi
+          major=${BASH_REMATCH[1]}; minor=${BASH_REMATCH[2]}; build=${BASH_REMATCH[3]}
+          if [ -n "$RC" ] && [[ ! "$RC" =~ ^RC[0-9]+$ ]]; then
+            echo "::error::rc must look like RC1 or be empty for a final release (got '$RC')"
+            exit 1
+          fi
+
+          # SCP convention: even minor = release, odd minor = development (weekly/nightly builds)
+          if (( minor % 2 == 1 )); then
+            echo "::warning::$VERSION has an odd minor version, which is a development version under SCP's scheme."
+          fi
+
+          base="release_${major}_${minor}_${build}"
+          tag="$base${RC:+-$RC}"
+          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "::error::Tag $tag already exists"
+            exit 1
+          fi
+          if [ -n "$RC" ] && git rev-parse -q --verify "refs/tags/$base" >/dev/null; then
+            echo "::error::$base has already been released as a final; cutting $tag after it would be out of order"
+            exit 1
+          fi
+
+          if [ -n "$SCP_TAG" ]; then
+            git fetch --no-tags https://github.com/scp-fs2open/fs2open.github.com.git "refs/tags/$SCP_TAG:refs/scp-check/tag" || {
+              echo "::error::Could not fetch SCP tag $SCP_TAG"
+              exit 1
+            }
+            # SCP's tags sit on their own automated build commit; its parent is the real source commit
+            scp_base=$(git rev-parse "refs/scp-check/tag^{commit}^")
+            if ! git merge-base --is-ancestor "$scp_base" HEAD; then
+              echo "::error::$SOURCE_REF does not contain $SCP_TAG's base commit $(git rev-parse --short "$scp_base"); merge SCP up to it first"
+              exit 1
+            fi
+            echo "$SOURCE_REF contains $SCP_TAG's base commit $(git rev-parse --short "$scp_base")."
+          fi
+
+          echo "Cutting $tag from $SOURCE_REF ($(git log -1 --format='%h %s' HEAD))"
+          if [ "$DRY_RUN" = "true" ]; then
+            echo "Dry run: not creating the commit, pushing the tag or starting the build."
+            exit 0
+          fi
+
+          # Same file SCP's scheduler commits. REVISION_STR is the RC suffix, empty for a final.
+          {
+            echo "set(FSO_VERSION_MAJOR $major)"
+            echo "set(FSO_VERSION_MINOR $minor)"
+            echo "set(FSO_VERSION_BUILD $build)"
+            echo "set(FSO_VERSION_REVISION 0)"
+            echo "set(FSO_VERSION_REVISION_STR $RC)"
+          } > version_override.cmake
+
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add version_override.cmake
+          git commit -m "Automated build commit"
+
+          # Must be annotated: dist_functions.sh names packages with `git describe` (no --tags)
+          # and ci/post/main.py finds the tag via for-each-ref %(tag); both ignore lightweight tags
+          git tag -a "$tag" -m "Release build $tag"
+          git push origin "refs/tags/$tag"
+
+          # Tags pushed with GITHUB_TOKEN don't trigger push workflows, so start the build explicitly
+          gh workflow run build-release.yaml --ref "$tag"
+          echo "Started Build Release package for $tag"
