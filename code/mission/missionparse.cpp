@@ -7240,17 +7240,38 @@ void apply_default_ship_custom_data(SCP_map<SCP_string, SCP_string>& custom_data
 	}
 }
 
-// parse one #...CustomData section (header already consumed) into the given schema
-static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_data>& dest)
+// parse one #...CustomData section (header already consumed) into the given schema.
+// $Key: works like $Name: in object tables: keys are unique per section, and a key
+// that already exists (e.g. from editor.tbl, when parsing a *-edt.tbm) is modified
+// in place, with any field left out keeping its current value.
+static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_data>& dest, const char* filename)
 {
-	while (required_string_either("#End", "+Key:")) {
-		required_string("+Key:");
-		mission_default_custom_data def;
-		stuff_string(def.key, F_NAME);
+	SCP_unordered_set<SCP_string> keys_in_this_file;
 
-		required_string("+Type:");
-		stuff_string(def.type, F_NAME);
-		SCP_tolower(def.type);
+	while (required_string_either("#End", "$Key:")) {
+		required_string("$Key:");
+		SCP_string key;
+		stuff_string(key, F_NAME);
+
+		if (!keys_in_this_file.insert(key).second) {
+			Warning(LOCATION, "Editor custom data key '%s' is defined more than once in %s.  The later definition modifies the earlier one.", key.c_str(), filename);
+		}
+
+		auto existing = std::find_if(dest.begin(), dest.end(), [&key](const mission_default_custom_data& d) { return d.key == key; });
+		const bool modifying = existing != dest.end();
+
+		mission_default_custom_data def;
+		if (modifying) {
+			def = *existing;
+		} else {
+			def.key = key;
+		}
+
+		// required for a new key; optional when modifying one
+		if (modifying ? optional_string("+Type:") : required_string("+Type:")) {
+			stuff_string(def.type, F_NAME);
+			SCP_tolower(def.type);
+		}
 		if (def.type != "string" && def.type != "int" && def.type != "bool") {
 			Warning(LOCATION, "Editor custom data key '%s' has invalid type '%s'; expected string, int, or bool.  Defaulting to string.", def.key.c_str(), def.type.c_str());
 			def.type = "string";
@@ -7258,7 +7279,7 @@ static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_d
 
 		if (optional_string("+Default:")) {
 			stuff_string(def.value, F_RAW);
-		} else {
+		} else if (!modifying) {
 			def.value.clear();
 		}
 
@@ -7289,7 +7310,11 @@ static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_d
 			stuff_string(def.description, F_NAME);
 		}
 
-		dest.emplace_back(std::move(def));
+		if (modifying) {
+			*existing = std::move(def);
+		} else {
+			dest.emplace_back(std::move(def));
+		}
 	}
 	required_string("#End");
 }
@@ -7305,11 +7330,11 @@ static void parse_editor_custom_data_tbl(const char* filename)
 	ignore_white_space();
 	while (!check_for_eof()) {
 		if (optional_string("#MissionCustomData")) {
-			parse_editor_custom_data_section(Default_custom_data);
+			parse_editor_custom_data_section(Default_custom_data, filename);
 		} else if (optional_string("#CampaignCustomData")) {
-			parse_editor_custom_data_section(Default_campaign_custom_data);
+			parse_editor_custom_data_section(Default_campaign_custom_data, filename);
 		} else if (optional_string("#ShipCustomData")) {
-			parse_editor_custom_data_section(Default_ship_custom_data);
+			parse_editor_custom_data_section(Default_ship_custom_data, filename);
 		} else {
 			advance_to_eoln(nullptr);
 		}
