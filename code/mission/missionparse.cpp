@@ -7284,8 +7284,9 @@ static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_d
 			}
 		}
 
+		// One line, as documented; F_NAME also resolves an XSTR description.
 		if (optional_string("+Description:")) {
-			stuff_string(def.description, F_MULTITEXT);
+			stuff_string(def.description, F_NAME);
 		}
 
 		dest.emplace_back(std::move(def));
