@@ -40,31 +40,31 @@ value controls, help text, and reset-to-default support.</p>
 <code>*-edt.tbm</code>), in one section per domain. Sections may appear in any order,
 and any subset may be present:</p>
 <pre>#MissionCustomData
-	+Key:         music_track
+	$Key:         music_track
 	+Type:        string
 	+Default:     Aquitaine
 	+Description: Name of the ambient track this mission requests.
 
-	+Key:         intro_seen
+	$Key:         intro_seen
 	+Type:        bool
 	+Default:     false
 #End
 
 #CampaignCustomData
-	+Key:         starting_credits
+	$Key:         starting_credits
 	+Type:        int
 	+Default:     5000
 #End
 
 #ShipCustomData
-	+Key:         bounty
+	$Key:         bounty
 	+Type:        int
 	+Default:     50
 	+Description: Credits paid for the kill.
 #End</pre>
 <table>
     <tr><th>Field</th><th>Required</th><th>Notes</th></tr>
-    <tr><td><code>+Key:</code></td><td>Yes</td><td>The key name.</td></tr>
+    <tr><td><code>$Key:</code></td><td>Yes</td><td>The key name. Keys are unique within a section, like <code>$Name:</code> in the object tables: repeating a key in a <code>*-edt.tbm</code> modifies the existing entry, and any field left out (including <code>+Type:</code>) keeps its current value.</td></tr>
     <tr><td><code>+Type:</code></td><td>Yes</td><td><code>string</code>, <code>int</code>,
         or <code>bool</code>. An unrecognized type produces a warning and falls back to
         <code>string</code>.</td></tr>
