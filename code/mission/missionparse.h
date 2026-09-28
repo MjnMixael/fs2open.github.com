@@ -174,6 +174,7 @@ typedef struct mission_default_custom_data {
 	SCP_string key;
 	SCP_string value;
 	SCP_string description;
+	SCP_string type;
 } mission_default_custom_data;
 
 typedef struct custom_string {
@@ -386,7 +387,10 @@ extern int Num_unknown_loadout_classes;
 extern ushort Current_file_checksum;
 extern int    Current_file_length;
 
-extern SCP_vector<mission_default_custom_data> Default_custom_data;
+// editor-defined custom data schemas (from editor.tbl / *-edt.tbm), one per domain
+extern SCP_vector<mission_default_custom_data> Default_custom_data;			// mission
+extern SCP_vector<mission_default_custom_data> Default_campaign_custom_data;	// campaign
+extern SCP_vector<mission_default_custom_data> Default_ship_custom_data;		// ship instance
 
 #define SUBSYS_STATUS_NO_CHANGE	-999
 
@@ -538,8 +542,10 @@ public:
 	// Goober5000
 	SCP_vector<texture_replace> replacement_textures;
 
-	SCP_vector<alt_class> alt_classes;	
+	SCP_vector<alt_class> alt_classes;
 	SCP_map<std::pair<int, int>, int> alt_iff_color;
+
+	SCP_map<SCP_string, SCP_string> custom_data;	// per-ship instance custom data overrides
 
 	~p_object();
 
@@ -641,6 +647,12 @@ void mission_parse_close();
 // used in fred management.cpp when creating a new mission
 void apply_default_custom_data(mission* pm);
 
+class campaign;	// defined in missioncampaign.h; only referenced by pointer here
+void apply_default_campaign_custom_data(campaign* pc);
+// Seeds a newly placed ship's custom data with the editor.tbl #ShipCustomData defaults.
+void apply_default_ship_custom_data(SCP_map<SCP_string, SCP_string>& custom_data);
+void parse_editor_custom_data_table();
+
 bool mission_maybe_make_ship_arrive(p_object *p_objp, bool force_arrival = false);
 bool mission_maybe_make_wing_arrive(int wingnum, bool force_arrival = false);
 
@@ -706,4 +718,3 @@ subsys_status *parse_get_subsys_status(p_object *pobjp, const char *subsys_name)
 custom_string* get_custom_string_by_name(SCP_string name);
 
 #endif
-

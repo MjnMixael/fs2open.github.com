@@ -21,6 +21,7 @@
 #include <menuui/mainhallmenu.h>
 #include <menuui/techmenu.h>
 #include <mission/missioncampaign.h>
+#include <mission/missionparse.h>
 #include <missioneditor/common.h>
 #include <missionui/fictionviewer.h>
 #include <model/modelreplace.h>
@@ -246,6 +247,10 @@ initialize(const std::string& cfilepath, int argc, char* argv[], Editor* editor,
 
 	listener(SubSystem::MissionBrief);
 	mission_brief_common_init();
+
+	// Editor-only custom-data schemas.  Loaded here, before OnGameInit, so scripts that
+	// call mn.addDefaultCustomData() add to the table instead of being wiped by it.
+	parse_editor_custom_data_table();
 
 	listener(SubSystem::Nebulas);
 	neb2_init();                        // fullneb stuff

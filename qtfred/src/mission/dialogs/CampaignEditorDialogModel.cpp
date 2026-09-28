@@ -164,6 +164,14 @@ void CampaignEditorDialogModel::initializeData(const char* filename)
 		m_campaign_type = CAMPAIGN_TYPE_SINGLE;
 		m_num_players = 0;
 		m_flags = CF_DEFAULT_VALUE;
+
+		// Start from the editor.tbl campaign defaults, the way a new mission starts from its
+		// mission defaults. Reset first: the working copy otherwise keeps the custom data of
+		// whatever campaign was open before.
+		m_custom_data.clear();
+		for (const auto& def : Default_campaign_custom_data) {
+			m_custom_data.emplace(def.key, def.value);
+		}
 	}
 
 	// Load the list of available mission files from the directory.
@@ -457,7 +465,8 @@ void CampaignEditorDialogModel::createNewCampaign()
 	// First, clear the global state to ensure a clean load.
 	clearCampaignGlobal();
 
-	// Initialize the model to a clean "new campaign" state.
+	// Initialize the model to a clean "new campaign" state; this also seeds the editor.tbl
+	// campaign defaults into the working copy.
 	initializeData();
 }
 	

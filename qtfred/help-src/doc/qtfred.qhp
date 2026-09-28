@@ -59,6 +59,7 @@
                     <section title="Prop Editor"            ref="dialogs/PropEditorDialog.html"/>
                     <section title="Ship Editor"            ref="dialogs/ShipEditorDialog.html">
                         <section title="Alt Ship Class"         ref="dialogs/ShipAltShipClass.html"/>
+                        <section title="Custom Data"            ref="dialogs/CustomDataDialog.html"/>
                         <section title="Custom Warp Params"     ref="dialogs/ShipCustomWarpDialog.html"/>
                         <section title="Initial Orders"         ref="dialogs/ShipInitialOrdersDialog.html"/>
                         <section title="Initial Status"         ref="dialogs/ShipInitialStatusDialog.html"/>

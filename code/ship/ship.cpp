@@ -7097,6 +7097,8 @@ void ship::clear()
 
 	ship_iff_color.clear();
 
+	custom_data.clear();
+
 	ammo_low_complaint_count = 0;
 
 	armor_type_idx = -1;

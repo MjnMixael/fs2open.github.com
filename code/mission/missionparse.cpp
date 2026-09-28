@@ -128,6 +128,10 @@ int    Current_file_length   = 0;
 
 // coverity[GLOBAL_INIT_ORDER] -- safe; default-constructed, no cross-TU dependencies
 SCP_vector<mission_default_custom_data> Default_custom_data;
+// coverity[GLOBAL_INIT_ORDER] -- safe; default-constructed, no cross-TU dependencies
+SCP_vector<mission_default_custom_data> Default_campaign_custom_data;
+// coverity[GLOBAL_INIT_ORDER] -- safe; default-constructed, no cross-TU dependencies
+SCP_vector<mission_default_custom_data> Default_ship_custom_data;
 
 // alternate ship type names
 char Mission_alt_types[MAX_ALT_TYPE_NAMES][NAME_LENGTH];
@@ -2429,6 +2433,7 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 
 	shipp->group = p_objp->group;
 	shipp->fred_layer = p_objp->fred_layer;
+	shipp->custom_data = p_objp->custom_data;
 	shipp->escort_priority = p_objp->escort_priority;
 	shipp->ship_guardian_threshold = p_objp->ship_guardian_threshold;
 	shipp->use_special_explosion = p_objp->use_special_explosion;
@@ -4067,6 +4072,11 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 			else
 				mprintf(("Too many replacement textures specified for ship '%s'!\n", p_objp->name));
 		}
+	}
+
+	// per-ship instance custom data overrides
+	if (optional_string("$begin_custom_data")) {
+		parse_string_map(p_objp->custom_data, "$end_custom_data", "+Val:");
 	}
 
 	// for multiplayer, assign a network signature to this parse object.  Doing this here will
@@ -7204,6 +7214,119 @@ void apply_default_custom_data(mission* pm)
 			pm->custom_data.emplace(def.key, def.value);
 		}
 	}
+}
+
+// Campaign twin of apply_default_custom_data().  Deliberately NOT called from
+// mission_campaign_clear(): mission_campaign_load() clears before it parses,
+// and parse_string_map() merges with emplace(), which does not overwrite an
+// existing key -- seeding before the parse would make every schema default win
+// over the campaign file's own saved value.  Seed after parsing instead, so
+// this only fills in keys the campaign doesn't already define.
+void apply_default_campaign_custom_data(campaign* pc)
+{
+	for (const auto& def : Default_campaign_custom_data) {
+		if (pc->custom_data.find(def.key) == pc->custom_data.end()) {
+			pc->custom_data.emplace(def.key, def.value);
+		}
+	}
+}
+
+// Ship twin of apply_default_custom_data(), called by the editors when a ship is placed.
+// Ships loaded from a mission keep exactly the keys the file saved.
+void apply_default_ship_custom_data(SCP_map<SCP_string, SCP_string>& custom_data)
+{
+	for (const auto& def : Default_ship_custom_data) {
+		custom_data.emplace(def.key, def.value);
+	}
+}
+
+// parse one #...CustomData section (header already consumed) into the given schema
+static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_data>& dest)
+{
+	while (required_string_either("#End", "+Key:")) {
+		required_string("+Key:");
+		mission_default_custom_data def;
+		stuff_string(def.key, F_NAME);
+
+		required_string("+Type:");
+		stuff_string(def.type, F_NAME);
+		SCP_tolower(def.type);
+		if (def.type != "string" && def.type != "int" && def.type != "bool") {
+			Warning(LOCATION, "Editor custom data key '%s' has invalid type '%s'; expected string, int, or bool.  Defaulting to string.", def.key.c_str(), def.type.c_str());
+			def.type = "string";
+		}
+
+		if (optional_string("+Default:")) {
+			stuff_string(def.value, F_RAW);
+		} else {
+			def.value.clear();
+		}
+
+		// The editor rejects mistyped values, so a bad default would be seeded into new
+		// missions and then refused by the Custom Data dialog.  Fall back to the type's
+		// zero value instead.
+		if (def.type == "int") {
+			char* endp = nullptr;
+			(void)strtol(def.value.c_str(), &endp, 10);
+			if (def.value.empty() || endp == def.value.c_str() || *endp != '\0') {
+				if (!def.value.empty())
+					Warning(LOCATION, "Editor custom data key '%s' is type int but its default '%s' is not a whole number.  Using 0.", def.key.c_str(), def.value.c_str());
+				def.value = "0";
+			}
+		} else if (def.type == "bool") {
+			if (!stricmp(def.value.c_str(), "true")) {
+				def.value = "true";
+			} else if (!stricmp(def.value.c_str(), "false") || def.value.empty()) {
+				def.value = "false";
+			} else {
+				Warning(LOCATION, "Editor custom data key '%s' is type bool but its default '%s' is not true or false.  Using false.", def.key.c_str(), def.value.c_str());
+				def.value = "false";
+			}
+		}
+
+		// One line, as documented; F_NAME also resolves an XSTR description.
+		if (optional_string("+Description:")) {
+			stuff_string(def.description, F_NAME);
+		}
+
+		dest.emplace_back(std::move(def));
+	}
+	required_string("#End");
+}
+
+// non-capturing so it can be passed to parse_modular_table's function pointer parameter
+static void parse_editor_custom_data_tbl(const char* filename)
+{
+	read_file_text(filename, CF_TYPE_TABLES);
+	reset_parse();
+
+	// sections may appear in any order and any subset; unrelated content is
+	// skipped so editor.tbl can host other editor-focused sections in the future
+	ignore_white_space();
+	while (!check_for_eof()) {
+		if (optional_string("#MissionCustomData")) {
+			parse_editor_custom_data_section(Default_custom_data);
+		} else if (optional_string("#CampaignCustomData")) {
+			parse_editor_custom_data_section(Default_campaign_custom_data);
+		} else if (optional_string("#ShipCustomData")) {
+			parse_editor_custom_data_section(Default_ship_custom_data);
+		} else {
+			advance_to_eoln(nullptr);
+		}
+		ignore_white_space();
+	}
+}
+
+void parse_editor_custom_data_table()
+{
+	Default_custom_data.clear();
+	Default_campaign_custom_data.clear();
+	Default_ship_custom_data.clear();
+
+	if (cf_exists_full("editor.tbl", CF_TYPE_TABLES)) {
+		parse_editor_custom_data_tbl("editor.tbl");
+	}
+	parse_modular_table("*-edt.tbm", parse_editor_custom_data_tbl, CF_TYPE_TABLES);
 }
 
 bool parse_mission(mission *pm, int flags)

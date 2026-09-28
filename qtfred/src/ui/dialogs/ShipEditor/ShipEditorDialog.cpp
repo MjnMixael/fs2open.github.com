@@ -5,6 +5,7 @@
 
 #include "iff_defs/iff_defs.h"
 #include "mission/missionmessage.h"
+#include "mission/missionparse.h"
 #include "missioneditor/common.h"
 #include "mission/object.h"
 #include "mission/missionparse.h"
@@ -18,6 +19,7 @@
 #include <ui/util/menu.h>
 
 #include <ui/dialogs/General/CheckBoxListDialog.h>
+#include <ui/dialogs/MissionSpecs/CustomDataDialog.h>
 #include <QVariant>
 #include <QShortcut>
 
@@ -1162,6 +1164,10 @@ void ShipEditorDialog::enableDisable()
 	const bool noPlayerSelected = (_model->getNumSelectedPlayers() == 0);
 	ui->deleteButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
 	ui->resetButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
+	// Custom data is per-ship, so only editable for one ship. Deliberately not gated on
+	// getUIEnable(): that is false when only the player ship is selected (the AI/cargo/cue
+	// fields don't apply to it), but custom data does.
+	ui->customDataButton->setEnabled(_model->getCustomDataShip() >= 0);
 	ui->killScoreEdit->setEnabled(_model->getUIEnable());
 	ui->assistEdit->setEnabled(_model->getUIEnable());
 
@@ -1405,6 +1411,47 @@ void ShipEditorDialog::on_textureReplacementButton_clicked()
 	});
 
 	dialog->show();
+}
+
+void ShipEditorDialog::on_customDataButton_clicked()
+{
+	// Single-ship only (the button is disabled in multi-edit), so unlike the
+	// texture-replacement dialog there is just one ship to bracket.
+	const int ship = _model->getCustomDataShip();
+	if (ship < 0 || Ships[ship].objnum < 0) {
+		return;
+	}
+
+	CustomDataDialog dlg(this, _viewport);
+	dlg.setSchema(Default_ship_custom_data);
+	dlg.setInitial(_model->getShipCustomData());
+
+	if (dlg.exec() != QDialog::Accepted) {
+		return;
+	}
+
+	const SCP_map<SCP_string, SCP_string> before = _model->getShipCustomData();
+	_model->setShipCustomData(dlg.items());
+	const SCP_map<SCP_string, SCP_string> after = _model->getShipCustomData();
+	if (before == after) {
+		return; // dialog accepted but nothing actually changed
+	}
+
+	// Address the ship by object signature rather than slot index: an undo can
+	// run after later edits have shuffled Ships[], the same reason the other
+	// per-ship commands in this dialog resolve through obj_get_by_signature.
+	const int sig = Objects[Ships[ship].objnum].signature;
+
+	auto* cmd = new FieldEditCommand<SCP_map<SCP_string, SCP_string>>(
+		FieldId::Ship_CustomData, _viewport->editor, tr("Edit Ship Custom Data"), true);
+	cmd->setNoMerge(); // each subdialog visit is a discrete action
+	cmd->addEntry(before, after, [sig](const SCP_map<SCP_string, SCP_string>& v) {
+		const int o = obj_get_by_signature(sig);
+		if (o >= 0) {
+			Ships[Objects[o].instance].custom_data = v;
+		}
+	});
+	_fredView->mainUndoStack()->push(cmd);
 }
 
 void ShipEditorDialog::on_playerShipButton_clicked()

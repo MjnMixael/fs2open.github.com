@@ -50,6 +50,9 @@ void clone_ship_instance_data(int src_shipnum, int dest_shipnum)
 	// alt classes
 	dest->s_alt_classes = src->s_alt_classes;
 
+	// editor-defined per-ship custom data (editor.tbl schema + instance overrides)
+	dest->custom_data = src->custom_data;
+
 	// alt name / callsign
 	strcpy_s(Fred_alt_names[dest_shipnum], Fred_alt_names[src_shipnum]);
 	strcpy_s(Fred_callsigns[dest_shipnum], Fred_callsigns[src_shipnum]);

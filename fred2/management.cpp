@@ -401,6 +401,10 @@ bool fred_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	asteroid_init();
 	mission_brief_common_init();
 
+	// Editor-only custom-data schemas.  Loaded here, before OnGameInit, so scripts that
+	// call mn.addDefaultCustomData() add to the table instead of being wiped by it.
+	parse_editor_custom_data_table();
+
 	neb2_init();						// fullneb stuff
 	nebl_init();						// neb lightning
 	stars_init();
@@ -468,6 +472,10 @@ bool fred_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	timer_start_frame();
 
 	mission_campaign_clear();
+	// Seed the editor.tbl campaign schema defaults into the blank campaign, so
+	// the campaign editor starts pre-populated even before one is loaded (a
+	// loaded campaign gets seeded by mission_campaign_load instead).
+	apply_default_campaign_custom_data(&Campaign);
 	create_new_mission();
 
 	gr_reset_clip();
@@ -604,6 +612,8 @@ int create_ship(matrix *orient, vec3d *pos, int ship_type)
 
 	ship *shipp = &Ships[Objects[obj].instance];
 	sip = &Ship_info[shipp->ship_info_index];
+
+	apply_default_ship_custom_data(shipp->custom_data);
 
 	if (query_ship_name_duplicate(Objects[obj].instance))
 		fix_ship_name(Objects[obj].instance);
