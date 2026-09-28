@@ -631,11 +631,14 @@ bool FredView::saveMissionAs() {
 		return false;
 
 	const QString lastDir = fso::fred::util::getLastDir("missions/saveMission", CF_TYPE_MISSIONS);
-	saveName = QFileDialog::getSaveFileName(this, tr("Save mission"), lastDir, tr("FS2 missions (*.fs2)"));
-	if (saveName.isEmpty())
+	// Chosen into a local so cancelling leaves the current file (and its Save target) alone.
+	QString chosenName = QFileDialog::getSaveFileName(this, tr("Save mission"), lastDir, tr("FS2 missions (*.fs2)"));
+	if (chosenName.isEmpty())
 		return false;
+	if (!chosenName.endsWith(".fs2", Qt::CaseInsensitive))
+		chosenName += ".fs2";
 
-	fso::fred::util::saveLastDir("missions/saveMission", saveName);
+	fso::fred::util::saveLastDir("missions/saveMission", chosenName);
 
 	Fred_mission_save save;
 	save.set_save_format(_missionSaveFormat);
@@ -646,9 +649,13 @@ bool FredView::saveMissionAs() {
 	save.set_fred_alt_names(Fred_alt_names);
 	save.set_fred_callsigns(Fred_callsigns);
 
-	save.save_mission_file(saveName.replace('/', DIR_SEPARATOR_CHAR).toUtf8().constData());
+	chosenName.replace('/', DIR_SEPARATOR_CHAR);
+	save.save_mission_file(chosenName.toUtf8().constData());
 	_missionModified = false;
 	setLastSaved(QDateTime::currentDateTime());
+
+	// Standard Save As: from here on the window is editing the new file.
+	setCurrentFile(chosenName);
 
 	if (fixCount > 0)
 		QMessageBox::information(this, tr("Auto-corrections Applied"),
@@ -661,9 +668,31 @@ bool FredView::saveMissionAs() {
 	if (_errorCheckerDialog && _errorCheckerDialog->isVisible())
 		_errorCheckerDialog->runCheck();
 
+	return true;
+}
+
+void FredView::setCurrentFile(const QString& filepath) {
+	const QString filename = filepath.isEmpty() ? tr("Untitled") : QFileInfo(filepath).fileName();
+
+	// The "[*]" is the placeholder for showing the modified state of the window
+	setWindowTitle(tr("%1[*]").arg(filename));
+	// This will add some additional features on platforms that make use of this information
+	setWindowFilePath(filepath);
+
+	// Templates are loaded to edit, not saved back to their original path, so a loaded
+	// template has no Save target (Save asks for a name) rather than keeping the previous one.
+	if (filepath.isEmpty() || filepath.endsWith(".fst", Qt::CaseInsensitive)) {
+		saveName.clear();
+	} else {
+		saveName = filepath;
+	}
+	if (!filepath.isEmpty()) {
+		addToRecentFiles(filepath);
+	}
+
+	// Update autosave path and start/stop timer based on whether we have a named file.
 	fred->setCurrentMissionPath(saveName);
 	restartAutosaveTimer();
-	return true;
 }
 
 void FredView::restartAutosaveTimer() {
@@ -929,32 +958,7 @@ void FredView::on_mission_loaded(const std::string& filepath) {
 		_tbLayerComboDirty = true;
 	}
 
-	QString filename = "Untitled";
-	if (!filepath.empty()) {
-		filename = QFileInfo(QString::fromStdString(filepath)).fileName();
-	}
-
-	// The "[*]" is the placeholder for showing the modified state of the window
-	auto title = tr("%1[*]").arg(filename);
-
-	setWindowTitle(title);
-	// This will add some additional features on platforms that make use of this information
-	setWindowFilePath(QString::fromStdString(filepath));
-
-	if (!filepath.empty()) {
-		auto qpath = QString::fromStdString(filepath);
-		// Templates are loaded to edit, not saved back to their original path
-		if (!qpath.endsWith(".fst", Qt::CaseInsensitive)) {
-			saveName = qpath;
-		}
-		addToRecentFiles(qpath);
-	} else {
-		saveName = QString();
-	}
-
-	// Update autosave path and start/stop timer based on whether we have a named file.
-	fred->setCurrentMissionPath(saveName);
-	restartAutosaveTimer();
+	setCurrentFile(QString::fromStdString(filepath));
 
 	_missionModified = false;
 
