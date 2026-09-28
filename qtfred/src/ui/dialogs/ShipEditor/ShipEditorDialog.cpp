@@ -1164,8 +1164,10 @@ void ShipEditorDialog::enableDisable()
 	const bool noPlayerSelected = (_model->getNumSelectedPlayers() == 0);
 	ui->deleteButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
 	ui->resetButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
-	// custom data is per-ship, so only editable when a single ship is selected
-	ui->customDataButton->setEnabled(_model->getUIEnable() && _model->getCustomDataShip() >= 0);
+	// Custom data is per-ship, so only editable for one ship. Deliberately not gated on
+	// getUIEnable(): that is false when only the player ship is selected (the AI/cargo/cue
+	// fields don't apply to it), but custom data does.
+	ui->customDataButton->setEnabled(_model->getCustomDataShip() >= 0);
 	ui->killScoreEdit->setEnabled(_model->getUIEnable());
 	ui->assistEdit->setEnabled(_model->getUIEnable());
 
