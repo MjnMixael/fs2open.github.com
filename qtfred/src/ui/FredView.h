@@ -243,6 +243,10 @@ class FredView: public QMainWindow, public IDialogProvider {
 	void addToRecentFiles(const QString& path);
 	void updateRecentFileList();
 
+	// Makes filepath the file this window is editing: title, platform file path, Save target,
+	// autosave name and recent files. Empty means an Untitled mission.
+	void setCurrentFile(const QString& filepath);
+
 	void recentFileOpened();
 
 	/**
