@@ -856,6 +856,7 @@ int SexpTreeModel::query_restricted_opf_range(int opf)
 
 		// Goober5000 - these are needed too (otherwise the arguments revert to their defaults)
 		case OPF_STRING:
+		case OPF_SHIP_CUSTOM_DATA_KEY:
 		case OPF_ANYTHING:
 		case OPF_CONTAINER_VALUE: // jg18
 		case OPF_DATA_OR_STR_CONTAINER: // jg18

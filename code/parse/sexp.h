@@ -65,6 +65,7 @@ enum sexp_opf_t : int {
 	OPF_SHIP_WING_POINT_OR_NONE,	// WMC - Ship, wing, point or none
 	OPF_COORDINATE_POINT,			// name of a coordinate point (special point) only
 	OPF_COORDINATE_POINT_FLAG,		// name of a coordinate point flag (Parse_coordinate_point_flags)
+	OPF_SHIP_CUSTOM_DATA_KEY,		// ship custom data key: lists #ShipCustomData keys and keys used on ships, free text allowed
 	OPF_SHIP_TYPE,					// type of ship (fighter/bomber/etc)... NOTE: the type "fighter/bomber" is allowed even though it's not a real ship type; SEXPs must account for this
 	OPF_KEYPRESS,					// a default key
 	OPF_EVENT_NAME,					// name of an event

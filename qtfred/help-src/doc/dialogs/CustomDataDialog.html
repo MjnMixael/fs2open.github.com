@@ -18,6 +18,16 @@ know to look for specific keys. See <a href="../concepts/custom-data.html">Custo
 Data</a> in Concepts for the full picture, including how per-domain schemas are
 defined.</p>
 
+<h2>Ship custom data</h2>
+<p>Opened from the <a href="ShipEditorDialog.html">Ship Editor</a>, the dialog edits the
+custom data of the one selected ship, which can be the player ship. The button is
+disabled when several ships are selected. A newly placed ship starts with every key from
+the <code>#ShipCustomData</code> section of <code>editor.tbl</code> at its default value;
+ships loaded from a mission keep exactly the keys that were saved. Ship custom data is
+saved with the ship in the mission file, is included when the ship is duplicated, and
+edits are one undo step. SEXPs and Lua read and change it during the mission; see
+<a href="../concepts/custom-data.html">Custom Data</a> in Concepts.</p>
+
 <h2>Schemas and pre-defined keys</h2>
 <p>An editor-defined schema (from <code>editor.tbl</code>) or a script calling
 <code>mn.addDefaultCustomData(key, defaultValue, description)</code> can register the

@@ -1298,6 +1298,31 @@ sexp_list_item *SexpTreeOPF::get_listing_opf_coordinate_point_flags()
 	return head.next;
 }
 
+// Keys offered for a ship custom data key argument: the editor.tbl #ShipCustomData keys plus
+// any key already set on a ship in the mission. Free text is still allowed (the OPF is not a
+// restricted range), so this is a convenience list that catches key-name typos.
+sexp_list_item *SexpTreeOPF::get_listing_opf_ship_custom_data_keys()
+{
+	SCP_set<SCP_string> keys;
+	for (const auto& def : Default_ship_custom_data) {
+		keys.insert(def.key);
+	}
+	for (const auto& shipp : Ships) {
+		if (shipp.objnum < 0)
+			continue;
+		for (const auto& entry : shipp.custom_data) {
+			keys.insert(entry.first);
+		}
+	}
+
+	sexp_list_item head;
+	for (const auto& key : keys) {
+		head.add_data(key.c_str());
+	}
+
+	return head.next;
+}
+
 sexp_list_item *SexpTreeOPF::get_listing_opf_team_colors()
 {
 	sexp_list_item head;
@@ -2425,6 +2450,10 @@ sexp_list_item *SexpTreeOPF::get_listing_opf(int opf, int parent_node, int arg_i
 			list = get_listing_opf_coordinate_point_flags();
 			break;
 
+		case OPF_SHIP_CUSTOM_DATA_KEY:
+			list = get_listing_opf_ship_custom_data_keys();
+			break;
+
 		case OPF_TEAM_COLOR:
 			list = get_listing_opf_team_colors();
 			break;
@@ -2651,6 +2680,7 @@ int SexpTreeOPF::query_default_argument_available(int op, int i) const
 		case OPF_SHIP_FLAG:
 		case OPF_WING_FLAG:
 		case OPF_COORDINATE_POINT_FLAG:
+		case OPF_SHIP_CUSTOM_DATA_KEY:
 		case OPF_NEBULA_PATTERN:
 		case OPF_NAV_POINT:
 		case OPF_TEAM_COLOR:
@@ -3286,6 +3316,10 @@ int SexpTreeOPF::get_default_value(sexp_list_item* item, int op, int i) const
 
 		case OPF_VARIABLE_NAME:
 			str = "<variable name>";
+			break;
+
+		case OPF_SHIP_CUSTOM_DATA_KEY:
+			str = "<custom data key>";
 			break;
 
 		case OPF_CONTAINER_NAME:

@@ -496,7 +496,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "ship-custom-data-set",			OP_SHIP_CUSTOM_DATA_SET,				3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 	{ "ship-custom-data-set-int",		OP_SHIP_CUSTOM_DATA_SET_INT,			3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 	{ "ship-custom-data-set-bool",		OP_SHIP_CUSTOM_DATA_SET_BOOL,			3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
-	{ "ship-custom-data-clear",			OP_SHIP_CUSTOM_DATA_CLEAR,				1,	2,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
+	{ "ship-custom-data-clear",			OP_SHIP_CUSTOM_DATA_CLEAR,				2,	INT_MAX,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 
 	//Shields, Engines and Weapons Sub-Category
 	{ "set-weapon-energy",				OP_SET_WEAPON_ENERGY,					2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Karajorma
@@ -3730,6 +3730,7 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 			case OPF_CARGO:
 			case OPF_STRING:
 			case OPF_MESSAGE_OR_STRING:
+			case OPF_SHIP_CUSTOM_DATA_KEY:
 				if (node_subtype != SEXP_ATOM_STRING)
 					return SEXP_CHECK_TYPE_MISMATCH;
 				break;
@@ -8610,44 +8611,37 @@ int sexp_ship_custom_data_has_key(int node)
 	return SEXP_FALSE;
 }
 
+// arguments: the key, then the ships to remove it from (like alter-ship-flag)
 void sexp_ship_custom_data_clear(int node)
 {
-	auto ship_entry = eval_ship(node);
-	auto data = ship_custom_data_target(ship_entry);
-	if (data == nullptr)
-		return;
-
-	int key_node = CDR(node);
-	if (key_node >= 0)
-		data->erase(CTEXT(key_node));
-	else
-		data->clear();
+	const SCP_string key = CTEXT(node);
 
 	Current_sexp_network_packet.start_callback();
-	Current_sexp_network_packet.send_string(SCP_string(ship_entry->name));
-	Current_sexp_network_packet.send_bool(key_node >= 0);
-	if (key_node >= 0)
-		Current_sexp_network_packet.send_string(SCP_string(CTEXT(key_node)));
+	Current_sexp_network_packet.send_string(key);
+
+	for (int n = CDR(node); n >= 0; n = CDR(n)) {
+		auto ship_entry = eval_ship(n);
+		auto data = ship_custom_data_target(ship_entry);
+		if (data == nullptr)
+			continue;
+		data->erase(key);
+		Current_sexp_network_packet.send_string(SCP_string(ship_entry->name));
+	}
+
 	Current_sexp_network_packet.end_callback();
 }
 
 void multi_sexp_ship_custom_data_clear()
 {
-	SCP_string ship_name, key;
-	bool has_key = false;
-	Current_sexp_network_packet.get_string(ship_name);
-	if (!Current_sexp_network_packet.get_bool(has_key))
-		return;
-	if (has_key && !Current_sexp_network_packet.get_string(key))
+	SCP_string key, ship_name;
+	if (!Current_sexp_network_packet.get_string(key))
 		return;
 
-	auto data = ship_custom_data_target(ship_registry_get(ship_name.c_str()));
-	if (data == nullptr)
-		return;
-	if (has_key)
-		data->erase(key);
-	else
-		data->clear();
+	while (Current_sexp_network_packet.get_string(ship_name)) {
+		auto data = ship_custom_data_target(ship_registry_get(ship_name.c_str()));
+		if (data != nullptr)
+			data->erase(key);
+	}
 }
 
 int sexp_get_energy_pct (int node, int op_num)
@@ -33088,8 +33082,11 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_SHIP_WING;
 
 		case OP_SHIP_CUSTOM_DATA_SET:
+		case OP_SHIP_CUSTOM_DATA_IS:
 			if (argnum == 0)
 				return OPF_SHIP;
+			else if (argnum == 1)
+				return OPF_SHIP_CUSTOM_DATA_KEY;
 			else
 				return OPF_STRING;
 
@@ -33097,7 +33094,7 @@ int query_operator_argument_type(int op_index, int argnum)
 			if (argnum == 0)
 				return OPF_SHIP;
 			else if (argnum == 1)
-				return OPF_STRING;
+				return OPF_SHIP_CUSTOM_DATA_KEY;
 			else
 				return OPF_NUMBER;
 
@@ -33105,24 +33102,23 @@ int query_operator_argument_type(int op_index, int argnum)
 			if (argnum == 0)
 				return OPF_SHIP;
 			else if (argnum == 1)
-				return OPF_STRING;
+				return OPF_SHIP_CUSTOM_DATA_KEY;
 			else
 				return OPF_BOOL;
-
-		case OP_SHIP_CUSTOM_DATA_IS:
-			if (argnum == 0)
-				return OPF_SHIP;
-			else
-				return OPF_STRING;
 
 		case OP_SHIP_CUSTOM_DATA_GET_INT:
 		case OP_SHIP_CUSTOM_DATA_GET_BOOL:
 		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
-		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			if (argnum == 0)
 				return OPF_SHIP;
 			else
-				return OPF_STRING;
+				return OPF_SHIP_CUSTOM_DATA_KEY;
+
+		case OP_SHIP_CUSTOM_DATA_CLEAR:
+			if (argnum == 0)
+				return OPF_SHIP_CUSTOM_DATA_KEY;
+			else
+				return OPF_SHIP;
 
 		case OP_SET_DEATH_MESSAGE:
 			return OPF_MESSAGE_OR_STRING;
@@ -41384,9 +41380,9 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 
 	// MjnMixael
 	{ OP_SHIP_CUSTOM_DATA_CLEAR, "ship-custom-data-clear\r\n"
-		"\tClears custom data on a ship instance.  If a key is provided, only that key is removed; otherwise all custom data on the ship is cleared.  Takes 1 or 2 arguments...\r\n"
-		"\t1:\tThe ship on which to clear data\r\n"
-		"\t2:\tThe key to remove (optional)" },
+		"\tRemoves a custom data key from one or more ship instances.  Ships without the key are unaffected.  Takes 2 or more arguments...\r\n"
+		"\t1:\tThe key to remove\r\n"
+		"\tRest:\tThe ships to remove it from" },
 
 	// Goober5000
 	{ OP_SET_DEATH_MESSAGE, "set-death-message\r\n"
