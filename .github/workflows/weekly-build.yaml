@@ -2,9 +2,11 @@ name: Weekly build
 
 on:
   schedule:
-    # Mondays 06:00 UTC = 1am CDT / midnight CST (same time of day as SCP's nightly trigger),
-    # after the Sunday afternoon SCP upstream sync
-    - cron: '0 6 * * 1'
+    # Mondays 05:17 UTC = 12:17am CDT / 11:17pm Sunday CST, after the Sunday afternoon SCP
+    # upstream sync. Deliberately off the top of the hour: GitHub delays scheduled runs under
+    # load and can drop them outright, and :00 is the busiest slot (the first 06:00 run was
+    # never delivered). If a Monday is missed, dispatch this workflow by hand with dry_run off.
+    - cron: '17 5 * * 1'
   workflow_dispatch:
     inputs:
       dry_run:
