@@ -2,9 +2,14 @@ name: Weekly build
 
 on:
   schedule:
-    # Mondays 06:00 UTC = 1am CDT / midnight CST (same time of day as SCP's nightly trigger),
-    # after the Sunday afternoon SCP upstream sync
-    - cron: '0 6 * * 1'
+    # Monday, after the Sunday afternoon SCP upstream sync. GitHub delays scheduled runs under
+    # load and can drop them outright (the first 06:00 run was never delivered), so there are
+    # three attempts, all off the top of the hour. The first to arrive builds; the rest find
+    # master already tagged (or today's tag already made) and exit cleanly. If every attempt
+    # is missed, dispatch this workflow by hand with dry_run off.
+    - cron: '17 5 * * 1'    # 05:17 UTC = 12:17am CDT / 11:17pm Sunday CST
+    - cron: '47 8 * * 1'    # 08:47 UTC =  3:47am CDT /  2:47am CST (backup)
+    - cron: '23 13 * * 1'   # 13:23 UTC =  8:23am CDT /  7:23am CST (backup)
   workflow_dispatch:
     inputs:
       dry_run:
@@ -49,9 +54,12 @@ jobs:
             echo "::error::Could not build a tag name from cmake/version.cmake (got '$tag')"
             exit 1
           fi
-          if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
-            echo "::error::Tag $tag already exists on another commit"
-            exit 1
+          # Today's tag already exists on an earlier commit: a backup schedule arriving after
+          # something merged since the first run, or a second manual run the same day. One
+          # weekly build per day; the new commits go out next week (or cut a build by hand).
+          if existing_sha=$(git rev-parse -q --verify "refs/tags/$tag^{commit}"); then
+            echo "Today's build $tag already exists (on $(git rev-parse --short "$existing_sha")); nothing to do."
+            exit 0
           fi
 
           echo "Tagging $(git log -1 --format='%h %s' HEAD) as $tag"
