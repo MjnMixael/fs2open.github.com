@@ -211,6 +211,49 @@ void MissionGoalsDialog::recreate_tree()
 
 	_model->setCurrentGoal(-1);
 }
+// This dialog edits a working copy of the goals. If it was already open with unapplied edits,
+// the working copy can differ from Mission_goals, so trust the index only when the name there
+// still matches; otherwise take the first goal with that name.
+void MissionGoalsDialog::focusGoal(const SCP_string& name, int index)
+{
+	const auto& goals = _model->getGoals();
+	int target = -1;
+	if (index >= 0 && index < static_cast<int>(goals.size()) && goals[index].name == name) {
+		target = index;
+	} else {
+		for (size_t i = 0; i < goals.size(); ++i) {
+			if (goals[i].name == name) {
+				target = static_cast<int>(i);
+				break;
+			}
+		}
+	}
+	if (target < 0)
+		return;
+
+	// The tree only lists one goal type at a time. Switch to this goal's type directly
+	// (signals blocked) so the jump isn't recorded as an undoable display-filter change.
+	const int type = goals[target].type & GOAL_TYPE_MASK;
+	if (type != _model->m_display_goal_types) {
+		_model->setGoalDisplayType(type);
+		{
+			QSignalBlocker blocker(ui->displayTypeCombo);
+			ui->displayTypeCombo->setCurrentIndex(type);
+		}
+		recreate_tree();
+	}
+
+	const int formula = goals[target].formula;
+	for (int i = 0; i < ui->goalEventTree->topLevelItemCount(); ++i) {
+		auto* it = ui->goalEventTree->topLevelItem(i);
+		if (it && it->data(0, sexp_tree_view::FormulaDataRole).toInt() == formula) {
+			ui->goalEventTree->setCurrentItem(it);
+			ui->goalEventTree->scrollToItem(it);
+			break;
+		}
+	}
+}
+
 void MissionGoalsDialog::createNewObjective()
 {
 	auto& goal = _model->createNewGoal();

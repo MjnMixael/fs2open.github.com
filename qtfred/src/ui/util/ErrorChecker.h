@@ -46,9 +46,20 @@ inline const SeverityInfo& infoFor(ErrorSeverity sev) {
 	return severity_info[1];
 }
 
+// Where an error lives, so the error checker can offer to take the designer there.
+struct ErrorTarget {
+	enum class Kind { None, Event, Goal, Wing, Object };
+	Kind kind = Kind::None;
+	int index = -1;     // Mission_events / Mission_goals / Wings / Objects index when the check ran
+	int signature = 0;  // Kind::Object: the object's signature (its Objects[] slot can be reused)
+	int obj_type = -1;  // Kind::Object: its OBJ_* type, for the button label
+	SCP_string name;    // event/goal/wing name, to re-find it if the list has changed since
+};
+
 struct ErrorEntry {
 	SCP_string message;
 	ErrorSeverity severity;
+	ErrorTarget target;
 };
 
 enum class ErrorCheckType {
@@ -105,6 +116,23 @@ private:
 	// that need to halt immediately.
 	int g_err = 0;
 	SCP_vector<ErrorEntry> _collected_errors;
+	// Attached to every error recorded while it is set; see TargetScope.
+	ErrorTarget _current_target;
+
+	// Sets _current_target for its lifetime and clears it on any way out of the scope,
+	// including early "return internal_error(...)" exits. One per checked item.
+	class TargetScope {
+	public:
+		TargetScope(ErrorTarget* slot, ErrorTarget target) : _slot(slot) { *_slot = std::move(target); }
+		~TargetScope() { *_slot = {}; }
+		TargetScope(const TargetScope&) = delete;
+		TargetScope& operator=(const TargetScope&) = delete;
+		TargetScope(TargetScope&&) = delete;
+		TargetScope& operator=(TargetScope&&) = delete;
+
+	private:
+		ErrorTarget* _slot;
+	};
 	SCP_set<anchor_t> _anchors_checked;
 
 	// error() records a user-fixable problem and continues; return type is void so

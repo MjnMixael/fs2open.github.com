@@ -25,6 +25,10 @@ public:
 	void accept() override;
 	void reject() override;
 
+	// Shows a goal and selects it (e.g. from the error checker's "Go to Goal"). index is a
+	// Mission_goals index and name that goal's name; see the definition for a changed list.
+	void focusGoal(const SCP_string& name, int index);
+
  protected:
 	void closeEvent(QCloseEvent* event) override;
 

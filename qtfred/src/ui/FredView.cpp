@@ -2984,6 +2984,75 @@ DialogT* showSingleInstanceDialog(FredView* parent, EditorViewport* viewport, Ar
 void FredView::on_actionMission_Events_triggered(bool) {
 	showSingleInstanceDialog<dialogs::MissionEventsDialog>(this, _viewport);
 }
+// Opens a single-instance dialog, or brings the open one forward, and returns it.
+template <typename DialogT>
+static DialogT* openOrRaiseDialog(FredView* parent, EditorViewport* viewport) {
+	if (auto* existing = parent->findChild<DialogT*>(QString(), Qt::FindDirectChildrenOnly)) {
+		existing->raise();
+		existing->activateWindow();
+		return existing;
+	}
+	return showSingleInstanceDialog<DialogT>(parent, viewport);
+}
+
+void FredView::showErrorTarget(const ErrorTarget& target) {
+	switch (target.kind) {
+	case ErrorTarget::Kind::Event:
+		if (auto* events = openOrRaiseDialog<dialogs::MissionEventsDialog>(this, _viewport))
+			events->focusEvent(target.name, target.index);
+		break;
+
+	case ErrorTarget::Kind::Goal:
+		if (auto* goals = openOrRaiseDialog<dialogs::MissionGoalsDialog>(this, _viewport))
+			goals->focusGoal(target.name, target.index);
+		break;
+
+	case ErrorTarget::Kind::Object: {
+		// Objects[] slots are reused, so the signature decides; fall back to a search if
+		// the object moved to another slot since the check.
+		int objnum = -1;
+		if (target.index >= 0 && target.index < MAX_OBJECTS && Objects[target.index].type != OBJ_NONE &&
+			Objects[target.index].signature == target.signature) {
+			objnum = target.index;
+		} else {
+			objnum = obj_get_by_signature(target.signature);
+		}
+		if (objnum < 0) {
+			statusBar()->showMessage(tr("That object no longer exists."), 5000);
+			return;
+		}
+		// Select it alone, bring it into view, then open whichever editor it uses
+		// (the same dispatch a double-click in the viewport goes through).
+		fred->unmark_all();
+		fred->selectObject(objnum);
+		on_actionZoomSelected_triggered(false);
+		handleObjectEditor(objnum);
+		break;
+	}
+
+	case ErrorTarget::Kind::Wing: {
+		int wing = -1;
+		if (target.index >= 0 && target.index < MAX_WINGS && Wings[target.index].wave_count > 0 &&
+			target.name == Wings[target.index].name) {
+			wing = target.index;
+		} else {
+			wing = wing_name_lookup(target.name.c_str());
+		}
+		if (wing < 0 || Wings[wing].wave_count <= 0) {
+			statusBar()->showMessage(tr("That wing no longer exists."), 5000);
+			return;
+		}
+		fred->mark_wing(wing); // selects the whole wing, leader as the current object
+		if (query_valid_object(fred->currentObject))
+			_viewport->view_object(fred->currentObject);
+		on_actionWings_triggered(false);
+		break;
+	}
+
+	case ErrorTarget::Kind::None:
+		break;
+	}
+}
 void FredView::on_actionMission_Cutscenes_triggered(bool)
 {
 	showSingleInstanceDialog<dialogs::MissionCutscenesDialog>(this, _viewport);
@@ -3607,6 +3676,8 @@ void FredView::openAndRunErrorChecker() {
 	if (!_errorCheckerDialog) {
 		_errorCheckerDialog = new dialogs::ErrorCheckerDialog(this, _viewport);
 		_errorCheckerDialog->setAttribute(Qt::WA_DeleteOnClose);
+		connect(_errorCheckerDialog, &dialogs::ErrorCheckerDialog::navigationRequested,
+			this, &FredView::showErrorTarget);
 		connect(_errorCheckerDialog, &QObject::destroyed, this, [this]() {
 			_errorCheckerDialog = nullptr;
 		});
@@ -3621,6 +3692,8 @@ void FredView::autoRunErrorChecker() {
 	if (!_errorCheckerDialog) {
 		_errorCheckerDialog = new dialogs::ErrorCheckerDialog(this, _viewport);
 		_errorCheckerDialog->setAttribute(Qt::WA_DeleteOnClose);
+		connect(_errorCheckerDialog, &dialogs::ErrorCheckerDialog::navigationRequested,
+			this, &FredView::showErrorTarget);
 		connect(_errorCheckerDialog, &QObject::destroyed, this, [this]() {
 			_errorCheckerDialog = nullptr;
 		});

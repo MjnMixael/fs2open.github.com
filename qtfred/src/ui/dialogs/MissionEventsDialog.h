@@ -39,6 +39,11 @@ class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface {
 	void accept() override;
 	void reject() override;
 
+	// Shows an event in the tree view and selects it (e.g. from the error checker's
+	// "Go to Event"). index is a Mission_events index and name that event's name; see the
+	// definition for how a list that has changed since is handled.
+	void focusEvent(const SCP_string& name, int index);
+
 	SCP_vector<SCP_string> getMessages() override;
 	bool hasDefaultMessageParameter() override;
 	int getRootReturnType() const override;

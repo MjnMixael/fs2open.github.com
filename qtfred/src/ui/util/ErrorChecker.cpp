@@ -28,10 +28,32 @@ namespace fso::fred {
 
 ErrorChecker::ErrorChecker(EditorViewport* viewport) : _viewport(viewport) {}
 
+namespace {
+
+ErrorTarget objectTarget(int objnum) {
+	ErrorTarget t;
+	t.kind = ErrorTarget::Kind::Object;
+	t.index = objnum;
+	t.signature = Objects[objnum].signature;
+	t.obj_type = Objects[objnum].type;
+	return t;
+}
+
+ErrorTarget namedTarget(ErrorTarget::Kind kind, int index, SCP_string name) {
+	ErrorTarget t;
+	t.kind = kind;
+	t.index = index;
+	t.name = std::move(name);
+	return t;
+}
+
+} // namespace
+
 bool ErrorChecker::runFullCheck() {
 	_collected_errors.clear();
 	_anchors_checked.clear();
 	_object_names.clear();
+	_current_target = {};
 	g_err = 0;
 
 	// Surface any auto-corrections the parser had to apply at load time. These would
@@ -39,7 +61,7 @@ bool ErrorChecker::runFullCheck() {
 	// persona indices to -1, etc., so by the time the checker runs the live data is
 	// already clean and the per-check predicates would never fire.
 	for (const auto& msg : Mission_parse_warnings) {
-		_collected_errors.push_back({msg, ErrorSeverity::Warning});
+		_collected_errors.push_back({msg, ErrorSeverity::Warning, {}});
 		g_err = 1;
 	}
 	Mission_parse_warnings.clear();
@@ -105,7 +127,7 @@ void ErrorChecker::error(const char* msg, ...) {
 	buf[sizeof(buf) - 1] = '\0';
 
 	g_err = 1;
-	_collected_errors.push_back({buf, ErrorSeverity::Error});
+	_collected_errors.push_back({buf, ErrorSeverity::Error, _current_target});
 }
 
 int ErrorChecker::internal_error(const char* msg, ...) {
@@ -117,7 +139,7 @@ int ErrorChecker::internal_error(const char* msg, ...) {
 	va_end(args);
 
 	g_err = 1;
-	_collected_errors.push_back({buf, ErrorSeverity::InternalError});
+	_collected_errors.push_back({buf, ErrorSeverity::InternalError, _current_target});
 	return -1;
 }
 
@@ -131,7 +153,7 @@ void ErrorChecker::warning(const char* msg, ...) {
 	buf[sizeof(buf) - 1] = '\0';
 
 	g_err = 1;
-	_collected_errors.push_back({buf, ErrorSeverity::Warning});
+	_collected_errors.push_back({buf, ErrorSeverity::Warning, _current_target});
 }
 
 void ErrorChecker::potential(const char* msg, ...) {
@@ -143,7 +165,7 @@ void ErrorChecker::potential(const char* msg, ...) {
 	va_end(args);
 	buf[sizeof(buf) - 1] = '\0';
 
-	_collected_errors.push_back({buf, ErrorSeverity::Potential});
+	_collected_errors.push_back({buf, ErrorSeverity::Potential, _current_target});
 }
 
 int ErrorChecker::fred_check_sexp(int sexp, int type, const char* location, ...) {
@@ -200,7 +222,7 @@ int ErrorChecker::fred_check_sexp(int sexp, int type, const char* location, ...)
 					sexp_buf.c_str(),
 					bad_node_str.c_str());
 
-			_collected_errors.push_back({error_buf, ErrorSeverity::Potential});
+			_collected_errors.push_back({error_buf, ErrorSeverity::Potential, _current_target});
 		}
 	}
 
@@ -236,6 +258,7 @@ int ErrorChecker::checkObjectList() {
 	_object_names.clear();
 	object* ptr = GET_FIRST(&obj_used_list);
 	while (ptr != END_OF_LIST(&obj_used_list)) {
+		TargetScope target(&_current_target, objectTarget(OBJ_INDEX(ptr)));
 		ObjectName entry;
 		int i = ptr->instance;
 		if ((ptr->type == OBJ_SHIP) || (ptr->type == OBJ_START)) {
@@ -393,6 +416,7 @@ int ErrorChecker::checkShips() {
 			if (!query_valid_object(Ships[i].objnum)) {
 				return internal_error("Ship uses an unused object");
 			}
+			TargetScope target(&_current_target, objectTarget(Ships[i].objnum));
 
 			int z = Objects[Ships[i].objnum].type;
 			if ((z != OBJ_SHIP) && (z != OBJ_START)) {
@@ -599,6 +623,7 @@ int ErrorChecker::checkWings() {
 		int j = Wings[i].wave_count;
 		if (j) {
 			count++;
+			TargetScope target(&_current_target, namedTarget(ErrorTarget::Kind::Wing, i, Wings[i].name));
 			if (j < 0 || j > MAX_SHIPS_PER_WING) {
 				return internal_error("Invalid number of ships in wing \"%s\"", Wings[i].name);
 			}
@@ -762,6 +787,7 @@ int ErrorChecker::checkWaypointPaths() {
 		}
 
 		for (const auto& jj : ii.get_waypoints()) {
+			TargetScope target(&_current_target, objectTarget(jj.get_objnum()));
 			char buf[256];
 			waypoint_stuff_name(buf, jj);
 			bool found = false;
@@ -1063,7 +1089,10 @@ int ErrorChecker::checkPlayerWings() {
 }
 
 int ErrorChecker::checkMissionEvents() {
-	for (const auto& event : Mission_events) {
+	for (size_t i = 0; i < Mission_events.size(); ++i) {
+		const auto& event = Mission_events[i];
+		TargetScope target(&_current_target, namedTarget(ErrorTarget::Kind::Event, static_cast<int>(i), event.name));
+
 		if (event.repeat_count == 0) {
 			error("Mission event \"%s\" has a repeat count of 0; must be at least 1 (or negative for unlimited)",
 				  event.name.c_str());
@@ -1082,7 +1111,9 @@ int ErrorChecker::checkMissionEvents() {
 }
 
 int ErrorChecker::checkMissionGoals() {
-	for (const auto& goal : Mission_goals) {
+	for (size_t i = 0; i < Mission_goals.size(); ++i) {
+		const auto& goal = Mission_goals[i];
+		TargetScope target(&_current_target, namedTarget(ErrorTarget::Kind::Goal, static_cast<int>(i), goal.name));
 		if (fred_check_sexp(goal.formula, OPR_BOOL, "mission goal \"%s\"", goal.name.c_str())) {
 			return -1;
 		}
@@ -1130,6 +1161,7 @@ int ErrorChecker::checkWingOrders() {
 		if (!wing.wave_count) {
 			continue;
 		}
+		TargetScope target(&_current_target, namedTarget(ErrorTarget::Kind::Wing, static_cast<int>(&wing - Wings), wing.name));
 
 		int starting_wing = (ship_starting_wing_lookup(wing.name) != -1);
 
@@ -1178,6 +1210,7 @@ int ErrorChecker::checkDockingGroupCues() {
 		if (!query_valid_object(Ships[i].objnum)) continue;
 		if (!object_is_docked(&Objects[Ships[i].objnum])) continue;
 		if (visited.count(i)) continue;
+		TargetScope target(&_current_target, objectTarget(Ships[i].objnum));
 
 		// BFS to collect all ships in this docking group
 		SCP_vector<int> group;
