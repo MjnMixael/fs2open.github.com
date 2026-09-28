@@ -1165,7 +1165,7 @@ void ShipEditorDialog::enableDisable()
 	ui->deleteButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
 	ui->resetButton->setEnabled(_model->getUIEnable() && noPlayerSelected);
 	// custom data is per-ship, so only editable when a single ship is selected
-	ui->customDataButton->setEnabled(_model->getUIEnable() && !_model->getIfMultipleShips() && _model->getSingleShip() >= 0);
+	ui->customDataButton->setEnabled(_model->getUIEnable() && _model->getCustomDataShip() >= 0);
 	ui->killScoreEdit->setEnabled(_model->getUIEnable());
 	ui->assistEdit->setEnabled(_model->getUIEnable());
 
@@ -1415,8 +1415,8 @@ void ShipEditorDialog::on_customDataButton_clicked()
 {
 	// Single-ship only (the button is disabled in multi-edit), so unlike the
 	// texture-replacement dialog there is just one ship to bracket.
-	const int ship = _model->getSingleShip();
-	if (_model->getIfMultipleShips() || ship < 0 || Ships[ship].objnum < 0) {
+	const int ship = _model->getCustomDataShip();
+	if (ship < 0 || Ships[ship].objnum < 0) {
 		return;
 	}
 

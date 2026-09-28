@@ -143,7 +143,10 @@ class ShipEditorDialogModel : public AbstractDialogModel {
 	static SCP_vector<std::pair<SCP_string, int>> getPlayerOrders();
 	void applyPlayerOrders(const SCP_vector<std::pair<SCP_string, int>>& orders);
 
-	// per-ship instance custom data (single-ship editing only)
+	// per-ship instance custom data (single-ship editing only). The ship being edited is the
+	// single selected ship or, in a single-player mission, the player ship (tracked separately
+	// in _playerShipIndex); -1 when several are selected.
+	int getCustomDataShip() const;
 	SCP_map<SCP_string, SCP_string> getShipCustomData() const;
 	void setShipCustomData(const SCP_map<SCP_string, SCP_string>& data);
 
