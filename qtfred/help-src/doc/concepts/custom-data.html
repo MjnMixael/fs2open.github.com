@@ -24,9 +24,11 @@ scripts or SEXPs that know to look for specific keys. Values are stored as strin
 </table>
 <p>Per-ship custom data is saved to the mission file in a <code>$begin_custom_data</code>
 &hellip; <code>$end_custom_data</code> block on the ship. Scripts read a ship's data
-through the ship object's custom-data methods, and SEXPs such as
-<code>ship-custom-data-get-int</code> and <code>ship-custom-data-set</code> read and
-write it during the mission.</p>
+through the ship object's custom-data methods, and SEXPs read and write it during the
+mission: <code>ship-custom-data-is</code> and <code>ship-custom-data-set</code> for text,
+<code>ship-custom-data-get-int</code> and <code>ship-custom-data-set-int</code> for numbers,
+<code>ship-custom-data-get-bool</code> and <code>ship-custom-data-set-bool</code> for
+true/false, plus <code>ship-custom-data-has-key</code> and <code>ship-custom-data-clear</code>.</p>
 
 <h2>Editor-defined schemas</h2>
 <p>A schema declares the keys an editor is <em>expected</em> to use, along with a type,

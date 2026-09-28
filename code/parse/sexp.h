@@ -1038,6 +1038,8 @@ enum : int {
 	OP_SHIP_CUSTOM_DATA_GET_INT,	// MjnMixael
 	OP_SHIP_CUSTOM_DATA_HAS_KEY,	// MjnMixael
 	OP_SHIP_CUSTOM_DATA_CLEAR,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_GET_BOOL,	// MjnMixael
+	OP_SHIP_CUSTOM_DATA_SET_BOOL,	// MjnMixael
 
 	// this should come after every operator
 	First_available_operator_id

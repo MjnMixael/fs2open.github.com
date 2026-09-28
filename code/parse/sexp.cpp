@@ -296,6 +296,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "ship-custom-data-is",			OP_SHIP_CUSTOM_DATA_IS,					3,	3,			SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
 	{ "ship-custom-data-has-key",		OP_SHIP_CUSTOM_DATA_HAS_KEY,			2,	2,			SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
 	{ "ship-custom-data-get-int",		OP_SHIP_CUSTOM_DATA_GET_INT,			2,	2,			SEXP_INTEGER_OPERATOR,	},	// MjnMixael
+	{ "ship-custom-data-get-bool",		OP_SHIP_CUSTOM_DATA_GET_BOOL,			2,	2,			SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
 
 	//Shields, Engines and Weapons Sub-Category
 	{ "has-primary-weapon",				OP_HAS_PRIMARY_WEAPON,					3,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// Karajorma
@@ -494,6 +495,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "cancel-future-waves",			OP_CANCEL_FUTURE_WAVES,					1,	INT_MAX,	SEXP_ACTION_OPERATOR,	}, // naomimyselfandi
 	{ "ship-custom-data-set",			OP_SHIP_CUSTOM_DATA_SET,				3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 	{ "ship-custom-data-set-int",		OP_SHIP_CUSTOM_DATA_SET_INT,			3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
+	{ "ship-custom-data-set-bool",		OP_SHIP_CUSTOM_DATA_SET_BOOL,			3,	3,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 	{ "ship-custom-data-clear",			OP_SHIP_CUSTOM_DATA_CLEAR,				1,	2,			SEXP_ACTION_OPERATOR,	}, // MjnMixael
 
 	//Shields, Engines and Weapons Sub-Category
@@ -1116,6 +1118,8 @@ void sexp_ship_custom_data_set(int node);
 void sexp_ship_custom_data_set_int(int node);
 int sexp_ship_custom_data_is(int node);
 int sexp_ship_custom_data_get_int(int node);
+int sexp_ship_custom_data_get_bool(int node);
+void sexp_ship_custom_data_set_bool(int node);
 int sexp_ship_custom_data_has_key(int node);
 void sexp_ship_custom_data_clear(int node);
 
@@ -8515,6 +8519,13 @@ void sexp_ship_custom_data_set_int(int node)
 	ship_custom_data_store(eval_ship(node), CTEXT(CDR(node)), std::to_string(value));
 }
 
+// stores exactly "true" or "false", so ship-custom-data-get-bool and the editor agree on spelling
+void sexp_ship_custom_data_set_bool(int node)
+{
+	const bool value = is_sexp_true(CDR(CDR(node)));
+	ship_custom_data_store(eval_ship(node), CTEXT(CDR(node)), value ? "true" : "false");
+}
+
 void multi_sexp_ship_custom_data_set()
 {
 	SCP_string ship_name, key, value;
@@ -8563,6 +8574,23 @@ int sexp_ship_custom_data_get_int(int node)
 		return atoi(it->second.c_str());
 
 	return 0;
+}
+
+// true when the stored value is "true" in any case; a missing key is false
+int sexp_ship_custom_data_get_bool(int node)
+{
+	auto ship_entry = eval_ship(node);
+	if (!ship_entry || ship_entry->status == ShipStatus::NOT_YET_PRESENT)
+		return SEXP_NAN;
+	if (ship_entry->status == ShipStatus::EXITED)
+		return SEXP_NAN_FOREVER;
+	auto shipp = ship_entry->shipp();
+
+	auto it = shipp->custom_data.find(CTEXT(CDR(node)));
+	if (it != shipp->custom_data.end() && !stricmp(it->second.c_str(), "true"))
+		return SEXP_TRUE;
+
+	return SEXP_FALSE;
 }
 
 int sexp_ship_custom_data_has_key(int node)
@@ -29116,6 +29144,10 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = sexp_ship_custom_data_get_int(node);
 				break;
 
+			case OP_SHIP_CUSTOM_DATA_GET_BOOL:
+				sexp_val = sexp_ship_custom_data_get_bool(node);
+				break;
+
 			case OP_CAP_SUBSYS_CARGO_KNOWN_DELAY:
 				sexp_val = sexp_cap_subsys_cargo_known_delay(node);
 				break;
@@ -30722,6 +30754,11 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
+			case OP_SHIP_CUSTOM_DATA_SET_BOOL:
+				sexp_ship_custom_data_set_bool(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
 			case OP_SHIP_CUSTOM_DATA_CLEAR:
 				sexp_ship_custom_data_clear(node);
 				sexp_val = SEXP_TRUE;
@@ -31482,6 +31519,7 @@ void multi_sexp_eval()
 
 			case OP_SHIP_CUSTOM_DATA_SET:
 			case OP_SHIP_CUSTOM_DATA_SET_INT:
+			case OP_SHIP_CUSTOM_DATA_SET_BOOL:
 				multi_sexp_ship_custom_data_set();
 				break;
 
@@ -32000,6 +32038,7 @@ int query_operator_return_type(int op)
 		case OP_MAP_HAS_DATA_ITEM:
 		case OP_SHIP_CUSTOM_DATA_IS:
 		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
+		case OP_SHIP_CUSTOM_DATA_GET_BOOL:
 			return OPR_BOOL;
 
 		case OP_PLUS:
@@ -32519,6 +32558,7 @@ int query_operator_return_type(int op)
 		case OP_RESET_GOAL:
 		case OP_SHIP_CUSTOM_DATA_SET:
 		case OP_SHIP_CUSTOM_DATA_SET_INT:
+		case OP_SHIP_CUSTOM_DATA_SET_BOOL:
 		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			return OPR_NULL;
 
@@ -33061,6 +33101,14 @@ int query_operator_argument_type(int op_index, int argnum)
 			else
 				return OPF_NUMBER;
 
+		case OP_SHIP_CUSTOM_DATA_SET_BOOL:
+			if (argnum == 0)
+				return OPF_SHIP;
+			else if (argnum == 1)
+				return OPF_STRING;
+			else
+				return OPF_BOOL;
+
 		case OP_SHIP_CUSTOM_DATA_IS:
 			if (argnum == 0)
 				return OPF_SHIP;
@@ -33068,6 +33116,7 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_STRING;
 
 		case OP_SHIP_CUSTOM_DATA_GET_INT:
+		case OP_SHIP_CUSTOM_DATA_GET_BOOL:
 		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
 		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			if (argnum == 0)
@@ -37406,6 +37455,7 @@ int get_category(int op_id)
 		case OP_SHIP_CUSTOM_DATA_IS:
 		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
 		case OP_SHIP_CUSTOM_DATA_GET_INT:
+		case OP_SHIP_CUSTOM_DATA_GET_BOOL:
 			return OP_CATEGORY_STATUS;
 
 		case OP_WHEN:
@@ -37829,6 +37879,7 @@ int get_category(int op_id)
 		case OP_SET_MOTION_DEBRIS:
 		case OP_SHIP_CUSTOM_DATA_SET:
 		case OP_SHIP_CUSTOM_DATA_SET_INT:
+		case OP_SHIP_CUSTOM_DATA_SET_BOOL:
 		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			return OP_CATEGORY_CHANGE;
 
@@ -37996,6 +38047,7 @@ int get_subcategory(int op_id)
 		case OP_CANCEL_FUTURE_WAVES:
 		case OP_SHIP_CUSTOM_DATA_SET:
 		case OP_SHIP_CUSTOM_DATA_SET_INT:
+		case OP_SHIP_CUSTOM_DATA_SET_BOOL:
 		case OP_SHIP_CUSTOM_DATA_CLEAR:
 			return CHANGE_SUBCATEGORY_SHIP_STATUS;
 
@@ -38411,6 +38463,7 @@ int get_subcategory(int op_id)
 		case OP_SHIP_CUSTOM_DATA_IS:
 		case OP_SHIP_CUSTOM_DATA_HAS_KEY:
 		case OP_SHIP_CUSTOM_DATA_GET_INT:
+		case OP_SHIP_CUSTOM_DATA_GET_BOOL:
 			return STATUS_SUBCATEGORY_SHIP_STATUS;
 
 		case OP_SHIELD_RECHARGE_PCT:
@@ -41309,6 +41362,19 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\tReturns the stored value of the given custom data key interpreted as a number, or 0 if the key is not present.  Takes 2 arguments...\r\n"
 		"\t1:\tThe ship to query\r\n"
 		"\t2:\tThe key" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_GET_BOOL, "ship-custom-data-get-bool\r\n"
+		"\tReturns true if the given custom data key's stored value is true (in any capitalization).  Returns false if the value is anything else or the key is not present.  Takes 2 arguments...\r\n"
+		"\t1:\tThe ship to query\r\n"
+		"\t2:\tThe key" },
+
+	// MjnMixael
+	{ OP_SHIP_CUSTOM_DATA_SET_BOOL, "ship-custom-data-set-bool\r\n"
+		"\tSets a custom data key on a ship instance to true or false.  If the key already exists, its value is overwritten.  Takes 3 arguments...\r\n"
+		"\t1:\tThe ship on which to store the data\r\n"
+		"\t2:\tThe key\r\n"
+		"\t3:\tTrue or false" },
 
 	// MjnMixael
 	{ OP_SHIP_CUSTOM_DATA_HAS_KEY, "ship-custom-data-has-key\r\n"
