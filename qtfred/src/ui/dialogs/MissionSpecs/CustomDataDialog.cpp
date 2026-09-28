@@ -33,7 +33,7 @@ CustomDataDialog::CustomDataDialog(QWidget* parent, EditorViewport* viewport)
 
 	// no schema until setSchema() is called: treat everything as free-form strings
 	ui->valueBoolCombo->setVisible(false);
-	ui->typeValueLabel->setText("string");
+	ui->typeValueLabel->setText(tr("free-form"));
 	ui->resetButton->setEnabled(false);
 
 	buildView();
@@ -226,7 +226,18 @@ void CustomDataDialog::applyTypeForKey(const QString& key)
 	// only constrain the line edit to integers for int-typed keys
 	ui->valueLineEdit->setValidator(type == "int" ? _intValidator : nullptr);
 
-	ui->typeValueLabel->setText(QString::fromStdString(type));
+	// A key that isn't registered (editor.tbl or a script) has no type at all, not "string":
+	// say so, so it isn't mistaken for a checked string key.
+	if (entry != nullptr) {
+		ui->typeValueLabel->setText(QString::fromStdString(type));
+		ui->typeValueLabel->setToolTip(QString());
+	} else {
+		ui->typeValueLabel->setText(tr("free-form"));
+		ui->typeValueLabel->setToolTip(tr("This key isn't defined in editor.tbl, so it has no type and its value is "
+										  "edited as plain text. Mission and campaign files save only a key and its "
+										  "value, never a type, so type checking comes from editor.tbl: define the key "
+										  "there to give it a type, default and description."));
+	}
 
 	// the schema knows a default only when a matching entry exists
 	ui->resetButton->setEnabled(entry != nullptr);

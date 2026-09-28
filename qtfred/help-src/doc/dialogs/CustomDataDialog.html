@@ -29,21 +29,33 @@ dialog:</p>
     <li>The <strong>Description</strong> box shows the description registered for the
         selected key, or <em>No help text provided</em> if none was registered.</li>
 </ul>
-<p>When no schema applies, every entry is treated as a free-form string. For the mission
+<p>Keys that aren't registered are <em>free-form</em> (see below). For the mission
 domain, any registered key not already present is added automatically when the mission
 is opened, so the expected entries exist without being created by hand.</p>
 
 <h2>Type-aware value editing</h2>
 <table>
     <tr><th>Type</th><th>Value control</th></tr>
-    <tr><td><code>string</code> (or unregistered)</td><td>A plain text field.</td></tr>
+    <tr><td><code>string</code></td><td>A plain text field.</td></tr>
     <tr><td><code>int</code></td><td>A text field that only accepts whole
         numbers.</td></tr>
     <tr><td><code>bool</code></td><td>A drop-down offering <code>true</code> or
         <code>false</code>.</td></tr>
+    <tr><td><em>free-form</em></td><td>A plain text field, for any key that isn't
+        registered.</td></tr>
 </table>
 <p>Click <strong>Reset</strong> to restore the value editor to the selected key's
 schema default. Reset is available only for keys that have a registered default.</p>
+
+<h2>Free-form keys</h2>
+<p>Any key can be added, not just registered ones. A key that isn't defined in
+<code>editor.tbl</code> (or registered by a script) shows <em>free-form</em> as its type:
+it has no type, default or description, and its value is edited as plain text.</p>
+<p>The type can't be chosen here because it wouldn't be kept. Mission and campaign files
+save each entry as just a key and its value, never its type, and at runtime scripts
+read every value as text. So a key's type lives in <code>editor.tbl</code>, where the
+whole mod shares one definition. If a key needs type checking, a default, or a
+description, define it there.</p>
 
 <h2>Adding an entry</h2>
 <p>Fill in the <strong>Key</strong> and <strong>Value</strong> fields and click
