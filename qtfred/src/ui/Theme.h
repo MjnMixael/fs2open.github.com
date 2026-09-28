@@ -43,6 +43,7 @@ enum class CustomIcon {
 	MoveToLeft,
 	MoveToRight,
 	Settings, // a cog / gear
+	Copy,     // two overlapping pages
 };
 
 // Draw a palette-aware icon for a CustomIcon using QPainter.

@@ -5,6 +5,7 @@
 
 #include "mission/dialogs/ErrorCheckerDialogModel.h"
 
+class QAbstractButton;
 class QLabel;
 class QVBoxLayout;
 
@@ -40,6 +41,10 @@ public:
 	// a data migration). Caller can clear by passing false.
 	void setForcePotentialsDisplay(bool force);
 
+signals:
+	// A "Go to" button was clicked; FredView selects/opens the target in its editor.
+	void navigationRequested(const fso::fred::ErrorTarget& target);
+
 public slots: // NOLINT(readability-redundant-access-specifiers)
 	bool runCheck(); // returns true if errors were found
 	void clearErrors();
@@ -57,6 +62,15 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeUi();
 	void updateUi();
 
+	// "[Severity] message" -- the severity is spelled out because the colored stripe
+	// doesn't survive a paste.
+	static QString formatEntry(const ErrorEntry& entry);
+	// The "Go to ..." button text for a target, or empty when there's nowhere to go.
+	static QString gotoLabel(const ErrorTarget& target);
+	void copyAll();
+	// Puts text on the clipboard and briefly confirms on the button that did it.
+	void copyToClipboard(const QString& text, QAbstractButton* source);
+
 	std::unique_ptr<Ui::ErrorCheckerDialog> ui;
 	std::unique_ptr<ErrorCheckerDialogModel> _model;
 	QVBoxLayout* _errorLayout = nullptr;
@@ -66,6 +80,9 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	PreSaveAction _preSaveAction  = PreSaveAction::Cancel;
 	QPushButton*  _fixSaveButton  = nullptr; // PreSave mode only; used in updateUi
 	bool          _forcePotentialsDisplay = false;
+
+	QPushButton*           _copyAllButton = nullptr;
+	SCP_vector<ErrorEntry> _displayedErrors; // exactly what the list shows, in order, for Copy All
 };
 
 } // namespace fso::fred::dialogs

@@ -1,5 +1,8 @@
 #include "ErrorCheckerDialog.h"
 #include "ui_ErrorCheckerDialog.h"
+#include "mission/missionparse.h"
+#include "object/object.h"
+#include "ui/Theme.h"
 
 #include <algorithm>
 
@@ -7,7 +10,13 @@
 #include <QFrame>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QClipboard>
+#include <QGuiApplication>
 #include <QPalette>
+#include <QPointer>
+#include <QTimer>
+#include <QToolButton>
+#include <QToolTip>
 #include <QVBoxLayout>
 #include <QWidget>
 
@@ -116,6 +125,15 @@ void ErrorCheckerDialog::initializeUi() {
 		ui->mainLayout->insertWidget(2, _autoFixNudge);
 	}
 
+	// --- Copy All (common to both modes) ---
+	// Right end of the toolbar row; the toolbar spacer pushes it there. Pre-save mode hides the
+	// run/option controls but copying is still useful, so it stays.
+	_copyAllButton = new QPushButton(tr("Copy All"), this);
+	_copyAllButton->setToolTip(tr("Copy every listed error to the clipboard as text"));
+	_copyAllButton->setEnabled(false);
+	ui->toolbarLayout->addWidget(_copyAllButton);
+	connect(_copyAllButton, &QPushButton::clicked, this, &ErrorCheckerDialog::copyAll);
+
 	// --- Scroll area content (common to both modes) ---
 	auto* scrollContent = new QWidget(ui->errorScrollArea);
 	_errorLayout = new QVBoxLayout(scrollContent);
@@ -180,6 +198,9 @@ void ErrorCheckerDialog::updateUi() {
 
 	if (_autoFixNudge)
 		_autoFixNudge->hide();
+
+	_displayedErrors.clear();
+	_copyAllButton->setEnabled(false);
 
 	if (!_model->hasBeenRun()) {
 		ui->statusLabel->setText(tr("No check has been run yet."));
@@ -266,7 +287,35 @@ void ErrorCheckerDialog::updateUi() {
 		auto* label = new QLabel(QString::fromStdString(entry.message), card);
 		label->setWordWrap(true);
 		label->setContentsMargins(8, 6, 8, 6);
-		cardLayout->addWidget(label);
+		label->setTextInteractionFlags(Qt::TextSelectableByMouse);
+		cardLayout->addWidget(label, 1);
+
+		// Errors tied to one thing can take the designer straight to it. Normal mode only:
+		// the pre-save check is a save decision, and jumping away would abandon it. The
+		// checker closes before asking, so the editor that opens ends up with focus.
+		const QString gotoText = gotoLabel(entry.target);
+		if (_mode == Mode::Normal && !gotoText.isEmpty()) {
+			auto* gotoButton = new QToolButton(card);
+			gotoButton->setAutoRaise(true);
+			gotoButton->setText(gotoText);
+			gotoButton->setToolTip(tr("Close the error checker and open this in its editor"));
+			cardLayout->addWidget(gotoButton, 0, Qt::AlignTop);
+			connect(gotoButton, &QToolButton::clicked, this, [this, target = entry.target]() {
+				close();
+				Q_EMIT navigationRequested(target);
+			});
+		}
+
+		// Cards are rebuilt on every theme change (see changeEvent), so the icon only needs
+		// setting once here rather than a palette-change binding.
+		auto* copyButton = new QToolButton(card);
+		copyButton->setAutoRaise(true);
+		copyButton->setToolTip(tr("Copy this error"));
+		copyButton->setIcon(makeThemedIcon(CustomIcon::Copy, palette().color(QPalette::ButtonText)));
+		cardLayout->addWidget(copyButton, 0, Qt::AlignTop);
+		connect(copyButton, &QToolButton::clicked, this, [this, copyButton, text = formatEntry(entry)]() {
+			copyToClipboard(text, copyButton);
+		});
 
 		_errorLayout->addWidget(card);
 	}
@@ -280,6 +329,9 @@ void ErrorCheckerDialog::updateUi() {
 		parts << tr("%1 potential issue(s)").arg(potentialCount);
 	ui->statusLabel->setText(parts.join(tr(", ")) + tr(" found."));
 
+	_displayedErrors = errors;
+	_copyAllButton->setEnabled(true);
+
 	// "Fix and Save" is only enabled when there are entries the auto-corrector can address.
 	// Under the current taxonomy, only Warnings have auto-fixes; Errors must be addressed manually.
 	if (_fixSaveButton)
@@ -291,6 +343,71 @@ void ErrorCheckerDialog::updateUi() {
 	if (_autoFixNudge && warningCount > 0 && !_model->getApplyAutoCorrections()) {
 		_autoFixNudge->setText(tr("<b>%1 warning(s)</b> can be fixed automatically. Enable <i>Apply auto-corrections</i> and re-run.").arg(warningCount));
 		_autoFixNudge->show();
+	}
+}
+
+QString ErrorCheckerDialog::gotoLabel(const ErrorTarget& target) {
+	switch (target.kind) {
+	case ErrorTarget::Kind::Event:
+		return tr("Go to Event");
+	case ErrorTarget::Kind::Goal:
+		return tr("Go to Goal");
+	case ErrorTarget::Kind::Wing:
+		return tr("Go to Wing");
+	case ErrorTarget::Kind::Object:
+		switch (target.obj_type) {
+		case OBJ_SHIP:
+		case OBJ_START: // player starts are edited in the Ship Editor
+			return tr("Go to Ship");
+		case OBJ_PROP:
+			return tr("Go to Prop");
+		case OBJ_WAYPOINT:
+			return tr("Go to Waypoint");
+		case OBJ_JUMP_NODE:
+			return tr("Go to Jump Node");
+		case OBJ_COORDINATE_POINT:
+			return tr("Go to Coordinate Point");
+		default:
+			return {};
+		}
+	case ErrorTarget::Kind::None:
+		break;
+	}
+	return {};
+}
+
+QString ErrorCheckerDialog::formatEntry(const ErrorEntry& entry) {
+	return QStringLiteral("[%1] %2").arg(tr(infoFor(entry.severity).label), QString::fromStdString(entry.message));
+}
+
+void ErrorCheckerDialog::copyAll() {
+	if (_displayedErrors.empty())
+		return;
+
+	// Header with the mission and the status-bar counts, then one line per listed error.
+	QStringList lines;
+	lines << tr("QtFRED error check: %1 - %2").arg(QString::fromStdString(The_mission.name), ui->statusLabel->text());
+	for (const auto& entry : _displayedErrors)
+		lines << formatEntry(entry);
+
+	copyToClipboard(lines.join(QLatin1Char('\n')), _copyAllButton);
+}
+
+void ErrorCheckerDialog::copyToClipboard(const QString& text, QAbstractButton* source) {
+	QGuiApplication::clipboard()->setText(text);
+
+	if (source == _copyAllButton) {
+		// Text button: say it on the button for a moment. Restore the fixed label rather than
+		// whatever it says now, so a second click within the window can't leave it on "Copied!".
+		_copyAllButton->setText(tr("Copied!"));
+		QPointer<QPushButton> button = _copyAllButton;
+		QTimer::singleShot(1500, this, [button]() {
+			if (button)
+				button->setText(tr("Copy All"));
+		});
+	} else if (source != nullptr) {
+		// Icon-only card button: a tooltip at the button confirms it without a dialog.
+		QToolTip::showText(source->mapToGlobal(QPoint(0, source->height())), tr("Copied"), source);
 	}
 }
 

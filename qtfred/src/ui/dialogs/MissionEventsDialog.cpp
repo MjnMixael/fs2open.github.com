@@ -756,6 +756,38 @@ void MissionEventsDialog::selectEventInTree(int eventIndex)
 	}
 }
 
+// This dialog edits a working copy of the events. If it was already open with unapplied
+// edits, the working copy can differ from Mission_events, so trust the index only when the
+// name there still matches; otherwise take the first event with that name.
+void MissionEventsDialog::focusEvent(const SCP_string& name, int index)
+{
+	const auto& events = _model->getEventList();
+	int target = -1;
+	if (index >= 0 && index < static_cast<int>(events.size()) && events[index].name == name) {
+		target = index;
+	} else {
+		for (size_t i = 0; i < events.size(); ++i) {
+			if (events[i].name == name) {
+				target = static_cast<int>(i);
+				break;
+			}
+		}
+	}
+	if (target < 0)
+		return;
+
+	// A name filter could be hiding the event, so clear it, as jumping from a message does.
+	if (!ui->eventSearchEdit->text().isEmpty()) {
+		{
+			QSignalBlocker blocker(ui->eventSearchEdit);
+			ui->eventSearchEdit->clear();
+		}
+		applyEventFilter();
+	}
+
+	jumpToEventInTree(target);
+}
+
 // Double-clicking an event in the graph brings the tree view forward and
 // selects that event.
 void MissionEventsDialog::jumpToEventInTree(int eventIndex)

@@ -580,6 +580,32 @@ QIcon makeThemedIcon(CustomIcon icon, const QColor& color, int size)
 		p.drawPath(gear);
 		break;
 	}
+	case CustomIcon::Copy: {
+		// Two overlapping page outlines. The front page's area is cleared before its
+		// outline is drawn, so the back page's lines don't show through it.
+		const qreal pw = qMax<qreal>(1.0, size * 0.09);
+		const qreal w = full.width() * 0.68;
+		const qreal h = full.height() * 0.78;
+		const qreal inset = pw / 2.0;
+		const QRectF back(full.left(), full.top(), w, h);
+		const QRectF front(full.right() - w, full.bottom() - h, w, h);
+		const QPen outline(color, pw);
+
+		p.setBrush(Qt::NoBrush);
+		p.setPen(outline);
+		p.drawRoundedRect(back.adjusted(inset, inset, -inset, -inset), pw, pw);
+
+		p.setCompositionMode(QPainter::CompositionMode_Clear);
+		p.setPen(Qt::NoPen);
+		p.setBrush(Qt::black);
+		p.drawRect(front);
+		p.setCompositionMode(QPainter::CompositionMode_SourceOver);
+
+		p.setBrush(Qt::NoBrush);
+		p.setPen(outline);
+		p.drawRoundedRect(front.adjusted(inset, inset, -inset, -inset), pw, pw);
+		break;
+	}
 	}
 
 	p.end();

@@ -32,6 +32,7 @@ namespace fred {
 
 class Editor;
 class RenderWidget;
+struct ErrorTarget;
 
 namespace dialogs {
 class ErrorCheckerDialog;
@@ -219,6 +220,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 	bool saveMissionToCurrentPath();
 	bool saveMissionAs();
 	void openAndRunErrorChecker();
+	// Error checker "Go to ...": select the target and open it in its editor.
+	void showErrorTarget(const ErrorTarget& target);
 	void autoRunErrorChecker();
 	// Runs the error checker before a save (no mutations, no potential issues).
 	// If errors are found, shows the error checker in PreSave mode and applies
