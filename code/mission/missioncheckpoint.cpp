@@ -2251,6 +2251,12 @@ void store_support(environment_state& out)
 	out.support_max_subsys_repair = support.max_subsys_repair_val;
 	out.support_disallow_rearm = support.disallow_rearm;
 
+	if (Arriving_support_ship != nullptr) {
+		for (int i = 0; i < Num_arriving_repair_targets; i++) {
+			out.support_incoming_for.emplace_back(Arriving_repair_targets[i]);
+		}
+	}
+
 	for (const auto& pool : support.rearm_weapon_pool) {
 		SCP_map<SCP_string, int> named;
 		for (const auto& item : pool) {
@@ -6350,6 +6356,34 @@ void reissue_departures(const checkpoint_data& data)
 	}
 }
 
+// Call again the support ship that was on its way in.  The requesters came back with
+// Awaiting_repair set, and a ship with that flag never asks again (maybe_request_support()), so
+// without this they would wait for the rest of the mission.  It gets a fresh warp-in delay and
+// position; the saved tally already counted it, and calling it again counts it a second time.
+void reissue_incoming_support(const checkpoint_data& data)
+{
+	const auto& requesters = data.environment.support_incoming_for;
+
+	bool called = false;
+	for (const auto& name : requesters) {
+		int shipnum = ship_name_lookup(name.c_str());
+		if (shipnum < 0) {
+			continue;
+		}
+
+		object* objp = &Objects[Ships[shipnum].objnum];
+		if (!called) {
+			mission_bring_in_support_ship(objp);
+			called = (Arriving_support_ship != nullptr);
+			if (called && The_mission.support_ships.tally > 0) {
+				The_mission.support_ships.tally--;
+			}
+		} else {
+			mission_add_to_arriving_support(objp);
+		}
+	}
+}
+
 void apply_variables(const checkpoint_data& data)
 {
 	for (const auto& state : data.variables) {
@@ -7523,6 +7557,7 @@ void mission_checkpoint_apply()
 
 	// After the wings, whose departure info a departing wing member is handed on the way out.
 	reissue_departures(data);
+	reissue_incoming_support(data);
 
 	apply_variables(data);
 	apply_file_sounds(data);
