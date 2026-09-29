@@ -7034,8 +7034,25 @@ void apply_debris(const checkpoint_data& data)
 			continue;
 		}
 
-		objp->phys_info.vel = state.velocity;
-		objp->phys_info.rotvel = state.rotational_velocity;
+		// debris_create_only() leaves the object with physics_init()'s defaults -- ordinary damping
+		// toward a zero desired velocity, mass 10 -- and debris_create_set_velocity(), which turns
+		// it into a tumbling ballistic chunk, also re-rolls the velocity from an explosion and needs
+		// the ship it came from.  So the same setup here, minus the dice.  A subsystem's own debris
+		// density is not recorded, so its pieces get the class's.
+		physics_info* pi = &objp->phys_info;
+		if (state.is_hull) {
+			auto pm = model_get(model_num);
+			float density = (ship_class >= 0) ? Ship_info[ship_class].debris_density : 1.0f;
+			calc_debris_physics_properties(pi, &pm->submodel[submodel_num].min, &pm->submodel[submodel_num].max, density);
+		}
+		pi->flags |= (PF_DEAD_DAMP | PF_BALLISTIC);
+		pi->rotdamp = 10000.0f;
+		pi->gravity_const = (ship_class >= 0) ? Ship_info[ship_class].debris_gravity_const : 1.0f;
+		vm_vec_zero(&pi->max_vel);
+		vm_vec_zero(&pi->max_rotvel);
+
+		pi->vel = state.velocity;
+		pi->rotvel = state.rotational_velocity;
 		objp->hull_strength = state.hull_strength;
 
 		auto db = &Debris[objp->instance];
