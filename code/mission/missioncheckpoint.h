@@ -1031,6 +1031,12 @@ struct environment_state {
 	float support_max_subsys_repair = 0.0f;
 	bool support_disallow_rearm = false;
 
+	// A support ship that had been called but had not warped in yet exists only as the static
+	// Arriving_support_ship parse object, which a restore does not rebuild; these are the ships
+	// waiting for it, in request order, so it can be called again for them.  Empty when none was
+	// on its way.
+	SCP_vector<SCP_string> support_incoming_for;
+
 	// Per team, weapon class name -> rounds left in the pool.  An absent entry means the mission
 	// default, so only what the map actually holds is stored.
 	SCP_vector<SCP_map<SCP_string, int>> rearm_pools;

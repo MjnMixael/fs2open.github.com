@@ -606,6 +606,7 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	handler->writeFloat("support_hull_repair", env.support_max_hull_repair);
 	handler->writeFloat("support_subsys_repair", env.support_max_subsys_repair);
 	handler->writeBool("support_disallow_rearm", env.support_disallow_rearm);
+	write_string_list(handler, "support_incoming_for", env.support_incoming_for);
 
 	// One entry per team, each holding that team's weapon class -> rounds left map.
 	handler->startArrayWrite("rearm_pools", env.rearm_pools.size());
@@ -904,6 +905,7 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	env.support_max_hull_repair = handler->readFloatOr("support_hull_repair", 0.0f);
 	env.support_max_subsys_repair = handler->readFloatOr("support_subsys_repair", 0.0f);
 	env.support_disallow_rearm = handler->readBoolOr("support_disallow_rearm", false);
+	read_string_list(handler, "support_incoming_for", env.support_incoming_for);
 
 	env.rearm_pools.clear();
 	if (handler->hasField("rearm_pools")) {
