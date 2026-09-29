@@ -1449,7 +1449,9 @@ struct checkpoint_data {
 bool mission_checkpoint_allowed();
 
 // Capture the current mission state and write it to the named slot.  Returns false (and logs)
-// if the file could not be written.  Safe to call from inside SEXP evaluation.
+// if the store was refused or the file could not be written.  Called from inside an event, it
+// only queues the store and returns true: the event has not been marked as fired yet, so the
+// store waits for the end of the frame (mission_checkpoint_process_pending_load()).
 bool mission_checkpoint_store(const SCP_string& slot);
 
 // Does a usable checkpoint exist for this pilot, campaign, mission and slot?  A checkpoint
@@ -1466,14 +1468,16 @@ int mission_checkpoint_delete_all(const SCP_string& mission_name);
 
 // Request a load.  This does NOT reload the mission itself -- doing that while SEXP
 // evaluation is on the stack would tear the level down underneath the caller.  It records the
-// request; mission_checkpoint_process_pending_load() acts on it at the end of the frame.
+// request, having already read and checked the file, so a missing or mismatched checkpoint is
+// refused here; mission_checkpoint_process_pending_load() acts on it at the end of the frame.
 void mission_checkpoint_request_load(const SCP_string& slot, checkpoint::LoadFlags flags);
 
 // Is a load queued?
 bool mission_checkpoint_load_pending();
 
-// Called once per frame at the end of the gameplay loop.  If a load is queued, posts the
-// mission restart that will eventually land in mission_checkpoint_apply().
+// Called once per frame at the end of the gameplay loop.  Writes any stores events queued this
+// frame, then, if a load is queued, posts the mission restart that will eventually land in
+// mission_checkpoint_apply().
 void mission_checkpoint_process_pending_load();
 
 // Offer the player a checkpoint on the way into a mission, if one is worth offering.  Does
