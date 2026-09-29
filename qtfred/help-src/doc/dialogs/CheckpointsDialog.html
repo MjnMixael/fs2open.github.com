@@ -55,9 +55,9 @@ without doing more harm than the loss:</p>
         that is not a ship. Both are dropped rather than restored pointing at nothing.</li>
     <li>Autopilot, which is disengaged on resume rather than picked up half way.</li>
     <li>A ship in the middle of its death roll, which is recorded as already destroyed.</li>
-    <li>The arguments of an AI order issued from a Lua script. Those have no form the file can hold,
-        so a script that needs its orders to survive should remember what it needs through the
-        checkpoint data functions and issue them again from the restore hook.</li>
+    <li>AI orders from Lua AI modes. Their arguments have no form the file can hold, so the order is
+        dropped and the ship resumes its other orders. A script that needs its orders to survive
+        should remember what it needs through the checkpoint data functions and issue them again from the restore hook.</li>
 </ul>
 
 <h2>Availability</h2>
