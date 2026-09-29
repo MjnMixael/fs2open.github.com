@@ -5968,6 +5968,34 @@ void find_dock_leader_helper(p_object* pobjp, p_dock_function_info* infop)
 	}
 }
 
+// Force a loose ship in through the engine's arrival path for the restore.  force_arrival only
+// skips the cue: mission_did_ship_arrive() still waits out the arrival delay, and still refuses a
+// ship arriving from a docking bay whose carrier has not arrived yet (it may come later in the
+// registry) or has gone (it was destroyed after launching this one).  Neither matters to a ship
+// that is being put back -- its position is bashed from the checkpoint straight afterwards -- so
+// both are taken out of the way for the call.  The parse object and the ship made from it both
+// get the real arrival location back afterwards.
+void force_loose_arrival(p_object* p_objp)
+{
+	auto location = p_objp->arrival_location;
+	auto delay = p_objp->arrival_delay;
+
+	p_objp->arrival_delay = 0;
+	if (location == ArrivalLocation::FROM_DOCK_BAY) {
+		p_objp->arrival_location = ArrivalLocation::AT_LOCATION;
+	}
+
+	mission_maybe_make_ship_arrive(p_objp, true);
+
+	p_objp->arrival_location = location;
+	if (p_objp->created_object == nullptr) {
+		p_objp->arrival_delay = delay;
+	} else if (p_objp->created_object->type == OBJ_SHIP) {
+		// parse_create_object() copied the stand-in onto the ship.
+		Ships[p_objp->created_object->instance].arrival_location = location;
+	}
+}
+
 void restore_loose_arrivals(const checkpoint_data& data)
 {
 	for (const auto& state : data.ships) {
@@ -6002,12 +6030,12 @@ void restore_loose_arrivals(const checkpoint_data& data)
 			// A leader in a wing arrives with its wing (restore_wing_arrivals() has already run).
 			p_object* leader = dfi.maintained_variables.objp_value;
 			if (leader != nullptr && leader->created_object == nullptr && leader->wingnum < 0) {
-				mission_maybe_make_ship_arrive(leader, true);
+				force_loose_arrival(leader);
 			}
 			continue;
 		}
 
-		mission_maybe_make_ship_arrive(p_objp, true);
+		force_loose_arrival(p_objp);
 	}
 }
 
