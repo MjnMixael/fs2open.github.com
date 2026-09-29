@@ -306,6 +306,7 @@ const wing_flag_entry Wing_flag_table[] = {
 	{Ship::Wing_Flags::Departing, "departing"},
 	{Ship::Wing_Flags::Departure_ordered, "departure_ordered"},
 	{Ship::Wing_Flags::Never_existed, "never_existed"},
+	{Ship::Wing_Flags::Reinforcement, "reinforcement"},
 	{Ship::Wing_Flags::Reset_reinforcement, "reset_reinforcement"},
 	{Ship::Wing_Flags::No_dynamic, "no_dynamic"},
 	{Ship::Wing_Flags::Nav_carry, "nav_carry"},
