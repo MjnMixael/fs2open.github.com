@@ -651,7 +651,7 @@ class campaign;	// defined in missioncampaign.h; only referenced by pointer here
 void apply_default_campaign_custom_data(campaign* pc);
 // Seeds a newly placed ship's custom data with the editor.tbl #ShipCustomData defaults.
 void apply_default_ship_custom_data(SCP_map<SCP_string, SCP_string>& custom_data);
-void parse_editor_custom_data_table();
+void parse_editor_table();
 
 bool mission_maybe_make_ship_arrive(p_object *p_objp, bool force_arrival = false);
 bool mission_maybe_make_wing_arrive(int wingnum, bool force_arrival = false);

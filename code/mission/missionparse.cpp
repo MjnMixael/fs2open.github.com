@@ -7319,8 +7319,68 @@ static void parse_editor_custom_data_section(SCP_vector<mission_default_custom_d
 	required_string("#End");
 }
 
+// add a name to one of the editor name lists, skipping one that's already there
+static void add_editor_setting_name(SCP_vector<SCP_string>& list, SCP_string name)
+{
+	drop_extension(name);
+	const bool present = std::any_of(list.begin(), list.end(), [&name](const SCP_string& existing) {
+		return !stricmp(existing.c_str(), name.c_str());
+	});
+	if (!present) {
+		list.push_back(std::move(name));
+	}
+}
+
+// parse the #Settings section (header already consumed).  These mirror the
+// #FRED SETTINGS entries of game_settings.tbl, which is parsed first and still
+// accepted: single values set here override it, and name lists add to it.
+static void parse_editor_settings_section()
+{
+	if (optional_string("$Disable Hard Coded Message Head Ani Files:")) {
+		stuff_boolean(&Disable_hc_message_ani);
+	}
+
+	if (optional_string("$Add Message Head Ani Files:")) {
+		SCP_string head_name;
+		while (optional_string("+Head:")) {
+			stuff_string(head_name, F_NAME);
+			add_editor_setting_name(Custom_head_anis, head_name);
+		}
+	}
+
+	if (optional_string("$Enable scripting in FRED:")) {
+		stuff_boolean(&Enable_scripts_in_fred);
+	}
+
+	if (optional_string("$Ignore Music Files In Music Player:")) {
+		SCP_string music_name;
+		while (optional_string("+File:")) {
+			stuff_string(music_name, F_NAME);
+			add_editor_setting_name(Ignored_music_player_files, music_name);
+		}
+	}
+
+	if (optional_string("$FRED spacemouse nonlinearities:")) {
+		static const char* const axes[] = { "Sideways", "Forwards", "Upwards", "Pitch", "Bank", "Heading" };
+		static_assert(std::size(axes) == std::tuple_size<decltype(Fred_spacemouse_nonlinearity)>::value, "one name per spacemouse axis");
+
+		for (size_t i = 0; i < std::size(axes); ++i) {
+			SCP_string field = SCP_string("+") + axes[i] + " exponent:";
+			if (optional_string(field.c_str())) {
+				stuff_float(&std::get<0>(Fred_spacemouse_nonlinearity[i]));
+			}
+			field = SCP_string("+") + axes[i] + " scale:";
+			if (optional_string(field.c_str())) {
+				stuff_float(&std::get<1>(Fred_spacemouse_nonlinearity[i]));
+			}
+		}
+	}
+
+	required_string("#End");
+}
+
 // non-capturing so it can be passed to parse_modular_table's function pointer parameter
-static void parse_editor_custom_data_tbl(const char* filename)
+static void parse_editor_tbl(const char* filename)
 {
 	read_file_text(filename, CF_TYPE_TABLES);
 	reset_parse();
@@ -7329,7 +7389,9 @@ static void parse_editor_custom_data_tbl(const char* filename)
 	// skipped so editor.tbl can host other editor-focused sections in the future
 	ignore_white_space();
 	while (!check_for_eof()) {
-		if (optional_string("#MissionCustomData")) {
+		if (optional_string("#Settings")) {
+			parse_editor_settings_section();
+		} else if (optional_string("#MissionCustomData")) {
 			parse_editor_custom_data_section(Default_custom_data, filename);
 		} else if (optional_string("#CampaignCustomData")) {
 			parse_editor_custom_data_section(Default_campaign_custom_data, filename);
@@ -7342,16 +7404,16 @@ static void parse_editor_custom_data_tbl(const char* filename)
 	}
 }
 
-void parse_editor_custom_data_table()
+void parse_editor_table()
 {
 	Default_custom_data.clear();
 	Default_campaign_custom_data.clear();
 	Default_ship_custom_data.clear();
 
 	if (cf_exists_full("editor.tbl", CF_TYPE_TABLES)) {
-		parse_editor_custom_data_tbl("editor.tbl");
+		parse_editor_tbl("editor.tbl");
 	}
-	parse_modular_table("*-edt.tbm", parse_editor_custom_data_tbl, CF_TYPE_TABLES);
+	parse_modular_table("*-edt.tbm", parse_editor_tbl, CF_TYPE_TABLES);
 }
 
 bool parse_mission(mission *pm, int flags)
