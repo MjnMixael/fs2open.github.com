@@ -1492,6 +1492,27 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 // damage and weapon loadout live.  wl_update_parse_object_weapons() writes into it when a
 // loadout is committed, and SEXPs that alter an unarrived wing's loadout write into it too, so
 // it is genuine runtime state and not just a copy of the mission file.
+// A subsys_status bank is a weapon class, -1 for an empty bank, or, in bank 0,
+// SUBSYS_STATUS_NO_CHANGE: the mission file listed the subsystem (to damage it, say) without
+// touching its weapons.  parse_object_to_ship() only applies the banks when bank 0 is not the
+// sentinel, so it must survive the round trip -- read back as an empty bank, it took every
+// weapon off the ship.
+const char* const Parse_bank_no_change = "<no change>";
+
+SCP_string parse_bank_name(int bank)
+{
+	return (bank == SUBSYS_STATUS_NO_CHANGE) ? SCP_string(Parse_bank_no_change) : weapon_class_name(bank);
+}
+
+int lookup_parse_bank(const SCP_string& name)
+{
+	if (name == Parse_bank_no_change) {
+		return SUBSYS_STATUS_NO_CHANGE;
+	}
+	// An empty name means the bank was empty, which is -1 rather than a lookup failure.
+	return name.empty() ? -1 : lookup_weapon_class(name);
+}
+
 void store_parse_subsystems(const p_object* p_objp, SCP_vector<parse_subsys_state>& out)
 {
 	out.clear();
@@ -1513,11 +1534,11 @@ void store_parse_subsystems(const p_object* p_objp, SCP_vector<parse_subsys_stat
 		state.cargo_title = sssp->subsys_cargo_title;
 
 		for (int j = 0; j < MAX_SHIP_PRIMARY_BANKS; j++) {
-			state.primary_banks.push_back(weapon_class_name(sssp->primary_banks[j]));
+			state.primary_banks.push_back(parse_bank_name(sssp->primary_banks[j]));
 			state.primary_ammo.push_back(sssp->primary_ammo[j]);
 		}
 		for (int j = 0; j < MAX_SHIP_SECONDARY_BANKS; j++) {
-			state.secondary_banks.push_back(weapon_class_name(sssp->secondary_banks[j]));
+			state.secondary_banks.push_back(parse_bank_name(sssp->secondary_banks[j]));
 			state.secondary_ammo.push_back(sssp->secondary_ammo[j]);
 		}
 
@@ -1564,14 +1585,11 @@ void load_parse_subsystems(p_object* p_objp, const SCP_vector<parse_subsys_state
 		}
 
 		for (int j = 0; j < MAX_SHIP_PRIMARY_BANKS && j < static_cast<int>(state.primary_banks.size()); j++) {
-			// An empty name means the bank was empty, which is -1 rather than a lookup failure.
-			sssp->primary_banks[j] =
-				state.primary_banks[j].empty() ? -1 : lookup_weapon_class(state.primary_banks[j]);
+			sssp->primary_banks[j] = lookup_parse_bank(state.primary_banks[j]);
 			sssp->primary_ammo[j] = state.primary_ammo[j];
 		}
 		for (int j = 0; j < MAX_SHIP_SECONDARY_BANKS && j < static_cast<int>(state.secondary_banks.size()); j++) {
-			sssp->secondary_banks[j] =
-				state.secondary_banks[j].empty() ? -1 : lookup_weapon_class(state.secondary_banks[j]);
+			sssp->secondary_banks[j] = lookup_parse_bank(state.secondary_banks[j]);
 			sssp->secondary_ammo[j] = state.secondary_ammo[j];
 		}
 	}
