@@ -1408,6 +1408,31 @@ void load_ai_scalars(ai_info& obj, const ai_state& state)
 	}
 }
 
+// model_get_dock_name() only asserts its index, and a dock index can be stale: a goal flagged
+// index-valid can still hold -1, and a ship that changed class carries indices from its old model.
+const char* dock_name_for_index(int modelnum, int dockpoint)
+{
+	if (modelnum < 0 || dockpoint < 0 || dockpoint >= model_get(modelnum)->n_docks) {
+		return nullptr;
+	}
+	return model_get_dock_name(modelnum, dockpoint);
+}
+
+// ai_add_dock_name(), without its overflow: the table holds MAX_AI_DOCK_NAMES entries for the
+// whole mission and the engine only asserts before writing past it.  Null when it is full.
+char* checkpoint_add_dock_name(const SCP_string& name)
+{
+	for (int i = 0; i < Num_ai_dock_names; i++) {
+		if (!stricmp(Ai_dock_names[i], name.c_str())) {
+			return Ai_dock_names[i];
+		}
+	}
+	if (Num_ai_dock_names >= MAX_AI_DOCK_NAMES || name.length() >= NAME_LENGTH) {
+		return nullptr;
+	}
+	return ai_add_dock_name(name.c_str());
+}
+
 void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 {
 	out.mode = ai_goal_mode_name(goal.ai_mode);
@@ -1441,7 +1466,7 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 	// ship's model to resolve, so in that case only a name can be written.
 	if (goal.flags[AI::Goal_Flags::Docker_index_valid] && shipp != nullptr) {
 		int modelnum = Ship_info[shipp->ship_info_index].model_num;
-		const char* name = (modelnum >= 0) ? model_get_dock_name(modelnum, goal.docker.index) : nullptr;
+		const char* name = dock_name_for_index(modelnum, goal.docker.index);
 		if (name != nullptr) {
 			out.docker_point = name;
 		}
@@ -1453,7 +1478,7 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 		int target_shipnum = (goal.target_name != nullptr) ? ship_name_lookup(goal.target_name) : -1;
 		if (target_shipnum >= 0) {
 			int modelnum = Ship_info[Ships[target_shipnum].ship_info_index].model_num;
-			const char* name = (modelnum >= 0) ? model_get_dock_name(modelnum, goal.dockee.index) : nullptr;
+			const char* name = dock_name_for_index(modelnum, goal.dockee.index);
 			if (name != nullptr) {
 				out.dockee_point = name;
 			}
@@ -3918,7 +3943,7 @@ SCP_string dock_point_name(const ship* shipp, int dockpoint)
 		return SCP_string();
 	}
 
-	const char* name = model_get_dock_name(modelnum, dockpoint);
+	const char* name = dock_name_for_index(modelnum, dockpoint);
 	return (name != nullptr) ? SCP_string(name) : SCP_string();
 }
 
@@ -4220,11 +4245,17 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 
 	// A chase-ship-class submode is a class index, so re-resolve it rather than trusting the
 	// number, which a table change would have reassigned.
+	// A class that no longer exists drops the goal: keeping the saved number would chase whatever
+	// class now has that index, or assert in the goal dispatch if none does.
 	if (mode == AI_GOAL_CHASE_SHIP_CLASS && !in.submode_ship_class.empty()) {
 		int ship_class = lookup_ship_class(in.submode_ship_class);
-		if (ship_class >= 0) {
-			goal.ai_submode = ship_class;
+		if (ship_class < 0) {
+			mprintf(("CHECKPOINT => Ship class '%s' no longer exists; dropping the goal to chase it.\n",
+			         in.submode_ship_class.c_str()));
+			ai_goal_reset(&goal);
+			return;
 		}
+		goal.ai_submode = ship_class;
 	}
 
 	if (!in.target_name.empty()) {
@@ -4242,11 +4273,31 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 	// final state.
 	goal.flags.remove(AI::Goal_Flags::Docker_index_valid);
 	goal.flags.remove(AI::Goal_Flags::Dockee_index_valid);
+
+	// A destroy-subsystem goal keeps the subsystem's name in docker.name and its index into the
+	// target's subsystem list in ai_submode.  The index is only good for the model it was found on,
+	// so hand the goal back its name the way OP_AI_DESTROY_SUBSYS does -- in the goal target name
+	// table, not the small dock name one -- and let ai_mission_goal_achievable() find it again.
+	if (mode == AI_GOAL_DESTROY_SUBSYSTEM) {
+		if (in.docker_point.empty()) {
+			ai_goal_reset(&goal);
+			return;
+		}
+		int dummy;
+		goal.docker.name = ai_get_goal_target_name(in.docker_point.c_str(), &dummy);
+		goal.flags.set(AI::Goal_Flags::Subsys_needs_fixup);
+		return;
+	}
+
 	if (!in.docker_point.empty()) {
-		goal.docker.name = ai_add_dock_name(in.docker_point.c_str());
+		goal.docker.name = checkpoint_add_dock_name(in.docker_point);
 	}
 	if (!in.dockee_point.empty()) {
-		goal.dockee.name = ai_add_dock_name(in.dockee_point.c_str());
+		goal.dockee.name = checkpoint_add_dock_name(in.dockee_point);
+	}
+	if ((!in.docker_point.empty() && goal.docker.name == nullptr) || (!in.dockee_point.empty() && goal.dockee.name == nullptr)) {
+		mprintf(("CHECKPOINT => No room left for dock point names; dropping a '%s' goal.\n", in.mode.c_str()));
+		ai_goal_reset(&goal);
 	}
 }
 
@@ -6734,7 +6785,13 @@ void apply_beams(const checkpoint_data& data)
 		info.num_shots = state.shot_count;
 		info.bank = state.bank;
 		info.point = state.firingpoint;
-		info.team = static_cast<char>(lookup_team(state.team));
+		// beam_fire() takes the team from the firing ship when there is one, but a floating beam
+		// keeps this, and beam_start_firing() indexes beam_iff_miss_factor[] with it unchecked.
+		int team = lookup_team(state.team);
+		if (team < 0 && info.shooter == nullptr) {
+			continue;
+		}
+		info.team = static_cast<char>(team);
 		info.burst_seed = 0;
 		info.per_burst_rotation = 0.0f;
 		info.burst_index = 0;
