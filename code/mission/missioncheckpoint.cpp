@@ -4805,8 +4805,12 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		ship_state state;
 		state.name = entry.name;
 
-		// A script may have renamed the ship; the fresh load will only know the parse name.
-		if (entry.has_p_objp() && stricmp(entry.p_objp()->name, entry.name) != 0) {
+		// A script may have renamed the ship; the fresh load will only know the parse name.  Not
+		// for wing ships: every wave shares one parse object whose name is rewritten as each ship
+		// is created, so for a wing ship it names whichever member came last and says nothing
+		// about this one.  Taking it anyway made the restore rename a live later-wave ship to a
+		// dead earlier one.  A script rename of a wing ship is therefore not followed.
+		if (entry.has_p_objp() && entry.p_objp()->wingnum < 0 && stricmp(entry.p_objp()->name, entry.name) != 0) {
 			state.parse_name = entry.p_objp()->name;
 		}
 
