@@ -19,6 +19,7 @@
 class object;
 struct CFILE;
 class model_draw_list;
+struct physics_info;
 
 #define MAX_DEBRIS_ARCS 8
 
@@ -84,6 +85,7 @@ object *debris_create_only(int parent_objnum, int parent_ship_class, int alt_typ
 
 // Set velocity after debris creation
 void debris_create_set_velocity(const debris *db, const ship *source_shipp, const vec3d *exp_center, float exp_force, const ship_subsys* source_subsys = nullptr);
+void calc_debris_physics_properties(physics_info *pi, vec3d *mins, vec3d *maxs, float density);
 
 // Fire scripting hook after debris creation
 void debris_create_fire_hook(object *obj, object *source_obj);
