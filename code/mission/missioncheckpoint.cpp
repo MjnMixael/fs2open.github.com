@@ -6190,7 +6190,14 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 		shipp->persona_index = persona;
 	}
 
+	// With a kept loadout the weapons are the fresh load's, whose starting ammo has not been
+	// recorded yet (ship_process_post() does it on the first frame); restoring the flag as set would
+	// stop that, and the rearm cap would stay whatever the class's default weapons carry.
+	bool ammo_recorded = shipp->flags[Ship::Ship_Flags::Ammo_count_recorded];
 	apply_flags(state.flags, Ship_flag_table, shipp->flags);
+	if (skip_loadout) {
+		shipp->flags.set(Ship::Ship_Flags::Ammo_count_recorded, ammo_recorded);
+	}
 
 	// Object flags go through obj_set_flags() rather than straight onto the object, because
 	// Collides is not just a bit: membership of the collision pair list only changes through
