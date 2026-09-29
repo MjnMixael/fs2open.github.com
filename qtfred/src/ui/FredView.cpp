@@ -2748,6 +2748,15 @@ void FredView::closeEvent(QCloseEvent* event) {
 	settings.setValue("FredView/transformLocalRotate", _tbLocalRotate);
 	// Camera speeds are persisted on change in onUpdateViewSpeeds(), so no need to save them here.
 
+	// The campaign editor saves to its own file, so close it first: that asks about unsaved
+	// campaign changes, and cancelling there cancels the exit too.
+	if (auto* campaignEditor = findChild<dialogs::CampaignEditorDialog*>(QString(), Qt::FindDirectChildrenOnly)) {
+		if (!campaignEditor->close()) {
+			event->ignore();
+			return;
+		}
+	}
+
 	if (!maybePromptToSaveMissionChanges(tr("closing QtFRED"))) {
 		event->ignore();
 		return;
@@ -2758,9 +2767,13 @@ void FredView::closeEvent(QCloseEvent* event) {
 	// shutdown() frees the engine data (sexp nodes, models, ship data) before
 	// gr_close() destroys this window. Open editor dialogs and undo commands free
 	// sexp nodes they own in their destructors, so release them now while that
-	// data still exists; otherwise exiting crashes in free_sexp2.
+	// data still exists; otherwise exiting crashes in free_sexp2.  The campaign editor is a
+	// QMainWindow rather than a QDialog, and its model clears the campaign globals on the way out.
 	for (auto* dialog : findChildren<QDialog*>(QString(), Qt::FindDirectChildrenOnly)) {
 		delete dialog;
+	}
+	for (auto* window : findChildren<QMainWindow*>(QString(), Qt::FindDirectChildrenOnly)) {
+		delete window;
 	}
 	_shipEditorDialog = nullptr;
 	_wingEditorDialog = nullptr;

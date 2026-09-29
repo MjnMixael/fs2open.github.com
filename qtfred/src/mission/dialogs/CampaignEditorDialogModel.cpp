@@ -1409,6 +1409,32 @@ int CampaignEditorDialogModel::getNumBranches() const
 	return static_cast<int>(m_missions[m_current_mission_index].branches.size());
 }
 
+// Branches are tried in order and the first true one wins, so a repeat branch (a normal branch
+// back to the same mission) belongs at the end as the fallback.  New branches therefore go in
+// front of the repeat branches that end the list rather than after them, where they could never
+// be reached.  Loop/fork branches are saved as a separate list, so they don't count either way.
+CampaignBranchData& CampaignEditorDialogModel::insertBranchBeforeRepeats(int mission_index)
+{
+	auto& mission = m_missions[mission_index];
+	auto& branches = mission.branches;
+
+	size_t insert_at = branches.size();
+	for (size_t i = branches.size(); i-- > 0;) {
+		const auto& b = branches[i];
+		if (b.is_loop || b.is_fork)
+			continue;
+		if (b.next_mission_name != mission.filename)
+			break;
+		insert_at = i;
+	}
+
+	// Indices at and after the insertion point shift, so drop a selection that would now be wrong
+	if (mission_index == m_current_mission_index && m_current_branch_index >= static_cast<int>(insert_at))
+		m_current_branch_index = -1;
+
+	return *branches.emplace(branches.begin() + insert_at);
+}
+
 void CampaignEditorDialogModel::addBranch(int from_mission_index, int to_mission_index)
 {
 	if (!SCP_vector_inbounds(m_missions, from_mission_index) || !SCP_vector_inbounds(m_missions, to_mission_index)) {
@@ -1426,8 +1452,9 @@ void CampaignEditorDialogModel::addBranch(int from_mission_index, int to_mission
 		}
 	}
 
-	// Create the new branch data
-	auto& new_branch = from_mission.branches.emplace_back();
+	// Create the new branch data; a repeat branch goes last, anything else ahead of the repeats
+	auto& new_branch = (from_mission_index == to_mission_index) ? from_mission.branches.emplace_back()
+		: insertBranchBeforeRepeats(from_mission_index);
 	addBranchIdIfMissing(new_branch);
 	new_branch.next_mission_name = to_mission_name;
 	new_branch.is_loop = false;
@@ -1533,7 +1560,7 @@ void CampaignEditorDialogModel::addEndBranch(int from_mission_index)
 		}
 	}
 
-	auto& nb = from.branches.emplace_back();
+	auto& nb = insertBranchBeforeRepeats(from_mission_index);
 	nb.next_mission_name.clear(); // END
 	nb.is_loop = false;
 	nb.is_fork = false;
@@ -1572,7 +1599,7 @@ void CampaignEditorDialogModel::addSpecialBranch(int from_mission_index, int to_
 		}
 	}
 
-	auto& nb = from.branches.emplace_back();
+	auto& nb = insertBranchBeforeRepeats(from_mission_index);
 	nb.next_mission_name = to_name;
 	nb.is_loop = asLoop;
 	nb.is_fork = asFork;

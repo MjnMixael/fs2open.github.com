@@ -241,6 +241,8 @@ class CampaignEditorDialogModel : public AbstractDialogModel {
 	void syncCampaignMissionList();
 	void sortMissions();
 	void stopSpeech();
+	// Adds an empty branch to the mission, ahead of any repeat branches at the end of the list
+	CampaignBranchData& insertBranchBeforeRepeats(int mission_index);
 };
 
 } // namespace fso::fred::dialogs

@@ -62,6 +62,7 @@ class CampaignEditorDialog : public QMainWindow, public SexpTreeEditorInterface 
 
 	void on_availableMissionsFilterLineEdit_textChanged(const QString& arg1);
 	void on_availableMissionsListWidget_itemSelectionChanged();
+	void on_addMissionButton_clicked();
 
 	void on_graphView_missionSelected(int missionIndex);
 	void on_graphView_specialModeToggleRequested(int missionIndex);

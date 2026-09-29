@@ -137,7 +137,7 @@
          <number>11</number>
         </property>
         <item>
-         <layout class="QVBoxLayout" name="editorControls" stretch="0,0,0,1,0,0,1,0,0">
+         <layout class="QVBoxLayout" name="editorControls" stretch="0,0,0,0,1,0,0,1,0,0">
           <item>
            <layout class="QHBoxLayout" name="availableMissionsLayout">
             <item>
@@ -199,6 +199,33 @@
              <bool>true</bool>
             </property>
            </widget>
+          </item>
+          <item>
+           <layout class="QHBoxLayout" name="addMissionLayout">
+            <item>
+             <spacer name="addMissionSpacer">
+              <property name="orientation">
+               <enum>Qt::Horizontal</enum>
+              </property>
+              <property name="sizeHint" stdset="0">
+               <size>
+                <width>40</width>
+                <height>20</height>
+               </size>
+              </property>
+             </spacer>
+            </item>
+            <item>
+             <widget class="QPushButton" name="addMissionButton">
+              <property name="toolTip">
+               <string>Add the selected mission to the campaign flow</string>
+              </property>
+              <property name="text">
+               <string>Add &gt;&gt;</string>
+              </property>
+             </widget>
+            </item>
+           </layout>
           </item>
           <item>
            <widget class="QPushButton" name="fredMissionButton">
