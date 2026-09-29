@@ -173,8 +173,8 @@ void MissionEventsDialogModel::initializeEvents()
 		m_events[i].formula = m_tree_model.load_sub_tree(Mission_events[i].formula, false, "do-nothing");
 
 		// we must check for the case of the repeat count being 0.  This would happen if the repeat
-		// count is not specified in a mission
-		if (m_events[i].repeat_count <= 0) {
+		// count is not specified in a mission.  Negative counts are valid (repeat forever).
+		if (m_events[i].repeat_count == 0) {
 			m_events[i].repeat_count = 1;
 		}
 	}
@@ -1855,7 +1855,8 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 	for (size_t i = 0; i < parsedEvents.size(); ++i) {
 		mission_event e = parsedEvents[i];
 		e.formula = m_tree_model.load_sub_tree(parsedEvents[i].formula, false, "do-nothing");
-		if (e.repeat_count <= 0)
+		// negative repeat counts are valid (repeat forever); only 0 is corrected
+		if (e.repeat_count == 0)
 			e.repeat_count = 1;
 		if (e.name.empty())
 			e.name = "<Unnamed>";
