@@ -7173,7 +7173,7 @@ void mission_checkpoint_maybe_offer_resume()
 	        XSTR("Resume from checkpoint?", 2002),
 	        XSTR("You have a saved checkpoint for this mission.", 2003));
 
-	int choice = popup(PF_USE_AFFIRMATIVE_ICON | PF_USE_NEGATIVE_ICON, 2, POPUP_NO, POPUP_YES, prompt.c_str());
+	int choice = popup(PF_USE_AFFIRMATIVE_ICON | PF_USE_NEGATIVE_ICON, 2, POPUP_NO, POPUP_YES, "%s", prompt.c_str());
 
 	if (choice != 1) {
 		mprintf(("CHECKPOINT => Player declined the checkpoint; starting the mission normally.\n"));
