@@ -856,6 +856,11 @@ bool sexp_tree_view::eventFilter(QObject* obj, QEvent* ev)
 	if (obj == _opEdit && ev->type() == QEvent::KeyPress) {
 		const auto* key = static_cast<QKeyEvent*>(ev);
 		switch (key->key()) {
+		case Qt::Key_Escape:
+			// Cancel here: left to Qt, Escape closes the popup like a click elsewhere
+			// would, and a click elsewhere keeps what was typed
+			endOperatorQuickSearch(false);
+			return true;
 		case Qt::Key_Up:
 		case Qt::Key_Down:
 		case Qt::Key_PageUp:
@@ -876,10 +881,11 @@ bool sexp_tree_view::eventFilter(QObject* obj, QEvent* ev)
 		case QEvent::Hide:
 		case QEvent::Close:
 		case QEvent::WindowDeactivate:
-			// Treat any external close as cancel; just clear state.
-			_opPopupActive = false;
-			_opNodeIndex = -1;
-			setFocus(Qt::OtherFocusReason);
+			// endOperatorQuickSearch() clears _opPopupActive before it hides the popup, so
+			// still being active here means the popup was closed from outside, by clicking
+			// elsewhere. Keep an unambiguous entry, like an inline edit does on focus loss.
+			if (_opPopupActive)
+				endOperatorQuickSearch(true, /*clickedAway=*/true);
 			break;
 		default:
 			break;
@@ -1806,21 +1812,34 @@ void sexp_tree_view::filterOperatorPopup(const QString& text)
 //   3. Otherwise, fall back to _model.match_closest_operator() for fuzzy matching
 // On successful operator resolution, calls _actions.add_or_replace_operator() to commit.
 // Hides the popup, clears state, and returns focus to the tree.
-void sexp_tree_view::endOperatorQuickSearch(bool confirm)
+void sexp_tree_view::endOperatorQuickSearch(bool confirm, bool clickedAway)
 {
 	if (!_opPopupActive)
 		return;
 
-	// Cache before hiding since hide triggers eventFilter which clears state
+	// Mark the popup closed before anything hides it, so the Hide event reaching
+	// eventFilter() is recognized as our own close rather than a click elsewhere
+	_opPopupActive = false;
 	const int node = _opNodeIndex;
 
 	QString chosenOp;
 	QString typed = (_opEdit ? _opEdit->text().trimmed() : QString());
 
 	if (confirm) {
-		// If user selected an operator in the list, prefer that
-		if (_opList && _opList->currentItem())
-			chosenOp = _opList->currentItem()->text();
+		if (!clickedAway) {
+			// If user selected an operator in the list, prefer that
+			if (_opList && _opList->currentItem())
+				chosenOp = _opList->currentItem()->text();
+		} else if (!typed.isEmpty()) {
+			// Clicking elsewhere keeps only what was typed out in full: the exact name of
+			// an offered operator (the number check below handles typed numbers)
+			for (const auto& op : _opAll) {
+				if (op.compare(typed, Qt::CaseInsensitive) == 0) {
+					chosenOp = op;
+					break;
+				}
+			}
+		}
 
 		// If nothing selected, see if typed text is a valid *number* for this slot
 		if (chosenOp.isEmpty() && !typed.isEmpty()) {
@@ -1852,13 +1871,14 @@ void sexp_tree_view::endOperatorQuickSearch(bool confirm)
 
 				_actions.replace_data(typed.toUtf8().constData(), type);
 				Q_EMIT modified(); // so undo captures it and dependent views refresh
-				setFocus(Qt::OtherFocusReason);
+				if (!clickedAway) // the click went to another control; leave focus there
+					setFocus(Qt::OtherFocusReason);
 				return; // done
 			}
 		}
 
-		// fall back to closest operator match from typed text
-		if (chosenOp.isEmpty() && !typed.isEmpty()) {
+		// fall back to closest operator match from typed text (not on a click elsewhere: no guessing)
+		if (!clickedAway && chosenOp.isEmpty() && !typed.isEmpty()) {
 			auto best = _model.match_closest_operator(typed.toStdString(), node);
 			if (!best.empty())
 				chosenOp = QString::fromStdString(best);
@@ -1883,7 +1903,8 @@ void sexp_tree_view::endOperatorQuickSearch(bool confirm)
 		}
 	}
 
-	setFocus(Qt::OtherFocusReason);
+	if (!clickedAway) // the click went to another control; leave focus there
+		setFocus(Qt::OtherFocusReason);
 }
 
 // Slot connected to QTreeWidget::itemChanged. Handles inline edit completion.

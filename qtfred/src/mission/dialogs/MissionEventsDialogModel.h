@@ -77,6 +77,8 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	// Event Management
 	void createEvent();
 	void insertEvent();
+	// Inserts a new event right after the selected one (or at the end if none is selected)
+	void insertEventBelow();
 	void deleteEvent();
 	void renameEvent(int id, const SCP_string& name);
 	int getFormula() const;

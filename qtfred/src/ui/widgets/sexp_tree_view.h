@@ -406,7 +406,9 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 
 	//! Closes the operator popup. On confirm: commits the chosen operator via _actions.add_or_replace_operator(),
 	//! or commits typed numbers via _actions.replace_data(). Falls back to _model.match_closest_operator().
-	void endOperatorQuickSearch(bool confirm);
+	//! clickedAway: the popup was closed by clicking elsewhere; only an unambiguous entry (a typed
+	//! number, or the exact name of an operator) is committed, nothing is guessed.
+	void endOperatorQuickSearch(bool confirm, bool clickedAway = false);
 
 	//! Filters the operator list widget as the user types, matching case-insensitively.
 	void filterOperatorPopup(const QString& text);

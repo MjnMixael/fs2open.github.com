@@ -2,6 +2,7 @@
 #include "ui_MissionEventsDialog.h"
 
 #include <QShortcut>
+#include <functional>
 #include "ui/Theme.h"
 #include "ui/widgets/EventGraphView.h"
 #include "ui/widgets/MissionTextHighlighter.h"
@@ -413,6 +414,33 @@ void MissionEventsDialog::initViewToggle()
 			ui->eventSearchEdit->selectAll();
 		}
 	});
+
+	// Excel-style row shortcuts on the event tree: Ctrl+Plus inserts an event above the
+	// selected one, Ctrl+Alt+Plus below it, Ctrl+Minus deletes it. Ctrl+= and the keypad keys
+	// work too, so no Shift is needed. WidgetShortcut: only while the tree itself has focus,
+	// never while an inline edit (a child editor) or another field is being typed in.
+	auto bindEventShortcuts = [this](std::initializer_list<QKeySequence> keys, QPushButton* gate, const std::function<void()>& action) {
+		for (const auto& key : keys) {
+			auto* sc = new QShortcut(key, ui->eventTree);
+			sc->setContext(Qt::WidgetShortcut);
+			connect(sc, &QShortcut::activated, this, [gate, action] {
+				if (gate->isEnabled())
+					action();
+			});
+		}
+	};
+	const auto ctrl = Qt::KeyboardModifiers(Qt::ControlModifier);
+	const auto ctrlAlt = Qt::ControlModifier | Qt::AltModifier;
+	const auto pad = Qt::KeyboardModifiers(Qt::KeypadModifier);
+	auto seq = [](Qt::KeyboardModifiers mods, Qt::Key key) { return QKeySequence(QKeyCombination(mods, key)); };
+	bindEventShortcuts({seq(ctrl, Qt::Key_Plus), seq(ctrl, Qt::Key_Equal), seq(ctrl | pad, Qt::Key_Plus)},
+		ui->btnInsertEvent, [this] { on_btnInsertEvent_clicked(); });
+	bindEventShortcuts({seq(ctrlAlt, Qt::Key_Plus), seq(ctrlAlt, Qt::Key_Equal), seq(ctrlAlt | pad, Qt::Key_Plus)},
+		ui->btnInsertEvent, [this] { insertEventBelow(); });
+	bindEventShortcuts({seq(ctrl, Qt::Key_Minus), seq(ctrl | pad, Qt::Key_Minus)},
+		ui->btnDeleteEvent, [this] { on_btnDeleteEvent_clicked(); });
+	ui->btnInsertEvent->setToolTip(tr("Insert an event above the selected one (Ctrl++; Ctrl+Alt++ inserts below)"));
+	ui->btnDeleteEvent->setToolTip(tr("Delete the selected event (Ctrl+-)"));
 
 	// Restore the view used last time this session. A view whose button is
 	// disabled can't be restored into.
@@ -1124,6 +1152,33 @@ bool MissionEventsDialog::hasDefaultMessageParameter()
 	return !_model->getMessageList().empty();
 }
 
+// Event names come from the working events, like messages above, not from Mission_events.
+// Otherwise an event added or renamed in this editor wasn't a valid choice: the lists
+// didn't offer it, and editing another argument of the same operator re-validated the
+// arguments and replaced its name with the first saved event.
+SCP_vector<SCP_string> MissionEventsDialog::getMissionEvents(const SCP_string& reference_name)
+{
+	if (!_model)
+		return SexpTreeEditorInterface::getMissionEvents(reference_name);
+
+	SCP_vector<SCP_string> out;
+	const auto& events = _model->getEventList();
+	out.reserve(events.size());
+	for (const auto& ev : events) {
+		out.emplace_back(ev.name, 0, NAME_LENGTH - 1);
+	}
+	return out;
+}
+
+bool MissionEventsDialog::hasDefaultEvent(int operator_value)
+{
+	if (!_model)
+		return SexpTreeEditorInterface::hasDefaultEvent(operator_value);
+
+	return (operator_value == OP_PREVIOUS_EVENT_TRUE) || (operator_value == OP_PREVIOUS_EVENT_FALSE)
+		|| (operator_value == OP_PREVIOUS_EVENT_INCOMPLETE) || !_model->getEventList().empty();
+}
+
 void MissionEventsDialog::closeEvent(QCloseEvent* e)
 {
 	reject();
@@ -1773,10 +1828,28 @@ void MissionEventsDialog::on_btnNewEvent_clicked()
 	_suppressTreeUndo = false;
 
 	updateEventUi(); // rebuilds the graph via syncGraphAfterEventUi (event count grew)
-	// In the graph, pan/zoom to the freshly-created event node and select it.
-	if (ui->eventViewStack->currentIndex() == GraphViewIndex)
-		ui->eventGraph->focusEvent(_model->getCurrentlySelectedEvent());
+	focusNewEvent();
 	pushEventStateSnapshot(before, tr("Add Event"));
+}
+
+// The clicked New/Insert button would otherwise keep keyboard focus, so Space pressed it
+// again (adding yet another event) instead of editing the new event's name.
+void MissionEventsDialog::focusNewEvent()
+{
+	switch (ui->eventViewStack->currentIndex()) {
+	case TreeViewIndex:
+		if (auto* cur = ui->eventTree->currentItem())
+			ui->eventTree->scrollToItem(cur);
+		ui->eventTree->setFocus(Qt::OtherFocusReason);
+		break;
+	case GraphViewIndex:
+		// Pan/zoom to the new event's node and select it
+		ui->eventGraph->focusEvent(_model->getCurrentlySelectedEvent());
+		ui->eventGraph->setFocus(Qt::OtherFocusReason);
+		break;
+	default:
+		break;
+	}
 }
 
 void MissionEventsDialog::on_btnInsertEvent_clicked()
@@ -1790,6 +1863,23 @@ void MissionEventsDialog::on_btnInsertEvent_clicked()
 	_suppressTreeUndo = false;
 
 	updateEventUi();
+	focusNewEvent();
+	pushEventStateSnapshot(before, tr("Insert Event"));
+}
+
+// Ctrl+Alt+Plus: like Insert Event, but below the selected event
+void MissionEventsDialog::insertEventBelow()
+{
+	// Clear any active filter so the new event is visible.
+	ui->eventSearchEdit->clear();
+
+	const QByteArray before = _model->captureEventWorkingState();
+	_suppressTreeUndo = true;
+	_model->insertEventBelow();
+	_suppressTreeUndo = false;
+
+	updateEventUi();
+	focusNewEvent();
 	pushEventStateSnapshot(before, tr("Insert Event"));
 }
 
