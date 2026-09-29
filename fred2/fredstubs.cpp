@@ -18,6 +18,7 @@
 #include "network/psnet2.h"
 #include "stats/scoring.h"
 #include "cfile/cfile.h"
+#include "sound/sound.h"
 
 float flFrametime;
 int	game_zbuffer = 1;
@@ -203,6 +204,7 @@ bool Game_shudder_everywhere;
 TIMESTAMP Game_shudder_time;
 int Game_shudder_total;
 float Game_shudder_intensity;
+sound_env Game_sound_env;
 void game_shudder_apply(int, float, bool, bool){}
 
 class object;
