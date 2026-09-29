@@ -565,6 +565,13 @@ SCP_string team_name(int team)
 	return Iff_info[team].iff_name;
 }
 
+// The name set-variable-by-index and copy-variable give every slot they create
+// (sexp_add_array_block_variable()).
+bool is_array_block_variable(int index)
+{
+	return !strcmp(Sexp_variables[index].variable_name, "variable array block");
+}
+
 int lookup_team(const SCP_string& name)
 {
 	if (name.empty()) {
@@ -5228,6 +5235,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.is_number = (Sexp_variables[i].type & SEXP_VARIABLE_NUMBER) != 0;
 		state.value = Sexp_variables[i].text;
 		state.type = Sexp_variables[i].type;
+		if (is_array_block_variable(i)) {
+			state.array_index = i;
+		}
 
 		data.variables.push_back(std::move(state));
 	}
@@ -6387,6 +6397,29 @@ void reissue_incoming_support(const checkpoint_data& data)
 void apply_variables(const checkpoint_data& data)
 {
 	for (const auto& state : data.variables) {
+		// An array slot goes back where it was.  By name, every one of them would match the first
+		// slot of that name and overwrite it, and get-variable-by-index would find the rest gone.
+		// A named variable the mission file puts at that index takes precedence.
+		if (state.array_index >= 0) {
+			int slot = state.array_index;
+			if (slot >= MAX_SEXP_VARIABLES) {
+				continue;
+			}
+			if ((Sexp_variables[slot].type & SEXP_VARIABLE_SET) && !is_array_block_variable(slot)) {
+				mprintf(("CHECKPOINT => Variable slot %d is taken by '%s'; dropping the array value stored there.\n",
+				         slot,
+				         Sexp_variables[slot].variable_name));
+				continue;
+			}
+			sexp_add_array_block_variable(slot, state.is_number);
+			strcpy_s(Sexp_variables[slot].text, state.value.c_str());
+			if (state.type != 0) {
+				Sexp_variables[slot].type = state.type;
+			}
+			Sexp_variables[slot].type |= SEXP_VARIABLE_MODIFIED;
+			continue;
+		}
+
 		int index = get_index_sexp_variable_name(state.name.c_str());
 		if (index < 0) {
 			// Not in this parse: a script created it during the mission (mission.SEXPVariables
