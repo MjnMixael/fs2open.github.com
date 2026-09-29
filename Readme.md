@@ -1,4 +1,4 @@
-FreeSpace2 *S*ource *C*ode *P*roject
+*O*pen *F*reeSpace *P*roject
 ==
 [![Coverity](https://img.shields.io/coverity/scan/870.svg)](https://scan.coverity.com/projects/870)
 
