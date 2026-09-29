@@ -122,7 +122,7 @@ float supernova_seconds_left()
 	return Supernova_time_left;
 }
 
-void supernova_restore(float total_seconds, float seconds_left)
+void supernova_restore(float total_seconds, float seconds_left, TIMESTAMP deadline)
 {
 	if (Game_mode & GM_MULTIPLAYER) {
 		return;
@@ -130,7 +130,7 @@ void supernova_restore(float total_seconds, float seconds_left)
 
 	Supernova_time_total = total_seconds;
 	Supernova_time_left = seconds_left;
-	Supernova_timestamp = _timestamp(fl2i(seconds_left * MILLISECONDS_PER_SECOND));
+	Supernova_timestamp = deadline;
 
 	// STARTED is enough: the first supernova_process() moves it on to CLOSE if the time left
 	// says so, playing the approach sound as it would have
