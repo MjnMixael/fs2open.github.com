@@ -3024,7 +3024,11 @@ void apply_environment(const checkpoint_data& data)
 	// Only the stages the player is still flying through; the store refuses anything later.
 	if (env.supernova_stage == static_cast<int>(SUPERNOVA_STAGE::STARTED) ||
 	    env.supernova_stage == static_cast<int>(SUPERNOVA_STAGE::CLOSE)) {
-		supernova_restore(env.supernova_total, env.supernova_left);
+		// The deadline as it stood in the saved run, shifted onto this one like every other stamp.
+		int left_ms = fl2i(env.supernova_left * MILLISECONDS_PER_SECOND);
+		supernova_restore(env.supernova_total,
+		                  env.supernova_left,
+		                  TIMESTAMP(translate_stamp(data.saved_timestamp_ms + left_ms)));
 	}
 
 	// Through the same two calls the SEXPs make, so the ramp and the lock behave as they did.
