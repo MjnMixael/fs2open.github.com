@@ -401,9 +401,11 @@ bool fred_init(std::unique_ptr<os::GraphicsOperations>&& graphicsOps)
 	asteroid_init();
 	mission_brief_common_init();
 
-	// Editor-only custom-data schemas.  Loaded here, before OnGameInit, so scripts that
-	// call mn.addDefaultCustomData() add to the table instead of being wiped by it.
-	parse_editor_custom_data_table();
+	// editor.tbl: editor settings and custom-data schemas.  Loaded here, after game_settings.tbl
+	// (its #Settings override or add to that table's #FRED SETTINGS) and before scripting starts,
+	// since it can set $Enable scripting in FRED: and scripts that call mn.addDefaultCustomData()
+	// must add to the schemas instead of being wiped by them.
+	parse_editor_table();
 
 	neb2_init();						// fullneb stuff
 	nebl_init();						// neb lightning
