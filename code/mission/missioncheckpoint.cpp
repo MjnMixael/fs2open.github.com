@@ -4766,12 +4766,35 @@ bool mission_checkpoint_allowed()
 // Store
 // ------------------------------------------------------------------
 
+// Raised for the whole of a store.  The On Checkpoint Save hook runs inside it, and a script that
+// stores from that hook (mission.storeCheckpoint) would otherwise recurse until the stack ran out.
+static bool Checkpoint_storing = false;
+
 bool mission_checkpoint_store(const SCP_string& slot)
 {
 	if (!(Game_mode & GM_IN_MISSION)) {
 		mprintf(("CHECKPOINT => store called outside a mission; ignoring.\n"));
 		return false;
 	}
+
+	if (Checkpoint_storing) {
+		mprintf(("CHECKPOINT => A store was asked for while another is being written; ignoring it.\n"));
+		return false;
+	}
+
+	// While a checkpoint is being applied the mission is half old and half new (the clock has
+	// jumped, the mission logic has not been put back yet), and scripts still run -- the arrival
+	// hook fires for the ships the restore brings back.  A store from there would write that
+	// in-between state over the slot.
+	if (Game_restoring) {
+		mprintf(("CHECKPOINT => A store was asked for during a restore; ignoring it.\n"));
+		return false;
+	}
+
+	struct storing_scope {
+		storing_scope() { Checkpoint_storing = true; }
+		~storing_scope() { Checkpoint_storing = false; }
+	} storing;
 
 	if (!mission_checkpoint_allowed()) {
 		mprintf(("CHECKPOINT => Checkpoints are switched off for this mission; not storing.\n"));
