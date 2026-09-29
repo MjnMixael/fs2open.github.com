@@ -3691,8 +3691,16 @@ void store_asteroids(checkpoint_data& data)
 			continue;
 		}
 
+		// asteroid_delete() clears the flags but leaves objnum behind, and the object slot is soon
+		// reused -- often by another asteroid.  Only a live entry that its object points back at is
+		// really this rock; the rest would be stored twice and restored as a duplicate outside the
+		// used list, which later trips asteroid_delete()'s objnum Assert.
+		if (!(ast.flags & AF_USED)) {
+			continue;
+		}
+
 		const object* objp = &Objects[ast.objnum];
-		if (objp->type != OBJ_ASTEROID) {
+		if (objp->type != OBJ_ASTEROID || objp->instance != static_cast<int>(&ast - Asteroids)) {
 			continue;
 		}
 
