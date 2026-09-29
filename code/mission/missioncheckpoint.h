@@ -703,10 +703,17 @@ struct goal_state {
 // is why the text comes along -- for those nodes the text *is* the value, and without it a
 // restored mission re-rolls every random delay the mission had already settled.
 //
-// Identified by node index, which is only meaningful for an identical parse of an identical
-// mission file.  That is exactly what the fingerprint check guarantees.
+// Identified by where the node sits rather than by its index into Sexp_nodes: the formula that owns
+// it (an event, a goal, a ship's or wing's arrival or departure cue, a prop's spawn or despawn
+// cue -- by name, and by which of several same-named owners), and its position in a preorder walk
+// of that formula.  Node indices depend on everything parsed before the mission, such as the
+// campaign's own formulas, and shift with any edit to the file; this key survives both, and a node
+// whose formula was edited simply starts fresh.
 struct sexp_node_state {
-	int index = 0;
+	SCP_string owner_kind;   // "event", "goal", "ship arrival", ...; see collect_formula_owners()
+	SCP_string owner_name;
+	int owner_occurrence = 0; // the nth owner of that kind with that name, in mission order
+	int ordinal = 0;          // preorder position within the owner's formula
 	int value = 0;
 	int flags = 0;
 	SCP_string text;   // only stored when the node's text carries state, i.e. SEXP_NUM_EVAL
