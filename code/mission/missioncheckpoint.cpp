@@ -12,6 +12,7 @@
 #include "debris/debris.h"
 #include "graphics/light.h"
 #include "hud/hud.h"
+#include "hud/hudparse.h"
 #include "jumpnode/jumpnode.h"
 #include "nebula/neb.h"
 #include "nebula/neblightning.h"
@@ -4642,7 +4643,9 @@ void store_subsystems(const ship* shipp, SCP_vector<subsystem_state>& out)
 	}
 }
 
-void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in)
+// keep_class_maxima: the ship is not the class the checkpoint was written for (a kept loadout), so a
+// subsystem it shares by name keeps this class's max_hits and gets its health back as a proportion.
+void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in, bool keep_class_maxima)
 {
 	auto live = index_subsystems(shipp);
 
@@ -4659,7 +4662,12 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in)
 		ship_subsys* subsys = it->second;
 
 		apply_flags(state.flags, Subsys_flag_table, subsys->flags);
+		float fresh_max_hits = subsys->max_hits;
 		load_subsys_scalars(*subsys, state.floats, state.ints);
+		if (keep_class_maxima) {
+			subsys->current_hits = (subsys->max_hits > 0.0f) ? subsys->current_hits / subsys->max_hits * fresh_max_hits : fresh_max_hits;
+			subsys->max_hits = fresh_max_hits;
+		}
 
 		if (!state.sub_name.empty()) {
 			strcpy_s(subsys->sub_name, state.sub_name.c_str());
@@ -6094,6 +6102,14 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 		int ship_class = lookup_ship_class(state.ship_class);
 		if (ship_class >= 0 && ship_class != shipp->ship_info_index) {
 			change_ship_type(entry->shipnum, ship_class, 1);
+
+			// The HUD and cockpit displays are built for the player's class; change-ship-class
+			// rebuilds them, so the same here.
+			if (shipp == Player_ship) {
+				set_current_hud();
+				ship_close_cockpit_displays(Player_ship);
+				ship_init_cockpit_displays(Player_ship);
+			}
 		}
 	}
 
@@ -6192,8 +6208,47 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 	// the mission file gave it.
 	shipp->display_name = shipp->flags[Ship::Ship_Flags::Has_display_name] ? state.display_name : SCP_string();
 
+	// A kept loadout can leave the ship a different class from the one the checkpoint recorded (the
+	// player went back to the loadout screen and picked another fighter).  The saved maxima,
+	// fuel, energy and countermeasure count belong to the old class, so they are carried over as a
+	// proportion of the new class's instead of verbatim -- a light fighter's hull is not a heavy
+	// fighter's.
+	int saved_class = lookup_ship_class(state.ship_class);
+	bool other_class = skip_loadout && saved_class != shipp->ship_info_index;
+
+	float fresh_max_hull = shipp->ship_max_hull_strength;
+	float fresh_max_shield = shipp->ship_max_shield_strength;
+	float fresh_fuel = shipp->afterburner_fuel;
+	float fresh_energy = shipp->weapon_energy;
+	int fresh_cmeasures = shipp->cmeasure_count;
+
 	load_ship_scalars(*shipp, state.floats, state.ints);
 	load_physics(objp->phys_info, state.physics_floats, state.physics_vecs);
+
+	float hull_scale = 1.0f;
+	float shield_scale = 1.0f;
+	if (other_class) {
+		auto proportion = [](float value, float old_max, float new_max) {
+			return (old_max > 0.0f) ? value / old_max * new_max : new_max;
+		};
+
+		hull_scale = (shipp->ship_max_hull_strength > 0.0f) ? fresh_max_hull / shipp->ship_max_hull_strength : 1.0f;
+		shield_scale = (shipp->ship_max_shield_strength > 0.0f) ? fresh_max_shield / shipp->ship_max_shield_strength : 1.0f;
+		shipp->ship_max_hull_strength = fresh_max_hull;
+		shipp->ship_max_shield_strength = fresh_max_shield;
+
+		const ship_info* new_sip = &Ship_info[shipp->ship_info_index];
+		if (saved_class >= 0) {
+			const ship_info* old_sip = &Ship_info[saved_class];
+			shipp->afterburner_fuel = proportion(shipp->afterburner_fuel, old_sip->afterburner_fuel_capacity, new_sip->afterburner_fuel_capacity);
+			shipp->weapon_energy = proportion(shipp->weapon_energy, old_sip->max_weapon_reserve, new_sip->max_weapon_reserve);
+			shipp->cmeasure_count = fl2i(proportion(i2fl(shipp->cmeasure_count), i2fl(old_sip->cmeasure_max), i2fl(new_sip->cmeasure_max)) + 0.5f);
+		} else {
+			shipp->afterburner_fuel = fresh_fuel;
+			shipp->weapon_energy = fresh_energy;
+			shipp->cmeasure_count = fresh_cmeasures;
+		}
+	}
 
 	// current_viewpoint indexes the model's eye points, and the model may not be the one the
 	// checkpoint was written against -- a kept loadout, or a mod that re-exported the pof.  The
@@ -6210,21 +6265,26 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 
 	// Clamp hull and shields to the current maxima; the ship class may grant different values
 	// now than it did when the checkpoint was written.
-	objp->hull_strength = MIN(state.hull, shipp->ship_max_hull_strength);
+	objp->hull_strength = MIN(state.hull * hull_scale, shipp->ship_max_hull_strength);
 
 	size_t quadrants = MIN(state.shield_quadrants.size(), objp->shield_quadrant.size());
 	for (size_t i = 0; i < quadrants; i++) {
-		objp->shield_quadrant[i] = state.shield_quadrants[i];
+		objp->shield_quadrant[i] = state.shield_quadrants[i] * shield_scale;
 	}
 
+	// The countermeasure is part of the class's loadout; a new class keeps its own.
 	int cmeasure = lookup_weapon_class(state.countermeasure_class);
-	if (cmeasure >= 0) {
+	if (cmeasure >= 0 && !other_class) {
 		shipp->current_cmeasure = cmeasure;
 	}
 
-	load_subsystems(shipp, state.subsystems);
+	load_subsystems(shipp, state.subsystems, other_class);
 	load_ai(shipp, state.ai);
-	restore_animations(objp, state.animations);
+	// Animation ids are keyed to the class that wrote them, and would drive the new model with
+	// the old class's animations.
+	if (!other_class) {
+		restore_animations(objp, state.animations);
+	}
 	load_weapons(shipp->weapons, state.weapons, !skip_loadout);
 }
 
