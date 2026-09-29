@@ -4680,6 +4680,7 @@ void resolve_turret_targets(ship* shipp, const SCP_vector<subsystem_state>& in)
 struct pending_load_state {
 	bool queued = false;      // a SEXP asked for a load; act on it at end of frame
 	bool in_progress = false; // the mission restart has been posted; apply on the way back in
+	bool awaiting_reload = false; // the restart is posted but the level has not been rebuilt yet
 	SCP_string slot;
 	LoadFlags flags = LoadFlags::None;
 	checkpoint_data data;
@@ -5490,6 +5491,16 @@ void mission_checkpoint_process_pending_load()
 		return;
 	}
 
+	// Only these two states rebuild the level when the restart comes back round as ENTER_GAME (see
+	// game_enter_state()).  Leaving the death roll's first state, DEATH_DIED, stops the mission
+	// without loading it again, so a load asked for while the player is dying -- the obvious
+	// "is-destroyed Alpha 1 -> load-checkpoint" -- waits, still queued, until the death roll
+	// reaches DEATH_BLEW_UP, which restarts the way the death popup's own Restart does.
+	int state = gameseq_get_state();
+	if (state != GS_STATE_GAME_PLAY && state != GS_STATE_DEATH_BLEW_UP) {
+		return;
+	}
+
 	Pending_load.queued = false;
 
 	// Read the file now, while the old mission is still loaded, so that a missing or
@@ -5511,6 +5522,7 @@ void mission_checkpoint_process_pending_load()
 	}
 
 	Pending_load.in_progress = true;
+	Pending_load.awaiting_reload = true;
 
 	// Restarting the mission is what actually performs the load: the level is torn down and
 	// rebuilt from the mission file, and mission_checkpoint_apply() then bashes the saved
@@ -7170,6 +7182,15 @@ void mission_checkpoint_apply()
 	// to apply the same checkpoint again on the next mission load.
 	Pending_load.in_progress = false;
 
+	// The restore works by bashing saved state onto a freshly loaded mission.  If the level was not
+	// rebuilt on the way here, applying it would pile the saved state on top of the live one
+	// (duplicate ships from the reconciliation, doubled scoring), so refuse outright.
+	if (Pending_load.awaiting_reload) {
+		mprintf(("CHECKPOINT => The mission was not reloaded for checkpoint '%s'; discarding it.\n", Pending_load.slot.c_str()));
+		mission_checkpoint_clear_pending();
+		return;
+	}
+
 	// If we somehow arrived in a different mission -- the restart failed and dropped the
 	// player back to the main hall, say, and they then started something else -- the saved
 	// state belongs to a mission that is not loaded and must not be applied to this one.
@@ -7409,6 +7430,9 @@ void mission_checkpoint_level_init()
 	// either the checkpoint or the mission file.
 	Existence_cache.clear();
 	checkpoint_invalidate_fingerprint();
+
+	// The level a posted checkpoint restart was waiting for.
+	Pending_load.awaiting_reload = false;
 
 	// Not cleared by mission_checkpoint_clear_pending(), which has to survive the very reload a
 	// checkpoint load asks for -- but the level teardown is exactly where one mission's script
