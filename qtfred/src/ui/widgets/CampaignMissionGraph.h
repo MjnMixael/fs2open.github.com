@@ -68,6 +68,8 @@ struct CampaignGraphStyle {
 	qreal outboundDropMain{30.0};             // Y drop right after source for MAIN
 	qreal outboundDropSpecial{40.0};          // Y drop right after source for SPECIAL
 	qreal portHitExtra{30.0};                 // extra pixels added to port radius for hit testing
+	qreal portHitMinScreen{16.0};             // minimum port hit radius in screen pixels when zoomed out
+	qreal dropMargin{24.0};                   // how far outside a card or the END pill a connection drop still counts
 
 	// Edge routing
 	qreal fanoutStart{12.0}; // vertical run from port before spreading
@@ -115,6 +117,7 @@ class CampaignMissionGraph final : public QGraphicsView {
 	Q_OBJECT
   public:
 	explicit CampaignMissionGraph(QWidget* parent = nullptr);
+	~CampaignMissionGraph() override;
 
 	bool eventFilter(QObject* watched, QEvent* event) override;
 
@@ -143,6 +146,9 @@ class CampaignMissionGraph final : public QGraphicsView {
 	{
 		return m_style.forksEnabled;
 	}
+
+	// Grid-snapped top-left for a new node near the middle of the visible area, clear of existing nodes
+	QPointF freeNodePositionNearViewCenter() const;
 
   signals:
 	// Emitted when a mission node is clicked/selected
@@ -208,6 +214,9 @@ class CampaignMissionGraph final : public QGraphicsView {
 	bool hasRepeatBranch(int missionIndex) const;
 
 	detail::MissionNodeItem* nodeAtScenePos(const QPointF& scenePt) const;
+	// Outbound port under a press: the pressed card's own ports, or, outside any card, the nearest port in reach
+	detail::MissionNodeItem* outboundPortAtScenePos(const QPointF& scenePt, bool& isSpecial) const;
+	qreal portHitRadius() const;
 	bool tryFinishConnectionAt(const QPointF& scenePt);
 	void cancelDrag();
 
@@ -258,7 +267,10 @@ class MissionNodeItem final : public QGraphicsObject {
 		CampaignGraphStyle style,
 		QGraphicsItem* parent = nullptr);
 
+	// Covers the card plus the ports, which straddle its top and bottom edges
 	QRectF boundingRect() const override;
+	// Card plus port circles, so the outer half of a port is part of the item
+	QPainterPath shape() const override;
 	void paint(QPainter* p, const QStyleOptionGraphicsItem* opt, QWidget* w) override;
 
 	int missionIndex() const
@@ -266,6 +278,11 @@ class MissionNodeItem final : public QGraphicsObject {
 		return m_idx;
 	}
 
+	// The card itself, in item coordinates (boundingRect() also covers the ports)
+	QRectF cardRect() const
+	{
+		return m_rect;
+	}
 
 	enum class Port {
 		None,
@@ -274,7 +291,7 @@ class MissionNodeItem final : public QGraphicsObject {
 		Special
 	};
 
-	Port hitTestPortScene(const QPointF& scenePos) const;
+	Port hitTestPortScene(const QPointF& scenePos, qreal hitRadius) const;
 
 	// Port anchor points
 	QPointF inboundPortScenePos() const;
@@ -341,6 +358,9 @@ class EdgeItem final : public QObject, public QGraphicsPathItem {
 	void setEmphasis(Emphasis e);
 	Emphasis emphasis() const { return m_emphasis; }
 
+	// The arrowheads are drawn beside and past the path, so widen the bounds to cover them
+	QRectF boundingRect() const override;
+
 	// For focus mode connectivity checks
 	int sourceIndex() const { return m_missionIndex; }
 	int targetIndex() const { return m_targetIndex; }
@@ -386,9 +406,9 @@ class EndSinkItem final : public QGraphicsObject {
 
 	QRectF boundingRect() const override
 	{
-		// Expand upward by port radius so the top port isn't clipped
+		// Expand upward by the port radius so the top port isn't clipped, plus room for the pens
 		QRectF pill(QPointF(0, 0), m_style.endSinkSize);
-		return pill.adjusted(-1.0, -m_style.portRadius, +1.0, +1.0);
+		return pill.adjusted(-2.0, -m_style.portRadius - 2.0, +2.0, +2.0);
 	}
 
 	void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override

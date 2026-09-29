@@ -12,6 +12,7 @@
 #include <QtMath>
 #include <QMenu>
 #include <QContextMenuEvent>
+#include <algorithm>
 #include <cmath>
 #include <unordered_map>
 
@@ -40,7 +41,24 @@ MissionNodeItem::MissionNodeItem(int missionIndex,
 
 QRectF MissionNodeItem::boundingRect() const
 {
-	return m_rect.adjusted(-1, -1, 1, 1);
+	// The ports are centered on the top and bottom edges, so half of each sits outside the
+	// card; a rect that stops at the card leaves port trails behind when the node moves.
+	// The extra 2 covers the selected border pen and antialiasing.
+	const qreal m = m_style.portRadius + 2.0;
+	return m_rect.adjusted(-m, -m, m, m);
+}
+
+QPainterPath MissionNodeItem::shape() const
+{
+	QPainterPath path;
+	path.addRoundedRect(m_rect, m_style.nodeRadius, m_style.nodeRadius);
+	const qreal r = m_style.portRadius;
+	const qreal cx = m_rect.center().x();
+	path.addEllipse(QPointF(cx, m_rect.top()), r, r);
+	path.addEllipse(QPointF(cx - m_style.portOffsetX, m_rect.bottom()), r, r);
+	path.addEllipse(QPointF(cx + m_style.portOffsetX, m_rect.bottom()), r, r);
+	path.setFillRule(Qt::WindingFill);
+	return path;
 }
 
 static inline QPainterPath roundedRectPath(const QRectF& r, qreal rad)
@@ -202,26 +220,26 @@ void MissionNodeItem::updateGeometry()
 	m_rect = QRectF(0, 0, 240.0, 120.0);
 }
 
-detail::MissionNodeItem::Port detail::MissionNodeItem::hitTestPortScene(const QPointF& sp) const
+detail::MissionNodeItem::Port detail::MissionNodeItem::hitTestPortScene(const QPointF& sp, qreal hitRadius) const
 {
 	// If this item is no longer in a scene, treat as no port (avoids mapToScene on a dying item)
 	if (!scene())
 		return Port::None;
-	
-	const qreal r = m_style.portRadius + m_style.portHitExtra; // configurable hit radius
-	auto near = [&](const QPointF& a, const QPointF& b) { return QLineF(a, b).length() <= r; };
 
-	const QPointF inP = inboundPortScenePos();
-	const QPointF mainP = mainPortScenePos();
-	const QPointF specP = specialPortScenePos();
-
-	if (near(sp, mainP))
-		return Port::Main;
-	if (near(sp, specP))
-		return Port::Special;
-	if (near(sp, inP))
-		return Port::Inbound;
-	return Port::None;
+	// Nearest port within reach, so overlapping hit circles pick the one the cursor is closest to
+	Port best = Port::None;
+	qreal bestDist = hitRadius;
+	auto consider = [&](Port port, const QPointF& anchor) {
+		const qreal d = QLineF(sp, anchor).length();
+		if (d <= bestDist) {
+			bestDist = d;
+			best = port;
+		}
+	};
+	consider(Port::Main, mainPortScenePos());
+	consider(Port::Special, specialPortScenePos());
+	consider(Port::Inbound, inboundPortScenePos());
+	return best;
 }
 
 QPointF MissionNodeItem::inboundPortScenePos() const
@@ -269,6 +287,14 @@ EdgeItem::EdgeItem(int missionIndex,
 	QPen pen(m_color, m_style.edgeWidth, m_dash, Qt::RoundCap, Qt::RoundJoin);
 	pen.setCosmetic(true);
 	setPen(pen);
+}
+
+QRectF EdgeItem::boundingRect() const
+{
+	// Arrowheads reach arrowSize past and half of it beside the path, and the cosmetic pen is
+	// a fixed number of device pixels, which is several scene units when zoomed out.
+	const qreal m = m_style.arrowSize + 12.0;
+	return QGraphicsPathItem::boundingRect().adjusted(-m, -m, m, m);
 }
 
 void EdgeItem::setSelectedVisual(bool sel)
@@ -526,6 +552,23 @@ CampaignMissionGraph::CampaignMissionGraph(QWidget* parent) : QGraphicsView(pare
 	// Recolor graph when the application theme changes
 	qApp->installEventFilter(this);
 }
+CampaignMissionGraph::~CampaignMissionGraph()
+{
+	// The scene is a child object, so Qt would only delete it after this destructor has run.
+	// Deleting a selected node emits selectionChanged into onSceneSelectionChanged, and on an
+	// already destroyed graph that asserts ("Called object is not of the correct type") or
+	// crashes. Disconnect the scene and delete it now, while the graph is still whole.
+	cancelDrag();
+	if (m_scene) {
+		disconnect(m_scene, nullptr, this, nullptr);
+		setScene(nullptr);
+		delete m_scene;
+		m_scene = nullptr;
+	}
+	m_nodeItems.clear();
+	m_edgeItems.clear();
+}
+
 bool CampaignMissionGraph::eventFilter(QObject* watched, QEvent* event)
 {
 	if (event->type() == QEvent::ApplicationPaletteChange) {
@@ -870,7 +913,7 @@ void CampaignMissionGraph::buildMissionEdges()
 			if (i == j) {
 				// Selfloop: draw outside node
 				if (m_style.showSelfLoops) {
-					const QRectF nodeRectScene = srcNode->mapRectToScene(srcNode->boundingRect());
+					const QRectF nodeRectScene = srcNode->mapRectToScene(srcNode->cardRect());
 					const bool sourceRight = isSpecial; // special port on right; main on left
 					edge->setSelfLoop(nodeRectScene, sourceRight, sibIndex, sibCount);
 					m_scene->addItem(edge);
@@ -924,9 +967,9 @@ void CampaignMissionGraph::ensureEndSink()
 	// Position below the union of mission nodes
 	// Future TODO: Let the user move this around. Will require being able to save it's position to the campaign file
 	if (!m_nodeItems.empty()) {
-		QRectF nodesRect = m_nodeItems.front()->mapRectToScene(m_nodeItems.front()->boundingRect());
+		QRectF nodesRect = m_nodeItems.front()->mapRectToScene(m_nodeItems.front()->cardRect());
 		for (size_t i = 1; i < m_nodeItems.size(); ++i) {
-			nodesRect = nodesRect.united(m_nodeItems[i]->mapRectToScene(m_nodeItems[i]->boundingRect()));
+			nodesRect = nodesRect.united(m_nodeItems[i]->mapRectToScene(m_nodeItems[i]->cardRect()));
 		}
 		const qreal x = nodesRect.center().x() - m_style.endSinkSize.width() * 0.5;
 		const qreal y = nodesRect.bottom() + m_style.endSinkMargin;
@@ -975,6 +1018,51 @@ bool CampaignMissionGraph::hasRepeatBranch(int missionIndex) const
 }
 
 
+qreal CampaignMissionGraph::portHitRadius() const
+{
+	// Scene units; keep at least a usable number of screen pixels when zoomed out
+	const qreal scale = std::max<qreal>(0.01, transform().m11());
+	return std::max(m_style.portRadius + m_style.portHitExtra, m_style.portHitMinScreen / scale);
+}
+
+detail::MissionNodeItem* CampaignMissionGraph::outboundPortAtScenePos(const QPointF& scenePt, bool& isSpecial) const
+{
+	using Port = detail::MissionNodeItem::Port;
+	const qreal r = portHitRadius();
+
+	// Pressing on a card only reaches that card's own ports, so the neighbor's hit circle
+	// never steals a click meant to move or select this card
+	if (auto* n = nodeAtScenePos(scenePt)) {
+		const Port hit = n->hitTestPortScene(scenePt, r);
+		if (hit == Port::Main || hit == Port::Special) {
+			isSpecial = (hit == Port::Special);
+			return n;
+		}
+		return nullptr;
+	}
+
+	// Outside every card (the outer half of a port, or just beside it): nearest port in reach
+	detail::MissionNodeItem* best = nullptr;
+	qreal bestDist = r;
+	for (auto* n : m_nodeItems) {
+		if (!n || !n->scene())
+			continue;
+		const qreal dMain = QLineF(scenePt, n->mainPortScenePos()).length();
+		const qreal dSpec = QLineF(scenePt, n->specialPortScenePos()).length();
+		if (dMain <= bestDist) {
+			bestDist = dMain;
+			best = n;
+			isSpecial = false;
+		}
+		if (dSpec <= bestDist) {
+			bestDist = dSpec;
+			best = n;
+			isSpecial = true;
+		}
+	}
+	return best;
+}
+
 detail::MissionNodeItem* CampaignMissionGraph::nodeAtScenePos(const QPointF& scenePt) const
 {
 	if (!m_scene)
@@ -997,12 +1085,15 @@ bool CampaignMissionGraph::tryFinishConnectionAt(const QPointF& scenePt)
 	if (!m_model || m_drag.fromIndex < 0)
 		return false;
 
-	const qreal hitR = m_style.portRadius + m_style.portHitExtra;
+	const qreal hitR = portHitRadius();
+	// Drop tolerance around a card or the END pill, kept usable when zoomed out
+	const qreal margin = std::max<qreal>(m_style.dropMargin, m_style.portHitMinScreen / std::max<qreal>(0.01, transform().m11()));
 
-	// END sink
+	// END sink: anywhere on or near the pill, or near its port
 	if (!m_drag.isSpecial && m_endSink) {
 		const QPointF anchor = m_endSink->inboundAnchorScenePos();
-		if (QLineF(scenePt, anchor).length() <= hitR) {
+		const QRectF pill = m_endSink->sceneBoundingRect().adjusted(-margin, -margin, margin, margin);
+		if (pill.contains(scenePt) || QLineF(scenePt, anchor).length() <= hitR) {
 			// The dialog performs the model change (wrapped for undo); the
 			// signal is delivered synchronously, so the edge rebuild after
 			// this return sees the new branch.
@@ -1011,14 +1102,34 @@ bool CampaignMissionGraph::tryFinishConnectionAt(const QPointF& scenePt)
 		}
 	}
 
-	// Mission inbound port
-	if (auto* dst = nodeAtScenePos(scenePt)) {
-		const QPointF anchor = dst->inboundPortScenePos();
-		if (QLineF(scenePt, anchor).length() <= hitR) {
-			const int toIdx = dst->missionIndex();
-			Q_EMIT branchConnectRequested(m_drag.fromIndex, toIdx, m_drag.isSpecial);
-			return true;
+	// Mission target: anywhere on or near another card, or near any card's inbound port.
+	// The source card itself only takes a drop near its inbound port, so releasing back
+	// over it doesn't create a repeat branch by accident.
+	detail::MissionNodeItem* target = nullptr;
+	qreal bestDist = hitR;
+	for (auto* n : m_nodeItems) {
+		if (!n || !n->scene())
+			continue;
+		const qreal d = QLineF(scenePt, n->inboundPortScenePos()).length();
+		if (d <= bestDist) {
+			bestDist = d;
+			target = n;
 		}
+	}
+	if (!target) {
+		for (auto* n : m_nodeItems) {
+			if (!n || !n->scene() || n->missionIndex() == m_drag.fromIndex)
+				continue;
+			const QRectF card = n->mapRectToScene(n->cardRect()).adjusted(-margin, -margin, margin, margin);
+			if (card.contains(scenePt)) {
+				target = n;
+				break;
+			}
+		}
+	}
+	if (target) {
+		Q_EMIT branchConnectRequested(m_drag.fromIndex, target->missionIndex(), m_drag.isSpecial);
+		return true;
 	}
 
 	// Empty space: ask dialog to create a new mission here and connect
@@ -1026,8 +1137,11 @@ bool CampaignMissionGraph::tryFinishConnectionAt(const QPointF& scenePt)
 	const qreal s = m_style.minorStep;
 	const QPointF snapped(qRound(scenePt.x() / s) * s, qRound(scenePt.y() / s) * s);
 
-	// Don't spawn if we actually clicked on an item's body
-	if (!nodeAtScenePos(scenePt) && !(m_endSink && m_endSink->sceneBoundingRect().contains(scenePt))) {
+	// Don't spawn on or right next to a card (only the source card can still be here) or the END pill
+	const bool nearCard = std::any_of(m_nodeItems.begin(), m_nodeItems.end(), [&](const detail::MissionNodeItem* n) {
+		return n && n->scene() && n->mapRectToScene(n->cardRect()).adjusted(-margin, -margin, margin, margin).contains(scenePt);
+	});
+	if (!nearCard && !(m_endSink && m_endSink->sceneBoundingRect().adjusted(-margin, -margin, margin, margin).contains(scenePt))) {
 		m_spawnPending = true;
 		Q_EMIT createMissionAtAndConnectRequested(snapped, m_drag.fromIndex, m_drag.isSpecial);
 		// return false so caller won't rebuild; dialog will rebuild after it adds the mission
@@ -1094,6 +1208,40 @@ void CampaignMissionGraph::zoomToFitAll(qreal margin)
 	}
 }
 
+QPointF CampaignMissionGraph::freeNodePositionNearViewCenter() const
+{
+	const qreal s = m_style.minorStep;
+	const QSizeF size = m_style.nodeSize;
+	auto snap = [s](const QPointF& p) { return QPointF(std::round(p.x() / s) * s, std::round(p.y() / s) * s); };
+
+	const QPointF center = mapToScene(viewport()->rect().center());
+	const QPointF start = snap(center - QPointF(size.width() * 0.5, size.height() * 0.5));
+
+	// Keep a grid step of air around every existing card (and its ports)
+	auto isFree = [&](const QPointF& topLeft) {
+		const QRectF candidate = QRectF(topLeft, size).adjusted(-s, -s, s, s);
+		return std::none_of(m_nodeItems.begin(), m_nodeItems.end(), [&](const detail::MissionNodeItem* n) {
+			return n && n->scene() && n->mapRectToScene(n->cardRect()).intersects(candidate);
+		});
+	};
+
+	// Search outward in rings of card-sized steps, nearest ring first
+	const qreal stepX = size.width() + 2 * s;
+	const qreal stepY = size.height() + 2 * s;
+	for (int ring = 0; ring <= 6; ++ring) {
+		for (int dy = -ring; dy <= ring; ++dy) {
+			for (int dx = -ring; dx <= ring; ++dx) {
+				if (std::max(std::abs(dx), std::abs(dy)) != ring)
+					continue;
+				const QPointF p = snap(start + QPointF(dx * stepX, dy * stepY));
+				if (isFree(p))
+					return p;
+			}
+		}
+	}
+	return start;
+}
+
 void CampaignMissionGraph::setGridVisible(bool on)
 {
 	if (m_gridVisible == on)
@@ -1148,8 +1296,9 @@ void CampaignMissionGraph::mousePressEvent(QMouseEvent* ev)
 	const QPointF sp = mapToScene(ev->pos());
 
 	// If we're already dragging, ignore
-	if (!m_drag.active) {
-		if (auto* raw = nodeAtScenePos(sp)) {
+	if (!m_drag.active && ev->button() == Qt::LeftButton) {
+		bool portIsSpecial = false;
+		if (auto* raw = outboundPortAtScenePos(sp, portIsSpecial)) {
 			QPointer<detail::MissionNodeItem> n(raw);
 
 			// If the item is already gone, bail safely
@@ -1158,45 +1307,42 @@ void CampaignMissionGraph::mousePressEvent(QMouseEvent* ev)
 				return;
 			}
 
-			const auto hit = n->hitTestPortScene(sp);
-			if (hit == detail::MissionNodeItem::Port::Main || hit == detail::MissionNodeItem::Port::Special) {
-				// begin drag
-				m_drag.active = true;
-				m_drag.isSpecial = (hit == detail::MissionNodeItem::Port::Special);
+			// begin drag
+			m_drag.active = true;
+			m_drag.isSpecial = portIsSpecial;
 
-				// Recheck pointer right before using it again
-				if (!n) {
-					m_drag.active = false;
-					ev->ignore();
-					return;
-				}
-
-				m_drag.fromIndex = n->missionIndex();
-				m_drag.srcPt = m_drag.isSpecial ? n->specialPortScenePos() : n->mainPortScenePos();
-
-				// Build preview edge
-				const auto& missions = m_model->getCampaignMissions();
-
-				// quickly check for this, as we can drag the end mission sink that is not supposed to be dragged, by accident 
-				if (!SCP_vector_inbounds(missions, m_drag.fromIndex)){
-					m_drag.active = false;
-					ev->ignore();
-					return;
-				}
-
-				const auto mode = missions[m_drag.fromIndex].special_mode_hint;
-
-				m_drag.preview = new detail::EdgeItem(m_drag.fromIndex, /*branchId*/ -1, m_drag.isSpecial, mode, m_style);
-				m_drag.preview->setZValue(6.0);
-				m_drag.preview->setEndpoints(m_drag.srcPt, sp, /*sibIndex*/ 0, /*sibCount*/ 1);
-				m_drag.preview->setEmphasis(detail::EdgeItem::Emphasis::Highlighted);
-				m_scene->addItem(m_drag.preview);
-
-				// Disable hand drag while connecting
-				setDragMode(QGraphicsView::NoDrag);
-				ev->accept();
+			// Recheck pointer right before using it again
+			if (!n) {
+				m_drag.active = false;
+				ev->ignore();
 				return;
 			}
+
+			m_drag.fromIndex = n->missionIndex();
+			m_drag.srcPt = m_drag.isSpecial ? n->specialPortScenePos() : n->mainPortScenePos();
+
+			// Build preview edge
+			const auto& missions = m_model->getCampaignMissions();
+
+			// quickly check for this, as we can drag the end mission sink that is not supposed to be dragged, by accident 
+			if (!SCP_vector_inbounds(missions, m_drag.fromIndex)){
+				m_drag.active = false;
+				ev->ignore();
+				return;
+			}
+
+			const auto mode = missions[m_drag.fromIndex].special_mode_hint;
+
+			m_drag.preview = new detail::EdgeItem(m_drag.fromIndex, /*branchId*/ -1, m_drag.isSpecial, mode, m_style);
+			m_drag.preview->setZValue(6.0);
+			m_drag.preview->setEndpoints(m_drag.srcPt, sp, /*sibIndex*/ 0, /*sibCount*/ 1);
+			m_drag.preview->setEmphasis(detail::EdgeItem::Emphasis::Highlighted);
+			m_scene->addItem(m_drag.preview);
+
+			// Disable hand drag while connecting
+			setDragMode(QGraphicsView::NoDrag);
+			ev->accept();
+			return;
 		}
 	}
 

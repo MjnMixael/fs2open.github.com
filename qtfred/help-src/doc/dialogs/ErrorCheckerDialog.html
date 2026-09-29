@@ -29,7 +29,37 @@ of each problem found.</p>
     <tr><td>Status bar</td><td>Shows a summary of the most recent check: the total
         number of entries found, or <em>No check has been run yet</em> before the
         first run.</td></tr>
+    <tr><td>Copy All</td><td>Copies the whole report to the clipboard, for pasting into
+        a bug report or chat: a header with the mission name and the status line, then
+        one line per entry as <code>[Severity] message</code>.</td></tr>
 </table>
+
+<h2>Working with results</h2>
+<ul>
+    <li>Each result has a <strong>copy</strong> button in its top-right corner that
+        copies just that entry. The text of a result can also be selected with the
+        mouse.</li>
+    <li>Results about a specific ship, player start, wing, waypoint, coordinate point,
+        event or mission objective have a <strong>Go to</strong> button. It closes the
+        Error Checker and takes you to the problem:
+        <ul>
+            <li><strong>Objects</strong> (ships, player starts, waypoints, coordinate
+                points): selects the object, zooms the viewport to it, and opens its
+                editor.</li>
+            <li><strong>Wings</strong>: selects the wing, views it, and opens the Wing
+                Editor.</li>
+            <li><strong>Events</strong>: opens the Mission Events editor with the event
+                selected, clearing any event filter that would hide it.</li>
+            <li><strong>Mission objectives</strong>: opens the Mission Objectives editor
+                with the objective selected.</li>
+        </ul>
+        If an object or wing no longer exists, for example because it was deleted
+        after the check ran, the status bar says so; for a deleted event or objective,
+        its editor simply opens with nothing selected.</li>
+    <li><strong>Go to</strong> is not shown in pre-save mode (see below), since leaving
+        the checker there would abandon the save; <strong>Copy All</strong> and the
+        copy buttons still work.</li>
+</ul>
 
 <h2>Severity levels</h2>
 <table>

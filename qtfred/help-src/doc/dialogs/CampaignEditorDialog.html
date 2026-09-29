@@ -9,7 +9,9 @@
 <nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; Narrative &rsaquo; Campaign Editor</nav>
 <h1>Campaign Editor</h1>
 <p>Opens via <strong>File &rsaquo; Campaign Editor</strong>. The Campaign Editor opens
-as its own window rather than a modal dialog.</p>
+as its own window rather than a modal dialog. Closing QtFRED while it is open asks
+about unsaved campaign changes first; choosing <strong>Cancel</strong> there keeps
+QtFRED open.</p>
 <p>Links individual missions into a branching campaign. Each mission is a node in a
 graph; directed edges between nodes carry SEXP conditions that determine which mission
 the player flies next.</p>
@@ -46,8 +48,10 @@ the campaign, before any missions have been completed.</p>
 
 <h3>Mission list</h3>
 <p>Lists all <code>.fs2</code> mission files available to add to the campaign.
-Select a mission from the list then right-click in the graph view to add it as a
-node.</p>
+Select a mission and click <strong>Add &gt;&gt;</strong> to add it as a node in a free
+spot in the visible part of the graph, or right-click an empty spot in the graph and
+choose <strong>Add mission here</strong> to place it there. With no mission selected,
+both ask which mission to add.</p>
 
 <h3>Mission properties</h3>
 <p>Select a mission node in the graph to edit its properties:</p>
@@ -67,6 +71,10 @@ node.</p>
 <a href="../concepts/sexps.html">SEXP</a> condition; the first branch whose condition
 is true is the one taken. New branches are automatically given a <code>true</code>
 formula. Use the <strong>up/down arrows</strong> to reorder branch priority.</p>
+<p>A <strong>Repeat Mission</strong> branch only works as the last fallback, since any
+branch after it is never reached. New branches are therefore added above any Repeat
+Mission branches at the end of the list, so you don't have to move the repeat down
+each time. Branches you reorder yourself stay where you put them.</p>
 
 <table>
     <tr><th>Branch type</th><th>Description</th></tr>
@@ -101,6 +109,12 @@ formula. Use the <strong>up/down arrows</strong> to reorder branch priority.</p>
         ends when this branch is taken. The same SEXP priority rules
         apply.</td></tr>
 </table>
+<p>To draw a branch, drag from a bottom connector: anywhere on or near the colored
+dot works, including the half outside the box. Release anywhere on or near the target
+mission's box or its green connector, or on the End Campaign node. Releasing in an
+empty spot asks which mission to add there and connects the branch to it. Releasing
+back over the mission you started from does nothing, except on its own green connector,
+which makes the mission repeat itself.</p>
 <p>The End Campaign node is created automatically. Right-click a node in the graph
 for additional options, including <strong>Add Repeat Mission</strong>, which creates
 a branch that loops back to the same mission, the standard way to let the player

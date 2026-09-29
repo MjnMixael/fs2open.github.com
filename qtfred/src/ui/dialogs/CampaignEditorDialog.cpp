@@ -250,7 +250,15 @@ void CampaignEditorDialog::pushWorkingStateSnapshot(const QByteArray& before, co
 		},
 		label));
 }
-CampaignEditorDialog::~CampaignEditorDialog() = default;
+CampaignEditorDialog::~CampaignEditorDialog()
+{
+	// The child widgets are destroyed after this body and after the members, _model included.
+	// Tearing down the graph scene and the branch tree emits selection signals whose handlers
+	// here use _model, so cut every child off from this dialog first.
+	for (auto* child : findChildren<QObject*>()) {
+		disconnect(child, nullptr, this, nullptr);
+	}
+}
 
 SCP_vector<SCP_string> CampaignEditorDialog::getMissionNames()
 {
@@ -839,6 +847,13 @@ void CampaignEditorDialog::on_availableMissionsListWidget_itemSelectionChanged()
 	}
 }
 
+void CampaignEditorDialog::on_addMissionButton_clicked()
+{
+	// Same as "Add mission here" (the selected available mission, or a picker when none is
+	// selected), placed in a free spot in the middle of the visible part of the graph
+	on_graphView_addMissionHereRequested(ui->graphView->freeNodePositionNearViewCenter());
+}
+
 void CampaignEditorDialog::on_graphView_missionSelected(int missionIndex) {
 	_model->setCurrentMissionSelection(missionIndex);
 
@@ -936,6 +951,9 @@ void CampaignEditorDialog::on_graphView_addRepeatBranchRequested(int missionInde
 	const QByteArray before = _model->captureWorkingState();
 	_model->addBranch(missionIndex, missionIndex);
 	ui->graphView->rebuildAll();
+	// Make the right-clicked mission the active card, so its branch list (with the new
+	// repeat branch at the end) is what's shown
+	ui->graphView->setSelectedMission(missionIndex);
 	pushWorkingStateSnapshot(before, tr("Add Repeat Branch"));
 }
 
