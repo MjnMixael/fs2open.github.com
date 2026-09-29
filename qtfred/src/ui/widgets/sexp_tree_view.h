@@ -12,6 +12,7 @@
 #include <QTreeView>
 #include <QTreeWidgetItem>
 #include <QListWidget>
+#include <QHash>
 #include <QSet>
 #include <QShortcut>
 #include <QKeySequence>
@@ -109,9 +110,10 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	void showContextMenuForItem(QTreeWidgetItem* h, const QPoint& globalPos,
 		const std::function<void()>& expandOverride = {}, bool expandEnabled = true);
 
-	//! Open the node editor for a given item from another view: a numeric/operator
-	//! slot gets the operator quick-search, other data the text dialog. Any popup is
-	//! anchored at globalPos since the tree is hidden behind the caller.
+	//! Open the node editor for a given item from another view: an operator slot gets the
+	//! operator quick-search, a data slot with listed values the value search, anything
+	//! else the text dialog. Any popup is anchored at globalPos since the tree is hidden
+	//! behind the caller.
 	void editNodeExternally(QTreeWidgetItem* h, const QPoint& globalPos);
 
 	//! Looks up the sexp type (SEXPT_OPERATOR, SEXPT_STRING, etc.) for the node matching handle h.
@@ -387,22 +389,39 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	QFrame* _opPopup = nullptr;     //!< Popup frame containing the search field and list
 	QLineEdit* _opEdit = nullptr;   //!< Text filter field in the popup
 	QListWidget* _opList = nullptr; //!< Filtered list of valid operators in the popup
-	QStringList _opAll;             //!< All valid operators for the current node context
+	QStringList _opAll;             //!< All valid operators (or, in data mode, values) for the current node context
 	int _opNodeIndex = -1;          //!< tree_nodes[] index of the node being edited via popup
 	bool _opPopupActive = false;    //!< True while the popup is shown and accepting input
 	bool _opUserPicked = false;     //!< True once the arrow keys moved the popup selection
+
+	// Data mode: the popup searches a data slot's Replace Data list instead of operators
+	bool _opDataMode = false;
+	QHash<QString, int> _opDataIndex; //!< value text -> index in the Replace Data list
+	int _opDataReplaceCount = 0;      //!< replace_count the Replace Data list was built for
+	bool _opDataCanNumber = false;    //!< the slot takes a typed number (Replace Data > Number)
+	bool _opDataCanString = false;    //!< the slot takes typed text not in the list
 	QPoint _dragStartPos;           //!< Mouse position where the current root drag started
 	QTreeWidgetItem* _dragSourceRoot = nullptr; //!< Root item being dragged (root-level reordering only)
 	bool _dragging = false;                     //!< True once drag distance threshold has been exceeded
 
-	//! Decides whether to open the operator quick-search popup or inline text edit for an item.
-	//! Operators and nodes with valid operator choices get the popup; root labels and pure data get inline edit.
+	//! Decides how to edit an item: operator slots get the operator quick-search popup, data slots
+	//! with listed values the value search, and root labels and unlisted data (plain strings) inline edit.
 	//! Relies on validOperatorsForNode() -> _model._opf.get_listing_opf().
 	void openNodeEditor(QTreeWidgetItem* item);
 
 	//! Creates/shows the operator quick-search popup below the given item. Populates the list
 	//! from validOperatorsForNode(). Relies on _model._opf.get_listing_opf() and _model.query_node_argument_type().
 	void startOperatorQuickSearch(QTreeWidgetItem* item, const QString& seed = QString());
+
+	//! Search for Replacement on a data slot: the same popup, listing the slot's right-click
+	//! Replace Data values. Returns false (nothing shown) when the slot has no listed values.
+	bool startDataQuickSearch(QTreeWidgetItem* item);
+
+	//! Builds (once) and shows the quick-search popup for _opAll below the item.
+	void showQuickSearchPopup(QTreeWidgetItem* item, const QString& seed);
+
+	//! Data-mode half of endOperatorQuickSearch(): commits a picked value or typed free text.
+	void commitDataQuickSearch(int node, const QString& picked, const QString& typed);
 
 	//! Closes the operator popup. On confirm: commits the chosen operator via _actions.add_or_replace_operator(),
 	//! or commits typed numbers via _actions.replace_data(). Falls back to _model.match_closest_operator().
