@@ -2999,7 +2999,9 @@ bool checkpoint_peek_info(const SCP_string& filename, checkpoint::checkpoint_dat
 
 	std::unique_ptr<pilot::FileHandler> handler;
 	try {
-		handler.reset(new pilot::JSONFileHandler(fp, true));
+		auto json_handler = new pilot::JSONFileHandler(fp, true);
+		json_handler->setThrowOnReadError(true);
+		handler.reset(json_handler);
 	} catch (const std::exception&) {
 		// Not our file, or not valid JSON.  Enumeration walks whatever is in the directory, so
 		// this is a perfectly ordinary thing to run into.  The handler's constructor threw before
@@ -3008,21 +3010,27 @@ bool checkpoint_peek_info(const SCP_string& filename, checkpoint::checkpoint_dat
 		return false;
 	}
 
-	if (handler->readUIntOr("signature", 0) != checkpoint::CHECKPOINT_FILE_ID) {
-		return false;
-	}
-
 	bool found = false;
 
-	handler->beginSectionRead();
-	while (handler->hasMoreSections()) {
-		if (handler->nextSection() == Section::CheckpointInfo) {
-			read_info(handler.get(), data);
-			found = true;
-			break;
+	// A damaged file is skipped like any other stranger in the directory; see checkpoint_read().
+	try {
+		if (handler->readUIntOr("signature", 0) != checkpoint::CHECKPOINT_FILE_ID) {
+			return false;
 		}
+
+		handler->beginSectionRead();
+		while (handler->hasMoreSections()) {
+			if (handler->nextSection() == Section::CheckpointInfo) {
+				read_info(handler.get(), data);
+				found = true;
+				break;
+			}
+		}
+		handler->endSectionRead();
+	} catch (const std::exception& e) {
+		mprintf(("CHECKPOINT => Skipping damaged '%s': %s\n", filename.c_str(), e.what()));
+		return false;
 	}
-	handler->endSectionRead();
 
 	return found;
 }
@@ -3283,7 +3291,9 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 
 	std::unique_ptr<pilot::FileHandler> handler;
 	try {
-		handler.reset(new pilot::JSONFileHandler(fp, true));
+		auto json_handler = new pilot::JSONFileHandler(fp, true);
+		json_handler->setThrowOnReadError(true);
+		handler.reset(json_handler);
 	} catch (const std::exception& e) {
 		mprintf(("CHECKPOINT => Failed to parse '%s': %s\n", filename.c_str(), e.what()));
 		// The constructor threw before a handler existed to own the file.  Left open, a checkpoint
@@ -3292,91 +3302,108 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 		return false;
 	}
 
-	if (handler->readUIntOr("signature", 0) != CHECKPOINT_FILE_ID) {
-		mprintf(("CHECKPOINT => '%s' is not a checkpoint file!\n", filename.c_str()));
-		return false;
-	}
-
-	data.version = static_cast<int>(handler->readUIntOr("version", 0));
-	if (data.version > static_cast<int>(CHECKPOINT_VERSION)) {
-		// Newer files may be structured in ways this build cannot interpret.  Individual
-		// unknown fields and sections are fine, but a structural bump is not.
-		mprintf(("CHECKPOINT => '%s' was written by a newer version (%d > %d); ignoring it.\n",
-		         filename.c_str(),
-		         data.version,
-		         CHECKPOINT_VERSION));
-		return false;
-	}
-
-	handler->beginSectionRead();
-	while (handler->hasMoreSections()) {
-		auto section_id = handler->nextSection();
-
-		switch (section_id) {
-		case Section::CheckpointInfo:
-			read_info(handler.get(), data);
-			break;
-
-		case Section::CheckpointClock:
-			read_clock(handler.get(), data);
-			break;
-
-		case Section::CheckpointShips:
-			read_ships(handler.get(), data);
-			break;
-
-		case Section::CheckpointWings:
-			read_wings(handler.get(), data);
-			break;
-
-		case Section::CheckpointScoring:
-			read_scoring(handler.get(), data);
-			break;
-
-		case Section::CheckpointEvents:
-			read_events(handler.get(), data);
-			break;
-
-		case Section::CheckpointGoals:
-			read_goals(handler.get(), data);
-			break;
-
-		case Section::CheckpointLog:
-			read_log(handler.get(), data);
-			break;
-
-		case Section::CheckpointSexp:
-			read_sexp(handler.get(), data);
-			break;
-
-		case Section::CheckpointDebris:
-			read_debris(handler.get(), data);
-			break;
-
-		case Section::CheckpointWorld:
-			read_world(handler.get(), data);
-			break;
-
-		case Section::CheckpointProjectiles:
-			read_projectiles(handler.get(), data);
-			break;
-
-		case Section::CheckpointMission:
-			read_mission_extras(handler.get(), data);
-			break;
-
-		case Section::CheckpointScriptData:
-			read_script_data(handler.get(), data);
-			break;
-
-		default:
-			// A section this build does not know about -- most likely written by a newer
-			// engine.  Skipping it is the whole point of the sectioned layout.
-			mprintf(("CHECKPOINT => Skipping unknown section 0x%04x.\n", static_cast<int>(section_id)));
-			break;
+	// A file that parses as JSON but has the wrong type where a value belongs (hand-edited, or
+	// written by something else) throws out of the handler rather than stopping the game; the
+	// resume prompt reads the default slot on every mission entry, so a hard error here would
+	// make the mission unplayable until the file was deleted by hand.
+	auto read_sections = [&]() -> bool {
+		if (handler->readUIntOr("signature", 0) != CHECKPOINT_FILE_ID) {
+			mprintf(("CHECKPOINT => '%s' is not a checkpoint file!\n", filename.c_str()));
+			return false;
 		}
+
+		data.version = static_cast<int>(handler->readUIntOr("version", 0));
+		if (data.version > static_cast<int>(CHECKPOINT_VERSION)) {
+			// Newer files may be structured in ways this build cannot interpret.  Individual
+			// unknown fields and sections are fine, but a structural bump is not.
+			mprintf(("CHECKPOINT => '%s' was written by a newer version (%d > %d); ignoring it.\n",
+			         filename.c_str(),
+			         data.version,
+			         CHECKPOINT_VERSION));
+			return false;
+		}
+
+		handler->beginSectionRead();
+		while (handler->hasMoreSections()) {
+			auto section_id = handler->nextSection();
+
+			switch (section_id) {
+			case Section::CheckpointInfo:
+				read_info(handler.get(), data);
+				break;
+
+			case Section::CheckpointClock:
+				read_clock(handler.get(), data);
+				break;
+
+			case Section::CheckpointShips:
+				read_ships(handler.get(), data);
+				break;
+
+			case Section::CheckpointWings:
+				read_wings(handler.get(), data);
+				break;
+
+			case Section::CheckpointScoring:
+				read_scoring(handler.get(), data);
+				break;
+
+			case Section::CheckpointEvents:
+				read_events(handler.get(), data);
+				break;
+
+			case Section::CheckpointGoals:
+				read_goals(handler.get(), data);
+				break;
+
+			case Section::CheckpointLog:
+				read_log(handler.get(), data);
+				break;
+
+			case Section::CheckpointSexp:
+				read_sexp(handler.get(), data);
+				break;
+
+			case Section::CheckpointDebris:
+				read_debris(handler.get(), data);
+				break;
+
+			case Section::CheckpointWorld:
+				read_world(handler.get(), data);
+				break;
+
+			case Section::CheckpointProjectiles:
+				read_projectiles(handler.get(), data);
+				break;
+
+			case Section::CheckpointMission:
+				read_mission_extras(handler.get(), data);
+				break;
+
+			case Section::CheckpointScriptData:
+				read_script_data(handler.get(), data);
+				break;
+
+			default:
+				// A section this build does not know about -- most likely written by a newer
+				// engine.  Skipping it is the whole point of the sectioned layout.
+				mprintf(("CHECKPOINT => Skipping unknown section 0x%04x.\n", static_cast<int>(section_id)));
+				break;
+			}
+		}
+		handler->endSectionRead();
+		return true;
+	};
+
+	try {
+		if (!read_sections()) {
+			return false;
+		}
+	} catch (const std::exception& e) {
+		mprintf(("CHECKPOINT => '%s' is damaged: %s\n", filename.c_str(), e.what()));
+		data = checkpoint_data();
+		return false;
 	}
-	handler->endSectionRead();
 
 	data.slot = slot;
 	data.loaded = true;
