@@ -233,6 +233,9 @@ void applyPalette(bool darkMode)
 		p.setColor(QPalette::Link,            QColor(42, 130, 218));
 		p.setColor(QPalette::Highlight,       QColor(42, 130, 218));
 		p.setColor(QPalette::HighlightedText, Qt::black);
+		// Not inherited from the dark roles: a default-constructed palette keeps Qt's
+		// light-theme placeholder, which is nearly invisible on the dark Base.
+		p.setColor(QPalette::PlaceholderText, QColor(150, 150, 150));
 		// Mid-tone roles — Fusion uses these for scroll bar grooves, frame bevels, spin boxes.
 		// Without them the roles inherit from the system (light-mode) palette, causing
 		// light-gray artifacts on dark backgrounds.
@@ -264,6 +267,7 @@ void applyPalette(bool darkMode)
 		p.setColor(QPalette::Link,            QColor(0, 0, 255));
 		p.setColor(QPalette::Highlight,       QColor(0, 120, 215));
 		p.setColor(QPalette::HighlightedText, Qt::white);
+		p.setColor(QPalette::PlaceholderText, QColor(110, 110, 110));
 		p.setColor(QPalette::Disabled, QPalette::Text,       QColor(160, 160, 160));
 		p.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(160, 160, 160));
 		qApp->setPalette(p);
