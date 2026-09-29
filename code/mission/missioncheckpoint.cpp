@@ -564,6 +564,19 @@ SCP_string team_name(int team)
 	return Iff_info[team].iff_name;
 }
 
+int lookup_team(const SCP_string& name)
+{
+	if (name.empty()) {
+		return -1;
+	}
+
+	int index = iff_lookup(name.c_str());
+	if (index < 0) {
+		mprintf(("CHECKPOINT => IFF '%s' no longer exists.\n", name.c_str()));
+	}
+	return index;
+}
+
 // Look up a name that came out of a checkpoint.  A miss is normal -- the mod may have changed
 // since the file was written -- so it logs and lets the caller fall back rather than erroring.
 int lookup_ship_class(const SCP_string& name)
@@ -884,19 +897,6 @@ anchor_t lookup_anchor(const SCP_string& name)
 	// hand back, so resolve it that way.
 	int index = ship_registry_get_index(name.c_str());
 	return index >= 0 ? anchor_t(index) : anchor_t::invalid();
-}
-
-int lookup_team(const SCP_string& name)
-{
-	if (name.empty()) {
-		return -1;
-	}
-
-	int index = iff_lookup(name.c_str());
-	if (index < 0) {
-		mprintf(("CHECKPOINT => IFF '%s' no longer exists.\n", name.c_str()));
-	}
-	return index;
 }
 
 // ------------------------------------------------------------------
