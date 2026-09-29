@@ -18,6 +18,12 @@ class JSONFileHandler: public FileHandler {
 	// open can tell that what is on disk now is not a complete file.
 	bool _writeFailed = false;
 
+	// When set, a read that finds the wrong type, or no value where one is required, throws
+	// std::runtime_error instead of calling Error().  Pilot files keep the hard stop; a checkpoint
+	// is optional, so a bad one is rejected and the mission carries on without it.
+	bool _throwOnReadError = false;
+	void readError(const SCP_string& message);
+
 	json_t* _rootObj = nullptr;
 
 	json_t* _currentEl = nullptr;
@@ -76,6 +82,8 @@ class JSONFileHandler: public FileHandler {
 
 	// Did the last flush() fail to write the document?
 	bool writeFailed() const { return _writeFailed; }
+
+	void setThrowOnReadError(bool value) { _throwOnReadError = value; }
 
 	std::int8_t readByte(const char* name) override;
 
