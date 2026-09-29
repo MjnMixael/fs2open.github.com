@@ -4173,7 +4173,14 @@ void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 {
 	ai_goal_reset(&goal);
 
+	// Lua AI orders are not captured: Ai_goal_names has no entry for AI_GOAL_LUA, so they are
+	// written with an empty mode and land here, which is what we want.  Their target and
+	// arguments are live Lua values (lua_ai_target) and their submode is a dynamic SEXP operator
+	// id that need not mean the same thing in this run.  See the AIM_LUA note in load_ai().
 	ai_goal_mode mode;
+	if (in.mode.empty()) {
+		return;
+	}
 	if (!ai_goal_mode_value(in.mode, mode)) {
 		mprintf(("CHECKPOINT => AI goal '%s' no longer exists; dropping it.\n", in.mode.c_str()));
 		return;
@@ -4346,6 +4353,17 @@ void load_ai(ship* shipp, const ai_state& in)
 		} else if (aip->submode == AIS_UNDOCK_1 || aip->submode == AIS_UNDOCK_2) {
 			aip->submode = AIS_UNDOCK_0;
 		}
+	}
+
+	// A Lua AI mode keeps its target and arguments in lua_ai_target, which holds live Lua values
+	// and is not captured, and its submode is the id of a dynamic SEXP operator, which is handed
+	// out at script registration and so need not name the same mode (or any) in this run.  Its
+	// goal is dropped for the same reasons (load_ai_goal()), so idle the ship: ai_lua() would
+	// otherwise run the action every frame with nothing to act on, or throw on an unknown id.
+	if (aip->mode == AIM_LUA) {
+		mprintf(("CHECKPOINT => '%s' was running a Lua AI order, which is not restored; idling it.\n", shipp->ship_name));
+		aip->mode = AIM_NONE;
+		aip->submode = 0;
 	}
 }
 
