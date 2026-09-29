@@ -18,6 +18,7 @@
 
 struct vec3d;
 struct matrix;
+class TIMESTAMP;
 
 // supernova timing stuff
 constexpr float SUPERNOVA_CLOSE_TIME = 15.0f;							// must be at least 15 seconds out
@@ -58,8 +59,10 @@ float supernova_time_total();
 float supernova_seconds_left();
 
 // put a countdown back part-way through, as supernova_start() would have left it that long ago;
-// the stage is re-derived by supernova_process() from the time left
-void supernova_restore(float total_seconds, float seconds_left);
+// the stage is re-derived by supernova_process() from the time left.  The deadline is passed in
+// rather than worked out here: the restore jumps the clock forward without refreshing the
+// frame-start snapshot _timestamp() reads, so only the caller knows what "now" really is.
+void supernova_restore(float total_seconds, float seconds_left, TIMESTAMP deadline);
 
 // call once per frame
 void supernova_process();
