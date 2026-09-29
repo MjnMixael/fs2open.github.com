@@ -1575,6 +1575,7 @@ void sexp_variable_delete(int index);
 void sexp_variable_sort();
 void sexp_fred_modify_variable(const char *text, const char *var_name, int index, int type);
 int sexp_add_variable(const char *text, const char *var_name, int type, int index=-1);
+void sexp_add_array_block_variable(int index, bool is_numeric);
 
 // is-true-for-duration: when each such node first became true, indexed by sexp_node::duration_index.
 // Exposed so the mission checkpoint can carry the clocks across a restore.

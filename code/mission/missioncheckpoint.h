@@ -600,6 +600,11 @@ struct variable_state {
 	// The full SEXP_VARIABLE_* type word: a script can create a variable mid-mission and can
 	// change its persistence.  Zero in a file from before this was stored.
 	int type = 0;
+	// Only for the unnamed slots set-variable-by-index and copy-variable create, which all share the
+	// name "variable array block" and are addressed by nothing but their index into Sexp_variables
+	// -- the one runtime index worth writing, since it is what the mission itself uses.  -1 for a
+	// named variable.
+	int array_index = -1;
 };
 
 // A prop: a piece of the scene with no crew and no AI, created by the mission file, by prop-create

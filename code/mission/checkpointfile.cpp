@@ -1957,6 +1957,9 @@ void write_wings(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->writeBool("is_number", var.is_number);
 		handler->writeString("value", var.value.c_str());
 		handler->writeInt("type", var.type);
+		if (var.array_index >= 0) {
+			handler->writeInt("array_index", var.array_index);
+		}
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -2008,6 +2011,7 @@ void read_wings(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			var.is_number = handler->readBoolOr("is_number", false);
 			var.value = handler->readStringOr("value", "");
 			var.type = handler->readIntOr("type", 0);
+			var.array_index = handler->readIntOr("array_index", -1);
 
 			data.variables.push_back(std::move(var));
 		}
