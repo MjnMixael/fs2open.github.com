@@ -24,6 +24,11 @@ class JSONFileHandler: public FileHandler {
 	bool _throwOnReadError = false;
 	void readError(const SCP_string& message);
 
+	// When set, strings are handed back in the game's own text encoding.  writeString() coerces
+	// Latin-1 text to UTF-8, so outside Unicode text mode an accented name does not read back
+	// as the string that was written.  Off by default so the pilot files behave as they always have.
+	bool _decodeStrings = false;
+
 	json_t* _rootObj = nullptr;
 
 	json_t* _currentEl = nullptr;
@@ -84,6 +89,7 @@ class JSONFileHandler: public FileHandler {
 	bool writeFailed() const { return _writeFailed; }
 
 	void setThrowOnReadError(bool value) { _throwOnReadError = value; }
+	void setDecodeStrings(bool value) { _decodeStrings = value; }
 
 	std::int8_t readByte(const char* name) override;
 
