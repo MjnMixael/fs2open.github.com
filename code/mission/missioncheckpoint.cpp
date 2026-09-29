@@ -566,6 +566,73 @@ SCP_string team_name(int team)
 	return Iff_info[team].iff_name;
 }
 
+// A formula a SEXP node can belong to, named the way the checkpoint stores it; see sexp_node_state.
+struct formula_owner {
+	const char* kind;
+	SCP_string name;
+	int occurrence;
+	int formula;
+};
+
+// Every formula in the mission that evaluates at runtime, in mission order.  The store and the apply
+// both go through this, so the same node gets the same key on both sides.  Wing members' own cues
+// are skipped: the wing's cues are the ones that run, and the members' parse object is renamed wave
+// by wave.
+SCP_vector<formula_owner> collect_formula_owners()
+{
+	SCP_vector<formula_owner> owners;
+
+	auto add = [&owners](const char* kind, const char* name, int formula) {
+		if (formula < 0) {
+			return;
+		}
+		int occurrence = 0;
+		for (const auto& owner : owners) {
+			if (!strcmp(owner.kind, kind) && lcase_equal(owner.name, name)) {
+				occurrence++;
+			}
+		}
+		owners.push_back({kind, name, occurrence, formula});
+	};
+
+	for (const auto& event : Mission_events) {
+		add("event", event.name.c_str(), event.formula);
+	}
+	for (const auto& goal : Mission_goals) {
+		add("goal", goal.name.c_str(), goal.formula);
+	}
+	for (const auto& p_obj : Parse_objects) {
+		if (p_obj.wingnum >= 0) {
+			continue;
+		}
+		add("ship arrival", p_obj.name, p_obj.arrival_cue);
+		add("ship departure", p_obj.name, p_obj.departure_cue);
+	}
+	for (int i = 0; i < Num_wings; i++) {
+		add("wing arrival", Wings[i].name, Wings[i].arrival_cue);
+		add("wing departure", Wings[i].name, Wings[i].departure_cue);
+	}
+	for (const auto& prop : Parse_props) {
+		add("prop spawn", prop.name, prop.spawn_cue);
+		add("prop despawn", prop.name, prop.despawn_cue);
+	}
+
+	return owners;
+}
+
+// Preorder walk of a formula: the node, then its first child, then its siblings.  Iterative along
+// the sibling chain, since argument lists can run long.
+template <typename Visit>
+void walk_formula(int node, int& ordinal, Visit&& visit)
+{
+	for (; node >= 0 && node < Num_sexp_nodes; node = Sexp_nodes[node].rest) {
+		visit(node, ordinal++);
+		if (Sexp_nodes[node].first >= 0) {
+			walk_formula(Sexp_nodes[node].first, ordinal, visit);
+		}
+	}
+}
+
 // The name set-variable-by-index and copy-variable give every slot they create
 // (sexp_add_array_block_variable()).
 bool is_array_block_variable(int index)
@@ -5341,38 +5408,45 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 	// Sticky SEXP node states.  Without these an event that has already fired can re-trigger the
 	// arrival or destruction the ship restore has just accounted for.
-	for (int i = 0; i < Num_sexp_nodes; i++) {
-		if (Sexp_nodes[i].type == SEXP_NOT_USED) {
-			continue;
-		}
+	// Keyed by owning formula and position, not index; see sexp_node_state.
+	for (const auto& owner : collect_formula_owners()) {
+		int ordinal = 0;
+		walk_formula(owner.formula, ordinal, [&](int i, int node_ordinal) {
+			if (Sexp_nodes[i].type == SEXP_NOT_USED) {
+				return;
+			}
 
-		bool sticky = (Sexp_nodes[i].value == SEXP_KNOWN_TRUE) || (Sexp_nodes[i].value == SEXP_KNOWN_FALSE) ||
-					  (Sexp_nodes[i].value == SEXP_NAN_FOREVER) || (Sexp_nodes[i].value == SEXP_NUM_EVAL);
+			bool sticky = (Sexp_nodes[i].value == SEXP_KNOWN_TRUE) || (Sexp_nodes[i].value == SEXP_KNOWN_FALSE) ||
+			              (Sexp_nodes[i].value == SEXP_NAN_FOREVER) || (Sexp_nodes[i].value == SEXP_NUM_EVAL);
 
-		// An is-true-for-duration node that has started its clock is state too, sticky or not.
-		int duration_index = Sexp_nodes[i].duration_index;
-		bool has_duration = (duration_index >= 0) && (duration_index < static_cast<int>(Sexp_is_true_for_duration_times.size()));
+			// An is-true-for-duration node that has started its clock is state too, sticky or not.
+			int duration_index = Sexp_nodes[i].duration_index;
+			bool has_duration = (duration_index >= 0) && (duration_index < static_cast<int>(Sexp_is_true_for_duration_times.size()));
 
-		if (!sticky && Sexp_nodes[i].flags == SNF_DEFAULT_VALUE && !has_duration) {
-			continue;
-		}
+			if (!sticky && Sexp_nodes[i].flags == SNF_DEFAULT_VALUE && !has_duration) {
+				return;
+			}
 
-		sexp_node_state state;
-		state.index = i;
-		state.value = Sexp_nodes[i].value;
-		state.flags = Sexp_nodes[i].flags;
+			sexp_node_state state;
+			state.owner_kind = owner.kind;
+			state.owner_name = owner.name;
+			state.owner_occurrence = owner.occurrence;
+			state.ordinal = node_ordinal;
+			state.value = Sexp_nodes[i].value;
+			state.flags = Sexp_nodes[i].flags;
 
-		// For a rolled `rand` the text is the number it settled on, so it has to travel with it.
-		if (Sexp_nodes[i].value == SEXP_NUM_EVAL) {
-			state.text = Sexp_nodes[i].text;
-		}
+			// For a rolled `rand` the text is the number it settled on, so it has to travel with it.
+			if (Sexp_nodes[i].value == SEXP_NUM_EVAL) {
+				state.text = Sexp_nodes[i].text;
+			}
 
-		if (has_duration) {
-			state.has_duration = true;
-			state.duration_start = Sexp_is_true_for_duration_times[duration_index];
-		}
+			if (has_duration) {
+				state.has_duration = true;
+				state.duration_start = Sexp_is_true_for_duration_times[duration_index];
+			}
 
-		data.sexp_nodes.push_back(std::move(state));
+			data.sexp_nodes.push_back(std::move(state));
+		});
 	}
 
 	for (const auto& container : get_all_sexp_containers()) {
@@ -7376,26 +7450,53 @@ void apply_mission_logic(const checkpoint_data& data)
 	// Sticky node states last, so nothing above can re-dirty them.  These are what stop an event
 	// whose formula has already resolved from resolving it a second time and re-triggering an
 	// arrival or a destruction that the ship restore has already put back the way it was.
+	//
+	// Each saved node is found again by walking the same formulas the store walked.  A formula that
+	// was edited since can put a different node at the same position; the one state that rewrites
+	// the node, a rolled rand, is only put back on a node that is still a rand.
+	SCP_unordered_map<SCP_string, int> nodes_by_key;
+	auto node_key = [](const char* kind, const SCP_string& name, int occurrence, int ordinal) {
+		SCP_string key;
+		sprintf(key, "%s|%s|%d|%d", kind, name.c_str(), occurrence, ordinal);
+		SCP_tolower(key);
+		return key;
+	};
+	for (const auto& owner : collect_formula_owners()) {
+		int ordinal = 0;
+		walk_formula(owner.formula, ordinal, [&](int i, int node_ordinal) {
+			nodes_by_key[node_key(owner.kind, owner.name, owner.occurrence, node_ordinal)] = i;
+		});
+	}
+
 	for (const auto& state : data.sexp_nodes) {
-		if (state.index < 0 || state.index >= Num_sexp_nodes) {
-			mprintf(("CHECKPOINT => SEXP node %d is out of range for this mission; skipping it.\n", state.index));
-			continue;
-		}
-		if (Sexp_nodes[state.index].type == SEXP_NOT_USED) {
+		auto found = nodes_by_key.find(node_key(state.owner_kind.c_str(), state.owner_name, state.owner_occurrence, state.ordinal));
+		if (found == nodes_by_key.end()) {
 			continue;
 		}
 
-		Sexp_nodes[state.index].value = state.value;
-		Sexp_nodes[state.index].flags = state.flags;
+		int index = found->second;
+		if (Sexp_nodes[index].type == SEXP_NOT_USED) {
+			continue;
+		}
+
+		// rand_sexp() parks its roll on the rand operator node itself, replacing the operator's
+		// text with the number; anywhere else that text would wreck evaluation.
+		if (state.value == SEXP_NUM_EVAL &&
+		    (Sexp_nodes[index].subtype != SEXP_ATOM_OPERATOR || get_operator_const(index) != OP_RAND)) {
+			continue;
+		}
+
+		Sexp_nodes[index].value = state.value;
+		Sexp_nodes[index].flags = state.flags;
 
 		if (state.value == SEXP_NUM_EVAL && !state.text.empty()) {
-			strcpy_s(Sexp_nodes[state.index].text, state.text.c_str());
+			strcpy_s(Sexp_nodes[index].text, state.text.c_str());
 		}
 
 		// The duration clocks are handed out in evaluation order and cleared by the level init,
 		// so the node simply gets the next slot, holding the mission time it started at.
 		if (state.has_duration) {
-			Sexp_nodes[state.index].duration_index = static_cast<int>(Sexp_is_true_for_duration_times.size());
+			Sexp_nodes[index].duration_index = static_cast<int>(Sexp_is_true_for_duration_times.size());
 			Sexp_is_true_for_duration_times.push_back(state.duration_start);
 		}
 	}
