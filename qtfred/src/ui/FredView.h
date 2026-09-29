@@ -335,6 +335,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 	bool _inKeyPressHandler = false;
 	bool _inKeyReleaseHandler = false;
 	bool _missionModified = false;
+	// The mission was loaded from an autosave; the next save to its own file asks first
+	bool _recoveredFromAutosave = false;
 
 	void onUpdateConstrains();
 	void onUpdateEditingMode();

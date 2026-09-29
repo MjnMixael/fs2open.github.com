@@ -493,6 +493,7 @@ void FredView::loadMissionFile(const QString& pathName, int flags) {
 		fred->loadMission(pathToLoad, flags, fromAutosave ? originalPath : std::string());
 		if (fromAutosave) {
 			_missionModified = true;
+			_recoveredFromAutosave = true; // set after loading: setCurrentFile() clears it
 			statusBar()->showMessage(tr("Recovered from autosave. Save to keep the recovered changes."));
 		}
 
@@ -601,6 +602,27 @@ bool FredView::saveMissionToCurrentPath() {
 	if (saveName.isEmpty())
 		return saveMissionAs();
 
+	// A recovered autosave would overwrite the original file, which may be the version the
+	// user wanted to keep; confirm once (Save, Run FreeSpace and the unsaved-changes prompt
+	// all come through here)
+	if (_recoveredFromAutosave) {
+		QMessageBox confirm(this);
+		confirm.setIcon(QMessageBox::Warning);
+		confirm.setWindowTitle(tr("Replace Original Mission"));
+		confirm.setText(tr("This mission was recovered from an autosave."));
+		confirm.setInformativeText(tr("Saving will replace %1 with the recovered version.")
+			.arg(QFileInfo(saveName).fileName()));
+		auto* replaceBtn = confirm.addButton(tr("Replace"), QMessageBox::AcceptRole);
+		auto* saveAsBtn = confirm.addButton(tr("Save As..."), QMessageBox::ActionRole);
+		confirm.addButton(QMessageBox::Cancel);
+		confirm.setDefaultButton(QMessageBox::Cancel);
+		confirm.exec();
+		if (confirm.clickedButton() == saveAsBtn)
+			return saveMissionAs();
+		if (confirm.clickedButton() != replaceBtn)
+			return false;
+	}
+
 	int fixCount = -1;
 	if (!performPreSaveCheck(&fixCount))
 		return false;
@@ -616,6 +638,7 @@ bool FredView::saveMissionToCurrentPath() {
 
 	save.save_mission_file(saveName.replace('/', DIR_SEPARATOR_CHAR).toUtf8().constData());
 	_missionModified = false;
+	_recoveredFromAutosave = false; // the original has been replaced; don't ask again
 	setLastSaved(QDateTime::currentDateTime());
 
 	if (fixCount > 0)
@@ -681,6 +704,9 @@ bool FredView::saveMissionAs() {
 }
 
 void FredView::setCurrentFile(const QString& filepath) {
+	// A new, loaded or Save As'd mission is no longer a pending autosave recovery
+	_recoveredFromAutosave = false;
+
 	const QString filename = filepath.isEmpty() ? tr("Untitled") : QFileInfo(filepath).fileName();
 
 	// The "[*]" is the placeholder for showing the modified state of the window
