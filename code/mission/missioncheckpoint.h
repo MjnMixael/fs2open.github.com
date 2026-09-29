@@ -450,7 +450,8 @@ struct ship_state {
 	// The name the mission file gives this ship, when a script has renamed it since (ship.Name
 	// from Lua renames the ship and its registry entry but not its parse object).  A fresh load
 	// only knows the ship by this name; the restore finds it by this and renames it back to
-	// `name`.  Empty when the two agree, which is nearly always.
+	// `name`.  Empty when the two agree, which is nearly always, and always empty for wing ships,
+	// whose waves share one parse object and so have no parse name of their own.
 	SCP_string parse_name;
 
 	// --- only meaningful when disposition == Present ---
