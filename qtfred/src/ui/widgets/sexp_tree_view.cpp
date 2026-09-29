@@ -845,6 +845,25 @@ void sexp_tree_view::keyPressEvent(QKeyEvent* e)
 		return;
 	}
 
+	// + expands one level, * everything below, - collapses. QTreeView does this too, but it
+	// then passes the key on to type-ahead search, which jumps to an item (such as an event
+	// name) starting with that character; handle them here and stop.
+	if (currentItem() && !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+		switch (e->key()) {
+		case Qt::Key_Plus:
+			currentItem()->setExpanded(true);
+			return;
+		case Qt::Key_Asterisk:
+			expand_branch(currentItem());
+			return;
+		case Qt::Key_Minus:
+			currentItem()->setExpanded(false);
+			return;
+		default:
+			break;
+		}
+	}
+
 	QTreeWidget::keyPressEvent(e);
 }
 
@@ -1255,7 +1274,7 @@ std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h,
 		auto* expand_act = popup_menu->addAction(tr("Expand Card"), this, expandOverride);
 		expand_act->setEnabled(expandEnabled);
 	} else {
-		// The tree itself already handles + (expand one level) and * (expand everything
+		// keyPressEvent() handles + (expand one level) and * (expand everything
 		// below); the menu shows those keys so they can be found
 		const bool hasChildren = h->childCount() > 0;
 		auto* expand_act = popup_menu->addAction(tr("Expand"), this, [this]() {
