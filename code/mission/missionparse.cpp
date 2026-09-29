@@ -378,18 +378,11 @@ flag_def_list_new<Object::Object_Flags> Parse_ship_object_flags[] = {
 const size_t Num_Parse_ship_object_flags =
 	sizeof(Parse_ship_object_flags) / sizeof(flag_def_list_new<Object::Object_Flags>);
 
-// The names here do double duty: from mission version 26.1 they are what the file stores in
-// +Flags List:, and they populate QtFRED's mission specs flag checkboxes, so they can be more
-// descriptive than other flag def lists.  Because they go into mission files, an existing name
-// must never be changed -- only added or, at worst, retired by clearing in_use.
-//
-// is_special is about parsing (see parse_string_flag_list); none of these need special handling,
-// so it stays false throughout.  Which flags QtFRED hides from the general list because they have
-// a dedicated control elsewhere is an editor question and lives in MissionSpecDialogModel.cpp.
-//
-// NOTE: the order of Mission_Flags is still load-bearing.  Anything older than 26.1, and anything
-// saved in retail format, stores these as a bitfield in +Flags:, so inserting a flag anywhere but
-// the end of the enum would misread every one of those missions.
+// These are a little different than the object flags as they aren't used in traditional flag sexps or parsed flag lists
+// Instead, this list is used to popuplate QtFRED's mission specs flag checkboxes. As such the names can be more descriptive than other flag def lists
+// NOTE: Inactive flags are not added to the UI flag list.  Which flags QtFRED hides from the general list because they
+// have a dedicated control elsewhere is an editor question and lives in MissionSpecDialogModel.cpp, not in is_special.
+// NOTE: mission files store these as a bitfield in +Flags:, so Mission_Flags must only ever grow at the end.
 flag_def_list_new<Mission::Mission_Flags> Parse_mission_flags[] = {
 	{"Mission Takes Place In Subspace",           Mission::Mission_Flags::Subspace,                   true, false},
 	{"Disallow Promotions/Badges",                Mission::Mission_Flags::No_promotion,               true, false},
@@ -896,23 +889,6 @@ void parse_mission_info(mission *pm, bool basic = false)
 
 	if (optional_string("+Flags:")){
         stuff_flagset(&pm->flags);
-	}
-
-	// From 26.1, flags are stored by name instead -- the bitfield above makes the order of
-	// Mission_Flags part of the file format and runs out of room as the enum grows.  A mission
-	// carries one form or the other, never both, but the list is treated as authoritative if a
-	// hand-edited file somehow has both.
-	if (optional_string("+Flags List:")) {
-		SCP_vector<SCP_string> unparsed_vec;
-
-		pm->flags.reset();
-		parse_string_flag_list(pm->flags, Parse_mission_flags, Num_parse_mission_flags, &unparsed_vec);
-
-		// A name this build does not know is almost certainly a flag from a newer engine, which is
-		// exactly what storing them by name is meant to survive.  Say so and carry on.
-		for (const auto& unparsed : unparsed_vec) {
-			WarningEx(LOCATION, "Unknown mission flag: %s", unparsed.c_str());
-		}
 	}
 
 	// nebula mission stuff
