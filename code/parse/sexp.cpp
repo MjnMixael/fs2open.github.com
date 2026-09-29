@@ -19092,6 +19092,7 @@ static void sexp_prompt_user_checkpoint_load(int node)
 	                   2,
 	                   POPUP_NO,
 	                   POPUP_YES,
+	                   "%s",
 	                   prompt.c_str());
 
 	if (choice != 1) {
