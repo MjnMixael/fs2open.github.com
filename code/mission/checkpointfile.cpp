@@ -2204,7 +2204,10 @@ void write_sexp(pilot::FileHandler* handler, const checkpoint::checkpoint_data& 
 	handler->startArrayWrite("nodes", data.sexp_nodes.size());
 	for (const auto& node : data.sexp_nodes) {
 		handler->startSectionWrite(Section::Unnamed);
-		handler->writeInt("i", node.index);
+		handler->writeString("owner", node.owner_kind.c_str());
+		handler->writeString("name", node.owner_name.c_str());
+		handler->writeInt("n", node.owner_occurrence);
+		handler->writeInt("i", node.ordinal);
 		handler->writeInt("v", node.value);
 		handler->writeInt("f", node.flags);
 		if (!node.text.empty()) {
@@ -2240,7 +2243,10 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		auto count = handler->startArrayRead("nodes");
 		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
 			checkpoint::sexp_node_state node;
-			node.index = handler->readIntOr("i", -1);
+			node.owner_kind = handler->readStringOr("owner", "");
+			node.owner_name = handler->readStringOr("name", "");
+			node.owner_occurrence = handler->readIntOr("n", 0);
+			node.ordinal = handler->readIntOr("i", -1);
 			node.value = handler->readIntOr("v", 0);
 			node.flags = handler->readIntOr("f", 0);
 			node.text = handler->readStringOr("t", "");
@@ -2249,7 +2255,7 @@ void read_sexp(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 				node.duration_start = static_cast<fix>(handler->readIntOr("d", 0));
 			}
 
-			if (node.index >= 0) {
+			if (!node.owner_kind.empty() && node.ordinal >= 0) {
 				data.sexp_nodes.push_back(node);
 			}
 		}
