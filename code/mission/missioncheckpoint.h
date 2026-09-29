@@ -402,9 +402,9 @@ struct ai_state {
 	SCP_string ai_class;           // an index into Ai_classes, which comes from ai.tbl, so by name
 
 	// Not here: ai_info::lua_ai_target, the argument list a Lua-driven AI order carries.  It is a
-	// LuaValueList, which has no serialisable form, so a script order in progress is lost on
-	// restore.  A script that needs its orders to survive should stage what it needs through
-	// mission.setCheckpointData() and re-issue them from the On Checkpoint Restore hook.
+	// LuaValueList, which has no serializable form, so Lua orders are dropped on restore and a
+	// ship running one comes back idle (load_ai()).  A script that needs its orders to survive
+	// should stage what it needs through mission.setCheckpointData() and re-issue them from the On Checkpoint Restore hook.
 
 	SCP_map<SCP_string, int> ints;
 	SCP_map<SCP_string, float> floats;
