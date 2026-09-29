@@ -416,7 +416,7 @@ void MissionEventsDialog::initViewToggle()
 	});
 
 	// Excel-style row shortcuts on the event tree: Ctrl+Plus inserts an event above the
-	// selected one, Ctrl+Alt+Plus below it, Ctrl+Minus deletes it. Ctrl+= and the keypad keys
+	// selected one, Ctrl+Alt+Plus below it (Delete already deletes). Ctrl+= and the keypad +
 	// work too, so no Shift is needed. WidgetShortcut: only while the tree itself has focus,
 	// never while an inline edit (a child editor) or another field is being typed in.
 	auto bindEventShortcuts = [this](std::initializer_list<QKeySequence> keys, QPushButton* gate, const std::function<void()>& action) {
@@ -437,10 +437,7 @@ void MissionEventsDialog::initViewToggle()
 		ui->btnInsertEvent, [this] { on_btnInsertEvent_clicked(); });
 	bindEventShortcuts({seq(ctrlAlt, Qt::Key_Plus), seq(ctrlAlt, Qt::Key_Equal), seq(ctrlAlt | pad, Qt::Key_Plus)},
 		ui->btnInsertEvent, [this] { insertEventBelow(); });
-	bindEventShortcuts({seq(ctrl, Qt::Key_Minus), seq(ctrl | pad, Qt::Key_Minus)},
-		ui->btnDeleteEvent, [this] { on_btnDeleteEvent_clicked(); });
 	ui->btnInsertEvent->setToolTip(tr("Insert an event above the selected one (Ctrl++; Ctrl+Alt++ inserts below)"));
-	ui->btnDeleteEvent->setToolTip(tr("Delete the selected event (Ctrl+-)"));
 
 	// Restore the view used last time this session. A view whose button is
 	// disabled can't be restored into.
