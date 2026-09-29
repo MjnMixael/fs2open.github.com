@@ -7179,12 +7179,38 @@ void apply_debris(const checkpoint_data& data)
 // The fingerprint check makes that mostly academic, but it costs nothing and it means the failure
 // mode for a mismatched file is "this event starts fresh" rather than "this event gets some other
 // event's state".
+// Events and goals are matched by name, but nothing makes the names unique -- QtFRED names every new
+// event "Event name" and every new goal "Goal name" -- so the name alone would send every duplicate's
+// state to the first of them.  The nth saved entry with a name goes to the nth one in the mission;
+// both lists are in mission order, so duplicates pair up the way they were.
+template <typename Saved>
+int name_occurrence(const SCP_vector<Saved>& saved, size_t index)
+{
+	int nth = 0;
+	for (size_t i = 0; i < index; i++) {
+		if (lcase_equal(saved[i].name, saved[index].name)) {
+			nth++;
+		}
+	}
+	return nth;
+}
+
+template <typename Items>
+auto find_nth_named(Items& items, const SCP_string& name, int nth) -> decltype(items.begin())
+{
+	for (auto it = items.begin(); it != items.end(); ++it) {
+		if (lcase_equal(it->name, name) && nth-- == 0) {
+			return it;
+		}
+	}
+	return items.end();
+}
+
 void apply_mission_logic(const checkpoint_data& data)
 {
-	for (const auto& state : data.events) {
-		auto it = std::find_if(Mission_events.begin(), Mission_events.end(), [&state](const mission_event& e) {
-			return lcase_equal(e.name, state.name);
-		});
+	for (size_t i = 0; i < data.events.size(); i++) {
+		const auto& state = data.events[i];
+		auto it = find_nth_named(Mission_events, state.name, name_occurrence(data.events, i));
 
 		if (it == Mission_events.end()) {
 			mprintf(("CHECKPOINT => Event '%s' is no longer in this mission.\n", state.name.c_str()));
@@ -7210,10 +7236,9 @@ void apply_mission_logic(const checkpoint_data& data)
 		it->backup_log_buffer = state.backup_log_buffer;
 	}
 
-	for (const auto& state : data.goals) {
-		auto it = std::find_if(Mission_goals.begin(), Mission_goals.end(), [&state](const mission_goal& g) {
-			return lcase_equal(g.name, state.name);
-		});
+	for (size_t i = 0; i < data.goals.size(); i++) {
+		const auto& state = data.goals[i];
+		auto it = find_nth_named(Mission_goals, state.name, name_occurrence(data.goals, i));
 
 		if (it == Mission_goals.end()) {
 			mprintf(("CHECKPOINT => Goal '%s' is no longer in this mission.\n", state.name.c_str()));
