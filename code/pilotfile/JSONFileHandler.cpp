@@ -3,6 +3,8 @@
 #include "pilotfile/JSONFileHandler.h"
 #include "libs/jansson.h"
 #include "parse/parselo.h"
+#include "mod_table/mod_table.h"
+#include "utils/unicode.h"
 
 namespace {
 const SCP_vector<std::pair<Section, const char*>> SectionMapping {
@@ -287,6 +289,13 @@ SCP_string pilot::JSONFileHandler::readString(const char* name) {
 	auto json_str = json_string_value(el);
 	SCP_string val;
 	val.assign(json_str, json_str + json_string_length(el));
+
+	if (_decodeStrings && !Unicode_text_mode) {
+		SCP_string decoded;
+		if (unicode::convert_encoding(decoded, val.c_str(), unicode::Encoding::Encoding_utf8, unicode::Encoding::Encoding_iso8859_1)) {
+			val = std::move(decoded);
+		}
+	}
 
 	return val;
 }
