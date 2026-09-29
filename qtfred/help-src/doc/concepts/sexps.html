@@ -41,9 +41,44 @@ as a SEXP tree.</p>
 </ul>
 
 <h2>Editing SEXPs in QtFRED</h2>
-<p>The SEXP tree editor is embedded directly in the Mission Events and Mission Goals
-dialogs. Right-click any node in the tree to add, replace, or remove operators and
-arguments. Hover over an operator name for a brief description of what it does.</p>
+<p>The same SEXP tree editor is used wherever QtFRED edits a condition or action: the
+Mission Events and Mission Goals dialogs, ship and wing arrival and departure cues, and
+the briefing, debriefing, cutscene and campaign branch conditions. Right-click any node in
+the tree to add, replace, or remove operators and arguments. Hover over an operator name
+for a brief description of what it does.</p>
+<p>To open parts of the tree from the keyboard, select a node and press <kbd>+</kbd>
+(<strong>Expand</strong>: one level) or <kbd>*</kbd> (<strong>Expand All</strong>: every
+level below it); <kbd>-</kbd> collapses it again. The keypad keys work too.</p>
+
+<h3 id="search-for-replacement">Search for Replacement</h3>
+<p>Select a node and press <kbd>Space</kbd> or <kbd>Ctrl</kbd>+<kbd>S</kbd> (also
+<strong>Search for Replacement</strong> in the right-click menu), or double-click a node
+that has nothing to expand. A search box opens with a list to filter as you type. What it
+lists depends on the argument:</p>
+<ul>
+    <li><strong>Operators</strong>, for actions, conditions and numbers. On a number you
+        can also just type the value.</li>
+    <li><strong>Values</strong>, for every other argument (ships, wings, messages, events,
+        sounds, and so on): the same choices as the right-click <strong>Replace
+        Data</strong> menu. Where an argument also accepts text that isn't listed, such as
+        a plain string or a message sender, you can type your own. Arguments that only take
+        listed values, such as ships or events, can't be set to anything else. The current
+        value starts highlighted.</li>
+    <li>An argument with nothing to list (a free-form string) opens a plain text edit
+        instead.</li>
+</ul>
+<table>
+    <tr><th>To</th><th>Do this</th></tr>
+    <tr><td>Take the highlighted entry</td><td>Press <kbd>Enter</kbd> or click it. Use
+        <kbd>Up</kbd>/<kbd>Down</kbd> to move the highlight while you keep typing.</td></tr>
+    <tr><td>Keep what you typed</td><td>Press <kbd>Enter</kbd> when nothing in the list
+        matches, or click elsewhere. Clicking elsewhere only keeps an exact entry: a number,
+        the full name of an operator or listed value, or your own text where the argument
+        accepts it. Nothing is guessed.</td></tr>
+    <tr><td>Cancel</td><td>Press <kbd>Escape</kbd>.</td></tr>
+</table>
+<p>Variables and containers are not in the search; use <strong>Replace Variable</strong>
+and <strong>Replace Container Data</strong> from the right-click menu.</p>
 
 <div class="note">
     <strong>Note:</strong> The full SEXP reference is maintained on the

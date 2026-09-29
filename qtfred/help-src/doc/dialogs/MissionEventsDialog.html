@@ -22,10 +22,26 @@ Clicking on the arrow of an event expands its condition and action expressions f
 Right-click any SEXP node to add, replace, or remove operators and arguments. See
 <a href="../concepts/sexps.html">SEXPs</a> for a full overview of the expression
 language and the operators available.</p>
-<p>Several keyboard shortcuts are available for quick actions. Spacebar initiates edit
-or operator search. Double-clicking a leaf node (one that cannot be expanded) will do 
+<p>Several keyboard shortcuts are available for quick actions. <kbd>Space</kbd> (or
+<kbd>Ctrl</kbd>+<kbd>S</kbd>) opens <strong>Search for Replacement</strong> on the
+selected node: operators for actions, conditions and numbers, and the valid values for
+every other argument. Double-clicking a leaf node (one that cannot be expanded) will do
 the same. Double-clicking other nodes will only expand that part of the tree. Copy and
-pasting are also available.</p>
+pasting are also available. See
+<a href="../concepts/sexps.html#search-for-replacement">SEXPs &rsaquo; Search for
+Replacement</a> for how the search works.</p>
+<p>Event-name arguments list the events in this editor, including ones you've added or
+renamed since opening it, so they can be referenced before you press OK.</p>
+<p>With the event list focused, spreadsheet-style keys add events:</p>
+<table>
+    <tr><th>Keys</th><th>Action</th></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>+</kbd></td><td>Insert a new event above the selected
+        one (the <strong>Insert</strong> button).</td></tr>
+    <tr><td><kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>+</kbd></td><td>Insert a new event below
+        the selected one.</td></tr>
+</table>
+<p><kbd>Ctrl</kbd>+<kbd>=</kbd> and the keypad <kbd>+</kbd> key work too. After <strong>New</strong> or <strong>Insert</strong>, the new event is selected
+and the list has focus, so <kbd>Space</kbd> starts editing its name.</p>
 <p>Events are evaluated in list order each frame. Order matters: events earlier in the
 list are processed first, which can affect timing when events interact.</p>
 
@@ -34,7 +50,8 @@ list are processed first, which can affect timing when events interact.</p>
     <tr><th>Button</th><th>Description</th></tr>
     <tr><td>New</td><td>Appends a new blank event at the end of the list.</td></tr>
     <tr><td>Insert</td><td>Inserts a new blank event above the currently selected
-        event.</td></tr>
+        event (<kbd>Ctrl</kbd>+<kbd>+</kbd>; <kbd>Ctrl</kbd>+<kbd>Alt</kbd>+<kbd>+</kbd>
+        inserts below it).</td></tr>
     <tr><td>Delete</td><td>Removes the selected event.</td></tr>
     <tr><td>Move Up / Move Down</td><td>Reorders the selected event within the
         list.</td></tr>

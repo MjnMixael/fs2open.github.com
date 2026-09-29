@@ -46,6 +46,8 @@ class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface {
 
 	SCP_vector<SCP_string> getMessages() override;
 	bool hasDefaultMessageParameter() override;
+	SCP_vector<SCP_string> getMissionEvents(const SCP_string& reference_name) override;
+	bool hasDefaultEvent(int operator_value) override;
 	int getRootReturnType() const override;
 
   protected:
@@ -142,6 +144,9 @@ private: // NOLINT(readability-redundant-access-specifiers)
 
 	void onEventTreeModified();
 	void pushEventStateSnapshot(const QByteArray& before, const QString& label);
+	// Shows the newly created (current) event and gives its view keyboard focus
+	void focusNewEvent();
+	void insertEventBelow();
 	void pushMessageStateSnapshot(const QByteArray& before, const QString& label, int mergeId = -1);
 	void pushEventLogFlagCommand(int fieldConst, int mask, bool checked);
 	void changeMessageAni(const SCP_string& name);

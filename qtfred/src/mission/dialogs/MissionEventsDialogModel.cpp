@@ -628,6 +628,28 @@ void MissionEventsDialogModel::insertEvent()
 	set_modified();
 }
 
+void MissionEventsDialogModel::insertEventBelow()
+{
+	// Below the last event, or with nothing selected, this is the same as adding at the end
+	if (m_cur_event < 0 || m_cur_event >= static_cast<int>(m_events.size()) - 1) {
+		createEvent();
+		return;
+	}
+
+	const int pos = m_cur_event + 1;
+	const int after = m_events[m_cur_event].formula; // the new root goes right after this one
+	m_events.insert(m_events.begin() + pos, makeDefaultEvent());
+	m_sig.insert(m_sig.begin() + pos, -1);
+	auto& event = m_events[pos];
+
+	event.formula = buildDefaultTreeStructure(event.name);
+	Q_EMIT defaultRootBuilt(event.name, after, event.formula);
+	Q_EMIT rootSelected(event.formula);
+
+	setCurrentlySelectedEventByFormula(event.formula);
+	set_modified();
+}
+
 void MissionEventsDialogModel::deleteEvent()
 {
 	if (!SCP_vector_inbounds(m_events, m_cur_event)) {

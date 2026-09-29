@@ -3,6 +3,7 @@
 #include "mission/Editor.h"
 #include "mission/EditorViewport.h"
 #include "mission/object.h"
+#include "localization/localize.h"
 
 #include <ui/util/menu.h>
 #include <ui/util/SignalBlockers.h>
@@ -844,6 +845,25 @@ void sexp_tree_view::keyPressEvent(QKeyEvent* e)
 		return;
 	}
 
+	// + expands one level, * everything below, - collapses. QTreeView does this too, but it
+	// then passes the key on to type-ahead search, which jumps to an item (such as an event
+	// name) starting with that character; handle them here and stop.
+	if (currentItem() && !(e->modifiers() & (Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier))) {
+		switch (e->key()) {
+		case Qt::Key_Plus:
+			currentItem()->setExpanded(true);
+			return;
+		case Qt::Key_Asterisk:
+			expand_branch(currentItem());
+			return;
+		case Qt::Key_Minus:
+			currentItem()->setExpanded(false);
+			return;
+		default:
+			break;
+		}
+	}
+
 	QTreeWidget::keyPressEvent(e);
 }
 
@@ -856,6 +876,11 @@ bool sexp_tree_view::eventFilter(QObject* obj, QEvent* ev)
 	if (obj == _opEdit && ev->type() == QEvent::KeyPress) {
 		const auto* key = static_cast<QKeyEvent*>(ev);
 		switch (key->key()) {
+		case Qt::Key_Escape:
+			// Cancel here: left to Qt, Escape closes the popup like a click elsewhere
+			// would, and a click elsewhere keeps what was typed
+			endOperatorQuickSearch(false);
+			return true;
 		case Qt::Key_Up:
 		case Qt::Key_Down:
 		case Qt::Key_PageUp:
@@ -876,10 +901,11 @@ bool sexp_tree_view::eventFilter(QObject* obj, QEvent* ev)
 		case QEvent::Hide:
 		case QEvent::Close:
 		case QEvent::WindowDeactivate:
-			// Treat any external close as cancel; just clear state.
-			_opPopupActive = false;
-			_opNodeIndex = -1;
-			setFocus(Qt::OtherFocusReason);
+			// endOperatorQuickSearch() clears _opPopupActive before it hides the popup, so
+			// still being active here means the popup was closed from outside, by clicking
+			// elsewhere. Keep an unambiguous entry, like an inline edit does on focus loss.
+			if (_opPopupActive)
+				endOperatorQuickSearch(true, /*clickedAway=*/true);
 			break;
 		default:
 			break;
@@ -1629,7 +1655,8 @@ QStringList sexp_tree_view::validOperatorsForNode(int nodeIndex) const
 }
 
 // Decides how to edit a node: roots get inline text edit, operator/data positions with valid
-// operator choices get the operator quick-search popup, and pure data nodes get inline edit.
+// operator choices get the operator quick-search popup, data slots with listed values get the
+// value search (startDataQuickSearch), and anything else gets inline edit.
 // Relies on validOperatorsForNode() -> _model._opf.get_listing_opf() to determine if operators are available.
 void sexp_tree_view::openNodeEditor(QTreeWidgetItem* item)
 {
@@ -1660,14 +1687,17 @@ void sexp_tree_view::openNodeEditor(QTreeWidgetItem* item)
 	if (nodeIdx < 0)
 		return;
 
-	// operator chooser vs inline data edit
+	// Operator slots (actions, bools, numbers, AI goals) take operators; every other slot is
+	// data only, so it gets the same search over its Replace Data values instead
 	const QStringList ops = validOperatorsForNode(nodeIdx); // uses get_listing_opf(...)
 	if (!ops.isEmpty()) {
 		startOperatorQuickSearch(item, QString());
 		return;
 	}
+	if (startDataQuickSearch(item))
+		return;
 
-	// Fallback to inline edit
+	// Nothing to list (a plain string slot, say): inline edit
 	beginItemEdit(item);
 }
 
@@ -1699,7 +1729,58 @@ void sexp_tree_view::startOperatorQuickSearch(QTreeWidgetItem* item, const QStri
 		return;
 
 	_opNodeIndex = nodeIdx;
+	_opDataMode = false;
+	showQuickSearchPopup(item, seed);
+}
 
+// Search for Replacement on a data slot (ship, message, event, sound, ...): lists exactly the
+// values the right-click Replace Data menu offers, and commits through the same handler.
+bool sexp_tree_view::startDataQuickSearch(QTreeWidgetItem* item)
+{
+	const int nodeIdx = get_node(item);
+	if (nodeIdx < 0)
+		return false;
+
+	// The menu's state is computed for item_index
+	item_index = nodeIdx;
+	auto state = _model.compute_context_menu_state();
+
+	_opAll.clear();
+	_opDataIndex.clear();
+	int data_idx = 0;
+	for (auto* ptr = state.replace_data_list; ptr; ptr = ptr->next, ++data_idx) {
+		if (ptr->op >= 0)
+			continue;
+		const QString text = QString::fromStdString(ptr->text);
+		if (!_opDataIndex.contains(text)) {
+			_opDataIndex.insert(text, data_idx);
+			_opAll.push_back(text);
+		}
+	}
+	_opDataReplaceCount = state.replace_count;
+	_opDataCanNumber = state.can_replace_number;
+	// Replace Data > String is offered for most text slots, but a restricted slot (ships,
+	// events, classes, ...) only really takes its listed values
+	_opDataCanString = state.can_replace_string
+		&& !SexpTreeModel::query_restricted_opf_range(_model.query_node_argument_type(nodeIdx));
+	state.cleanup();
+
+	if (_opAll.isEmpty())
+		return false;
+
+	_opNodeIndex = nodeIdx;
+	_opDataMode = true;
+	showQuickSearchPopup(item, QString());
+
+	// Start on the current value, so Enter alone keeps it
+	const auto current = _opList->findItems(QString::fromUtf8(tree_nodes[nodeIdx].text), Qt::MatchFixedString);
+	if (!current.isEmpty())
+		_opList->setCurrentItem(current.front());
+	return true;
+}
+
+void sexp_tree_view::showQuickSearchPopup(QTreeWidgetItem* item, const QString& seed)
+{
 	if (!_opPopup) {
 		_opPopup = new QFrame(viewport(), Qt::Popup);
 		_opPopup->setFrameShape(QFrame::Box);
@@ -1721,6 +1802,12 @@ void sexp_tree_view::startOperatorQuickSearch(QTreeWidgetItem* item, const QStri
 	}
 
 	_opUserPicked = false;
+	if (!_opDataMode)
+		_opEdit->setPlaceholderText(tr("Search operators..."));
+	else if (_opDataCanString || _opDataCanNumber)
+		_opEdit->setPlaceholderText(tr("Search, or type a value..."));
+	else
+		_opEdit->setPlaceholderText(tr("Search values..."));
 	_opList->clear();
 	_opList->addItems(_opAll);
 	if (!seed.isEmpty()) {
@@ -1806,21 +1893,49 @@ void sexp_tree_view::filterOperatorPopup(const QString& text)
 //   3. Otherwise, fall back to _model.match_closest_operator() for fuzzy matching
 // On successful operator resolution, calls _actions.add_or_replace_operator() to commit.
 // Hides the popup, clears state, and returns focus to the tree.
-void sexp_tree_view::endOperatorQuickSearch(bool confirm)
+void sexp_tree_view::endOperatorQuickSearch(bool confirm, bool clickedAway)
 {
 	if (!_opPopupActive)
 		return;
 
-	// Cache before hiding since hide triggers eventFilter which clears state
+	// Mark the popup closed before anything hides it, so the Hide event reaching
+	// eventFilter() is recognized as our own close rather than a click elsewhere
+	_opPopupActive = false;
 	const int node = _opNodeIndex;
 
 	QString chosenOp;
 	QString typed = (_opEdit ? _opEdit->text().trimmed() : QString());
 
+	if (_opDataMode) {
+		// Enter or a click takes the highlighted value; clicking elsewhere only keeps an
+		// exact value or allowed free text (commitDataQuickSearch), never a guess
+		const QString picked =
+			(confirm && !clickedAway && _opList && _opList->currentItem()) ? _opList->currentItem()->text() : QString();
+		if (_opPopup)
+			_opPopup->hide();
+		_opNodeIndex = -1;
+		if (confirm)
+			commitDataQuickSearch(node, picked, typed);
+		if (!clickedAway) // the click went to another control; leave focus there
+			setFocus(Qt::OtherFocusReason);
+		return;
+	}
+
 	if (confirm) {
-		// If user selected an operator in the list, prefer that
-		if (_opList && _opList->currentItem())
-			chosenOp = _opList->currentItem()->text();
+		if (!clickedAway) {
+			// If user selected an operator in the list, prefer that
+			if (_opList && _opList->currentItem())
+				chosenOp = _opList->currentItem()->text();
+		} else if (!typed.isEmpty()) {
+			// Clicking elsewhere keeps only what was typed out in full: the exact name of
+			// an offered operator (the number check below handles typed numbers)
+			for (const auto& op : _opAll) {
+				if (op.compare(typed, Qt::CaseInsensitive) == 0) {
+					chosenOp = op;
+					break;
+				}
+			}
+		}
 
 		// If nothing selected, see if typed text is a valid *number* for this slot
 		if (chosenOp.isEmpty() && !typed.isEmpty()) {
@@ -1852,13 +1967,14 @@ void sexp_tree_view::endOperatorQuickSearch(bool confirm)
 
 				_actions.replace_data(typed.toUtf8().constData(), type);
 				Q_EMIT modified(); // so undo captures it and dependent views refresh
-				setFocus(Qt::OtherFocusReason);
+				if (!clickedAway) // the click went to another control; leave focus there
+					setFocus(Qt::OtherFocusReason);
 				return; // done
 			}
 		}
 
-		// fall back to closest operator match from typed text
-		if (chosenOp.isEmpty() && !typed.isEmpty()) {
+		// fall back to closest operator match from typed text (not on a click elsewhere: no guessing)
+		if (!clickedAway && chosenOp.isEmpty() && !typed.isEmpty()) {
 			auto best = _model.match_closest_operator(typed.toStdString(), node);
 			if (!best.empty())
 				chosenOp = QString::fromStdString(best);
@@ -1883,7 +1999,63 @@ void sexp_tree_view::endOperatorQuickSearch(bool confirm)
 		}
 	}
 
-	setFocus(Qt::OtherFocusReason);
+	if (!clickedAway) // the click went to another control; leave focus there
+		setFocus(Qt::OtherFocusReason);
+}
+
+// Commits a data-mode search: a listed value goes through the Replace Data menu's own handler;
+// otherwise typed text is taken as a number or string, like the menu's Number / String entries,
+// but only where the slot accepts values that aren't listed.
+void sexp_tree_view::commitDataQuickSearch(int node, const QString& picked, const QString& typed)
+{
+	if (node < 0 || node >= static_cast<int>(tree_nodes.size()))
+		return;
+
+	// A listed value: highlighted and picked, or typed out in full
+	QString value = picked;
+	if (value.isEmpty() && !typed.isEmpty()) {
+		for (auto it = _opDataIndex.cbegin(); it != _opDataIndex.cend(); ++it) {
+			if (it.key().compare(typed, Qt::CaseInsensitive) == 0) {
+				value = it.key();
+				break;
+			}
+		}
+	}
+	if (!value.isEmpty()) {
+		if (value == QString::fromUtf8(tree_nodes[node].text))
+			return; // unchanged; no edit, no undo step
+		setCurrentItemIndex(node);
+		m_replace_count = _opDataReplaceCount;
+		addReplaceTypedDataHandler(_opDataIndex.value(value), true);
+		return;
+	}
+
+	if (typed.isEmpty())
+		return;
+
+	static const QRegularExpression kIntRx(QStringLiteral(R"(^[+-]?\d+$)"));
+	int type = 0;
+	if (_opDataCanNumber && kIntRx.match(typed).hasMatch())
+		type = SEXPT_NUMBER | SEXPT_VALID;
+	else if (_opDataCanString)
+		type = SEXPT_STRING | SEXPT_VALID;
+	else
+		return; // a restricted slot only takes its listed values
+	if (tree_nodes[node].type & SEXPT_MODIFIER)
+		type |= SEXPT_MODIFIER;
+
+	// Same length limit and character cleanup as an inline edit
+	SCP_string text = typed.toUtf8().constData();
+	if (text.size() >= TOKEN_LENGTH)
+		text.resize(TOKEN_LENGTH - 1);
+	lcl_fred_replace_stuff(text);
+	if (text == tree_nodes[node].text)
+		return;
+
+	setCurrentItemIndex(node);
+	_actions.expand_operator(item_index);
+	_actions.replace_data(text.c_str(), type);
+	Q_EMIT modified();
 }
 
 // Slot connected to QTreeWidget::itemChanged. Handles inline edit completion.
