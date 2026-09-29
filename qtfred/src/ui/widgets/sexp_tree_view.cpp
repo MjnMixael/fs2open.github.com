@@ -1227,7 +1227,7 @@ void sexp_tree_view::editNodeExternally(QTreeWidgetItem* h, const QPoint& global
 //
 // First calls _model.compute_context_menu_state() to get all enabled/disabled states, then
 // constructs the full menu hierarchy:
-//   - Delete, Edit Data, Expand (+), Expand All (*)
+//   - Delete, Edit Data, Expand All
 //   - Annotations: Edit Comment, Edit Color
 //   - Copy operations: Cut, Copy, Paste
 //   - Add Operator (categorized submenus by op_menu[]/op_submenu[])
@@ -1274,18 +1274,7 @@ std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h,
 		auto* expand_act = popup_menu->addAction(tr("Expand Card"), this, expandOverride);
 		expand_act->setEnabled(expandEnabled);
 	} else {
-		// keyPressEvent() handles + (expand one level) and * (expand everything
-		// below); the menu shows those keys so they can be found
-		const bool hasChildren = h->childCount() > 0;
-		auto* expand_act = popup_menu->addAction(tr("Expand"), this, [this]() {
-			if (auto* cur = currentItem())
-				cur->setExpanded(true);
-		});
-		expand_act->setShortcut(QKeySequence(Qt::Key_Plus));
-		expand_act->setEnabled(hasChildren);
-		auto* expand_all_act = popup_menu->addAction(tr("Expand All"), this, [this]() { expand_branch(currentItem()); });
-		expand_all_act->setShortcut(QKeySequence(Qt::Key_Asterisk));
-		expand_all_act->setEnabled(hasChildren);
+		popup_menu->addAction(tr("Expand All"), this, [this]() { expand_branch(currentItem()); });
 	}
 
 	popup_menu->addSection(tr("Annotations"));
