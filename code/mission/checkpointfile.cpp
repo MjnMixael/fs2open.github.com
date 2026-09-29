@@ -3003,6 +3003,7 @@ bool checkpoint_peek_info(const SCP_string& filename, checkpoint::checkpoint_dat
 	try {
 		auto json_handler = new pilot::JSONFileHandler(fp, true);
 		json_handler->setThrowOnReadError(true);
+		json_handler->setDecodeStrings(true);
 		handler.reset(json_handler);
 	} catch (const std::exception&) {
 		// Not our file, or not valid JSON.  Enumeration walks whatever is in the directory, so
@@ -3295,6 +3296,7 @@ bool checkpoint_read(const SCP_string& slot, checkpoint_data& data)
 	try {
 		auto json_handler = new pilot::JSONFileHandler(fp, true);
 		json_handler->setThrowOnReadError(true);
+		json_handler->setDecodeStrings(true);
 		handler.reset(json_handler);
 	} catch (const std::exception& e) {
 		mprintf(("CHECKPOINT => Failed to parse '%s': %s\n", filename.c_str(), e.what()));
