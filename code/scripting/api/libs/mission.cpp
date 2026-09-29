@@ -1951,7 +1951,7 @@ ADE_FUNC(storeCheckpoint,
 	"Saves the current state of the mission to a checkpoint, the same as the store-checkpoint SEXP.  "
 	"Does nothing in multiplayer.",
 	"boolean",
-	"true if the checkpoint was written, false otherwise")
+	"true if the checkpoint was written, or queued to be written at the end of the frame when called from inside an event; false otherwise")
 {
 	const char* slot = nullptr;
 	if (!ade_get_args(L, "|s", &slot)) {

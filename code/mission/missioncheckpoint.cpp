@@ -4829,6 +4829,9 @@ bool mission_checkpoint_allowed()
 // stores from that hook (mission.storeCheckpoint) would otherwise recurse until the stack ran out.
 static bool Checkpoint_storing = false;
 
+// Stores asked for during event evaluation, written at the end of the frame.
+static SCP_vector<SCP_string> Deferred_stores;
+
 bool mission_checkpoint_store(const SCP_string& slot)
 {
 	if (!(Game_mode & GM_IN_MISSION)) {
@@ -4848,6 +4851,20 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	if (Game_restoring) {
 		mprintf(("CHECKPOINT => A store was asked for during a restore; ignoring it.\n"));
 		return false;
+	}
+
+	// Asked for from inside an event (the store-checkpoint SEXP, or script-eval calling
+	// mission.storeCheckpoint): wait for the event to finish.  mission_process_event() records that
+	// the event fired -- its result, repeat count, done flag and next timestamp -- only after
+	// eval_sexp() returns, so a store made from its own actions captured it as not yet fired, and
+	// the restore ran the event, and every action in it, a second time.  The store happens at the
+	// end of the frame (mission_checkpoint_process_pending_load()), where every check above is made
+	// again.
+	if (Event_index >= 0) {
+		if (std::find(Deferred_stores.begin(), Deferred_stores.end(), slot) == Deferred_stores.end()) {
+			Deferred_stores.push_back(slot);
+		}
+		return true;
 	}
 
 	struct storing_scope {
@@ -5564,14 +5581,41 @@ static LoadFlags mission_load_flag_defaults()
 
 void mission_checkpoint_request_load(const SCP_string& slot, LoadFlags flags)
 {
+	// Lua can ask from anywhere -- the main hall, the debrief -- and a request left queued there
+	// would sit until the first frame of whatever mission came next, then restore that mission's
+	// slot unasked (and suppress its resume prompt on the way in).
+	if (!(Game_mode & GM_IN_MISSION)) {
+		mprintf(("CHECKPOINT => load called outside a mission; ignoring.\n"));
+		return;
+	}
+
 	if (!mission_checkpoint_allowed()) {
 		mprintf(("CHECKPOINT => Checkpoints are switched off for this mission; not loading.\n"));
 		return;
 	}
 
-	Pending_load.queued = true;
-	Pending_load.slot = slot;
-	Pending_load.flags = flags | mission_load_flag_defaults();
+	// Read the file now, while the old mission is still loaded and before anything later this frame
+	// can write to the slot, so that a missing or unusable checkpoint costs nothing -- we simply
+	// carry on with the mission in progress rather than restarting it and then discovering there
+	// is nothing to restore -- and so that what loads is the checkpoint as it stood when asked for.
+	pending_load_state request;
+	request.slot = slot;
+	request.flags = flags | mission_load_flag_defaults();
+
+	if (!checkpoint_read(request.slot, request.data)) {
+		mprintf(("CHECKPOINT => Cannot load '%s'; staying in the current mission.\n", request.slot.c_str()));
+		return;
+	}
+
+	if (!checkpoint_matches_current_mission(request.data) && !any(request.flags, LoadFlags::IgnoreFingerprint)) {
+		mprintf(("CHECKPOINT => Checkpoint '%s' was written for a different version of this mission; "
+		         "staying in the current mission.\n",
+		         request.slot.c_str()));
+		return;
+	}
+
+	request.queued = true;
+	Pending_load = std::move(request);
 }
 
 bool mission_checkpoint_load_pending()
@@ -5591,6 +5635,17 @@ void mission_checkpoint_clear_pending()
 
 void mission_checkpoint_process_pending_load()
 {
+	// Stores asked for from inside events this frame go first: the events have finished now, so
+	// their fired state is what gets written.  A load asked for this frame has already read its
+	// file, so a store to the same slot cannot change what it restores.
+	if (!Deferred_stores.empty()) {
+		auto slots = std::move(Deferred_stores);
+		Deferred_stores.clear();
+		for (const auto& slot : slots) {
+			mission_checkpoint_store(slot);
+		}
+	}
+
 	if (!Pending_load.queued) {
 		return;
 	}
@@ -5606,24 +5661,6 @@ void mission_checkpoint_process_pending_load()
 	}
 
 	Pending_load.queued = false;
-
-	// Read the file now, while the old mission is still loaded, so that a missing or
-	// unusable checkpoint costs nothing -- we simply carry on with the mission in progress
-	// rather than restarting it and then discovering there is nothing to restore.
-	if (!checkpoint_read(Pending_load.slot, Pending_load.data)) {
-		mprintf(("CHECKPOINT => Cannot load '%s'; staying in the current mission.\n", Pending_load.slot.c_str()));
-		mission_checkpoint_clear_pending();
-		return;
-	}
-
-	if (!checkpoint_matches_current_mission(Pending_load.data) &&
-	    !any(Pending_load.flags, LoadFlags::IgnoreFingerprint)) {
-		mprintf(("CHECKPOINT => Checkpoint '%s' was written for a different version of this mission; "
-		         "staying in the current mission.\n",
-		         Pending_load.slot.c_str()));
-		mission_checkpoint_clear_pending();
-		return;
-	}
 
 	Pending_load.in_progress = true;
 	Pending_load.awaiting_reload = true;
@@ -7543,6 +7580,10 @@ void mission_checkpoint_level_init()
 
 	// The level a posted checkpoint restart was waiting for.
 	Pending_load.awaiting_reload = false;
+
+	// Stores are only deferred to the end of the frame they were asked for in, but a mission that
+	// ends that frame never gets there, and they belong to it.
+	Deferred_stores.clear();
 
 	// Not cleared by mission_checkpoint_clear_pending(), which has to survive the very reload a
 	// checkpoint load asks for -- but the level teardown is exactly where one mission's script
