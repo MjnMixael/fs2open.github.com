@@ -482,10 +482,19 @@ void FredView::loadMissionFile(const QString& pathName, int flags) {
 		fred->clean_up_selections();
 
 		auto pathToLoad = pathName.toStdString();
+		const std::string originalPath = pathToLoad;
 		if (!(flags & MPF_IS_TEMPLATE) && _viewport->Offer_autosave_recovery)
 			fred->maybeUseAutosave(pathToLoad);
+		const bool fromAutosave = (pathToLoad != originalPath);
 
-		fred->loadMission(pathToLoad, flags);
+		// A recovered autosave stands in for the mission's own file: keep that as the current
+		// file (title, Save target, Recent Files, autosave name) rather than the copy in the
+		// autosave folder, and mark it modified since it differs from the file on disk
+		fred->loadMission(pathToLoad, flags, fromAutosave ? originalPath : std::string());
+		if (fromAutosave) {
+			_missionModified = true;
+			statusBar()->showMessage(tr("Recovered from autosave. Save to keep the recovered changes."));
+		}
 
 		QApplication::restoreOverrideCursor();
 		autoRunErrorChecker();
