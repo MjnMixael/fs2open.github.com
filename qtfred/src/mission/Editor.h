@@ -91,8 +91,9 @@ class Editor : public QObject {
 	void setUndoStack(QUndoStack* stack) { _undoStack = stack; }
 	QUndoStack* undoStack() const { return _undoStack; }
 
-	/*! Load a mission. */
-	bool loadMission(const std::string& filepath, int flags = 0);
+	/*! Load a mission. reportedPath, if set, is the path announced as the loaded mission
+	 *  instead of filepath (a recovered autosave stands in for the mission's own file). */
+	bool loadMission(const std::string& filepath, int flags = 0, const std::string& reportedPath = {});
 
 	void markObject(int objId);
 	void unmarkObject(int objId);

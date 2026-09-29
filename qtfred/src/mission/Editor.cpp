@@ -122,7 +122,10 @@ Editor::Editor() : currentObject{ -1 }, Shield_sys_teams(Iff_info.size(), Global
 	// When a mission was loaded we need to notify everyone that the mission has changed
 	connect(this, &Editor::missionLoaded, this, [this](const std::string&) { missionChanged(); });
 
-	_autosaveDirectory = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/autosave/";
+	// Native separators: a recovered autosave is loaded through cf_find_file_location(), which
+	// asserts on an absolute path with no native separator ("C:/Users/.../autosave/x.fs2")
+	_autosaveDirectory = QDir::toNativeSeparators(
+		QStandardPaths::writableLocation(QStandardPaths::AppDataLocation) + "/autosave/");
 	QDir().mkpath(_autosaveDirectory);
 
 	_autosaveTimer = new QTimer(this);
@@ -201,7 +204,7 @@ void Editor::performTimedAutosave() {
 	autosaveDue(savePath);
 }
 
-bool Editor::loadMission(const std::string& mission_name, int flags) {
+bool Editor::loadMission(const std::string& mission_name, int flags, const std::string& reportedPath) {
 	char name[512], * old_name;
 	int i, j, ob;
 	object* objp;
@@ -424,7 +427,7 @@ bool Editor::loadMission(const std::string& mission_name, int flags) {
 
 	stars_post_level_init();
 
-	missionLoaded(filepath);
+	missionLoaded(reportedPath.empty() ? filepath : reportedPath);
 
 	// This hook will allow for scripts to know when a mission has been loaded
 	// which will then allow them to update any LuaEnums that may be related to sexps
