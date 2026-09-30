@@ -347,6 +347,8 @@ add_file_folder("Source/UI/Util"
 	src/ui/util/ErrorChecker.h
 	src/ui/util/ImageRenderer.cpp
 	src/ui/util/ImageRenderer.h
+	src/ui/util/KeyboardNavigation.cpp
+	src/ui/util/KeyboardNavigation.h
 	src/ui/util/menu.cpp
 	src/ui/util/menu.h
 	src/ui/util/SignalBlockers.cpp

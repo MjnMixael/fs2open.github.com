@@ -318,17 +318,18 @@
  <tabstops>
   <tabstop>tabWidget</tabstop>
   <tabstop>primaryListWeapons</tabstop>
+  <tabstop>primaryTblButton</tabstop>
   <tabstop>primarySetAllButton</tabstop>
   <tabstop>primaryTreeBanks</tabstop>
   <tabstop>primaryAiCombo</tabstop>
   <tabstop>primaryAiButton</tabstop>
-  <tabstop>primaryTblButton</tabstop>
   <tabstop>secondaryListWeapons</tabstop>
+  <tabstop>secondaryTblButton</tabstop>
   <tabstop>secondarySetAllButton</tabstop>
   <tabstop>secondaryTreeBanks</tabstop>
   <tabstop>secondaryAiCombo</tabstop>
   <tabstop>secondaryAiButton</tabstop>
-  <tabstop>secondaryTblButton</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources>
   <include location="../resources/resources.qrc"/>

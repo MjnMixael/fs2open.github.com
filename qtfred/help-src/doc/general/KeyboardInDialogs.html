@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Keyboard in Dialogs - QtFRED Help</title>
+    <link rel="stylesheet" type="text/css" href="../css/help.css"/>
+</head>
+<body>
+<nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; General &rsaquo; Keyboard in Dialogs</nav>
+<h1>Keyboard in Dialogs</h1>
+<p>How the keyboard behaves in QtFRED's editor dialogs.</p>
+
+<table>
+    <tr><th>Key</th><th>What it does</th></tr>
+    <tr><td><kbd>Tab</kbd> / <kbd>Shift</kbd>+<kbd>Tab</kbd></td><td>Moves to the next or
+        previous control. Buttons reached this way are outlined in the accent color, so you
+        can see which one has focus. Multi-line text boxes (descriptions, briefing text,
+        message text, notes) pass Tab on to the next control too; the Events editor's
+        Advanced view and the Voice Acting Manager's script format keep Tab for typing a
+        tab character. Tab goes left to right and top to bottom, keeping each section
+        together (for example, the whole event side of the Events editor before its
+        messages). Read-only help panes are skipped; click one to select or copy its
+        text.</td></tr>
+    <tr><td><kbd>Enter</kbd></td><td>Confirms the field you are in, such as a typed number or
+        name, but does not close the dialog or press OK. This keeps a keystroke meant for a
+        field from applying and closing the editor mid-edit. To press a button with the
+        keyboard, Tab to it and press <kbd>Enter</kbd> or <kbd>Space</kbd>. Small pickers and
+        prompts (choosing a mission, entering a name) do accept on Enter.</td></tr>
+    <tr><td><kbd>Esc</kbd></td><td>Closes the dialog. Editors with unapplied changes ask
+        first.</td></tr>
+</table>
+</body>
+</html>

@@ -1,5 +1,6 @@
 #include "BriefingEditorDialog.h"
 #include "ui_BriefingEditorDialog.h"
+#include "ui/util/KeyboardNavigation.h"
 
 #include "mission/util.h"
 #include "ui/Theme.h"
@@ -186,6 +187,8 @@ void BriefingEditorDialog::setupMapWidget()
 	ui->leftPaneLayout->removeWidget(ui->mapView);
 	ui->mapView->hide();
 	ui->leftPaneLayout->insertWidget(idx, _mapWidget);
+	// Tab reaches the map after the icon controls above it, then moves on to the right pane
+	util::setTabChain({ui->makeIconFromShipButton, _mapWidget, ui->formulaTreeView});
 	_mapWidget->setFocus(Qt::OtherFocusReason);
 
 	// Wire icon selection from the map widget to our UI update

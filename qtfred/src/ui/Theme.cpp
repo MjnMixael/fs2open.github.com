@@ -63,6 +63,12 @@ QPushButton:checked:hover {
 QPushButton:default {
     border-color: #0078d7;
 }
+/* Ring only keyboard (Tab) focus: util/KeyboardNavigation sets keyboardFocus. A plain :focus
+   would also ring every button the user clicks. */
+QPushButton[keyboardFocus="true"]:focus {
+    border: 2px solid #0078d7;
+    padding: 2px 9px;
+}
 QPushButton:disabled {
     background-color: #f0f0f0;
     color: #a0a0a0;
@@ -87,6 +93,10 @@ QToolButton:checked:hover {
     background-color: #d8ecf9;
     border-color: #0078d7;
 }
+QToolButton[keyboardFocus="true"]:focus {
+    border: 2px solid #0078d7;
+    padding: 1px;
+}
 QToolButton::menu-indicator {
     image: none;
 }
@@ -107,6 +117,10 @@ QToolBar::separator {
 #contextToolBar QToolButton:pressed {
     background-color: #cce4f7;
     border-color: #005499;
+}
+#contextToolBar QToolButton[keyboardFocus="true"]:focus {
+    border: 2px solid #0078d7;
+    padding: 1px 5px;
 }
 )";
 
@@ -138,6 +152,12 @@ QPushButton:checked:hover {
 QPushButton:default {
     border-color: #2a82da;
 }
+/* Ring only keyboard (Tab) focus: util/KeyboardNavigation sets keyboardFocus. A plain :focus
+   would also ring every button the user clicks. */
+QPushButton[keyboardFocus="true"]:focus {
+    border: 2px solid #4aa3f0;
+    padding: 2px 9px;
+}
 QPushButton:disabled {
     background-color: #2a2a2a;
     color: #7f7f7f;
@@ -162,6 +182,10 @@ QToolButton:checked:hover {
     background-color: #6a6a6a;
     border-color: #aaaaaa;
 }
+QToolButton[keyboardFocus="true"]:focus {
+    border: 2px solid #4aa3f0;
+    padding: 1px;
+}
 QToolButton::menu-indicator {
     image: none;
 }
@@ -182,6 +206,10 @@ QToolBar::separator {
 #contextToolBar QToolButton:pressed {
     background-color: #606060;
     border-color: #909090;
+}
+#contextToolBar QToolButton[keyboardFocus="true"]:focus {
+    border: 2px solid #4aa3f0;
+    padding: 1px 5px;
 }
 QMenu::separator {
     height: 1px;

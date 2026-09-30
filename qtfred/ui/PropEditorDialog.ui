@@ -138,6 +138,9 @@
    </item>
    <item>
     <widget class="QPlainTextEdit" name="cueHelpText">
+     <property name="focusPolicy">
+      <enum>Qt::ClickFocus</enum>
+     </property>
      <property name="readOnly">
       <bool>true</bool>
      </property>

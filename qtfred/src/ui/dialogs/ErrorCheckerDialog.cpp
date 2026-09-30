@@ -1,5 +1,6 @@
 #include "ErrorCheckerDialog.h"
 #include "ui_ErrorCheckerDialog.h"
+#include "ui/util/KeyboardNavigation.h"
 #include "mission/missionparse.h"
 #include "object/object.h"
 #include "ui/Theme.h"
@@ -144,6 +145,9 @@ void ErrorCheckerDialog::initializeUi() {
 	ui->errorScrollArea->setWidgetResizable(true);
 
 	if (_mode == Mode::Normal) {
+		// Copy All is created after setupUi(); keep it with the toolbar, before the results
+		_bottomTabButtons = {ui->closeButton};
+		util::setTabChain({ui->checkApplyAutoCorrections, _copyAllButton, ui->closeButton});
 		ui->checkPotentialIssues->setChecked(_model->getCheckPotentialIssues());
 		ui->checkApplyAutoCorrections->setChecked(_model->getApplyAutoCorrections());
 		return;
@@ -183,6 +187,8 @@ void ErrorCheckerDialog::initializeUi() {
 	ui->bottomLayout->insertWidget(closeIdx,     _fixSaveButton);
 	ui->bottomLayout->insertWidget(closeIdx + 1, saveAnywayButton);
 	ui->bottomLayout->insertWidget(closeIdx + 2, cancelButton);
+	_bottomTabButtons = {_fixSaveButton, saveAnywayButton, cancelButton};
+	util::setTabChain({_copyAllButton, _fixSaveButton, saveAnywayButton, cancelButton});
 
 	connect(_fixSaveButton,   &QPushButton::clicked, this, [this]() { _preSaveAction = PreSaveAction::FixAndSave; accept(); });
 	connect(saveAnywayButton, &QPushButton::clicked, this, [this]() { _preSaveAction = PreSaveAction::SaveAsIs;   accept(); });
@@ -245,6 +251,8 @@ void ErrorCheckerDialog::updateUi() {
 	int potentialCount = 0;
 	bool hasAutoFixable = false;
 
+	// Card buttons are created on every rebuild, which would put them after the bottom row
+	QList<QWidget*> tabChain{_copyAllButton};
 	for (const auto& entry : errors) {
 		const fso::fred::SeverityInfo& info = fso::fred::infoFor(entry.severity);
 
@@ -300,6 +308,7 @@ void ErrorCheckerDialog::updateUi() {
 			gotoButton->setText(gotoText);
 			gotoButton->setToolTip(tr("Close the error checker and open this in its editor"));
 			cardLayout->addWidget(gotoButton, 0, Qt::AlignTop);
+			tabChain << gotoButton;
 			connect(gotoButton, &QToolButton::clicked, this, [this, target = entry.target]() {
 				close();
 				Q_EMIT navigationRequested(target);
@@ -313,12 +322,15 @@ void ErrorCheckerDialog::updateUi() {
 		copyButton->setToolTip(tr("Copy this error"));
 		copyButton->setIcon(makeThemedIcon(CustomIcon::Copy, palette().color(QPalette::ButtonText)));
 		cardLayout->addWidget(copyButton, 0, Qt::AlignTop);
+		tabChain << copyButton;
 		connect(copyButton, &QToolButton::clicked, this, [this, copyButton, text = formatEntry(entry)]() {
 			copyToClipboard(text, copyButton);
 		});
 
 		_errorLayout->addWidget(card);
 	}
+	tabChain << _bottomTabButtons;
+	util::setTabChain(tabChain);
 
 	QStringList parts;
 	if (errorCount > 0)

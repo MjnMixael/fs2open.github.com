@@ -242,6 +242,9 @@
       </layout>
      </widget>
      <widget class="QPlainTextEdit" name="helpTextBox">
+      <property name="focusPolicy">
+       <enum>Qt::ClickFocus</enum>
+      </property>
       <property name="readOnly">
        <bool>true</bool>
       </property>
@@ -258,7 +261,8 @@
   </customwidget>
  </customwidgets>
  <tabstops>
-  <tabstop>newObjectiveBtn</tabstop>
+  <tabstop>goalEventTree</tabstop>
+  <tabstop>displayTypeCombo</tabstop>
   <tabstop>goalTypeCombo</tabstop>
   <tabstop>goalName</tabstop>
   <tabstop>goalDescription</tabstop>
@@ -266,9 +270,8 @@
   <tabstop>goalTeamCombo</tabstop>
   <tabstop>objectiveInvalidCheck</tabstop>
   <tabstop>noCompletionMusicCheck</tabstop>
-  <tabstop>displayTypeCombo</tabstop>
-  <tabstop>goalEventTree</tabstop>
-  <tabstop>helpTextBox</tabstop>
+  <tabstop>newObjectiveBtn</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources/>
  <connections/>

@@ -185,6 +185,9 @@
       </layout>
      </widget>
      <widget class="QPlainTextEdit" name="helpTextBox">
+      <property name="focusPolicy">
+       <enum>Qt::ClickFocus</enum>
+      </property>
       <property name="readOnly">
        <bool>true</bool>
       </property>
@@ -201,12 +204,12 @@
   </customwidget>
  </customwidgets>
  <tabstops>
-  <tabstop>newCutsceneBtn</tabstop>
-  <tabstop>cutsceneTypeCombo</tabstop>
-  <tabstop>cutsceneFilename</tabstop>
   <tabstop>cutsceneEventTree</tabstop>
   <tabstop>displayTypeCombo</tabstop>
-  <tabstop>helpTextBox</tabstop>
+  <tabstop>cutsceneTypeCombo</tabstop>
+  <tabstop>cutsceneFilename</tabstop>
+  <tabstop>newCutsceneBtn</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources/>
  <connections/>

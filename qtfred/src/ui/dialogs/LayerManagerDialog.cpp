@@ -1,5 +1,6 @@
 #include "LayerManagerDialog.h"
 #include "ui_LayerManagerDialog.h"
+#include "ui/util/KeyboardNavigation.h"
 
 #include <QCheckBox>
 #include <QInputDialog>
@@ -65,6 +66,13 @@ void LayerManagerDialog::initializeUi() {
 		ui->iffLayout->insertWidget(spacerIndex + i, check);
 		_iffChecks.append(check);
 	}
+
+	// Created after setupUi(), so they'd come after OK/Cancel; put them after the object types
+	QList<QWidget*> chain{ui->showCoordinatePointsCheck};
+	for (auto* check : _iffChecks)
+		chain.append(check);
+	chain.append(ui->buttonBox);
+	util::setTabChain(chain);
 }
 
 void LayerManagerDialog::updateUi() {

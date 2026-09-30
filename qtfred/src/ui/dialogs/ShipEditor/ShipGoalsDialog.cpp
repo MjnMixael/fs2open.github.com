@@ -1,6 +1,7 @@
 #include "ShipGoalsDialog.h"
 
 #include "ui_ShipGoalsDialog.h"
+#include "ui/util/KeyboardNavigation.h"
 
 #include "mission/util.h"
 
@@ -53,6 +54,14 @@ ShipGoalsDialog::ShipGoalsDialog(QWidget* parent, EditorViewport* viewport, bool
 		ui->gridLayout->addWidget(docks[i],     row, 4);
 		ui->gridLayout->addWidget(priority[i],  row, 5);
 	}
+
+	// The order rows are created after setupUi(), so they'd come after OK/Cancel; row by row
+	// first, then the buttons
+	QList<QWidget*> chain;
+	for (int i = 0; i < ED_MAX_GOALS; i++)
+		chain << behaviors[i] << objects[i] << subsys[i] << docks[i] << priority[i];
+	chain << ui->okButton << ui->cancelButton;
+	util::setTabChain(chain);
 
 	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &ShipGoalsDialog::updateUi);
 	for (int i = 0; i < ED_MAX_GOALS; i++) {

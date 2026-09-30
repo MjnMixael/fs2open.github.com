@@ -203,6 +203,16 @@
    </item>
   </layout>
  </widget>
+ <tabstops>
+  <tabstop>keyLineEdit</tabstop>
+  <tabstop>valueLineEdit</tabstop>
+  <tabstop>stringsTableView</tabstop>
+  <tabstop>stringTextEdit</tabstop>
+  <tabstop>addButton</tabstop>
+  <tabstop>updateButton</tabstop>
+  <tabstop>removeButton</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
 </ui>

@@ -16,6 +16,7 @@
 
 #include "FredApplication.h"
 #include "ui/util/DialogEnterGuard.h"
+#include "ui/util/KeyboardNavigation.h"
 
 namespace fso::fred {
 
@@ -41,6 +42,9 @@ FredApplication::FredApplication() {
 
 	// Keep Return/Enter in a dialog field from pressing the dialog's default button.
 	fso::fred::util::installDialogEnterGuard(this);
+
+	// Visible Tab focus on buttons, and Tab moving on out of text boxes.
+	fso::fred::util::installKeyboardNavigation(this);
 
 	// When there are issues with event handling, enable this define to see the events in the log and stdout
 #ifdef EVENT_DEBUGGING

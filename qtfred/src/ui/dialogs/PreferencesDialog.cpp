@@ -1,5 +1,6 @@
 #include "PreferencesDialog.h"
 #include "ui_PreferencesDialog.h"
+#include "ui/util/KeyboardNavigation.h"
 
 #include <QCheckBox>
 #include <QColorDialog>
@@ -109,14 +110,21 @@ void PreferencesDialog::initializeUi() {
 	// Build the controls key-binding form dynamically from the registered bindings
 	auto* form = new QFormLayout(ui->controlsFormWidget);
 	auto& bindings = ControlBindings::instance();
+	// Created after setupUi(), so they'd come after the dialog buttons: chain them between
+	// the mouse options and Reset to Defaults, in form order
+	QList<QWidget*> controlsChain{ui->invertOrbitY};
 	for (const auto& def : bindings.definitions()) {
 		auto* edit = new ControlKeySequenceEdit(_model->getControlKey(def.action), ui->controlsFormWidget);
 		_controlEditors.emplace(def.action, edit);
 		form->addRow(def.label + ':', edit);
+		controlsChain << edit;
 		connect(edit, &QKeySequenceEdit::keySequenceChanged, this, [this, action = def.action](const QKeySequence& seq) {
 			_model->setControlKey(action, seq);
 		});
 	}
+
+	controlsChain << ui->resetDefaultsButton;
+	util::setTabChain(controlsChain);
 
 	buildSyntaxColorsUi();
 }
@@ -147,6 +155,8 @@ void PreferencesDialog::buildSyntaxColorsUi()
 	roleGrid->setHorizontalSpacing(4);
 	constexpr int perColumn = (SyntaxRoleCount + 1) / 2;
 	constexpr int columnWidth = 6; // five widgets plus a gap column
+	// Created after setupUi(): chain them after the Appearance form, in row order
+	QList<QWidget*> syntaxChain{ui->labelFontScaleSpin};
 	for (int r = 0; r < SyntaxRoleCount; ++r) {
 		const auto role = static_cast<SyntaxRole>(r);
 		const int row = r % perColumn;
@@ -210,6 +220,8 @@ void PreferencesDialog::buildSyntaxColorsUi()
 	}
 	roleGrid->setColumnMinimumWidth(columnWidth - 1, 16);
 	roleGrid->setColumnStretch(columnWidth * 2 - 1, 1);
+	for (const auto& row : _syntaxRows)
+		syntaxChain << row.color << row.bold << row.italic << row.reset;
 	layout->addLayout(roleGrid);
 
 	auto* optionsRow = new QHBoxLayout;
@@ -224,11 +236,14 @@ void PreferencesDialog::buildSyntaxColorsUi()
 	optionsRow->addStretch(1);
 	optionsRow->addWidget(resetAll);
 	layout->addLayout(optionsRow);
+	syntaxChain << _rainbowParensCheck << resetAll << ui->xyPlaneRadio;
+	util::setTabChain(syntaxChain);
 
 	// Live preview. Preferences apply as they change, so the highlighter here
 	// (like the one in an open Events editor) restyles right away.
 	auto* preview = new QPlainTextEdit(group);
 	preview->setReadOnly(true);
+	preview->setFocusPolicy(Qt::ClickFocus);
 	preview->setLineWrapMode(QPlainTextEdit::NoWrap);
 	preview->setFont(QFontDatabase::systemFont(QFontDatabase::FixedFont));
 	preview->setPlainText(QString::fromLatin1(SyntaxPreviewText));

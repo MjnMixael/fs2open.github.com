@@ -167,6 +167,9 @@
        </item>
        <item>
         <widget class="QPlainTextEdit" name="helpTextBrowser">
+         <property name="focusPolicy">
+          <enum>Qt::ClickFocus</enum>
+         </property>
          <property name="readOnly">
           <bool>true</bool>
          </property>
@@ -213,11 +216,13 @@
  <tabstops>
   <tabstop>keyLineEdit</tabstop>
   <tabstop>valueLineEdit</tabstop>
+  <tabstop>valueBoolCombo</tabstop>
   <tabstop>addButton</tabstop>
   <tabstop>updateButton</tabstop>
   <tabstop>removeButton</tabstop>
-  <tabstop>helpTextBrowser</tabstop>
+  <tabstop>resetButton</tabstop>
   <tabstop>stringsTableView</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources/>
  <connections/>

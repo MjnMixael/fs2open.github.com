@@ -7,6 +7,7 @@
 #include "mission/commands/FredCommands.h"
 
 #include <ui/util/default_dir.h>
+#include <ui/util/KeyboardNavigation.h>
 
 #include <ship/ship.h>
 #include <object/object.h>
@@ -60,6 +61,8 @@ VoiceActingManager::VoiceActingManager(FredView* parent, EditorViewport* viewpor
 {
 
     ui->setupUi(this);
+    // The script entry format may use tabs (e.g. for a tab-separated export)
+    util::allowTabInput(ui->scriptEntryFormatPlainTextEdit);
     util::installMainStackUndoShortcuts(this, _fredView->mainUndoStack());
 
 	ui->abbrevBriefingLineEdit->setMaxLength(NAME_LENGTH - 1);

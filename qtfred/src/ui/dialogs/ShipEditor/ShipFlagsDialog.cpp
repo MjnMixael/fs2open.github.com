@@ -107,19 +107,21 @@ void ShipFlagsDialog::updateUi()
 {
 	util::SignalBlockers blockers(this);
 	ui->destroySecondsSpinBox->setValue(_model->getDestroyTime());
+	// Each value stays visible and is only enabled while its flag is set, so the dialog
+	// doesn't rearrange itself as flags are toggled
 	auto* destroyFlag = _model->getFlag("Destroy before Mission");
-	ui->destroyedlabel->setVisible(destroyFlag && destroyFlag->second);
-	ui->destroySecondsSpinBox->setVisible(destroyFlag && destroyFlag->second);
-	ui->destroySecondsLabel->setVisible(destroyFlag && destroyFlag->second);
+	ui->destroyedlabel->setEnabled(destroyFlag && destroyFlag->second);
+	ui->destroySecondsSpinBox->setEnabled(destroyFlag && destroyFlag->second);
+	ui->destroySecondsLabel->setEnabled(destroyFlag && destroyFlag->second);
 
 	auto* escortFlag = _model->getFlag("escort");
 	ui->escortPrioritySpinBox->setValue(_model->getEscortPriority());
-	ui->escortLabel->setVisible(escortFlag && escortFlag->second);
-	ui->escortPrioritySpinBox->setVisible(escortFlag && escortFlag->second);
+	ui->escortLabel->setEnabled(escortFlag && escortFlag->second);
+	ui->escortPrioritySpinBox->setEnabled(escortFlag && escortFlag->second);
 
 	auto* kamikazeFlag = _model->getFlag("kamikaze");
 	ui->kamikazeDamageSpinBox->setValue(_model->getKamikazeDamage());
-	ui->kamikazeLabel->setVisible(kamikazeFlag && kamikazeFlag->second);
-	ui->kamikazeDamageSpinBox->setVisible(kamikazeFlag && kamikazeFlag->second);
+	ui->kamikazeLabel->setEnabled(kamikazeFlag && kamikazeFlag->second);
+	ui->kamikazeDamageSpinBox->setEnabled(kamikazeFlag && kamikazeFlag->second);
 }
 } // namespace fso::fred::dialogs

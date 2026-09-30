@@ -454,6 +454,7 @@
   <tabstop>lineEdit_ibox_maxZ</tabstop>
   <tabstop>shipSelectButton</tabstop>
   <tabstop>enhancedFieldEnabled</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources/>
  <connections/>
