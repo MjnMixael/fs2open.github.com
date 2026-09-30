@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QList>
+
 class QObject;
 class QWidget;
 
@@ -25,5 +27,11 @@ void installKeyboardNavigation(QObject* owner);
 // Keep Tab typing a tab character in this text box (a code or format editor). Call before
 // the widget is first shown.
 void allowTabInput(QWidget* textBox);
+
+// Tab order for widgets created in code: a dialog's .ui tab order is applied in setupUi(),
+// and widgets added after it land at the end of the chain, after OK/Cancel. This chains
+// the given widgets in order (null entries are skipped); anchor the list on a .ui widget
+// before them and the one after them to slot them in place.
+void setTabChain(const QList<QWidget*>& widgets);
 
 } // namespace fso::fred::util

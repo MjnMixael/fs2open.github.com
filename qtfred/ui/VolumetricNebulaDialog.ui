@@ -760,6 +760,7 @@
   <tabstop>noiseResolutionSpinBox</tabstop>
   <tabstop>setBaseNoiseFunctionButton</tabstop>
   <tabstop>setSubNoiseFunctionButton</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources/>
  <connections/>

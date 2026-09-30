@@ -82,6 +82,8 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	bool          _forcePotentialsDisplay = false;
 
 	QPushButton*           _copyAllButton = nullptr;
+	// Close, or the pre-save decision buttons: where Tab goes after the last result
+	QList<QWidget*>        _bottomTabButtons;
 	SCP_vector<ErrorEntry> _displayedErrors; // exactly what the list shows, in order, for Copy All
 };
 

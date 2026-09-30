@@ -276,19 +276,23 @@
   </customwidget>
  </customwidgets>
  <tabstops>
+  <tabstop>actionPrevStage</tabstop>
+  <tabstop>actionNextStage</tabstop>
   <tabstop>actionAddStage</tabstop>
   <tabstop>actionInsertStage</tabstop>
   <tabstop>actionDeleteStage</tabstop>
-  <tabstop>actionPrevStage</tabstop>
-  <tabstop>actionNextStage</tabstop>
+  <tabstop>actionChangeTeams</tabstop>
+  <tabstop>actionCopyToOtherTeams</tabstop>
   <tabstop>formulaTreeView</tabstop>
   <tabstop>debriefingTextEdit</tabstop>
   <tabstop>voiceFileLineEdit</tabstop>
   <tabstop>voiceFileBrowseButton</tabstop>
   <tabstop>voiceFilePlayButton</tabstop>
   <tabstop>recommendationTextEdit</tabstop>
-  <tabstop>actionChangeTeams</tabstop>
-  <tabstop>actionCopyToOtherTeams</tabstop>
+  <tabstop>successMusicWidget</tabstop>
+  <tabstop>averageMusicWidget</tabstop>
+  <tabstop>failureMusicWidget</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources>
   <include location="../resources/resources.qrc"/>

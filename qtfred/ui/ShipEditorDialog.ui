@@ -924,6 +924,9 @@
      </item>
      <item>
       <widget class="QLineEdit" name="HelpTitle">
+       <property name="focusPolicy">
+        <enum>Qt::ClickFocus</enum>
+       </property>
        <property name="enabled">
         <bool>true</bool>
        </property>
@@ -934,6 +937,9 @@
      </item>
      <item>
       <widget class="QTextEdit" name="helpText">
+       <property name="focusPolicy">
+        <enum>Qt::ClickFocus</enum>
+       </property>
        <property name="enabled">
         <bool>true</bool>
        </property>
@@ -967,8 +973,6 @@
   </customwidget>
  </customwidgets>
  <tabstops>
-  <tabstop>prevButton</tabstop>
-  <tabstop>nextButton</tabstop>
   <tabstop>shipNameEdit</tabstop>
   <tabstop>shipDisplayNameEdit</tabstop>
   <tabstop>shipClassCombo</tabstop>
@@ -978,6 +982,8 @@
   <tabstop>teamCombo</tabstop>
   <tabstop>cargoCombo</tabstop>
   <tabstop>cargoTitleEdit</tabstop>
+  <tabstop>textureReplacementButton</tabstop>
+  <tabstop>customDataButton</tabstop>
   <tabstop>hotkeyCombo</tabstop>
   <tabstop>personaCombo</tabstop>
   <tabstop>killScoreEdit</tabstop>
@@ -986,7 +992,8 @@
   <tabstop>playerShipCheckBox</tabstop>
   <tabstop>playerShipButton</tabstop>
   <tabstop>altShipClassButton</tabstop>
-  <tabstop>textureReplacementButton</tabstop>
+  <tabstop>prevButton</tabstop>
+  <tabstop>nextButton</tabstop>
   <tabstop>layerCombo</tabstop>
   <tabstop>deleteButton</tabstop>
   <tabstop>resetButton</tabstop>
@@ -1017,8 +1024,6 @@
   <tabstop>departureTree</tabstop>
   <tabstop>noDepartureWarpCheckBox</tabstop>
   <tabstop>dockWarpoutCheckBox</tabstop>
-  <tabstop>HelpTitle</tabstop>
-  <tabstop>helpText</tabstop>
  </tabstops>
  <resources>
   <include location="../resources/resources.qrc"/>

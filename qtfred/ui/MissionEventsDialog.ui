@@ -238,6 +238,9 @@
            </item>
            <item>
             <widget class="QPlainTextEdit" name="advancedErrorList">
+             <property name="focusPolicy">
+              <enum>Qt::ClickFocus</enum>
+             </property>
              <property name="maximumSize">
               <size>
                <width>16777215</width>
@@ -993,6 +996,9 @@ in Milliseconds</string>
        </item>
        <item>
         <widget class="QLineEdit" name="miniHelpBox">
+         <property name="focusPolicy">
+          <enum>Qt::ClickFocus</enum>
+         </property>
          <property name="readOnly">
           <bool>true</bool>
          </property>
@@ -1000,6 +1006,9 @@ in Milliseconds</string>
        </item>
        <item>
         <widget class="QTextEdit" name="helpBox">
+         <property name="focusPolicy">
+          <enum>Qt::ClickFocus</enum>
+         </property>
          <property name="verticalScrollBarPolicy">
           <enum>Qt::ScrollBarAlwaysOff</enum>
          </property>
@@ -1027,7 +1036,16 @@ in Milliseconds</string>
   </customwidget>
  </customwidgets>
  <tabstops>
+  <tabstop>btnViewTree</tabstop>
+  <tabstop>btnViewGraph</tabstop>
+  <tabstop>btnViewAdvanced</tabstop>
+  <tabstop>eventSearchEdit</tabstop>
+  <tabstop>btnFindPrev</tabstop>
+  <tabstop>btnFindNext</tabstop>
   <tabstop>eventTree</tabstop>
+  <tabstop>eventGraph</tabstop>
+  <tabstop>advancedTextEdit</tabstop>
+  <tabstop>btnValidateEvents</tabstop>
   <tabstop>btnNewEvent</tabstop>
   <tabstop>btnInsertEvent</tabstop>
   <tabstop>btnDeleteEvent</tabstop>
@@ -1053,16 +1071,17 @@ in Milliseconds</string>
   <tabstop>checkLogAlwaysFalse</tabstop>
   <tabstop>checkLogLastRepeat</tabstop>
   <tabstop>checkLogLastTrigger</tabstop>
+  <tabstop>messageSearchEdit</tabstop>
   <tabstop>messageList</tabstop>
   <tabstop>msgMoveTopBtn</tabstop>
   <tabstop>msgUpBtn</tabstop>
   <tabstop>msgDownBtn</tabstop>
   <tabstop>msgMoveBottomBtn</tabstop>
-  <tabstop>messageName</tabstop>
-  <tabstop>messageContent</tabstop>
   <tabstop>btnNewMsg</tabstop>
   <tabstop>btnInsertMsg</tabstop>
   <tabstop>btnDeleteMsg</tabstop>
+  <tabstop>messageName</tabstop>
+  <tabstop>messageContent</tabstop>
   <tabstop>btnMsgNote</tabstop>
   <tabstop>aniCombo</tabstop>
   <tabstop>btnAniBrowse</tabstop>
@@ -1072,8 +1091,7 @@ in Milliseconds</string>
   <tabstop>personaCombo</tabstop>
   <tabstop>btnUpdateStuff</tabstop>
   <tabstop>messageTeamCombo</tabstop>
-  <tabstop>miniHelpBox</tabstop>
-  <tabstop>helpBox</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources>
   <include location="../resources/resources.qrc"/>

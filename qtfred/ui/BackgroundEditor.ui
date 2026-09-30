@@ -1168,6 +1168,9 @@
   <tabstop>changeBitmapButton</tabstop>
   <tabstop>deleteBitmapButton</tabstop>
   <tabstop>bitmapTypeCombo</tabstop>
+  <tabstop>bitmapPitchSpin</tabstop>
+  <tabstop>bitmapBankSpin</tabstop>
+  <tabstop>bitmapHeadingSpin</tabstop>
   <tabstop>bitmapScaleXDoubleSpinBox</tabstop>
   <tabstop>bitmapScaleYDoubleSpinBox</tabstop>
   <tabstop>bitmapDivXSpinBox</tabstop>
@@ -1177,10 +1180,11 @@
   <tabstop>changeSunButton</tabstop>
   <tabstop>deleteSunButton</tabstop>
   <tabstop>sunSelectionCombo</tabstop>
+  <tabstop>sunPitchSpin</tabstop>
+  <tabstop>sunHeadingSpin</tabstop>
   <tabstop>sunScaleDoubleSpinBox</tabstop>
   <tabstop>useCorrectAngleFormatCheckBox</tabstop>
   <tabstop>fullNebulaCheckBox</tabstop>
-  <tabstop>poofsListWidget</tabstop>
   <tabstop>rangeSpinBox</tabstop>
   <tabstop>nebulaPatternCombo</tabstop>
   <tabstop>nebulaLightningCombo</tabstop>
@@ -1194,11 +1198,21 @@
   <tabstop>fogOverrideRedSpinBox</tabstop>
   <tabstop>fogOverrideGreenSpinBox</tabstop>
   <tabstop>fogOverrideBlueSpinBox</tabstop>
+  <tabstop>poofsListWidget</tabstop>
+  <tabstop>legacyNebulaToggle</tabstop>
+  <tabstop>oldNebulaPatternCombo</tabstop>
+  <tabstop>oldNebulaColorCombo</tabstop>
+  <tabstop>oldNebulaPitchSpinBox</tabstop>
+  <tabstop>oldNebulaBankSpinBox</tabstop>
+  <tabstop>oldNebulaHeadingSpinBox</tabstop>
   <tabstop>ambientLightRedSlider</tabstop>
   <tabstop>ambientLightGreenSlider</tabstop>
   <tabstop>ambientLightBlueSlider</tabstop>
   <tabstop>skyboxModelButton</tabstop>
   <tabstop>skyboxEdit</tabstop>
+  <tabstop>skyboxPitchSpin</tabstop>
+  <tabstop>skyboxBankSpin</tabstop>
+  <tabstop>skyboxHeadingSpin</tabstop>
   <tabstop>noLightingCheckBox</tabstop>
   <tabstop>transparentCheckBox</tabstop>
   <tabstop>forceClampCheckBox</tabstop>
@@ -1210,11 +1224,6 @@
   <tabstop>envMapButton</tabstop>
   <tabstop>envMapEdit</tabstop>
   <tabstop>lightingProfileCombo</tabstop>
-  <tabstop>oldNebulaPatternCombo</tabstop>
-  <tabstop>oldNebulaColorCombo</tabstop>
-  <tabstop>oldNebulaPitchSpinBox</tabstop>
-  <tabstop>oldNebulaBankSpinBox</tabstop>
-  <tabstop>oldNebulaHeadingSpinBox</tabstop>
  </tabstops>
  <resources/>
  <connections/>

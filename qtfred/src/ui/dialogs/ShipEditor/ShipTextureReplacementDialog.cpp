@@ -1,6 +1,7 @@
 #include "ShipTextureReplacementDialog.h"
 
 #include "ui_ShipTextureReplacementDialog.h"
+#include "ui/util/KeyboardNavigation.h"
 
 #include <globalincs/globals.h>
 #include <mission/util.h>
@@ -46,6 +47,9 @@ ShipTextureReplacementDialog::ShipTextureReplacementDialog(QDialog* parent, Edit
 
 	auto* subLayout = qobject_cast<QGridLayout*>(ui->subTextureBox->layout());
 	int gridRow = 0;
+	// The rows are created after setupUi(), so they'd come after OK/Cancel: chain them
+	// between the main texture field and the buttons, in display order
+	QList<QWidget*> tabChain{ui->newTextureLineEdit};
 	for (const auto& [tmType, suffix] : MODEL_TEXTURE_SUFFIXES) {
 		SCP_string typeKey = suffix.substr(1);
 		SCP_string displayStr = typeKey;
@@ -77,8 +81,11 @@ ShipTextureReplacementDialog::ShipTextureReplacementDialog(QDialog* parent, Edit
 		});
 
 		_textureRows[typeKey] = { label, useBox, inheritBox, lineEdit };
+		tabChain << useBox << inheritBox << lineEdit;
 		++gridRow;
 	}
+	tabChain << ui->buttonBox;
+	util::setTabChain(tabChain);
 
 	_listModel = new MapModel(_model.get(), this);
 	ui->TexturesList->setModel(_listModel);

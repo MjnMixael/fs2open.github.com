@@ -876,6 +876,9 @@
      </item>
      <item>
       <widget class="QLineEdit" name="HelpTitle">
+       <property name="focusPolicy">
+        <enum>Qt::ClickFocus</enum>
+       </property>
        <property name="enabled">
         <bool>true</bool>
        </property>
@@ -886,6 +889,9 @@
      </item>
      <item>
       <widget class="QTextEdit" name="helpText">
+       <property name="focusPolicy">
+        <enum>Qt::ClickFocus</enum>
+       </property>
        <property name="enabled">
         <bool>true</bool>
        </property>
@@ -914,8 +920,6 @@
   </customwidget>
  </customwidgets>
  <tabstops>
-  <tabstop>prevWingButton</tabstop>
-  <tabstop>nextWingButton</tabstop>
   <tabstop>wingNameEdit</tabstop>
   <tabstop>wingDisplayNameEdit</tabstop>
   <tabstop>wingLeaderCombo</tabstop>
@@ -926,6 +930,8 @@
   <tabstop>formationScaleSpinBox</tabstop>
   <tabstop>alignFormationButton</tabstop>
   <tabstop>setSquadLogoButton</tabstop>
+  <tabstop>prevWingButton</tabstop>
+  <tabstop>nextWingButton</tabstop>
   <tabstop>deleteWingButton</tabstop>
   <tabstop>disbandWingButton</tabstop>
   <tabstop>initialOrdersButton</tabstop>
@@ -950,8 +956,6 @@
   <tabstop>departureTree</tabstop>
   <tabstop>noDepartureWarpCheckBox</tabstop>
   <tabstop>noDepartureWarpAdjustCheckbox</tabstop>
-  <tabstop>HelpTitle</tabstop>
-  <tabstop>helpText</tabstop>
  </tabstops>
  <resources>
   <include location="../resources/resources.qrc"/>

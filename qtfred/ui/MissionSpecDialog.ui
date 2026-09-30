@@ -846,6 +846,45 @@
    <container>1</container>
   </customwidget>
  </customwidgets>
+ <tabstops>
+  <tabstop>missionTitle</tabstop>
+  <tabstop>missionDesigner</tabstop>
+  <tabstop>m_type_SinglePlayer</tabstop>
+  <tabstop>m_type_Cooperative</tabstop>
+  <tabstop>m_type_MultiPlayer</tabstop>
+  <tabstop>m_type_TeamVsTeam</tabstop>
+  <tabstop>m_type_Training</tabstop>
+  <tabstop>m_type_Dogfight</tabstop>
+  <tabstop>maxRespawnCount</tabstop>
+  <tabstop>respawnDelayCount</tabstop>
+  <tabstop>playerEntryDelayDoubleSpinBox</tabstop>
+  <tabstop>customWingNameButton</tabstop>
+  <tabstop>squadronName</tabstop>
+  <tabstop>squadronLogoButton</tabstop>
+  <tabstop>squadronLogo</tabstop>
+  <tabstop>lowResScreenButton</tabstop>
+  <tabstop>lowResScreen</tabstop>
+  <tabstop>highResScreenButton</tabstop>
+  <tabstop>highResScreen</tabstop>
+  <tabstop>supportRearmOptionsButton</tabstop>
+  <tabstop>toggleTrail</tabstop>
+  <tabstop>toggleSpeedDisplay</tabstop>
+  <tabstop>minDisplaySpeed</tabstop>
+  <tabstop>senderCombBox</tabstop>
+  <tabstop>personaComboBox</tabstop>
+  <tabstop>toggleOverrideHashCommand</tabstop>
+  <tabstop>defaultMusicCombo</tabstop>
+  <tabstop>musicPackCombo</tabstop>
+  <tabstop>flagList</tabstop>
+  <tabstop>largeShipCollisionGroup</tabstop>
+  <tabstop>aiProfileCombo</tabstop>
+  <tabstop>soundEnvButton</tabstop>
+  <tabstop>customDataButton</tabstop>
+  <tabstop>customStringsButton</tabstop>
+  <tabstop>missionDescEditor</tabstop>
+  <tabstop>designerNoteEditor</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
+ </tabstops>
  <resources/>
  <connections/>
  <buttongroups>

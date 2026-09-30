@@ -671,29 +671,30 @@
  </widget>
  <tabstops>
   <tabstop>currentTeamComboBox</tabstop>
+  <tabstop>copyLoadoutToOtherTeamsButton</tabstop>
   <tabstop>weaponValidationCheckbox</tabstop>
   <tabstop>tabWidget</tabstop>
   <tabstop>shipsFilterLineEdit</tabstop>
   <tabstop>clearShipsListButton</tabstop>
   <tabstop>selectAllShipsListButton</tabstop>
   <tabstop>shipsMultiSelectCheckBox</tabstop>
+  <tabstop>shipsList</tabstop>
   <tabstop>weaponsFilterLineEdit</tabstop>
   <tabstop>clearWeaponsListButton</tabstop>
   <tabstop>selectAllWeaponsListButton</tabstop>
   <tabstop>weaponsMultiSelectCheckBox</tabstop>
-  <tabstop>shipsList</tabstop>
   <tabstop>weaponsList</tabstop>
   <tabstop>shipsVarFilterLineEdit</tabstop>
   <tabstop>clearShipsVarListButton</tabstop>
   <tabstop>selectAllShipsVarListButton</tabstop>
   <tabstop>shipsVarMultiSelectCheckBox</tabstop>
+  <tabstop>shipVarsList</tabstop>
   <tabstop>weaponsVarFilterLineEdit</tabstop>
   <tabstop>clearWeaponsVarListButton</tabstop>
   <tabstop>selectAllWeaponsVarListButton</tabstop>
   <tabstop>weaponsVarMultiSelectCheckBox</tabstop>
-  <tabstop>shipVarsList</tabstop>
   <tabstop>weaponVarsList</tabstop>
-  <tabstop>copyLoadoutToOtherTeamsButton</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources>
   <include location="../resources/resources.qrc"/>

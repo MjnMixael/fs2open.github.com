@@ -377,16 +377,17 @@
   </layout>
  </widget>
  <tabstops>
+  <tabstop>poolMultiselectCheckbox</tabstop>
   <tabstop>possibleShipsList</tabstop>
   <tabstop>actionAddShip</tabstop>
-  <tabstop>chosenShipsList</tabstop>
   <tabstop>moveSelectionUp</tabstop>
   <tabstop>moveSelectionDown</tabstop>
+  <tabstop>actionRemoveShip</tabstop>
+  <tabstop>chosenMultiselectCheckbox</tabstop>
+  <tabstop>chosenShipsList</tabstop>
   <tabstop>useSpinBox</tabstop>
   <tabstop>delaySpinBox</tabstop>
-  <tabstop>actionRemoveShip</tabstop>
-  <tabstop>poolMultiselectCheckbox</tabstop>
-  <tabstop>chosenMultiselectCheckbox</tabstop>
+  <tabstop>okAndCancelButtons</tabstop>
  </tabstops>
  <resources/>
  <connections/>

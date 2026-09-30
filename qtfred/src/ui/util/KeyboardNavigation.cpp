@@ -75,4 +75,16 @@ void allowTabInput(QWidget* textBox)
 	textBox->setProperty(ALLOW_TAB_INPUT_PROPERTY, true);
 }
 
+void setTabChain(const QList<QWidget*>& widgets)
+{
+	QWidget* prev = nullptr;
+	for (auto* w : widgets) {
+		if (w == nullptr)
+			continue;
+		if (prev != nullptr)
+			QWidget::setTabOrder(prev, w);
+		prev = w;
+	}
+}
+
 } // namespace fso::fred::util

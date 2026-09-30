@@ -131,6 +131,9 @@
          <layout class="QVBoxLayout" name="iffGroupLayout">
           <item>
            <widget class="QScrollArea" name="iffScrollArea">
+            <property name="focusPolicy">
+             <enum>Qt::NoFocus</enum>
+            </property>
             <property name="frameShape">
              <enum>QFrame::NoFrame</enum>
             </property>
@@ -179,13 +182,15 @@
   <tabstop>tabWidget</tabstop>
   <tabstop>layerList</tabstop>
   <tabstop>addLayerButton</tabstop>
+  <tabstop>renameLayerButton</tabstop>
   <tabstop>deleteLayerButton</tabstop>
   <tabstop>showShipsCheck</tabstop>
   <tabstop>showPropsCheck</tabstop>
   <tabstop>showStartsCheck</tabstop>
   <tabstop>showJumpNodesCheck</tabstop>
   <tabstop>showWaypointsCheck</tabstop>
-  <tabstop>iffScrollArea</tabstop>
+  <tabstop>showCoordinatePointsCheck</tabstop>
+  <tabstop>buttonBox</tabstop>
  </tabstops>
  <resources/>
  <connections>
