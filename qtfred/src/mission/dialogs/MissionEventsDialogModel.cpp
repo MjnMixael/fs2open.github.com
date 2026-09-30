@@ -370,33 +370,31 @@ void MissionEventsDialogModel::initializePersonaList()
 	}
 }
 
-bool MissionEventsDialogModel::checkMessageNameConflict(const SCP_string& name)
+// Checked on every keystroke, so it reports rather than shows a dialog: the Events dialog
+// marks the field while the name clashes and only warns if the user leaves it that way.
+SCP_string MissionEventsDialogModel::messageNameConflict(const SCP_string& name) const
 {
 	// Validate against builtin messages
 	for (auto i = 0; i < Num_builtin_messages; i++) {
 		if (!stricmp(name.c_str(), Messages[i].name)) {
-			_viewport->dialogProvider->showButtonDialog(DialogType::Warning,
-				"Invalid Message Name",
-				"Message name cannot be the same as a builtin message name!",
-				{DialogButton::Ok});
-			return true;
-			break;
+			SCP_string reason = "The name matches the builtin message \"";
+			reason += Messages[i].name;
+			reason += "\".";
+			return reason;
 		}
 	}
 
 	// Validate against existing messages
 	for (auto i = 0; i < static_cast<int>(m_messages.size()); i++) {
 		if ((i != m_cur_msg) && (!stricmp(name.c_str(), m_messages[i].name))) {
-			_viewport->dialogProvider->showButtonDialog(DialogType::Warning,
-				"Invalid Message Name",
-				"Message name cannot be the same another message!",
-				{DialogButton::Ok});
-			return true;
-			break;
+			SCP_string reason = "Another message is already named \"";
+			reason += m_messages[i].name;
+			reason += "\".";
+			return reason;
 		}
 	}
 
-	return false;
+	return {};
 }
 
 SCP_string MissionEventsDialogModel::makeUniqueMessageName(const SCP_string& base) const
@@ -1225,15 +1223,17 @@ SCP_string MissionEventsDialogModel::getMessageName() const
 	return m_messages[m_cur_msg].name;
 }
 
-void MissionEventsDialogModel::setMessageName(const SCP_string& name)
+bool MissionEventsDialogModel::setMessageName(const SCP_string& name)
 {
 	if (!SCP_vector_inbounds(m_messages, m_cur_msg)) {
-		return;
+		return false;
 	}
 
-	if (!checkMessageNameConflict(name)) {
-		setMessageNameAt(m_cur_msg, name);
-	}
+	if (!messageNameConflict(name).empty())
+		return false;
+
+	setMessageNameAt(m_cur_msg, name);
+	return true;
 }
 
 // No conflict check: undo/redo applies values that were valid when captured,

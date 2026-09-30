@@ -139,7 +139,10 @@ name. Use the arrow buttons to reorder messages in the list.</p>
 <table>
     <tr><th>Field</th><th>Description</th></tr>
     <tr><td>Name</td><td>Internal identifier used to reference this message in SEXPs.
-        Not shown to the player.</td></tr>
+        Not shown to the player. It must differ from every other message and from the
+        built-in messages (such as <em>Help</em>). While the name clashes the field is
+        outlined in red, with the reason in its tooltip; if you leave the field that way,
+        the previous name is put back.</td></tr>
     <tr><td>Message text</td><td>The text displayed on the HUD when this message is
         sent.</td></tr>
     <tr><td>Head ANI</td><td>The talking-head animation file shown with the message.
