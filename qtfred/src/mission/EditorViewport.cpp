@@ -19,6 +19,7 @@
 #include <mission/missionparse.h>
 #include <missioneditor/common.h>
 #include <camera/camera.h>
+#include <parse/sexp.h>
 #include <nebula/volumetrics.h>
 #include <prop/prop.h>
 #include <FredApplication.h>
@@ -192,6 +193,7 @@ void EditorViewport::loadSettings() {
 	view.Show_waypoints                    = settings.value("view_show_waypoints",                    view.Show_waypoints).toBool();
 	view.Show_coordinate_points            = settings.value("view_show_coordinate_points",            view.Show_coordinate_points).toBool();
 	view.Show_compass                      = settings.value("view_show_compass",                      view.Show_compass).toBool();
+	view.Show_camera_gizmo                 = settings.value("view_show_camera_gizmo",                 view.Show_camera_gizmo).toBool();
 	view.Highlight_selectable_subsys       = settings.value("view_highlight_selectable_subsys",       view.Highlight_selectable_subsys).toBool();
 	view.Outline_lod                       = settings.value("view_outline_lod",                       view.Outline_lod).toInt();
 	view.Label_font_scale                  = settings.value("view_label_font_scale",                  view.Label_font_scale).toFloat();
@@ -244,6 +246,7 @@ void EditorViewport::saveSettings() const {
 	settings.setValue("view_show_waypoints",                    view.Show_waypoints);
 	settings.setValue("view_show_coordinate_points",            view.Show_coordinate_points);
 	settings.setValue("view_show_compass",                      view.Show_compass);
+	settings.setValue("view_show_camera_gizmo",                 view.Show_camera_gizmo);
 	settings.setValue("view_highlight_selectable_subsys",       view.Highlight_selectable_subsys);
 	settings.setValue("view_outline_lod",                       view.Outline_lod);
 	settings.setValue("view_label_font_scale",                  view.Label_font_scale);
@@ -398,6 +401,13 @@ void EditorViewport::select_objects(const Marking_box& box) {
 
 float EditorViewport::viewFov() const {
 	// Any viewpoint other than the basic editor camera shows what the game would
+	if (camera.getViewpoint() == CutsceneCameraViewpoint) {
+		CameraSexpPreview preview;
+		if (cameraPreview(&preview)) {
+			// A sexp can ask for anything; keep the projection sane (it is zoom * PROJ_FOV_FACTOR)
+			return std::clamp(preview.shot.fov, 0.05f, 2.2f);
+		}
+	}
 	return (camera.getViewpoint() != 0) ? _objectViewFov : FRED_DEFAULT_HTL_FOV;
 }
 
@@ -446,12 +456,21 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 	if ((camera.getViewpoint() == 1) && !query_valid_object(camera.getViewObj())) {
 		camera.setViewpoint(0);
 	}
+	CameraSexpPreview cameraView;
+	if ((camera.getViewpoint() == CutsceneCameraViewpoint) && !cameraPreview(&cameraView)) {
+		// The camera sexp was deselected or its dialog closed
+		camera.setViewpoint(0);
+		needsUpdate();
+	}
 
 	process_system_keys();
 	const auto controlsLocked = areControlsLocked();
 	cmode = camera.getControlMode();
 	if ((camera.getViewpoint() == 1) && !cmode) {
 		cmode = 2;
+	}
+	if ((camera.getViewpoint() == CutsceneCameraViewpoint) && !cmode) {
+		cmode = 3;
 	}
 
 	control_pos = Last_control_pos;
@@ -534,6 +553,9 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 
 		break;
 
+	case 3: // Looking through a cutscene camera: its sexps place it, so the controls don't
+		break;
+
 	default:
 		Assert(0);
 	}
@@ -554,6 +576,11 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 	case 1:
 		camera.eye_pos = Objects[camera.getViewObj()].pos;
 		camera.eye_orient = Objects[camera.getViewObj()].orient;
+		break;
+
+	case CutsceneCameraViewpoint:
+		camera.eye_pos = cameraView.shot.pos;
+		camera.eye_orient = cameraView.shot.orient;
 		break;
 
 	default:
@@ -596,6 +623,9 @@ void EditorViewport::level_controlled() {
 	cmode = camera.getControlMode();
 	if ((camera.getViewpoint() == 1) && !cmode) {
 		cmode = 2;
+	}
+	if ((camera.getViewpoint() == CutsceneCameraViewpoint) && !cmode) {
+		return; // the camera sexps place it
 	}
 
 	switch (cmode) {
@@ -650,6 +680,9 @@ void EditorViewport::verticalize_controlled() {
 	cmode = camera.getControlMode();
 	if ((camera.getViewpoint() == 1) && !cmode) {
 		cmode = 2;
+	}
+	if ((camera.getViewpoint() == CutsceneCameraViewpoint) && !cmode) {
+		return; // the camera sexps place it
 	}
 
 	switch (cmode) {
@@ -2306,6 +2339,153 @@ EnvironmentObject EditorViewport::handleEnvironment(HandlePick pick) const {
 		return EnvironmentObject::AsteroidField;
 	}
 	return EnvironmentObject::None;
+}
+
+// ---------------------------------------------------------------------------
+// Cutscene camera preview
+// ---------------------------------------------------------------------------
+
+void EditorViewport::setCameraGizmo(CameraGizmo gizmo) {
+	if (_cameraDragActive && gizmo.owner != _cameraGizmo.owner) {
+		cancelCameraDrag();
+	}
+	_cameraGizmo = std::move(gizmo);
+	needsUpdate();
+}
+
+void EditorViewport::clearCameraGizmo(const void* owner) {
+	if (owner == nullptr || _cameraGizmo.owner != owner) {
+		return;
+	}
+	if (_cameraDragActive) {
+		cancelCameraDrag();
+	}
+	_cameraGizmo = CameraGizmo();
+	needsUpdate();
+}
+
+bool EditorViewport::cameraPreview(CameraSexpPreview* out) const {
+	if (!_cameraGizmo.evaluate) {
+		return false;
+	}
+	CameraSexpPreview preview;
+	if (!_cameraGizmo.evaluate(preview)) {
+		return false;
+	}
+	if (out != nullptr) {
+		*out = preview;
+	}
+	return true;
+}
+
+bool EditorViewport::canSetCameraFromView() const {
+	// Looking through the cutscene camera, the view is the camera already
+	if (!_cameraGizmo.setFromView || camera.getViewpoint() == CutsceneCameraViewpoint) {
+		return false;
+	}
+	CameraSexpPreview preview;
+	if (!cameraPreview(&preview)) {
+		return false;
+	}
+	return preview.pointNodes[0] >= 0 || preview.angleNodes[0] >= 0;
+}
+
+void EditorViewport::setCameraFromView() {
+	if (!canSetCameraFromView()) {
+		return;
+	}
+	// Copied: the call edits the tree, which hands the viewport a new gizmo
+	const auto setFromView = _cameraGizmo.setFromView;
+	setFromView(camera.eye_pos, camera.eye_orient);
+	needsUpdate();
+}
+
+void EditorViewport::refreshCameraHandle() {
+	CameraSexpPreview preview;
+	const bool present = view.Show_camera_gizmo && camera.getViewpoint() != CutsceneCameraViewpoint &&
+		_cameraGizmo.movePoint && cameraPreview(&preview) && preview.pointNodes[0] >= 0;
+	vec3d pos = vmd_zero_vector;
+	if (present) {
+		pos = _cameraDragActive ? _cameraDragPoint : preview.point;
+	}
+	const int op = present ? preview.op : -1;
+
+	// Only touch the registry on a real change (see refreshVolumetricHandle)
+	if (present == _cam_handle_cached_present &&
+		(!present || (pos == _cam_handle_cached_pos && op == _cam_handle_cached_op))) {
+		return;
+	}
+	_cam_handle_cached_present = present;
+	_cam_handle_cached_pos = pos;
+	_cam_handle_cached_op = op;
+
+	std::vector<ViewportHandle> handles;
+	if (present) {
+		ViewportHandle h;
+		h.kind = ViewportHandle::Kind::Center;
+		h.world_pos = pos;
+		h.color_r = 0;
+		h.color_g = 200;
+		h.color_b = 255;
+		h.info_label = (op == OP_CUTSCENES_SET_CAMERA_POSITION) ? "Camera position" : "Camera facing point";
+		h.show_coords = true;
+		h.show_grid_position = true;
+		h.on_drag = [this](const vec3d& delta) {
+			if (!_cameraDragActive) {
+				return vmd_zero_vector;
+			}
+			vm_vec_add2(&_cameraDragPoint, &delta);
+			return delta;
+		};
+		handles.push_back(std::move(h));
+	}
+
+	if (_camera_handle_group.valid()) {
+		updateHandleGroup(_camera_handle_group, std::move(handles));
+	} else {
+		_camera_handle_group = registerHandleGroup(std::move(handles));
+	}
+}
+
+bool EditorViewport::isCameraHandle(HandlePick pick) const {
+	return pick.group_index >= 0 && _camera_handle_group.valid() && pick.group_index == _camera_handle_group.index;
+}
+
+void EditorViewport::beginCameraDrag() {
+	CameraSexpPreview preview;
+	if (!cameraPreview(&preview) || !preview.hasPoint) {
+		return;
+	}
+	_cameraDragActive = true;
+	_cameraDragPoint = preview.point;
+}
+
+bool EditorViewport::cameraDragPoint(vec3d* out) const {
+	if (!_cameraDragActive) {
+		return false;
+	}
+	*out = _cameraDragPoint;
+	return true;
+}
+
+void EditorViewport::commitCameraDrag() {
+	if (!_cameraDragActive) {
+		return;
+	}
+	_cameraDragActive = false;
+
+	CameraSexpPreview preview;
+	if (_cameraGizmo.movePoint && cameraPreview(&preview) && preview.hasPoint && !(preview.point == _cameraDragPoint)) {
+		// Copied: the call edits the tree, which hands the viewport a new gizmo
+		const auto movePoint = _cameraGizmo.movePoint;
+		movePoint(_cameraDragPoint);
+	}
+	needsUpdate();
+}
+
+void EditorViewport::cancelCameraDrag() {
+	_cameraDragActive = false;
+	needsUpdate();
 }
 
 // ---------------------------------------------------------------------------

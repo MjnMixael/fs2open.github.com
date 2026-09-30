@@ -321,6 +321,18 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 		const int py = event->position().y() * _window->devicePixelRatio();
 		auto pick = _viewport->pick_handle(px, py);
 		if (pick.group_index >= 0) {
+			// The cutscene camera's handle edits the selected camera sexp, not an environment
+			if (_viewport->isCameraHandle(pick)) {
+				if (_viewport->begin_handle_drag(pick, px, py)) {
+					_handleGrabbed = true;
+					_handleDragCamera = true;
+					_usingMarkingBox = false;
+					_viewport->beginCameraDrag();
+				}
+				event->accept();
+				return;
+			}
+
 			// Clicking a viewport handle selects its environment entity (mutually
 			// exclusive with object selection), records it as the spinbox target,
 			// and arms a drag if one can start.
@@ -514,6 +526,13 @@ void RenderWidget::finalizeHandleDrag() {
 	_viewport->end_handle_drag();
 	_handleGrabbed = false;
 
+	if (_handleDragCamera) {
+		// Written into the camera sexp once, as one tree edit
+		_handleDragCamera = false;
+		_viewport->commitCameraDrag();
+		return;
+	}
+
 	// One gesture, one undo step (nothing if the drag changed nothing). The
 	// viewport puts it on the open dialog's stack if there is one.
 	_viewport->commitEnvEdit(_handleDragEnv == EnvironmentObject::VolumetricNebula ? tr("Move Volumetric Nebula")
@@ -525,6 +544,10 @@ void RenderWidget::finalizeHandleDrag() {
 void RenderWidget::cancelHandleDrag() {
 	_viewport->end_handle_drag();
 	_handleGrabbed = false;
+	if (_handleDragCamera) {
+		_handleDragCamera = false;
+		_viewport->cancelCameraDrag();
+	}
 	_viewport->cancelEnvEdit();
 	_handleDragEnv = EnvironmentObject::None;
 	_viewport->needsUpdate();

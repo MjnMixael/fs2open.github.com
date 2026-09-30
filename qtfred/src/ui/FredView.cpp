@@ -1098,6 +1098,7 @@ void FredView::syncViewOptions() {
 	connectActionToViewSetting(ui->actionShow_Grid, &_viewport->view.Show_grid);
 	connectActionToViewSetting(ui->actionShow_Horizon, &_viewport->view.Show_horizon);
 	connectActionToViewSetting(ui->actionShow_3D_Compass, &_viewport->view.Show_compass);
+	connectActionToViewSetting(ui->actionShow_Camera_Gizmo, &_viewport->view.Show_camera_gizmo);
 	connectActionToViewSetting(ui->actionShow_Background, &_viewport->view.Show_stars);
 
 	connectActionToViewSetting(ui->actionLighting_from_Suns, &_viewport->view.Lighting_on);
@@ -1540,7 +1541,7 @@ void FredView::initializeTransformBar() {
 	// Steps apply live; typed values on Enter or focus-out (keyboard tracking is off). The idle
 	// sync in onUpdateCameraControlActions() sets the value with signals blocked.
 	connect(_transformFovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double degrees) {
-		if (!_viewport || _viewport->camera.getViewpoint() == 0) return;
+		if (!_viewport || _viewport->camera.getViewpoint() != 1) return;
 		_viewport->setObjectViewFov(fl_radians(static_cast<float>(degrees)));
 	});
 	// Like the transform boxes: Enter hands focus back to the viewport so its keys work again
@@ -2070,6 +2071,8 @@ void FredView::updateUI() {
 
 	if (_viewport->camera.getViewpoint() == 1) {
 		_statusBarViewmode->setText(tr("Viewpoint: %1").arg(object_name(_viewport->camera.getViewObj())));
+	} else if (_viewport->camera.getViewpoint() == EditorViewport::CutsceneCameraViewpoint) {
+		_statusBarViewmode->setText(tr("Viewpoint: Cutscene Camera"));
 	} else {
 		_statusBarViewmode->setText(tr("Viewpoint: Camera"));
 	}
@@ -2983,23 +2986,34 @@ void FredView::on_actionRotx50_triggered(bool enabled) {
 	}
 }
 void FredView::onUpdateCameraControlActions() {
-	ui->actionCamera->setChecked(_viewport->camera.getViewpoint() == 0);
-	ui->actionCurrent_Ship->setChecked(_viewport->camera.getViewpoint() == 1);
+	const int viewpoint = _viewport->camera.getViewpoint();
+	ui->actionCamera->setChecked(viewpoint == 0);
+	ui->actionCurrent_Ship->setChecked(viewpoint == 1);
+	ui->actionCutscene_Camera->setChecked(viewpoint == EditorViewport::CutsceneCameraViewpoint);
+	ui->actionCutscene_Camera->setEnabled(viewpoint == EditorViewport::CutsceneCameraViewpoint ||
+		_viewport->cameraPreview(nullptr));
+	ui->actionSet_Camera_From_View->setEnabled(_viewport->canSetCameraFromView());
 
 	// FOV readout: the fixed editor FOV (locked) for the basic camera, the object-view FOV
-	// (editable) otherwise. Left alone while focused so typing isn't overwritten, except after
-	// switching back to the basic camera: then the box has nothing to edit, so hand focus back
-	// to the viewport and lock it (a focused, disabled box would keep its text selected).
-	const bool objectView = (_viewport->camera.getViewpoint() != 0);
+	// (editable) through an object, and the camera sexps' FOV (locked) through a cutscene camera.
+	// Left alone while focused so typing isn't overwritten, except after switching away from
+	// the object view: then the box has nothing to edit, so hand focus back to the viewport and
+	// lock it (a focused, disabled box would keep its text selected).
+	const bool objectView = (viewpoint == 1);
 	if (_transformFovSpin && _transformFovSpin->hasFocus() && !objectView)
 		ui->centralWidget->setFocus(Qt::OtherFocusReason);
 	if (_transformFovSpin && !_transformFovSpin->hasFocus()) {
 		_transformFovSpin->setEnabled(objectView);
-		_transformFovSpin->setToolTip(objectView
-			? tr("Field of view while viewing through an object. Starts at the in-game FOV; "
-				 "changes last for this session and reset when a mission is loaded.")
-			: tr("Field of view of the editor camera (fixed). View through an object to use and "
-				 "adjust the in-game FOV."));
+		if (objectView) {
+			_transformFovSpin->setToolTip(tr("Field of view while viewing through an object. Starts at the in-game "
+											 "FOV; changes last for this session and reset when a mission is loaded."));
+		} else if (viewpoint == EditorViewport::CutsceneCameraViewpoint) {
+			_transformFovSpin->setToolTip(tr("Field of view of the cutscene camera, from its set-camera-fov "
+											 "(or the in-game FOV). Change it with the sexp."));
+		} else {
+			_transformFovSpin->setToolTip(tr("Field of view of the editor camera (fixed). View through an object "
+											 "to use and adjust the in-game FOV."));
+		}
 		QSignalBlocker blocker(_transformFovSpin);
 		// Only rewrite on a real change, so the idle tick doesn't reset the cursor or selection
 		const double degrees = fl_degrees(_viewport->viewFov());
@@ -3024,6 +3038,14 @@ void FredView::on_actionCurrent_Ship_triggered(bool enabled) {
 
 		_viewport->needsUpdate();
 	}
+}
+void FredView::on_actionCutscene_Camera_triggered(bool enabled) {
+	// Only offered while a camera sexp is selected in a sexp tree
+	_viewport->camera.setViewpoint((enabled && _viewport->cameraPreview(nullptr)) ? EditorViewport::CutsceneCameraViewpoint : 0);
+	_viewport->needsUpdate();
+}
+void FredView::on_actionSet_Camera_From_View_triggered(bool) {
+	_viewport->setCameraFromView();
 }
 void FredView::on_actionToggle_Viewpoint_triggered(bool) {
 	// Flip between the camera viewpoint (0) and the current ship's viewpoint (1).

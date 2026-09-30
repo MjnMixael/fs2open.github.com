@@ -33,7 +33,9 @@
 #include <QHash>
 #include <QDebug>
 
+#include <algorithm>
 #include <functional>
+#include <string>
 
 extern SCP_vector<game_snd> Snds;
 
@@ -273,7 +275,11 @@ sexp_tree_view::sexp_tree_view(QWidget* parent) : QTreeWidget(parent), _actions(
 }
 
 
-sexp_tree_view::~sexp_tree_view() = default;
+sexp_tree_view::~sexp_tree_view()
+{
+	if (_viewport != nullptr)
+		_viewport->clearCameraGizmo(this);
+}
 
 // --- ISexpTreeUI implementation ---
 // These callbacks are invoked by SexpTreeActions to manipulate the Qt widget.
@@ -1169,6 +1175,9 @@ void sexp_tree_view::initializeEditor(::fso::fred::Editor* edit, SexpTreeEditorI
 	_interface = editorInterface;
 	_viewport = viewport;
 	_fredView = fredView;
+
+	// An edit can turn the selection into a camera sexp, or out of one
+	connect(this, &sexp_tree_view::modified, this, &sexp_tree_view::syncCameraGizmo, Qt::UniqueConnection);
 }
 
 // Slot connected to customContextMenuRequested. Gets the QTreeWidgetItem at the click position,
@@ -1530,6 +1539,29 @@ std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h,
 	add_paste_act->setEnabled(state.can_paste_add);
 	cut_act->setEnabled(state.can_cut);
 	copy_act->setEnabled(state.can_copy);
+
+	// Cutscene camera sexps: look through the camera, or set it from the viewport
+	const int cameraOp = findCameraOperator(tree_nodes, item_index);
+	if (_viewport != nullptr && cameraOp >= 0) {
+		popup_menu->addSection(tr("Cutscene Camera"));
+		auto* look_act = popup_menu->addAction(tr("Look Through Camera"), this, [this](bool checked) {
+			syncCameraGizmo();
+			_viewport->camera.setViewpoint(checked ? EditorViewport::CutsceneCameraViewpoint : 0);
+			_viewport->needsUpdate();
+		});
+		look_act->setCheckable(true);
+		look_act->setChecked(_viewport->camera.getViewpoint() == EditorViewport::CutsceneCameraViewpoint);
+
+		CameraSexpPreview preview;
+		const bool settable = previewCameraSexp(tree_nodes, cameraOp, &preview) &&
+			(preview.pointNodes[0] >= 0 || preview.angleNodes[0] >= 0) &&
+			_viewport->camera.getViewpoint() != EditorViewport::CutsceneCameraViewpoint;
+		auto* from_view_act = popup_menu->addAction(tr("Set from Viewport"), this, [this]() {
+			syncCameraGizmo();
+			_viewport->setCameraFromView();
+		});
+		from_view_act->setEnabled(settable);
+	}
 
 	state.cleanup();
 	util::propagate_disabled_status(popup_menu.get());
@@ -2338,6 +2370,7 @@ void sexp_tree_view::handleNewItemSelected() {
 	if (selectedItem == nullptr) {
 		selectedRootChanged(-1);
 		setCurrentItemIndex(-1);
+		syncCameraGizmo();
 		return;
 	}
 
@@ -2350,6 +2383,90 @@ void sexp_tree_view::handleNewItemSelected() {
 	}
 
 	selectedRootChanged(item->data(0, FormulaDataRole).toInt());
+	syncCameraGizmo();
+}
+
+void sexp_tree_view::syncCameraGizmo()
+{
+	if (_viewport == nullptr)
+		return;
+
+	auto* item = currentItem();
+	const int node = (item != nullptr) ? get_node(item) : -1;
+	if (findCameraOperator(tree_nodes, node) < 0) {
+		_viewport->clearCameraGizmo(this);
+		return;
+	}
+
+	CameraGizmo gizmo;
+	gizmo.owner = this;
+	gizmo.evaluate = [this](CameraSexpPreview& out) { return evaluateCameraSexp(out); };
+	gizmo.movePoint = [this](const vec3d& world) { moveCameraPoint(world); };
+	gizmo.setFromView = [this](const vec3d& eye, const matrix& orient) { setCameraFromView(eye, orient); };
+	_viewport->setCameraGizmo(std::move(gizmo));
+}
+
+bool sexp_tree_view::evaluateCameraSexp(CameraSexpPreview& out) const
+{
+	// A closed dialog shows nothing (its tree may be kept for next time)
+	if (!window()->isVisible())
+		return false;
+	auto* item = currentItem();
+	if (item == nullptr)
+		return false;
+	const int op = findCameraOperator(tree_nodes, get_node(item));
+	return op >= 0 && previewCameraSexp(tree_nodes, op, &out);
+}
+
+void sexp_tree_view::writeCameraArgs(const int* nodes, const int* values)
+{
+	bool changed = false;
+	for (int i = 0; i < 3; ++i) {
+		if (!SCP_vector_inbounds(tree_nodes, nodes[i]))
+			continue;
+		const SCP_string text = std::to_string(values[i]);
+		if (text == tree_nodes[nodes[i]].text)
+			continue;
+		_model.apply_label_edit(nodes[i], text);
+		if (auto* h = handle(nodes[i])) {
+			QSignalBlocker blocker(this); // not an inline edit
+			h->setText(0, QString::fromStdString(text));
+		}
+		changed = true;
+	}
+	if (changed)
+		Q_EMIT modified();
+}
+
+void sexp_tree_view::moveCameraPoint(const vec3d& world)
+{
+	CameraSexpPreview preview;
+	int values[3];
+	if (evaluateCameraSexp(preview) && cameraPointArgs(preview, world, values))
+		writeCameraArgs(preview.pointNodes, values);
+}
+
+void sexp_tree_view::setCameraFromView(const vec3d& eye, const matrix& orient)
+{
+	CameraSexpPreview preview;
+	if (!evaluateCameraSexp(preview))
+		return;
+
+	int values[3];
+	if (preview.op == OP_CUTSCENES_SET_CAMERA_POSITION) {
+		if (cameraPointArgs(preview, eye, values))
+			writeCameraArgs(preview.pointNodes, values);
+	} else if (preview.op == OP_CUTSCENES_SET_CAMERA_ROTATION) {
+		if (cameraRotationArgs(preview, orient, values))
+			writeCameraArgs(preview.angleNodes, values);
+	} else if (preview.op == OP_CUTSCENES_SET_CAMERA_FACING) {
+		// Face what the middle of the view shows, as deep as the current point is
+		const float depth = std::max(vm_vec_dist(&eye, &preview.point), 100.0f);
+		vec3d point;
+		vm_vec_scale_add(&point, &eye, &orient.vec.fvec, depth);
+		if (cameraPointArgs(preview, point, values))
+			writeCameraArgs(preview.pointNodes, values);
+	}
 }
 
 // Slot connected to itemDoubleClicked. Allows the item to either be expanded or for an editable item

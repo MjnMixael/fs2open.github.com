@@ -70,6 +70,7 @@ class RenderWidget: public QWidget {
 	// Which environment entity the grabbed handle belongs to. The viewport holds
 	// the undo snapshot (see EditorViewport::beginEnvEdit).
 	EnvironmentObject _handleDragEnv = EnvironmentObject::None;
+	bool _handleDragCamera = false; // the handle is the cutscene camera's
 
 	// True iff the cursor is hovering a pickable viewport handle (and the
 	// editor is in Moving mode). updateCursor() consults this to show the

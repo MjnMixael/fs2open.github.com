@@ -65,6 +65,9 @@ class FredRenderer: public QObject {
 	void render_one_model_htl(object* objp, int cur_object_index);
 	void render_models(int cur_object_index);
 	void render_volumetric_overlay();
+	// The selected cutscene camera sexp: a frustum where the camera ends up, pointed where it
+	// looks, with lines to what it faces and to its host
+	void render_camera_gizmo();
 	// Draw draggable handles for the active background's suns/bitmaps while the
 	// Background editor dialog is open (2D overlay, must run inside the frame).
 	void draw_background_handles();

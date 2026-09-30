@@ -2,6 +2,7 @@
 
 
 #include "CameraController.h"
+#include "CameraSexpPreview.h"
 #include "FredRenderer.h"
 #include "Editor.h"
 #include "IDialogProvider.h"
@@ -12,6 +13,8 @@
 
 #include <QByteArray>
 #include <QString>
+
+#include <functional>
 
 namespace fso::fred {
 
@@ -33,6 +36,20 @@ constexpr float BG_HANDLE_DISTANCE = 1000.0f;
 // header is pulled in before Editor.h's full enum definition. Only used as a
 // return type in a declaration below, so a forward declaration suffices.
 enum class EnvironmentObject;
+
+// The camera sexp selected in a sexp tree, shown in the viewport (the frustum, a handle for its
+// point, and the Cutscene Camera viewpoint). Editor-only and never saved; the tree that set it
+// clears it again.
+struct CameraGizmo {
+	const void* owner = nullptr;
+	// Works the selected camera sexp out again from its tree. Called every frame, so a host or
+	// target that moves is followed; false once the tree no longer has a camera sexp selected.
+	std::function<bool(CameraSexpPreview&)> evaluate;
+	// Writes the operator's point (camera position or facing point) back into its arguments
+	std::function<void(const vec3d&)> movePoint;
+	// Sets the operator from a view (camera position, rotation or facing)
+	std::function<void(const vec3d&, const matrix&)> setFromView;
+};
 
 struct Marking_box {
 	int x1 = 0;
@@ -85,6 +102,7 @@ struct ViewSettings {
 	bool Show_jump_nodes = true;
 	bool Show_coordinate_points = true;
 	bool Show_compass = true;
+	bool Show_camera_gizmo = true;
 	bool Highlight_selectable_subsys = false;
 	int Outline_lod = 1;
 	float Label_font_scale = 1.0f;  // multiplier applied to viewport text labels
@@ -243,6 +261,28 @@ class EditorViewport {
 	// returns None. Used by the widget to drive environment selection.
 	EnvironmentObject handleEnvironment(HandlePick pick) const;
 
+	// --- Cutscene camera preview -------------------------------------------
+	// Set by a sexp tree while one of its camera sexps is selected; clearCameraGizmo() only
+	// clears it for the owner that set it.
+	void setCameraGizmo(CameraGizmo gizmo);
+	void clearCameraGizmo(const void* owner);
+	bool hasCameraGizmo() const { return static_cast<bool>(_cameraGizmo.evaluate); }
+	// The selected camera sexp worked out now; false if there is none
+	bool cameraPreview(CameraSexpPreview* out) const;
+	// Whether the selected camera sexp can take the editor view (Set Camera SEXP from View),
+	// and doing it with the basic editor camera's eye
+	bool canSetCameraFromView() const;
+	void setCameraFromView();
+	// The handle for the selected sexp's point, rebuilt each frame from the renderer. A drag
+	// moves the handle only; its release writes the sexp once, so it is one undo step.
+	void refreshCameraHandle();
+	bool isCameraHandle(HandlePick pick) const;
+	void beginCameraDrag();
+	// Where the handle is while it is being dragged
+	bool cameraDragPoint(vec3d* out) const;
+	void commitCameraDrag();
+	void cancelCameraDrag();
+
 	// The specific handle the transform-toolbar spinboxes act on (for the
 	// asteroid field, which has many handles). Set on a viewport handle click;
 	// cleared to fall back to the field's outer-box center.
@@ -312,10 +352,15 @@ class EditorViewport {
 
 	CameraController camera;
 
+	// Viewpoints (CameraController::getViewpoint()): 0 the editor camera, 1 through an object,
+	// 2 through the selected cutscene camera sexp
+	static constexpr int CutsceneCameraViewpoint = 2;
+
 	// Field of view for this viewport's camera, as the engine's g3 zoom (radians; the degrees
 	// shown to users are fl_degrees() of it, like the in-game option and the fov sexps). The
 	// basic editor camera always uses FRED_DEFAULT_HTL_FOV; viewing through an object uses the
-	// object-view FOV, which starts at the in-game FOV and can be changed for the session.
+	// object-view FOV, which starts at the in-game FOV and can be changed for the session. The
+	// cutscene camera viewpoint uses the camera sexps' FOV.
 	float viewFov() const;
 	float objectViewFov() const { return _objectViewFov; }
 	void setObjectViewFov(float fov); // clamped to the range of the game's FOV option
@@ -432,6 +477,16 @@ private:
 	// changes, mirroring Cursor_over / Last_cursor_over for objects.
 	HandlePick _hovered_handle{};
 	HandlePick _last_hovered_handle{};
+
+	// Cutscene camera preview. The handle cache works like the volumetric one below; while the
+	// handle is dragged, _cameraDragPoint is where it has been dragged to.
+	CameraGizmo _cameraGizmo;
+	HandleGroupId _camera_handle_group;
+	bool _cam_handle_cached_present = false;
+	vec3d _cam_handle_cached_pos = vmd_zero_vector;
+	int _cam_handle_cached_op = -1;
+	bool _cameraDragActive = false;
+	vec3d _cameraDragPoint = vmd_zero_vector;
 
 	// Viewport-owned volumetric gizmo state.
 	HandleGroupId _volumetric_handle_group;

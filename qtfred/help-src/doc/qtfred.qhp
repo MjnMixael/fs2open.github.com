@@ -15,6 +15,7 @@
                     <section title="SEXPs"           ref="concepts/sexps.html"/>
                 </section>
                 <section title="General">
+                    <section title="Cutscene Camera Preview" ref="general/CutsceneCamera.html"/>
                     <section title="Keyboard in Dialogs" ref="general/KeyboardInDialogs.html"/>
                     <section title="Layer Manager"  ref="general/LayerManagerDialog.html"/>
                     <section title="Preferences"    ref="general/PreferencesDialog.html"/>
@@ -99,6 +100,7 @@
             <keyword name="Viewport"                id="concept.viewport"           ref="general/Viewport.html"/>
             <keyword name="Toolbars"                id="concept.toolbar"            ref="general/Toolbars.html"/>
             <keyword name="Keyboard in Dialogs"     id="concept.keyboard"           ref="general/KeyboardInDialogs.html"/>
+            <keyword name="Cutscene Camera Preview" id="concept.cutscenecamera"     ref="general/CutsceneCamera.html"/>
             <keyword name="Custom Data"             id="CustomDataDialog"           ref="dialogs/CustomDataDialog.html"/>
             <keyword name="Quickstart"              id="concept.quickstart"         ref="quickstart.html"/>
 
@@ -179,6 +181,7 @@
             <file>general/Viewport.html</file>
             <file>general/Toolbars.html</file>
             <file>general/KeyboardInDialogs.html</file>
+            <file>general/CutsceneCamera.html</file>
             <file>general/LayerManagerDialog.html</file>
             <file>general/SceneBrowserDialog.html</file>
             <file>dialogs/MissionCutscenesDialog.html</file>

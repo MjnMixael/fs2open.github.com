@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Cutscene Camera Preview - QtFRED Help</title>
+    <link rel="stylesheet" type="text/css" href="../css/help.css"/>
+</head>
+<body>
+<nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; Cutscene Camera Preview</nav>
+<h1>Cutscene Camera Preview</h1>
+<p>While a camera SEXP is selected in a SEXP tree (usually in the <a href="../dialogs/MissionEventsDialog.html">Events
+editor</a>), the viewport shows where that camera ends up. Select the operator itself or any of its arguments.
+Nothing here is saved to the mission; it only helps you place the camera.</p>
+
+<h2>What is shown</h2>
+<p>The camera is drawn as a cyan frustum: a pyramid pointing where the camera looks, as wide as its field
+of view, with a small arrow on top so you can see which way is up. A darker line runs to what the camera
+faces (a <code>set-camera-facing</code> point, a <code>set-camera-facing-object</code> object, or a
+<code>set-camera-target</code> target), and a green line runs to its host (<code>set-camera-host</code>).</p>
+<p>To work out the camera, QtFRED runs the camera SEXPs of the same event in order, up to and including the
+selected one. These are understood:</p>
+<ul>
+    <li><code>set-camera</code> (switches between named cameras, each keeping its own state)</li>
+    <li><code>set-camera-position</code>, <code>set-camera-rotation</code>, <code>set-camera-facing</code>,
+        <code>set-camera-facing-object</code></li>
+    <li><code>set-camera-host</code>, <code>set-camera-target</code> (positions are relative to the host,
+        and a target turns the camera toward it)</li>
+    <li><code>set-camera-fov</code></li>
+</ul>
+<p>The preview shows where each move ends, not the transition. Each event starts from a new camera at the
+origin, since QtFRED can't know which earlier events will have run. A number argument that is a variable
+uses the variable's starting value, and an argument that is an operator (such as <code>+</code>) makes
+QtFRED skip that SEXP.</p>
+
+<h2>Moving the camera in the viewport</h2>
+<p>When the selected SEXP is a <code>set-camera-position</code> or <code>set-camera-facing</code> with plain
+number arguments, the point it sets gets a cyan handle in the viewport. In Move mode, drag the handle to
+move the camera (or the point it faces). The arguments are written when you let go, as one step in the
+dialog's undo history. Right-click or press Escape during the drag to cancel it. The drag follows the
+usual constraint plane and the toolbar's axis locks.</p>
+
+<h2>Looking through the camera</h2>
+<p><strong>View &rsaquo; Viewpoint &rsaquo; Cutscene Camera</strong>, or <strong>Look Through
+Camera</strong> in the SEXP tree's right-click menu, shows the viewport through the selected camera at its
+field of view (the <code>set-camera-fov</code> value, or the in-game FOV). Selecting a different camera
+SEXP updates the view, so you can step through a cutscene shot by shot. The camera controls don't move the
+view while you look through it. Switch back with <strong>Viewpoint &rsaquo; Camera</strong>; the view also
+goes back to the editor camera when no camera SEXP is selected or the dialog is closed.</p>
+
+<h2>Setting a camera SEXP from the viewport</h2>
+<p>Fly the editor camera to the shot you want, then use <strong>View &rsaquo; Viewpoint &rsaquo; Set Camera
+SEXP from View</strong> (also in the viewport's right-click menu) or <strong>Set from Viewport</strong> in
+the SEXP tree's right-click menu. What is written depends on the selected SEXP:</p>
+<ul>
+    <li><code>set-camera-position</code> takes the view's position (relative to the host, if the camera
+        has one).</li>
+    <li><code>set-camera-rotation</code> takes the view's orientation (relative to the host's orientation or
+        the target's facing, if the camera has one).</li>
+    <li><code>set-camera-facing</code> takes the point in the middle of the view, at the same distance as
+        its current point.</li>
+</ul>
+<p>The editor camera uses a narrower field of view than the game, so look through the camera afterwards to
+check the framing. The arguments must be plain numbers. The change can be undone in the dialog.</p>
+
+<h2>Showing and hiding</h2>
+<p><strong>View &rsaquo; Show Cutscene Camera</strong> turns the frustum and handle on or off. Looking
+through the camera still works while they are hidden.</p>
+</body>
+</html>

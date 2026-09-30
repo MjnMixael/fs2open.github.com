@@ -309,6 +309,16 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! Slot for customContextMenuRequested. Gets the item at pos, builds and executes the context menu.
 	void customMenuHandler(const QPoint& pos);
 
+	// Cutscene camera preview. While a node in a camera sexp is selected, this tree hands the
+	// viewport a gizmo for it (EditorViewport::setCameraGizmo) that works the camera out from
+	// the current selection each time it is asked, so it never holds stale node indices.
+	void syncCameraGizmo();
+	bool evaluateCameraSexp(CameraSexpPreview& out) const;
+	// Writes three number arguments as one tree edit: a single modified(), so one undo step
+	void writeCameraArgs(const int* nodes, const int* values);
+	void moveCameraPoint(const vec3d& world);
+	void setCameraFromView(const vec3d& eye, const matrix& orient);
+
 	//! Creates a persistent QShortcut on this widget bound to `key`. When the user presses
 	//! the shortcut while this widget has focus, recomputes the context menu state and only
 	//! invokes `action` if `gate(state)` returns true. Used to wire Cut/Copy/Paste/Delete
