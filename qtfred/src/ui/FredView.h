@@ -379,6 +379,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 	QDoubleSpinBox* _transformC          = nullptr;
 	QComboBox*      _transformMoveSpeedCombo = nullptr;
 	QComboBox*      _transformRotSpeedCombo  = nullptr;
+	// FOV of the current view in degrees; editable only while viewing through an object
+	QDoubleSpinBox* _transformFovSpin        = nullptr;
 	// Last camera speeds written to QSettings; lets us persist on change instead of only on close.
 	int             _lastSavedCameraSpeedMove = -1;
 	int             _lastSavedCameraSpeedRot  = -1;

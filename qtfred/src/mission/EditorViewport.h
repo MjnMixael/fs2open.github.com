@@ -312,6 +312,17 @@ class EditorViewport {
 
 	CameraController camera;
 
+	// Field of view for this viewport's camera, as the engine's g3 zoom (radians; the degrees
+	// shown to users are fl_degrees() of it, like the in-game option and the fov sexps). The
+	// basic editor camera always uses FRED_DEFAULT_HTL_FOV; viewing through an object uses the
+	// object-view FOV, which starts at the in-game FOV and can be changed for the session.
+	float viewFov() const;
+	float objectViewFov() const { return _objectViewFov; }
+	void setObjectViewFov(float fov); // clamped to the range of the game's FOV option
+	void resetObjectViewFov();        // back to the in-game FOV
+	static constexpr float MinObjectViewFov = 0.436332f; // same range as the Graphics.FOV option
+	static constexpr float MaxObjectViewFov = 1.5708f;
+
 	ViewSettings view;
 
 	int Cursor_over = -1;
@@ -377,6 +388,8 @@ class EditorViewport {
 	IDialogProvider* dialogProvider = nullptr;
 
 private:
+	float _objectViewFov = 0.75f; // set from the in-game FOV by resetObjectViewFov()
+
 	// Background editor integration (non-owning; valid only while the dialog lives)
 	dialogs::BackgroundEditorDialogModel* _bgEditModel = nullptr;
 	dialogs::VolumetricNebulaDialogModel* _volEditModel = nullptr;

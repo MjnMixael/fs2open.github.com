@@ -274,6 +274,16 @@ fields that change based on the active editing mode.</p>
         <td>Dropdown setting the camera rotation speed. Choices are x1, x5, x12,
             x25, x50. Mirrors the <em>Speed &rsaquo; Rotation</em> menu.</td>
     </tr>
+    <tr>
+        <td>FOV</td>
+        <td>Field of view of the current view, in degrees (the same units as the in-game
+            option and the <code>set-fov</code> SEXPs). The editor camera has a fixed, narrower
+            FOV, so the box is locked there. When viewing through an object
+            (<em>View &rsaquo; Viewpoint</em>), the view uses the in-game FOV so it matches what
+            the player sees, and the box can be changed between 25&deg; and 90&deg;. Changes
+            last for the session and reset to the in-game FOV when a mission is loaded or
+            created.</td>
+    </tr>
 </table>
 
 <h3>Selection fields (right section)</h3>

@@ -1522,6 +1522,35 @@ void FredView::initializeTransformBar() {
 
 	addFixedSpacer(8);
 
+	// FOV in degrees, the unit of the in-game option and the fov sexps. The basic editor camera
+	// has a fixed FOV, so this is only editable while viewing through an object, which uses the
+	// in-game FOV. The value lasts for this session only and resets when a mission is loaded.
+	auto* fovLabel = new QLabel(tr("FOV:"), _transformToolBar);
+	fovLabel->setContentsMargins(0, 0, 4, 0);
+	_transformToolBar->addWidget(fovLabel);
+
+	_transformFovSpin = new QDoubleSpinBox(_transformToolBar);
+	_transformFovSpin->setDecimals(1);
+	_transformFovSpin->setSingleStep(1.0);
+	_transformFovSpin->setSuffix(QStringLiteral("°"));
+	_transformFovSpin->setRange(fl_degrees(EditorViewport::MinObjectViewFov), fl_degrees(EditorViewport::MaxObjectViewFov));
+	_transformFovSpin->setKeyboardTracking(false);
+	_transformFovSpin->setFixedWidth(72);
+	_transformToolBar->addWidget(_transformFovSpin);
+	// Steps apply live; typed values on Enter or focus-out (keyboard tracking is off). The idle
+	// sync in onUpdateCameraControlActions() sets the value with signals blocked.
+	connect(_transformFovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double degrees) {
+		if (!_viewport || _viewport->camera.getViewpoint() == 0) return;
+		_viewport->setObjectViewFov(fl_radians(static_cast<float>(degrees)));
+	});
+	// Like the transform boxes: Enter hands focus back to the viewport so its keys work again
+	connect(_transformFovSpin, &QDoubleSpinBox::editingFinished, this, [this]() {
+		if (_transformFovSpin->hasFocus())
+			ui->centralWidget->setFocus(Qt::OtherFocusReason);
+	});
+
+	addFixedSpacer(8);
+
 	// ---- Single expanding spacer pushes everything to the right side -------
 	auto* leftSpacer = new QWidget(_transformToolBar);
 	leftSpacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
@@ -2956,6 +2985,27 @@ void FredView::on_actionRotx50_triggered(bool enabled) {
 void FredView::onUpdateCameraControlActions() {
 	ui->actionCamera->setChecked(_viewport->camera.getViewpoint() == 0);
 	ui->actionCurrent_Ship->setChecked(_viewport->camera.getViewpoint() == 1);
+
+	// FOV readout: the fixed editor FOV (locked) for the basic camera, the object-view FOV
+	// (editable) otherwise. Left alone while focused so typing isn't overwritten, except after
+	// switching back to the basic camera: then the box has nothing to edit, so hand focus back
+	// to the viewport and lock it (a focused, disabled box would keep its text selected).
+	const bool objectView = (_viewport->camera.getViewpoint() != 0);
+	if (_transformFovSpin && _transformFovSpin->hasFocus() && !objectView)
+		ui->centralWidget->setFocus(Qt::OtherFocusReason);
+	if (_transformFovSpin && !_transformFovSpin->hasFocus()) {
+		_transformFovSpin->setEnabled(objectView);
+		_transformFovSpin->setToolTip(objectView
+			? tr("Field of view while viewing through an object. Starts at the in-game FOV; "
+				 "changes last for this session and reset when a mission is loaded.")
+			: tr("Field of view of the editor camera (fixed). View through an object to use and "
+				 "adjust the in-game FOV."));
+		QSignalBlocker blocker(_transformFovSpin);
+		// Only rewrite on a real change, so the idle tick doesn't reset the cursor or selection
+		const double degrees = fl_degrees(_viewport->viewFov());
+		if (std::abs(_transformFovSpin->value() - degrees) > 0.05)
+			_transformFovSpin->setValue(degrees);
+	}
 
 	_controlModeCamera->setChecked(_viewport->camera.getControlMode() == 0);
 	_controlModeCurrentShip->setChecked(_viewport->camera.getControlMode() == 1);

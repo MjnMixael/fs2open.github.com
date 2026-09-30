@@ -9,6 +9,11 @@ constexpr float DEFAULT_NEBULA_RANGE = 3000.0f;
 // Smallest meaningful change in an orientation input field (degrees)
 constexpr float ORIENT_INPUT_THRESHOLD = 0.01f;
 
+// Zoom (field of view) of the editor's main viewport. The GPU projection and the software
+// g3 view (labels, markers, mouse picking) must both use it, or labels drift away from the
+// objects they name toward the edges of the view.
+constexpr float FRED_DEFAULT_HTL_FOV = 0.485f;
+
 // Normalize a degree value into the range [-180, 180]
 float normalize_degrees(float deg);
 

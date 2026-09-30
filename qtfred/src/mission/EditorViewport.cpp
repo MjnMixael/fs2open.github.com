@@ -17,6 +17,8 @@
 #include <jumpnode/jumpnode.h>
 #include <asteroid/asteroid.h>
 #include <mission/missionparse.h>
+#include <missioneditor/common.h>
+#include <camera/camera.h>
 #include <nebula/volumetrics.h>
 #include <prop/prop.h>
 #include <FredApplication.h>
@@ -127,6 +129,7 @@ EditorViewport::EditorViewport(Editor* in_editor, std::unique_ptr<FredRenderer>&
 	vm_vec_make(&Constraint, 1.0f, 0.0f, 1.0f);
 	vm_vec_make(&Anticonstraint, 0.0f, 1.0f, 0.0f);
 	reset();
+	resetObjectViewFov();
 
 	_layerNames.emplace_back(DefaultLayerName);
 	_layerVisibility.push_back(true);
@@ -391,6 +394,21 @@ void EditorViewport::select_objects(const Marking_box& box) {
 	}
 
 	needsUpdate();
+}
+
+float EditorViewport::viewFov() const {
+	// Any viewpoint other than the basic editor camera shows what the game would
+	return (camera.getViewpoint() != 0) ? _objectViewFov : FRED_DEFAULT_HTL_FOV;
+}
+
+void EditorViewport::setObjectViewFov(float fov) {
+	_objectViewFov = std::clamp(fov, MinObjectViewFov, MaxObjectViewFov);
+	needsUpdate();
+}
+
+void EditorViewport::resetObjectViewFov() {
+	// The in-game FOV: the Graphics.FOV option (0.75 unless the mod changes its default)
+	_objectViewFov = std::clamp(g3_get_hfov(VIEWER_ZOOM_DEFAULT), MinObjectViewFov, MaxObjectViewFov);
 }
 
 void EditorViewport::reset() {
@@ -1888,7 +1906,7 @@ void EditorViewport::view_universe(bool just_marked) {
 
 	dist = fl_sqrt(largest) + 1.0f;
 	vm_vec_scale_add(&camera.view_pos, &center, &camera.view_orient.vec.fvec, -dist);
-	g3_set_view_matrix(&camera.view_pos, &camera.view_orient, 0.5f);
+	g3_set_view_matrix(&camera.view_pos, &camera.view_orient, viewFov());
 
 	ptr = GET_FIRST(&obj_used_list);
 	while (ptr != END_OF_LIST(&obj_used_list)) {
@@ -1901,7 +1919,7 @@ void EditorViewport::view_universe(bool just_marked) {
 			while (v.codes & CC_OFF) {
 				dist += 5.0f;
 				vm_vec_scale_add(&camera.view_pos, &center, &camera.view_orient.vec.fvec, -dist);
-				g3_set_view_matrix(&camera.view_pos, &camera.view_orient, 0.5f);
+				g3_set_view_matrix(&camera.view_pos, &camera.view_orient, viewFov());
 				g3_rotate_vertex(&v, &ptr->pos);
 				if (g3_project_vertex(&v) & PF_OVERFLOW)
 					Int3();
@@ -1913,7 +1931,7 @@ void EditorViewport::view_universe(bool just_marked) {
 
 	dist *= 1.1f;
 	vm_vec_scale_add(&camera.view_pos, &center, &camera.view_orient.vec.fvec, -dist);
-	g3_set_view_matrix(&camera.view_pos, &camera.view_orient, 0.5f);
+	g3_set_view_matrix(&camera.view_pos, &camera.view_orient, viewFov());
 
 	needsUpdate();
 }
