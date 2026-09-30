@@ -40,6 +40,7 @@
 #include "math/vecmat.h"
 #include "mission/missiongrid.h"
 #include "mission/missionparse.h"
+#include "missioneditor/common.h"
 #include "model/model.h"
 #include "model/model.h"
 #include "mod_table/mod_table.h"
@@ -78,7 +79,6 @@ static char THIS_FILE[] = __FILE__;
 #define FRED_COLOUR_WHITE			0xffffff
 #define FRED_COLOUR_YELLOW_GREEN	0xc8ff00
 
-const float FRED_DEFAULT_HTL_FOV = 0.485f;
 const float FRED_BRIEFING_HTL_FOV = 0.325f;
 const float FRED_DEAFULT_HTL_DRAW_DIST = 300000.0f;
 

@@ -427,6 +427,10 @@ bool Editor::loadMission(const std::string& mission_name, int flags, const std::
 
 	stars_post_level_init();
 
+	// The object-view FOV is per session and per mission: back to the in-game FOV
+	for (auto& viewport : _viewports)
+		viewport->resetObjectViewFov();
+
 	missionLoaded(reportedPath.empty() ? filepath : reportedPath);
 
 	// This hook will allow for scripts to know when a mission has been loaded
@@ -882,6 +886,10 @@ void Editor::createNewMission() {
 	clearMission();
 	create_player(&vmd_zero_vector, &vmd_identity_matrix);
 	stars_post_level_init();
+	// The object-view FOV is per session and per mission: back to the in-game FOV
+	for (auto& viewport : _viewports)
+		viewport->resetObjectViewFov();
+
 	missionLoaded("");
 }
 void Editor::hideMarkedObjects() {
