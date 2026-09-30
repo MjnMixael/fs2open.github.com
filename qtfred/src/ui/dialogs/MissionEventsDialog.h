@@ -149,6 +149,8 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void insertEventBelow();
 	void pushMessageStateSnapshot(const QByteArray& before, const QString& label, int mergeId = -1);
 	void pushEventLogFlagCommand(int fieldConst, int mask, bool checked);
+	void onMessageNameEditingFinished();
+	void showMessageNameConflict(const SCP_string& reason);
 	void changeMessageAni(const SCP_string& name);
 	void changeMessageWave(const SCP_string& name);
 	void syncEventRootLabel(int eventIndex);

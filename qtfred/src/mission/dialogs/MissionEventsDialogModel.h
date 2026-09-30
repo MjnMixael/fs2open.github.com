@@ -160,7 +160,11 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void moveMessageToTop();
 	void moveMessageToBottom();
 	SCP_string getMessageName() const;
-	void setMessageName(const SCP_string& name);
+	// Renames the selected message; returns false (and changes nothing) if the name clashes
+	// with a builtin or another message (see messageNameConflict)
+	bool setMessageName(const SCP_string& name);
+	// Why a name can't be used for the selected message, or empty if it can. No UI.
+	SCP_string messageNameConflict(const SCP_string& name) const;
 	SCP_string getMessageText() const;
 	void setMessageText(const SCP_string& text);
 	SCP_string getMessageNote() const;
@@ -219,7 +223,6 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void initializeWaveList();
 	void initializePersonaList();
 
-	bool checkMessageNameConflict(const SCP_string& name);
 	SCP_string makeUniqueMessageName(const SCP_string& name) const;
 
 	SexpTreeModel& m_tree_model;

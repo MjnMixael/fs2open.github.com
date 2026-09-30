@@ -1199,6 +1199,7 @@ void MissionEventsDialog::initMessageWidgets() {
 	initMessageList();
 
 	ui->messageName->setMaxLength(NAME_LENGTH - 1);
+	connect(ui->messageName, &QLineEdit::editingFinished, this, &MissionEventsDialog::onMessageNameEditingFinished);
 
 	if (auto* le = ui->aniCombo->lineEdit()) {
 		le->setMaxLength(MAX_FILENAME_LEN - 1);
@@ -1574,6 +1575,9 @@ void MissionEventsDialog::updateMessageUi()
 	// otherwise re-enter the edit slots and mark the mission modified on a
 	// mere selection change.
 	util::SignalBlockers blockers(this);
+
+	// The name field is reloaded from the model below, which only holds valid names
+	showMessageNameConflict({});
 
 	bool enable = true;
 
@@ -2403,10 +2407,19 @@ void MissionEventsDialog::on_messageName_textChanged(const QString& text)
 	if (!_model->messageIsValid())
 		return;
 
+	// A clashing name is only marked while typing; a name on the way to a valid one (such as
+	// "Help" on the way to "Helprin", Help being a builtin) mustn't interrupt. The model keeps
+	// the last valid name until the text stops clashing; leaving the field with a clashing
+	// name warns and reverts (onMessageNameEditingFinished).
+	const SCP_string name = text.toUtf8().constData();
+	const SCP_string conflict = _model->messageNameConflict(name);
+	showMessageNameConflict(conflict);
+	if (!conflict.empty())
+		return;
+
 	const int index         = _model->getCurrentlySelectedMessage();
 	const SCP_string before = _model->getMessageName();
-	// The live setter keeps the interactive name-conflict check.
-	_model->setMessageName(text.toUtf8().constData());
+	_model->setMessageName(name);
 	const SCP_string after = _model->getMessageName();
 	if (before == after)
 		return;
@@ -2422,6 +2435,40 @@ void MissionEventsDialog::on_messageName_textChanged(const QString& text)
 		updateMessageUi();
 	});
 	_dialogStack->push(cmd);
+}
+
+// Leaving the name field (Enter or focus loss) with a name that still clashes: warn once and
+// put back the last valid name, which the model still holds.
+void MissionEventsDialog::onMessageNameEditingFinished()
+{
+	if (!_model->messageIsValid())
+		return;
+
+	const SCP_string conflict = _model->messageNameConflict(ui->messageName->text().toUtf8().constData());
+	if (conflict.empty())
+		return;
+
+	// Revert before the dialog: the warning takes focus, which ends editing again
+	{
+		QSignalBlocker blocker(ui->messageName);
+		ui->messageName->setText(QString::fromStdString(_model->getMessageName()));
+	}
+	showMessageNameConflict({});
+
+	QMessageBox::warning(this, tr("Invalid Message Name"),
+		QString::fromStdString(conflict) + QLatin1Char('\n') + tr("The previous name has been kept."));
+}
+
+// Marks the message name field while its text can't be used (reason non-empty), or clears it
+void MissionEventsDialog::showMessageNameConflict(const SCP_string& reason)
+{
+	if (reason.empty()) {
+		ui->messageName->setStyleSheet(QString());
+		ui->messageName->setToolTip(QString());
+	} else {
+		ui->messageName->setStyleSheet(QStringLiteral("QLineEdit { border: 2px solid #d9534f; }"));
+		ui->messageName->setToolTip(QString::fromStdString(reason));
+	}
 }
 
 void MissionEventsDialog::on_messageContent_textChanged()
