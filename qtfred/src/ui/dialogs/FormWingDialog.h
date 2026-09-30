@@ -23,6 +23,9 @@ class FormWingDialog: public QDialog, public IDialog<FormWingDialogModel> {
 	explicit FormWingDialog(QWidget* parent, EditorViewport* viewport);
 	~FormWingDialog() override;
 
+	// OK only closes the dialog once the model accepts the name (not empty, not in use)
+	void accept() override;
+
  private:
 	FormWingDialogModel* getModel() override;
 
