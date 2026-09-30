@@ -47,7 +47,7 @@ const int FRED_COLOUR_YELLOW_GREEN = 0xc8ff00;
 
 // FOV of the viewport being drawn, set at the start of each frame: the GPU projection
 // (enable_htl) and the software g3 view (labels, markers, picking) must use the same one
-static float Fred_frame_fov = FRED_DEFAULT_HTL_FOV;
+float Fred_frame_fov = FRED_DEFAULT_HTL_FOV;
 
 void enable_htl() {
 	gr_set_proj_matrix((4.0f / 9.0f) * PI * Fred_frame_fov,
