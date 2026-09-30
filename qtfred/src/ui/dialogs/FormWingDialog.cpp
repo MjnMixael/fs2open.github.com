@@ -27,6 +27,11 @@ FormWingDialog::FormWingDialog(QWidget* parent, EditorViewport* viewport) :
 FormWingDialog::~FormWingDialog() {
 
 }
+void FormWingDialog::accept() {
+	// apply() checks the name and says why it can't be used
+	if (_model->apply())
+		QDialog::accept();
+}
 void FormWingDialog::updateUI() {
 	ui->nameEdit->setText(QString::fromStdString(_model->getName()));
 }
