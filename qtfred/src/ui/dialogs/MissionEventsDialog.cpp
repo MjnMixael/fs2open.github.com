@@ -8,6 +8,7 @@
 #include "ui/widgets/MissionTextHighlighter.h"
 #include "ui/util/default_dir.h"
 #include "ui/util/SignalBlockers.h"
+#include "ui/util/KeyboardNavigation.h"
 #include "ui/dialogs/EventEditor/HeadAnimationPickerDialog.h"
 #include "mission/commands/FredCommands.h"
 
@@ -130,6 +131,8 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	_fredView->undoGroup()->addStack(_dialogStack);
 
 	ui->setupUi(this);
+	// The Advanced view edits mission-file text, where Tab indents
+	util::allowTabInput(ui->advancedTextEdit);
 
 	util::setupDialogUndo(this, _fredView->undoGroup(), _dialogStack, tr("Mission Events"));
 
