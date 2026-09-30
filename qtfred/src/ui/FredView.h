@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QAction>
 #include <QActionGroup>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QUndoGroup>
 #include <QUndoStack>
@@ -383,6 +384,17 @@ class FredView: public QMainWindow, public IDialogProvider {
 	QComboBox*      _transformRotSpeedCombo  = nullptr;
 	// FOV of the current view in degrees; editable only while viewing through an object
 	QDoubleSpinBox* _transformFovSpin        = nullptr;
+	// Cutscene camera playback, shown while looking through a cutscene camera
+	QList<QAction*> _cameraPlaybackActions;
+	QComboBox*      _cameraStartsAfterCombo  = nullptr;
+	QToolButton*    _cameraRewindBtn         = nullptr;
+	QToolButton*    _cameraPlayBtn           = nullptr;
+	QToolButton*    _cameraEndBtn            = nullptr;
+	QLabel*         _cameraTimeLabel         = nullptr;
+	QTimer*         _cameraPlaybackTimer     = nullptr;
+	QElapsedTimer   _cameraPlaybackClock;
+	QString         _cameraStartsAfterKey; // what the combo was last filled from
+	void updateCameraPlaybackControls();
 	// Last camera speeds written to QSettings; lets us persist on change instead of only on close.
 	int             _lastSavedCameraSpeedMove = -1;
 	int             _lastSavedCameraSpeedRot  = -1;

@@ -29,7 +29,7 @@ namespace Ui {
 class MissionEventsDialog;
 }
 
-class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface {
+class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface, public CameraEventSource {
 	Q_OBJECT
 
   public:
@@ -49,6 +49,10 @@ class MissionEventsDialog: public QDialog, public SexpTreeEditorInterface {
 	SCP_vector<SCP_string> getMissionEvents(const SCP_string& reference_name) override;
 	bool hasDefaultEvent(int operator_value) override;
 	int getRootReturnType() const override;
+
+	// Cutscene camera preview: the working events, and choosing an event's starts-after event
+	SCP_vector<CameraEventInfo> cameraEventInfo() const override;
+	void setCameraStartsAfter(int eventIndex, const SCP_string& name) override;
 
   protected:
 	void closeEvent(QCloseEvent* event) override;

@@ -158,6 +158,7 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	ui->editDirectiveKeypressText->setMaxLength(NAME_LENGTH - 1);
 
 	ui->eventTree->initializeEditor(viewport->editor, this, viewport, parent);
+	ui->eventTree->setCameraEventSource(this);
 	ui->eventTree->clear_tree();
 	ui->eventTree->_model.post_load();
 
@@ -299,7 +300,38 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	});
 }
 
-MissionEventsDialog::~MissionEventsDialog() = default;
+MissionEventsDialog::~MissionEventsDialog()
+{
+	// The tree outlives the model while the dialog's widgets are torn down
+	ui->eventTree->setCameraEventSource(nullptr);
+}
+
+SCP_vector<CameraEventInfo> MissionEventsDialog::cameraEventInfo() const
+{
+	SCP_vector<CameraEventInfo> events;
+	if (!_model)
+		return events;
+	const auto& list = _model->getEventList();
+	events.reserve(list.size());
+	for (int i = 0; i < static_cast<int>(list.size()); ++i) {
+		CameraEventInfo info;
+		info.name = list[i].name;
+		info.formula = list[i].formula;
+		info.chained = list[i].chain_delay >= 0;
+		info.startsAfter = _model->getCameraStartsAfter(i);
+		events.push_back(std::move(info));
+	}
+	return events;
+}
+
+void MissionEventsDialog::setCameraStartsAfter(int eventIndex, const SCP_string& name)
+{
+	if (!_model || _model->getCameraStartsAfter(eventIndex) == name)
+		return;
+	const QByteArray before = _model->captureEventWorkingState();
+	_model->setCameraStartsAfterAt(eventIndex, name);
+	pushEventStateSnapshot(before, tr("Set Camera Starts After"));
+}
 
 void MissionEventsDialog::initEventWidgets() {
 	initEventTeams();

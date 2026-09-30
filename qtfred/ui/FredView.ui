@@ -914,7 +914,7 @@
     <string>&amp;Toggle Viewpoint</string>
    </property>
    <property name="toolTip">
-    <string>Toggle between the camera and the current ship's viewpoint (Ctrl+Shift+V)</string>
+    <string>Cycle between the editor camera, the current ship and the cutscene camera (Ctrl+Shift+V)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+V</string>

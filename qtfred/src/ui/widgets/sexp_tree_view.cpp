@@ -1553,8 +1553,8 @@ std::unique_ptr<QMenu> sexp_tree_view::buildContextMenu(QTreeWidgetItem* h,
 		look_act->setChecked(_viewport->camera.getViewpoint() == EditorViewport::CutsceneCameraViewpoint);
 
 		CameraSexpPreview preview;
-		const bool settable = previewCameraSexp(tree_nodes, cameraOp, &preview) &&
-			(preview.pointNodes[0] >= 0 || preview.angleNodes[0] >= 0) &&
+		const bool settable = evaluateCameraSexp(preview) &&
+			(preview.positionNodes[0] >= 0 || preview.rotationNodes[0] >= 0) &&
 			_viewport->camera.getViewpoint() != EditorViewport::CutsceneCameraViewpoint;
 		auto* from_view_act = popup_menu->addAction(tr("Set from Viewport"), this, [this]() {
 			syncCameraGizmo();
@@ -2403,6 +2403,14 @@ void sexp_tree_view::syncCameraGizmo()
 	gizmo.evaluate = [this](CameraSexpPreview& out) { return evaluateCameraSexp(out); };
 	gizmo.movePoint = [this](const vec3d& world) { moveCameraPoint(world); };
 	gizmo.setFromView = [this](const vec3d& eye, const matrix& orient) { setCameraFromView(eye, orient); };
+	if (_cameraEventSource != nullptr) {
+		gizmo.events = [this]() { return cameraEventInfo(); };
+		gizmo.setStartsAfter = [this](int index, const SCP_string& name) {
+			_cameraEventSource->setCameraStartsAfter(index, name);
+			if (_viewport != nullptr)
+				_viewport->needsUpdate();
+		};
+	}
 	_viewport->setCameraGizmo(std::move(gizmo));
 }
 
@@ -2415,13 +2423,29 @@ bool sexp_tree_view::evaluateCameraSexp(CameraSexpPreview& out) const
 	if (item == nullptr)
 		return false;
 	const int op = findCameraOperator(tree_nodes, get_node(item));
-	return op >= 0 && previewCameraSexp(tree_nodes, op, &out);
+	if (op < 0)
+		return false;
+	if (_cameraEventSource != nullptr) {
+		const auto events = _cameraEventSource->cameraEventInfo();
+		return previewCameraSexp(tree_nodes, op, &out, &events);
+	}
+	return previewCameraSexp(tree_nodes, op, &out);
 }
 
-void sexp_tree_view::writeCameraArgs(const int* nodes, const int* values)
+SCP_vector<CameraEventInfo> sexp_tree_view::cameraEventInfo() const
+{
+	if (_cameraEventSource == nullptr)
+		return {};
+	auto events = _cameraEventSource->cameraEventInfo();
+	for (auto& e : events)
+		e.hasCameraSexps = formulaHasCameraSexps(tree_nodes, e.formula);
+	return events;
+}
+
+void sexp_tree_view::writeCameraArgs(const int* nodes, const int* values, int count)
 {
 	bool changed = false;
-	for (int i = 0; i < 3; ++i) {
+	for (int i = 0; i < count; ++i) {
 		if (!SCP_vector_inbounds(tree_nodes, nodes[i]))
 			continue;
 		const SCP_string text = std::to_string(values[i]);
@@ -2443,7 +2467,7 @@ void sexp_tree_view::moveCameraPoint(const vec3d& world)
 	CameraSexpPreview preview;
 	int values[3];
 	if (evaluateCameraSexp(preview) && cameraPointArgs(preview, world, values))
-		writeCameraArgs(preview.pointNodes, values);
+		writeCameraArgs(preview.pointNodes, values, 3);
 }
 
 void sexp_tree_view::setCameraFromView(const vec3d& eye, const matrix& orient)
@@ -2452,21 +2476,22 @@ void sexp_tree_view::setCameraFromView(const vec3d& eye, const matrix& orient)
 	if (!evaluateCameraSexp(preview))
 		return;
 
-	int values[3];
-	if (preview.op == OP_CUTSCENES_SET_CAMERA_POSITION) {
-		if (cameraPointArgs(preview, eye, values))
-			writeCameraArgs(preview.pointNodes, values);
-	} else if (preview.op == OP_CUTSCENES_SET_CAMERA_ROTATION) {
-		if (cameraRotationArgs(preview, orient, values))
-			writeCameraArgs(preview.angleNodes, values);
-	} else if (preview.op == OP_CUTSCENES_SET_CAMERA_FACING) {
-		// Face what the middle of the view shows, as deep as the current point is
-		const float depth = std::max(vm_vec_dist(&eye, &preview.point), 100.0f);
-		vec3d point;
-		vm_vec_scale_add(&point, &eye, &orient.vec.fvec, depth);
-		if (cameraPointArgs(preview, point, values))
-			writeCameraArgs(preview.pointNodes, values);
+	// The event's position and rotation (or facing) sexps together, as one edit
+	int nodes[6];
+	int values[6];
+	int count = 0;
+	if (cameraPositionArgs(preview, eye, values)) {
+		for (int i = 0; i < 3; ++i)
+			nodes[count + i] = preview.positionNodes[i];
+		count += 3;
 	}
+	if (cameraRotationArgs(preview, eye, orient, values + count)) {
+		for (int i = 0; i < 3; ++i)
+			nodes[count + i] = preview.rotationNodes[i];
+		count += 3;
+	}
+	if (count > 0)
+		writeCameraArgs(nodes, values, count);
 }
 
 // Slot connected to itemDoubleClicked. Allows the item to either be expanded or for an editable item

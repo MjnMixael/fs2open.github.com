@@ -4,6 +4,7 @@
 #include <algorithm>
 
 #include <ui/util/default_dir.h>
+#include <parse/sexp.h>
 
 #include <QDir>
 #include <QFileDialog>
@@ -19,6 +20,7 @@
 #include <QApplication>
 #include <QProcess>
 #include <QSignalBlocker>
+#include <QStyle>
 #include <QSettings>
 #include <QDateTime>
 #include <QPainter>
@@ -1550,6 +1552,83 @@ void FredView::initializeTransformBar() {
 			ui->centralWidget->setFocus(Qt::OtherFocusReason);
 	});
 
+	// ---- Cutscene camera playback (only while looking through a cutscene camera) ----
+	// Plays the selected event's shot. "Starts after" picks the event whose camera it carries
+	// on from; automatic works it out from chaining and is-event-true.
+	auto addPlaybackWidget = [this](QWidget* w) { _cameraPlaybackActions.append(_transformToolBar->addWidget(w)); };
+	{
+		auto* sp = new QWidget(_transformToolBar);
+		sp->setFixedWidth(12);
+		addPlaybackWidget(sp);
+	}
+	auto* startsAfterLabel = new QLabel(tr("Starts after:"), _transformToolBar);
+	startsAfterLabel->setContentsMargins(0, 0, 4, 0);
+	addPlaybackWidget(startsAfterLabel);
+
+	_cameraStartsAfterCombo = new QComboBox(_transformToolBar);
+	_cameraStartsAfterCombo->setSizeAdjustPolicy(QComboBox::AdjustToContents);
+	_cameraStartsAfterCombo->setToolTip(tr("The event whose camera this event's camera sexps carry on from. "
+										   "Automatic follows event chaining and is-event-true; the choice is "
+										   "saved with the mission for the editor only."));
+	addPlaybackWidget(_cameraStartsAfterCombo);
+	connect(_cameraStartsAfterCombo, QOverload<int>::of(&QComboBox::activated), this, [this](int index) {
+		_viewport->setCameraStartsAfter(_cameraStartsAfterCombo->itemData(index).toString().toUtf8().constData());
+		_cameraStartsAfterKey.clear(); // refill on the next update
+		ui->centralWidget->setFocus(Qt::OtherFocusReason);
+	});
+
+	auto makePlaybackButton = [this, &addPlaybackWidget](QStyle::StandardPixmap icon, const QString& tip) {
+		auto* button = new QToolButton(_transformToolBar);
+		button->setIcon(style()->standardIcon(icon));
+		button->setToolTip(tip);
+		button->setAutoRaise(true);
+		button->setFocusPolicy(Qt::NoFocus); // keep the keys on the viewport, which flies the camera
+		addPlaybackWidget(button);
+		return button;
+	};
+	_cameraRewindBtn = makePlaybackButton(QStyle::SP_MediaSkipBackward, tr("Go to the start of the event's shot"));
+	_cameraPlayBtn = makePlaybackButton(QStyle::SP_MediaPlay, tr("Play the event's shot"));
+	_cameraEndBtn = makePlaybackButton(QStyle::SP_MediaSkipForward, tr("Go to the end of the event's shot"));
+
+	_cameraTimeLabel = new QLabel(_transformToolBar);
+	_cameraTimeLabel->setContentsMargins(4, 0, 0, 0);
+	_cameraTimeLabel->setMinimumWidth(_cameraTimeLabel->fontMetrics().horizontalAdvance(QStringLiteral("00.0 / 00.0 s")));
+	addPlaybackWidget(_cameraTimeLabel);
+
+	_cameraPlaybackTimer = new QTimer(this);
+	_cameraPlaybackTimer->setInterval(16);
+	connect(_cameraPlaybackTimer, &QTimer::timeout, this, [this]() {
+		const float dt = static_cast<float>(_cameraPlaybackClock.restart()) / 1000.0f;
+		if (!_viewport->advanceCameraPlayback(dt))
+			_cameraPlaybackTimer->stop();
+		updateCameraPlaybackControls();
+	});
+	connect(_cameraRewindBtn, &QToolButton::clicked, this, [this]() {
+		_cameraPlaybackTimer->stop();
+		_viewport->rewindCamera();
+		updateCameraPlaybackControls();
+	});
+	connect(_cameraPlayBtn, &QToolButton::clicked, this, [this]() {
+		if (_viewport->cameraPlaying()) {
+			_cameraPlaybackTimer->stop();
+			_viewport->pauseCamera();
+		} else {
+			_viewport->playCamera();
+			if (_viewport->cameraPlaying()) {
+				_cameraPlaybackClock.start();
+				_cameraPlaybackTimer->start();
+			}
+		}
+		updateCameraPlaybackControls();
+	});
+	connect(_cameraEndBtn, &QToolButton::clicked, this, [this]() {
+		_cameraPlaybackTimer->stop();
+		_viewport->cameraToEnd();
+		updateCameraPlaybackControls();
+	});
+	for (auto* action : _cameraPlaybackActions)
+		action->setVisible(false);
+
 	addFixedSpacer(8);
 
 	// ---- Single expanding spacer pushes everything to the right side -------
@@ -3023,6 +3102,91 @@ void FredView::onUpdateCameraControlActions() {
 
 	_controlModeCamera->setChecked(_viewport->camera.getControlMode() == 0);
 	_controlModeCurrentShip->setChecked(_viewport->camera.getControlMode() == 1);
+
+	updateCameraPlaybackControls();
+}
+
+void FredView::updateCameraPlaybackControls() {
+	if (_cameraPlayBtn == nullptr)
+		return;
+
+	const bool show = _viewport->camera.getViewpoint() == EditorViewport::CutsceneCameraViewpoint;
+	if (_cameraPlaybackActions.front()->isVisible() != show) {
+		for (auto* action : _cameraPlaybackActions)
+			action->setVisible(show);
+	}
+	_viewport->syncCameraPlayback();
+	if (!_viewport->cameraPlaying() && _cameraPlaybackTimer->isActive())
+		_cameraPlaybackTimer->stop();
+	if (!show)
+		return;
+
+	CameraSexpPreview preview;
+	_viewport->cameraPreview(&preview);
+
+	// Transport
+	const bool playing = _viewport->cameraPlaying();
+	_cameraPlayBtn->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+	_cameraPlayBtn->setToolTip(playing ? tr("Pause") : tr("Play the event's shot"));
+	const bool moves = preview.duration > 0.0f;
+	_cameraPlayBtn->setEnabled(moves);
+	_cameraRewindBtn->setEnabled(moves);
+	_cameraEndBtn->setEnabled(moves);
+	if (_viewport->cameraPlaybackActive()) {
+		_cameraTimeLabel->setText(tr("%1 / %2 s").arg(_viewport->cameraPlaybackTime(), 0, 'f', 1).arg(preview.duration, 0, 'f', 1));
+	} else {
+		_cameraTimeLabel->setText(moves ? tr("%1 s").arg(preview.duration, 0, 'f', 1) : tr("No moves"));
+	}
+
+	// Starts after: refilled only when what it lists changes
+	const auto events = _viewport->cameraEvents();
+	const bool hasEvent = SCP_vector_inbounds(events, preview.eventIndex);
+	QString key;
+	if (hasEvent) {
+		key = QStringLiteral("%1|%2|%3")
+				  .arg(preview.eventIndex)
+				  .arg(preview.inferredStartsAfter)
+				  .arg(QString::fromStdString(events[preview.eventIndex].startsAfter));
+		for (const auto& e : events)
+			key += QStringLiteral("|%1%2").arg(QString::fromStdString(e.name), e.hasCameraSexps ? QStringLiteral("*") : QString());
+	}
+	if (key == _cameraStartsAfterKey)
+		return;
+	_cameraStartsAfterKey = key;
+
+	QSignalBlocker blocker(_cameraStartsAfterCombo);
+	_cameraStartsAfterCombo->clear();
+	_cameraStartsAfterCombo->setEnabled(hasEvent);
+	if (!hasEvent) {
+		_cameraStartsAfterCombo->addItem(tr("New camera"));
+		return;
+	}
+
+	const auto eventName = [&events](int i) { return QString::fromStdString(events[i].name); };
+	_cameraStartsAfterCombo->addItem(preview.inferredStartsAfter >= 0
+			? tr("Automatic (%1)").arg(eventName(preview.inferredStartsAfter))
+			: tr("Automatic (new camera)"),
+		QString());
+	_cameraStartsAfterCombo->addItem(tr("New camera"), QString::fromLatin1(SEXP_NONE_STRING));
+	for (int i = 0; i < static_cast<int>(events.size()); ++i) {
+		if (i != preview.eventIndex && events[i].hasCameraSexps)
+			_cameraStartsAfterCombo->addItem(eventName(i), eventName(i));
+	}
+
+	const QString chosen = QString::fromStdString(events[preview.eventIndex].startsAfter);
+	int current = 0;
+	for (int i = 0; i < _cameraStartsAfterCombo->count(); ++i) {
+		if (!chosen.isEmpty() && _cameraStartsAfterCombo->itemData(i).toString().compare(chosen, Qt::CaseInsensitive) == 0) {
+			current = i;
+			break;
+		}
+	}
+	if (!chosen.isEmpty() && current == 0) {
+		// The chosen event is gone or has no camera sexps: say so, and play from automatic
+		_cameraStartsAfterCombo->addItem(tr("%1 (missing)").arg(chosen), chosen);
+		current = _cameraStartsAfterCombo->count() - 1;
+	}
+	_cameraStartsAfterCombo->setCurrentIndex(current);
 }
 void FredView::on_actionCamera_triggered(bool enabled) {
 	if (enabled) {
@@ -3048,13 +3212,25 @@ void FredView::on_actionSet_Camera_From_View_triggered(bool) {
 	_viewport->setCameraFromView();
 }
 void FredView::on_actionToggle_Viewpoint_triggered(bool) {
-	// Flip between the camera viewpoint (0) and the current ship's viewpoint (1).
-	if (_viewport->camera.getViewpoint() != 0 || !query_valid_object(fred->currentObject)) {
-		_viewport->camera.setViewpoint(0);
-	} else {
-		_viewport->camera.setViewpoint(1);
-		_viewport->camera.setViewObj(fred->currentObject);
+	// Cycle editor camera (0) -> current ship (1) -> cutscene camera (2) -> editor camera,
+	// skipping the ones there is nothing to look through for.
+	const bool shipView = query_valid_object(fred->currentObject);
+	const bool cutsceneView = _viewport->cameraPreview(nullptr);
+	int next = 0;
+	switch (_viewport->camera.getViewpoint()) {
+	case 0:
+		next = shipView ? 1 : (cutsceneView ? EditorViewport::CutsceneCameraViewpoint : 0);
+		break;
+	case 1:
+		next = cutsceneView ? EditorViewport::CutsceneCameraViewpoint : 0;
+		break;
+	default:
+		next = 0;
+		break;
 	}
+	_viewport->camera.setViewpoint(next);
+	if (next == 1)
+		_viewport->camera.setViewObj(fred->currentObject);
 	_viewport->needsUpdate();
 }
 void FredView::on_actionControlModeCamera_triggered(bool enabled) {

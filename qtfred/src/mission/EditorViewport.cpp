@@ -462,6 +462,9 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 		camera.setViewpoint(0);
 		needsUpdate();
 	}
+	if (_camFlying && camera.getViewpoint() != CutsceneCameraViewpoint) {
+		commitCameraFly(); // left the camera's view mid-flight
+	}
 
 	process_system_keys();
 	const auto controlsLocked = areControlsLocked();
@@ -553,7 +556,30 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 
 		break;
 
-	case 3: // Looking through a cutscene camera: its sexps place it, so the controls don't
+	case 3: // Looking through a cutscene camera: the controls fly it (only the ways its event's
+	        // sexps can be written), and the sexps take the new place once the controls are still
+		if (!controlsLocked && !_camPlayback) {
+			vec3d pos = cameraView.shot.pos;
+			matrix orient = cameraView.shot.orient;
+			const bool canMove = cameraView.positionNodes[0] >= 0;
+			const bool canTurn = cameraView.rotationNodes[0] >= 0;
+			if ((canMove || canTurn) && camera.processControls(&pos, &orient, f2fl(Frametime), true)) {
+				if (!canMove)
+					pos = cameraView.shot.pos;
+				if (!canTurn)
+					orient = cameraView.shot.orient;
+				_camFlying = true;
+				_camFlyPos = pos;
+				_camFlyOrient = orient;
+				_camFlyLastMove = timer_get_milliseconds();
+				cameraView.shot.pos = pos;
+				cameraView.shot.orient = orient;
+				needsUpdate();
+			}
+		}
+		if (_camFlying && timer_get_milliseconds() - _camFlyLastMove >= 300) {
+			commitCameraFly();
+		}
 		break;
 
 	default:
@@ -2349,6 +2375,9 @@ void EditorViewport::setCameraGizmo(CameraGizmo gizmo) {
 	if (_cameraDragActive && gizmo.owner != _cameraGizmo.owner) {
 		cancelCameraDrag();
 	}
+	// A new selection or edit mid-flight: the flight's place may no longer fit the selected
+	// sexp's event, so drop it rather than write it there
+	_camFlying = false;
 	_cameraGizmo = std::move(gizmo);
 	needsUpdate();
 }
@@ -2361,16 +2390,37 @@ void EditorViewport::clearCameraGizmo(const void* owner) {
 		cancelCameraDrag();
 	}
 	_cameraGizmo = CameraGizmo();
+	_camFlying = false;
+	stopCameraPlayback();
 	needsUpdate();
 }
 
-bool EditorViewport::cameraPreview(CameraSexpPreview* out) const {
+bool EditorViewport::rawCameraPreview(CameraSexpPreview* out) const {
 	if (!_cameraGizmo.evaluate) {
 		return false;
 	}
 	CameraSexpPreview preview;
 	if (!_cameraGizmo.evaluate(preview)) {
 		return false;
+	}
+	if (out != nullptr) {
+		*out = preview;
+	}
+	return true;
+}
+
+bool EditorViewport::cameraPreview(CameraSexpPreview* out) const {
+	CameraSexpPreview preview;
+	if (!rawCameraPreview(&preview)) {
+		return false;
+	}
+	// Playing, the camera is where the event's shot has got to; flying, where it was flown
+	if (_camPlayback && preview.opNode == _camPlayOpNode) {
+		preview.shot = preview.play.at(_camTime);
+	}
+	if (_camFlying) {
+		preview.shot.pos = _camFlyPos;
+		preview.shot.orient = _camFlyOrient;
 	}
 	if (out != nullptr) {
 		*out = preview;
@@ -2387,7 +2437,7 @@ bool EditorViewport::canSetCameraFromView() const {
 	if (!cameraPreview(&preview)) {
 		return false;
 	}
-	return preview.pointNodes[0] >= 0 || preview.angleNodes[0] >= 0;
+	return preview.positionNodes[0] >= 0 || preview.rotationNodes[0] >= 0;
 }
 
 void EditorViewport::setCameraFromView() {
@@ -2403,7 +2453,7 @@ void EditorViewport::setCameraFromView() {
 void EditorViewport::refreshCameraHandle() {
 	CameraSexpPreview preview;
 	const bool present = view.Show_camera_gizmo && camera.getViewpoint() != CutsceneCameraViewpoint &&
-		_cameraGizmo.movePoint && cameraPreview(&preview) && preview.pointNodes[0] >= 0;
+		!_camPlayback && _cameraGizmo.movePoint && cameraPreview(&preview) && preview.pointNodes[0] >= 0;
 	vec3d pos = vmd_zero_vector;
 	if (present) {
 		pos = _cameraDragActive ? _cameraDragPoint : preview.point;
@@ -2486,6 +2536,117 @@ void EditorViewport::commitCameraDrag() {
 void EditorViewport::cancelCameraDrag() {
 	_cameraDragActive = false;
 	needsUpdate();
+}
+
+void EditorViewport::commitCameraFly() {
+	_camFlying = false;
+	camera.resetViewPhysics(); // don't carry the flight's speed into the next view
+	if (_cameraGizmo.setFromView) {
+		// Copied: the call edits the tree, which hands the viewport a new gizmo
+		const auto setFromView = _cameraGizmo.setFromView;
+		setFromView(_camFlyPos, _camFlyOrient);
+	}
+	needsUpdate();
+}
+
+void EditorViewport::playCamera() {
+	CameraSexpPreview preview;
+	if (!rawCameraPreview(&preview)) {
+		return;
+	}
+	if (!_camPlayback || preview.opNode != _camPlayOpNode || _camTime >= preview.duration) {
+		_camTime = 0.0f;
+	}
+	_camPlayback = true;
+	_camPlaying = preview.duration > 0.0f;
+	_camPlayOpNode = preview.opNode;
+	needsUpdate();
+}
+
+void EditorViewport::pauseCamera() {
+	_camPlaying = false;
+	needsUpdate();
+}
+
+void EditorViewport::rewindCamera() {
+	CameraSexpPreview preview;
+	if (!rawCameraPreview(&preview)) {
+		return;
+	}
+	_camPlayback = true;
+	_camPlaying = false;
+	_camTime = 0.0f;
+	_camPlayOpNode = preview.opNode;
+	needsUpdate();
+}
+
+void EditorViewport::cameraToEnd() {
+	CameraSexpPreview preview;
+	if (!rawCameraPreview(&preview)) {
+		return;
+	}
+	_camPlayback = true;
+	_camPlaying = false;
+	_camTime = preview.duration;
+	_camPlayOpNode = preview.opNode;
+	needsUpdate();
+}
+
+void EditorViewport::stopCameraPlayback() {
+	if (!_camPlayback) {
+		return;
+	}
+	_camPlayback = false;
+	_camPlaying = false;
+	_camTime = 0.0f;
+	_camPlayOpNode = -1;
+	needsUpdate();
+}
+
+bool EditorViewport::advanceCameraPlayback(float dt) {
+	if (!_camPlaying) {
+		return false;
+	}
+	CameraSexpPreview preview;
+	if (!rawCameraPreview(&preview) || preview.opNode != _camPlayOpNode) {
+		stopCameraPlayback();
+		return false;
+	}
+	_camTime += dt;
+	if (_camTime >= preview.duration) {
+		_camTime = preview.duration;
+		_camPlaying = false;
+	}
+	needsUpdate();
+	return _camPlaying;
+}
+
+SCP_vector<CameraEventInfo> EditorViewport::cameraEvents() const {
+	if (!_cameraGizmo.events) {
+		return {};
+	}
+	return _cameraGizmo.events();
+}
+
+void EditorViewport::setCameraStartsAfter(const SCP_string& name) {
+	CameraSexpPreview preview;
+	if (!_cameraGizmo.setStartsAfter || !rawCameraPreview(&preview) || preview.eventIndex < 0) {
+		return;
+	}
+	// Copied: the call edits the dialog's events, which can hand the viewport a new gizmo
+	const auto setStartsAfter = _cameraGizmo.setStartsAfter;
+	setStartsAfter(preview.eventIndex, name);
+	needsUpdate();
+}
+
+void EditorViewport::syncCameraPlayback() {
+	if (!_camPlayback) {
+		return;
+	}
+	CameraSexpPreview preview;
+	if (!rawCameraPreview(&preview) || preview.opNode != _camPlayOpNode) {
+		stopCameraPlayback();
+	}
 }
 
 // ---------------------------------------------------------------------------

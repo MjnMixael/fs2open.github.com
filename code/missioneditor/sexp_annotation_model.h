@@ -15,6 +15,9 @@ struct event_annotation {
 	float pos_y = 0.0f;
 	bool has_pos = false;
 	bool collapsed = false; // graph-view: event subtree collapsed to just its event node
+	// Event-level, editor-only: the event whose camera the cutscene camera preview starts from.
+	// Empty = worked out automatically; SEXP_NONE_STRING = a new camera.
+	SCP_string camera_starts_after;
 };
 extern SCP_vector<event_annotation> Event_annotations;
 
