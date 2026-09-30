@@ -7,8 +7,9 @@
 
 namespace fso::fred {
 
-// Where a cutscene camera is and what it shows at some moment: the editor's stand-in for
-// the engine's camera (camera/camera.cpp), worked out from a sexp tree without running it.
+// Where a cutscene camera is and what it shows: the editor's preview of the engine's camera
+// (camera/camera.cpp), worked out from a sexp tree without running it. The rules it follows
+// are in the Cutscene Camera Preview help page.
 struct CameraShot {
 	vec3d pos = vmd_zero_vector;
 	matrix orient = vmd_identity_matrix;
@@ -19,8 +20,8 @@ struct CameraShot {
 	vec3d aimPoint = vmd_zero_vector;
 };
 
-// One value moving the way the engine's avd_movement moves it: from start to end over time
-// seconds, easing in over accel and out over decel. A time of 0 is a value that isn't moving.
+// One value of the camera over a shot, as the engine's avd_movement moves it: from start to end
+// over time seconds, easing in over accel and out over decel. A time of 0 doesn't move.
 struct CameraMove {
 	float start = 0.0f;
 	float end = 0.0f;
@@ -28,12 +29,11 @@ struct CameraMove {
 	float accel = 0.0f;
 	float decel = 0.0f;
 
-	float at(float t) const;
+	float at(float t) const; // a negative t is the end
 };
 
-// A camera as the engine keeps it: position relative to a host, a rotation applied on top of
-// a target's facing or the host's orientation, and a field of view, each a move per value so
-// a shot can be played.
+// A camera over a shot: position relative to a host, a rotation applied on top of a target's
+// facing or the host's orientation, and a field of view
 struct CameraTrack {
 	CameraMove pos[3];
 	CameraMove rot[9];
@@ -43,23 +43,20 @@ struct CameraTrack {
 	bool hasAimPoint = false;
 	vec3d aimPoint = vmd_zero_vector;
 
-	// Seconds until every move has finished
-	float duration() const;
-	// The camera t seconds into the shot; a negative t is its end
-	CameraShot at(float t) const;
+	float duration() const;       // seconds until every move has finished
+	CameraShot at(float t) const; // t seconds into the shot; a negative t is its end
 };
 
-// An event, for carrying a camera on from earlier events. Supplied by a dialog whose tree
+// An event, for starting a shot where an earlier one ended. Supplied by a dialog whose tree
 // holds events (the Events editor).
 struct CameraEventInfo {
 	SCP_string name;
-	int formula = -1;        // root tree node
-	bool chained = false;    // runs after the event before it in the list
-	SCP_string startsAfter;  // the saved choice: empty = automatic, SEXP_NONE_STRING = new camera
+	int formula = -1;            // root tree node
+	bool chained = false;        // runs after the event before it in the list
+	SCP_string startsAfter;      // the chosen event: empty = automatic, SEXP_NONE_STRING = new camera
 	bool hasCameraSexps = false; // filled in by the sexp tree
 };
 
-// Lets the preview choose an event's starts-after event
 class CameraEventSource {
   public:
 	virtual ~CameraEventSource() = default;
@@ -67,73 +64,70 @@ class CameraEventSource {
 	virtual void setCameraStartsAfter(int eventIndex, const SCP_string& name) = 0;
 };
 
-// A selected camera sexp: its operator, the shot once it has run, the whole event's shot for
-// playing, and the arguments the editor can write.
+// A selected camera sexp: the shot it is in, the pose to show for it, and what the editor can
+// write into it.
 struct CameraSexpPreview {
 	int op = -1;     // OP_CUTSCENES_... constant
 	int opNode = -1; // tree_nodes[] index of the operator
-	CameraShot shot; // at the end of the selected sexp's moves
 
-	// Every camera sexp of the selected event runs at once, as in the game; this is that shot
+	// The selected sexp's whole event, as one shot: sexps without a time set its start, timed
+	// sexps move it to its end. `shot` is its start for a selected sexp without a time, its end
+	// for a timed one (atEnd).
 	CameraTrack play;
 	float duration = 0.0f;
+	bool atEnd = false;
+	CameraShot shot;
 
-	// The event the selected sexp is in, and the one its camera carries on from, when the tree
-	// has events. startsAfterAutomatic: worked out rather than chosen. startsAfterMissing: the
-	// chosen event doesn't exist or has no camera sexps, so it was worked out instead.
+	// The event the selected sexp is in, and the event its shot starts after, when the tree has
+	// events. startsAfterAutomatic: worked out rather than chosen. startsAfterMissing: the chosen
+	// event doesn't exist or has no camera sexps, so it was worked out instead.
 	int eventIndex = -1;
 	int startsAfterEvent = -1;
-	int inferredStartsAfter = -1; // what automatic would pick
+	int inferredStartsAfter = -1; // what automatic picks
 	bool startsAfterAutomatic = true;
 	bool startsAfterMissing = false;
 
-	// The selected operator's own point (the set-camera-position position or the
-	// set-camera-facing point), in world space, for its drag handle. pointNodes are set when
-	// its three arguments are plain numbers, so they can be written.
+	// The selected sexp's own point (the set-camera-position position or the set-camera-facing
+	// point), in world space
 	bool hasPoint = false;
 	vec3d point = vmd_zero_vector;
+
+	// Its arguments the editor can write, when they are plain numbers (-1 otherwise): the
+	// point's three, set-camera-rotation's pitch, bank and heading, set-camera-fov's degrees
 	int pointNodes[3] = {-1, -1, -1};
+	int angleNodes[3] = {-1, -1, -1};
+	int fovNode = -1;
 
-	// The event's sexps that place the camera (Set from View, flying the camera): its
-	// set-camera-position, and its set-camera-rotation or set-camera-facing. -1 when there
-	// is none with plain number arguments.
-	int positionNodes[3] = {-1, -1, -1};
-	int rotationNodes[3] = {-1, -1, -1};
-	bool rotationIsFacing = false;
-	vec3d facingPoint = vmd_zero_vector;
-
-	// The orientation the rotation is applied on top of, and the host the position is
-	// relative to
+	// For writing: the orientation a rotation is applied on top of at the shown pose, the host a
+	// position is relative to, and where the camera is when a set-camera-facing runs (the game
+	// aims it from there)
 	matrix rotationBase = vmd_identity_matrix;
 	int positionHost = -1;
+	vec3d facingFrom = vmd_zero_vector;
 };
 
 // The nearest camera operator at or above `node` (a node inside one selects it), or -1.
 int findCameraOperator(const SCP_vector<sexp_tree_item>& nodes, int node);
 
-// Whether an event's formula has any camera sexps
+// Whether a formula has any camera sexps
 bool formulaHasCameraSexps(const SCP_vector<sexp_tree_item>& nodes, int formula);
 
-// The event an event's camera carries on from, worked out: a chained event carries on from
-// the event before it, and otherwise from an event its formula waits for (is-event-true and
-// its -delay forms). Only events with camera sexps count. -1 if none.
-int inferCameraStartsAfter(const SCP_vector<sexp_tree_item>& nodes, const SCP_vector<CameraEventInfo>& events, int index);
-
-// Runs the camera sexps that lead up to `opNode`: those of the events its event carries on
-// from, then its own up to and including it. Without events, its formula starts from a new
-// camera.
+// Works out the selected sexp's shot: the shots of the events it starts after, oldest first,
+// each finished, then its own event. Without events, the shot starts from a new camera.
 bool previewCameraSexp(const SCP_vector<sexp_tree_item>& nodes, int opNode, CameraSexpPreview* out,
 	const SCP_vector<CameraEventInfo>* events = nullptr);
 
-// The argument values that put the selected operator's point at `world`. False if it has no
-// writable point.
+// The selected sexp's point arguments for a point at `world` (a position is relative to a host).
 bool cameraPointArgs(const CameraSexpPreview& preview, const vec3d& world, int out[3]);
 
-// The event's set-camera-position arguments for a camera at `world` (relative to a host).
-bool cameraPositionArgs(const CameraSexpPreview& preview, const vec3d& world, int out[3]);
+// The selected set-camera-rotation's arguments (degrees) for a camera turned to `orient`.
+bool cameraRotationArgs(const CameraSexpPreview& preview, const matrix& orient, int out[3]);
 
-// The event's set-camera-rotation arguments (degrees) for a camera turned to `orient`, or its
-// set-camera-facing point for one at `eye` looking along it.
-bool cameraRotationArgs(const CameraSexpPreview& preview, const vec3d& eye, const matrix& orient, int out[3]);
+// The selected set-camera-facing's point for a camera looking along `orient`: straight ahead of
+// where the facing aims from, as far away as the current point.
+bool cameraFacingArgs(const CameraSexpPreview& preview, const matrix& orient, int out[3]);
+
+// The selected set-camera-fov's argument (degrees) for a field of view in engine zoom units.
+bool cameraFovArg(const CameraSexpPreview& preview, float fov, int* out);
 
 } // namespace fso::fred

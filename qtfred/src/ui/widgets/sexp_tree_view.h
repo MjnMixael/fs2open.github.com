@@ -214,8 +214,8 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! actions that open dialogs participating in the undo stack (Add/Modify Variable).
 	void initializeEditor(Editor* edit, SexpTreeEditorInterface* editorInterface = nullptr, EditorViewport* viewport = nullptr, FredView* fredView = nullptr);
 
-	//! Hands the tree's events to the cutscene camera preview (the Events editor), so camera
-	//! sexps carry on from earlier events and the preview can choose where they start from.
+	//! Hands the tree's events to the cutscene camera preview (the Events editor), so a shot
+	//! can start where an earlier event's shot ended, and its starts-after event can be chosen.
 	void setCameraEventSource(CameraEventSource* source) { _cameraEventSource = source; }
 
 	//! Public entry point for deleting the currently selected item. Calls deleteActionHandler().
@@ -323,6 +323,7 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	void writeCameraArgs(const int* nodes, const int* values, int count);
 	void moveCameraPoint(const vec3d& world);
 	void setCameraFromView(const vec3d& eye, const matrix& orient);
+	void setCameraFov(float fov);
 
 	//! Creates a persistent QShortcut on this widget bound to `key`. When the user presses
 	//! the shortcut while this widget has focus, recomputes the context menu state and only

@@ -21,7 +21,7 @@ namespace {
 // sexp_get_set_camera()'s camera. Names are kept lowercase, as camera names match regardless of case
 constexpr auto DefaultCameraName = "sexp camera";
 
-// Guards a starts-after chain that loops or runs very long
+// Guards a chain of earlier events that loops or runs very long
 constexpr int MaxChainLength = 64;
 
 bool isCameraOp(int op)
@@ -38,6 +38,22 @@ bool isCameraOp(int op)
 		return true;
 	default:
 		return false;
+	}
+}
+
+// The argument holding a camera sexp's move time, or -1 if it has none
+int timeArgIndex(int op)
+{
+	switch (op) {
+	case OP_CUTSCENES_SET_CAMERA_POSITION:
+	case OP_CUTSCENES_SET_CAMERA_ROTATION:
+	case OP_CUTSCENES_SET_CAMERA_FACING:
+		return 3;
+	case OP_CUTSCENES_SET_CAMERA_FACING_OBJECT:
+	case OP_CUTSCENES_SET_CAMERA_FOV:
+		return 1;
+	default:
+		return -1;
 	}
 }
 
@@ -100,8 +116,8 @@ bool numberArgs3(const SCP_vector<sexp_tree_item>& nodes, const int* args, int* 
 	return true;
 }
 
-// A move's time, acceleration and deceleration arguments (milliseconds), as eval_nums()
-// reads them: missing ones are 0, and with only two given the deceleration is the acceleration
+// A move's time, acceleration and deceleration arguments (milliseconds), as eval_nums() reads
+// them: missing ones are 0, and with only two given the deceleration is the acceleration
 void moveTimes(const SCP_vector<sexp_tree_item>& nodes, const int* args, float& time, float& accel, float& decel)
 {
 	int v[3] = {0, 0, 0};
@@ -152,14 +168,14 @@ int objectArg(const SCP_vector<sexp_tree_item>& nodes, int node)
 	return validObject(objnum) ? objnum : -1;
 }
 
-// Where a moving value is at the moment a sexp runs: its start while a move of this event is
-// under way, its end once settled
-float instant(const CameraMove& m)
+// Where a value is when a sexp of the current event runs: all of an event's sexps run at the
+// start of its shot, so a move under way hasn't left its start yet
+float now(const CameraMove& m)
 {
 	return (m.time > 0.0f) ? m.start : m.end;
 }
 
-// avd_movement::setAVD() from the value's current place; no time is a jump
+// avd_movement::setAVD() from where the value is now; without a time it jumps
 void moveTo(CameraMove& m, float target, float time, float accel, float decel)
 {
 	if (time <= 0.0f) {
@@ -167,7 +183,7 @@ void moveTo(CameraMove& m, float target, float time, float accel, float decel)
 		m.start = m.end = target;
 		return;
 	}
-	m.start = instant(m);
+	m.start = now(m);
 	m.end = target;
 	m.time = time;
 	m.accel = accel;
@@ -209,12 +225,12 @@ matrix rotationBase(const CameraTrack& cam, const vec3d& pos)
 	return vmd_identity_matrix;
 }
 
-vec3d instantLocal(const CameraTrack& cam)
+vec3d localNow(const CameraTrack& cam)
 {
 	vec3d local;
-	local.xyz.x = instant(cam.pos[0]);
-	local.xyz.y = instant(cam.pos[1]);
-	local.xyz.z = instant(cam.pos[2]);
+	local.xyz.x = now(cam.pos[0]);
+	local.xyz.y = now(cam.pos[1]);
+	local.xyz.z = now(cam.pos[2]);
 	return local;
 }
 
@@ -227,7 +243,7 @@ void rotateTo(CameraTrack& cam, const matrix& m, float time, float accel, float 
 // camera::set_rotation_facing(): turns toward `point` from where the camera is right now
 void faceTowards(CameraTrack& cam, const vec3d& point, float time, float accel, float decel)
 {
-	const vec3d pos = worldPosition(cam, instantLocal(cam));
+	const vec3d pos = worldPosition(cam, localNow(cam));
 	if (vm_vec_same(&point, &pos))
 		return; // the engine refuses ("Camera tried to point to self")
 
@@ -251,11 +267,6 @@ void faceTowards(CameraTrack& cam, const vec3d& point, float time, float accel, 
 	cam.aimPoint = point;
 }
 
-bool isEventWait(int op)
-{
-	return op == OP_EVENT_TRUE || op == OP_EVENT_TRUE_DELAY || op == OP_EVENT_TRUE_MSECS_DELAY;
-}
-
 int findEvent(const SCP_vector<CameraEventInfo>& events, const char* name)
 {
 	for (int i = 0; i < static_cast<int>(events.size()); ++i) {
@@ -265,13 +276,14 @@ int findEvent(const SCP_vector<CameraEventInfo>& events, const char* name)
 	return -1;
 }
 
-// An event's formula waits for an event with camera sexps: the first one
+// An event with camera sexps that the formula waits for with is-event-true or its -delay forms
 int waitedForCameraEvent(const SCP_vector<sexp_tree_item>& nodes, const SCP_vector<CameraEventInfo>& events,
 	int index, int node)
 {
 	if (!validNode(nodes, node))
 		return -1;
-	if (isEventWait(operatorOf(nodes, node))) {
+	const int op = operatorOf(nodes, node);
+	if (op == OP_EVENT_TRUE || op == OP_EVENT_TRUE_DELAY || op == OP_EVENT_TRUE_MSECS_DELAY) {
 		const int arg = nodes[node].child;
 		if (validNode(nodes, arg) && !(nodes[arg].type & SEXPT_OPERATOR)) {
 			const int k = findEvent(events, nodes[arg].text);
@@ -287,12 +299,22 @@ int waitedForCameraEvent(const SCP_vector<sexp_tree_item>& nodes, const SCP_vect
 	return -1;
 }
 
+// The automatic starts-after event: a chained event's predecessor in the list, else an event its
+// formula waits for. Only events with camera sexps count. -1 if none.
+int inferStartsAfter(const SCP_vector<sexp_tree_item>& nodes, const SCP_vector<CameraEventInfo>& events, int index)
+{
+	if (events[index].chained && index > 0 && formulaHasCameraSexps(nodes, events[index - 1].formula))
+		return index - 1;
+	return waitedForCameraEvent(nodes, events, index, events[index].formula);
+}
+
 struct StartsAfter {
 	int index = -1;
 	bool automatic = true;
 	bool missing = false;
 };
 
+// The chosen starts-after event if it is usable, else the automatic one
 StartsAfter resolveStartsAfter(const SCP_vector<sexp_tree_item>& nodes, const SCP_vector<CameraEventInfo>& events, int index)
 {
 	StartsAfter result;
@@ -310,7 +332,7 @@ StartsAfter resolveStartsAfter(const SCP_vector<sexp_tree_item>& nodes, const SC
 		}
 		result.missing = true;
 	}
-	result.index = inferCameraStartsAfter(nodes, events, index);
+	result.index = inferStartsAfter(nodes, events, index);
 	return result;
 }
 
@@ -318,41 +340,37 @@ class CameraRun {
   public:
 	explicit CameraRun(const SCP_vector<sexp_tree_item>& nodes) : _nodes(&nodes) {}
 
-	// Camera operators run by runFormula(), in order
-	SCP_vector<int> ran;
+	// Recorded as the selected sexp runs: which camera it works on, and where that camera is
+	int selected = -1;
+	SCP_string selectedCamera;
+	vec3d selectedFrom = vmd_zero_vector;
 
-	CameraTrack& camera()
+	CameraTrack& camera(const SCP_string& name)
 	{
-		auto it = _cameras.find(_current);
+		auto it = _cameras.find(name);
 		if (it == _cameras.end()) {
 			CameraTrack fresh;
 			for (int i = 0; i < 9; ++i)
 				fresh.rot[i].start = fresh.rot[i].end = vmd_identity_matrix.a1d[i];
 			fresh.fov.start = fresh.fov.end = g3_get_hfov(VIEWER_ZOOM_DEFAULT);
-			it = _cameras.emplace(_current, fresh).first;
+			it = _cameras.emplace(name, fresh).first;
 		}
 		return it->second;
 	}
+	CameraTrack& camera() { return camera(_current); }
 
-	// Runs the camera sexps under `root` in tree order, the order the actions run in; stops
-	// after `stopAt`. True if it got to `stopAt`.
-	bool runFormula(int root, int stopAt)
-	{
-		_stopAt = stopAt;
-		_stopped = false;
-		visit(root);
-		return _stopped;
-	}
+	// Runs every camera sexp under `root` in tree order, the order the actions run in
+	void runFormula(int root) { visit(root); }
 
-	// Every move done, as if the event's shot played out before the next one
+	// Every move done, as if the event's shot played out before the next event
 	void settleAll()
 	{
-		for (auto& [name, cam] : _cameras) {
-			for (auto& m : cam.pos)
+		for (auto& entry : _cameras) {
+			for (auto& m : entry.second.pos)
 				settle(m);
-			for (auto& m : cam.rot)
+			for (auto& m : entry.second.rot)
 				settle(m);
-			settle(cam.fov);
+			settle(entry.second.fov);
 		}
 	}
 
@@ -360,26 +378,25 @@ class CameraRun {
 	const SCP_vector<sexp_tree_item>* _nodes;
 	SCP_unordered_map<SCP_string, CameraTrack> _cameras;
 	SCP_string _current = DefaultCameraName;
-	int _stopAt = -1;
-	bool _stopped = false;
 
 	void visit(int node)
 	{
 		const auto& nodes = *_nodes;
-		if (_stopped || !validNode(nodes, node))
+		if (!validNode(nodes, node))
 			return;
 
 		const int op = operatorOf(nodes, node);
 		if (op >= 0 && isCameraOp(op)) {
-			apply(node, op);
-			ran.push_back(node);
-			if (node == _stopAt) {
-				_stopped = true;
-				return;
+			if (node == selected) {
+				selectedCamera = _current;
+				selectedFrom = worldPosition(camera(), localNow(camera()));
 			}
+			apply(node, op);
+			if (node == selected && op == OP_CUTSCENES_SET_CAMERA)
+				selectedCamera = _current; // it selects the camera it names
 		}
 
-		for (int c = nodes[node].child; validNode(nodes, c) && !_stopped; c = nodes[c].next)
+		for (int c = nodes[node].child; validNode(nodes, c); c = nodes[c].next)
 			visit(c);
 	}
 
@@ -474,47 +491,19 @@ class CameraRun {
 	}
 };
 
-// Picks the event's sexp that sets the camera's position or rotation for the editor to write:
-// the last one before or at the selected sexp, else the first after it. Only sexps with plain
-// number arguments count.
-void findPlacingSexps(const SCP_vector<sexp_tree_item>& nodes, const SCP_vector<int>& ran, int selected,
-	CameraSexpPreview& out)
+// A world point as set-camera-position arguments: relative to the host, if there is one
+void positionToArgs(const CameraSexpPreview& preview, const vec3d& world, int out[3])
 {
-	int positionOp = -1;
-	int rotationOp = -1;
-	bool pastSelected = false;
-	for (const int node : ran) {
-		const int op = operatorOf(nodes, node);
-		int args[3];
-		argNodes(nodes, node, args, 3);
-		int values[3];
-		bool plain = false;
-		const bool writable = numberArgs3(nodes, args, values, plain) && plain;
-
-		if (op == OP_CUTSCENES_SET_CAMERA_POSITION && writable && (!pastSelected || positionOp < 0))
-			positionOp = node;
-		if ((op == OP_CUTSCENES_SET_CAMERA_ROTATION || op == OP_CUTSCENES_SET_CAMERA_FACING) && writable &&
-			(!pastSelected || rotationOp < 0))
-			rotationOp = node;
-
-		if (node == selected)
-			pastSelected = true;
+	vec3d p = world;
+	if (validObject(preview.positionHost)) {
+		const object& host = Objects[preview.positionHost];
+		vec3d offset;
+		vm_vec_sub(&offset, &world, &host.pos);
+		vm_vec_rotate(&p, &offset, &host.orient);
 	}
-
-	if (positionOp >= 0)
-		argNodes(nodes, positionOp, out.positionNodes, 3);
-	if (rotationOp >= 0) {
-		argNodes(nodes, rotationOp, out.rotationNodes, 3);
-		out.rotationIsFacing = (operatorOf(nodes, rotationOp) == OP_CUTSCENES_SET_CAMERA_FACING);
-		if (out.rotationIsFacing) {
-			int values[3];
-			bool plain = false;
-			numberArgs3(nodes, out.rotationNodes, values, plain);
-			out.facingPoint.xyz.x = i2fl(values[0]);
-			out.facingPoint.xyz.y = i2fl(values[1]);
-			out.facingPoint.xyz.z = i2fl(values[2]);
-		}
-	}
+	out[0] = static_cast<int>(std::lround(p.xyz.x));
+	out[1] = static_cast<int>(std::lround(p.xyz.y));
+	out[2] = static_cast<int>(std::lround(p.xyz.z));
 }
 
 } // namespace
@@ -594,15 +583,6 @@ bool formulaHasCameraSexps(const SCP_vector<sexp_tree_item>& nodes, int formula)
 	return false;
 }
 
-int inferCameraStartsAfter(const SCP_vector<sexp_tree_item>& nodes, const SCP_vector<CameraEventInfo>& events, int index)
-{
-	if (!SCP_vector_inbounds(events, index))
-		return -1;
-	if (events[index].chained && index > 0 && formulaHasCameraSexps(nodes, events[index - 1].formula))
-		return index - 1;
-	return waitedForCameraEvent(nodes, events, index, events[index].formula);
-}
-
 bool previewCameraSexp(const SCP_vector<sexp_tree_item>& nodes, int opNode, CameraSexpPreview* out,
 	const SCP_vector<CameraEventInfo>* events)
 {
@@ -620,7 +600,7 @@ bool previewCameraSexp(const SCP_vector<sexp_tree_item>& nodes, int opNode, Came
 
 	CameraRun run(nodes);
 
-	// Carry the camera on through the events this one starts after, oldest first
+	// Start where the shots this one starts after ended, oldest first, each finished
 	if (events != nullptr) {
 		for (int i = 0; i < static_cast<int>(events->size()); ++i) {
 			if ((*events)[i].formula == root) {
@@ -634,7 +614,7 @@ bool previewCameraSexp(const SCP_vector<sexp_tree_item>& nodes, int opNode, Came
 		result.startsAfterEvent = start.index;
 		result.startsAfterAutomatic = start.automatic;
 		result.startsAfterMissing = start.missing;
-		result.inferredStartsAfter = inferCameraStartsAfter(nodes, *events, result.eventIndex);
+		result.inferredStartsAfter = inferStartsAfter(nodes, *events, result.eventIndex);
 
 		SCP_vector<int> chain;
 		SCP_vector<bool> seen(events->size(), false);
@@ -645,119 +625,91 @@ bool previewCameraSexp(const SCP_vector<sexp_tree_item>& nodes, int opNode, Came
 			chain.push_back(k);
 		}
 		for (auto it = chain.rbegin(); it != chain.rend(); ++it) {
-			run.runFormula((*events)[*it].formula, -1);
+			run.runFormula((*events)[*it].formula);
 			run.settleAll();
 		}
-		run.ran.clear();
 	}
 
-	// The whole event, as the game runs it, for playing and for the sexps to write
-	CameraRun whole = run;
-	whole.runFormula(root, -1);
-	result.play = whole.camera();
-	result.duration = result.play.duration();
-	findPlacingSexps(nodes, whole.ran, opNode, result);
+	// The selected sexp's event as one shot
+	run.selected = opNode;
+	run.runFormula(root);
+	const auto& track = run.camera(run.selectedCamera);
+	result.play = track;
+	result.duration = track.duration();
 
-	// The shot at the selected sexp
-	if (!run.runFormula(root, opNode))
-		return false;
-	auto& cam = run.camera();
-	result.shot = cam.at(-1.0f);
-	result.rotationBase = rotationBase(cam, result.shot.pos);
+	// A timed sexp shows the end of the shot, one without a time its start
+	int args[6];
+	argNodes(nodes, opNode, args, 6);
+	const int timeArg = timeArgIndex(op);
+	if (timeArg >= 0) {
+		float time = 0.0f;
+		float accel = 0.0f;
+		float decel = 0.0f;
+		moveTimes(nodes, args + timeArg, time, accel, decel);
+		result.atEnd = time > 0.0f;
+	}
+	result.shot = track.at(result.atEnd ? -1.0f : 0.0f);
+	result.rotationBase = rotationBase(track, result.shot.pos);
 	result.positionHost = result.shot.hostObj;
+	result.facingFrom = run.selectedFrom;
 
-	if (op == OP_CUTSCENES_SET_CAMERA_POSITION || op == OP_CUTSCENES_SET_CAMERA_FACING) {
-		int args[3];
-		argNodes(nodes, opNode, args, 3);
-		int values[3];
-		bool plain = false;
+	int values[3];
+	bool plain = false;
+	switch (op) {
+	case OP_CUTSCENES_SET_CAMERA_POSITION:
+	case OP_CUTSCENES_SET_CAMERA_FACING:
 		if (numberArgs3(nodes, args, values, plain)) {
+			vec3d p;
+			p.xyz.x = i2fl(values[0]);
+			p.xyz.y = i2fl(values[1]);
+			p.xyz.z = i2fl(values[2]);
 			result.hasPoint = true;
-			if (op == OP_CUTSCENES_SET_CAMERA_POSITION) {
-				result.point = result.shot.pos;
-			} else {
-				result.point.xyz.x = i2fl(values[0]);
-				result.point.xyz.y = i2fl(values[1]);
-				result.point.xyz.z = i2fl(values[2]);
-			}
+			result.point = (op == OP_CUTSCENES_SET_CAMERA_POSITION) ? worldPosition(track, p) : p;
 			if (plain) {
 				for (int i = 0; i < 3; ++i)
 					result.pointNodes[i] = args[i];
 			}
 		}
+		break;
+	case OP_CUTSCENES_SET_CAMERA_ROTATION:
+		if (numberArgs3(nodes, args, values, plain) && plain) {
+			for (int i = 0; i < 3; ++i)
+				result.angleNodes[i] = args[i];
+		}
+		break;
+	case OP_CUTSCENES_SET_CAMERA_FOV:
+		if (numberArg(nodes, args[0], values[0], plain) && plain)
+			result.fovNode = args[0];
+		break;
+	default:
+		break;
 	}
 
 	*out = result;
 	return true;
 }
 
-namespace {
-
-// A world point as set-camera-position arguments: relative to the host, if there is one
-void positionToArgs(const CameraSexpPreview& preview, const vec3d& world, int out[3])
-{
-	vec3d p = world;
-	if (validObject(preview.positionHost)) {
-		const object& host = Objects[preview.positionHost];
-		vec3d offset;
-		vm_vec_sub(&offset, &world, &host.pos);
-		vm_vec_rotate(&p, &offset, &host.orient);
-	}
-	out[0] = static_cast<int>(std::lround(p.xyz.x));
-	out[1] = static_cast<int>(std::lround(p.xyz.y));
-	out[2] = static_cast<int>(std::lround(p.xyz.z));
-}
-
-void pointToArgs(const vec3d& p, int out[3])
-{
-	out[0] = static_cast<int>(std::lround(p.xyz.x));
-	out[1] = static_cast<int>(std::lround(p.xyz.y));
-	out[2] = static_cast<int>(std::lround(p.xyz.z));
-}
-
-} // namespace
-
 bool cameraPointArgs(const CameraSexpPreview& preview, const vec3d& world, int out[3])
 {
 	if (preview.pointNodes[0] < 0)
 		return false;
-	if (preview.op == OP_CUTSCENES_SET_CAMERA_POSITION)
+	if (preview.op == OP_CUTSCENES_SET_CAMERA_POSITION) {
 		positionToArgs(preview, world, out);
-	else
-		pointToArgs(world, out);
-	return true;
-}
-
-bool cameraPositionArgs(const CameraSexpPreview& preview, const vec3d& world, int out[3])
-{
-	if (preview.positionNodes[0] < 0)
-		return false;
-	positionToArgs(preview, world, out);
-	return true;
-}
-
-bool cameraRotationArgs(const CameraSexpPreview& preview, const vec3d& eye, const matrix& orient, int out[3])
-{
-	if (preview.rotationNodes[0] < 0)
-		return false;
-
-	if (preview.rotationIsFacing) {
-		// Face what the middle of the view shows, as deep as the current point is
-		const float depth = std::max(vm_vec_dist(&eye, &preview.facingPoint), 100.0f);
-		vec3d point;
-		vm_vec_scale_add(&point, &eye, &orient.vec.fvec, depth);
-		pointToArgs(point, out);
-		return true;
+	} else {
+		out[0] = static_cast<int>(std::lround(world.xyz.x));
+		out[1] = static_cast<int>(std::lround(world.xyz.y));
+		out[2] = static_cast<int>(std::lround(world.xyz.z));
 	}
+	return true;
+}
 
-	// The shot is base * rotation, so the rotation is base^T * orient. A target's facing
-	// depends on where the camera is, which is now the eye.
+bool cameraRotationArgs(const CameraSexpPreview& preview, const matrix& orient, int out[3])
+{
+	if (preview.op != OP_CUTSCENES_SET_CAMERA_ROTATION || preview.angleNodes[0] < 0)
+		return false;
+
+	// The shot is base * rotation, so the rotation is base^T * orient
 	matrix baseT = preview.rotationBase;
-	if (validObject(preview.shot.targetObj) && vm_vec_dist(&Objects[preview.shot.targetObj].pos, &eye) > 0.001f) {
-		vec3d dir;
-		vm_vec_normalized_dir(&dir, &Objects[preview.shot.targetObj].pos, &eye);
-		vm_vector_2_matrix_norm(&baseT, &dir, nullptr, nullptr);
-	}
 	vm_transpose(&baseT);
 	matrix rotation;
 	vm_matrix_x_matrix(&rotation, &baseT, &orient);
@@ -768,6 +720,24 @@ bool cameraRotationArgs(const CameraSexpPreview& preview, const vec3d& eye, cons
 	out[0] = static_cast<int>(std::lround(fl_degrees(a.p)));
 	out[1] = static_cast<int>(std::lround(fl_degrees(a.b)));
 	out[2] = static_cast<int>(std::lround(fl_degrees(a.h)));
+	return true;
+}
+
+bool cameraFacingArgs(const CameraSexpPreview& preview, const matrix& orient, int out[3])
+{
+	if (preview.op != OP_CUTSCENES_SET_CAMERA_FACING || preview.pointNodes[0] < 0)
+		return false;
+	const float depth = std::max(vm_vec_dist(&preview.facingFrom, &preview.point), 100.0f);
+	vec3d point;
+	vm_vec_scale_add(&point, &preview.facingFrom, &orient.vec.fvec, depth);
+	return cameraPointArgs(preview, point, out);
+}
+
+bool cameraFovArg(const CameraSexpPreview& preview, float fov, int* out)
+{
+	if (preview.fovNode < 0)
+		return false;
+	*out = static_cast<int>(std::lround(fl_degrees(fov)));
 	return true;
 }
 

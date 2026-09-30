@@ -1543,8 +1543,12 @@ void FredView::initializeTransformBar() {
 	// Steps apply live; typed values on Enter or focus-out (keyboard tracking is off). The idle
 	// sync in onUpdateCameraControlActions() sets the value with signals blocked.
 	connect(_transformFovSpin, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double degrees) {
-		if (!_viewport || _viewport->camera.getViewpoint() != 1) return;
-		_viewport->setObjectViewFov(fl_radians(static_cast<float>(degrees)));
+		if (!_viewport) return;
+		const float fov = fl_radians(static_cast<float>(degrees));
+		if (_viewport->camera.getViewpoint() == 1)
+			_viewport->setObjectViewFov(fov);
+		else if (_viewport->camera.getViewpoint() == EditorViewport::CutsceneCameraViewpoint)
+			_viewport->setCameraFov(fov); // into the selected set-camera-fov
 	});
 	// Like the transform boxes: Enter hands focus back to the viewport so its keys work again
 	connect(_transformFovSpin, &QDoubleSpinBox::editingFinished, this, [this]() {
@@ -1579,7 +1583,7 @@ void FredView::initializeTransformBar() {
 
 	auto makePlaybackButton = [this, &addPlaybackWidget](QStyle::StandardPixmap icon, const QString& tip) {
 		auto* button = new QToolButton(_transformToolBar);
-		button->setIcon(style()->standardIcon(icon));
+		bindStandardIcon(button, icon); // white in the dark theme, black in the light one
 		button->setToolTip(tip);
 		button->setAutoRaise(true);
 		button->setFocusPolicy(Qt::NoFocus); // keep the keys on the viewport, which flies the camera
@@ -3074,21 +3078,31 @@ void FredView::onUpdateCameraControlActions() {
 	ui->actionSet_Camera_From_View->setEnabled(_viewport->canSetCameraFromView());
 
 	// FOV readout: the fixed editor FOV (locked) for the basic camera, the object-view FOV
-	// (editable) through an object, and the camera sexps' FOV (locked) through a cutscene camera.
-	// Left alone while focused so typing isn't overwritten, except after switching away from
-	// the object view: then the box has nothing to edit, so hand focus back to the viewport and
-	// lock it (a focused, disabled box would keep its text selected).
+	// (editable) through an object, and the camera sexps' FOV through a cutscene camera (editable
+	// while a set-camera-fov is selected, which it writes). Left alone while focused so typing
+	// isn't overwritten, except once there is nothing to edit: then hand focus back to the
+	// viewport and lock it (a focused, disabled box would keep its text selected).
 	const bool objectView = (viewpoint == 1);
-	if (_transformFovSpin && _transformFovSpin->hasFocus() && !objectView)
+	const bool cameraView = (viewpoint == EditorViewport::CutsceneCameraViewpoint);
+	const bool editable = objectView || (cameraView && _viewport->canSetCameraFov());
+	if (_transformFovSpin && _transformFovSpin->hasFocus() && !editable)
 		ui->centralWidget->setFocus(Qt::OtherFocusReason);
 	if (_transformFovSpin && !_transformFovSpin->hasFocus()) {
-		_transformFovSpin->setEnabled(objectView);
+		_transformFovSpin->setEnabled(editable);
+		// A camera sexp can ask for more than the game's FOV option allows
+		QSignalBlocker rangeBlocker(_transformFovSpin);
+		if (cameraView)
+			_transformFovSpin->setRange(1.0, 179.0);
+		else
+			_transformFovSpin->setRange(fl_degrees(EditorViewport::MinObjectViewFov), fl_degrees(EditorViewport::MaxObjectViewFov));
 		if (objectView) {
 			_transformFovSpin->setToolTip(tr("Field of view while viewing through an object. Starts at the in-game "
 											 "FOV; changes last for this session and reset when a mission is loaded."));
-		} else if (viewpoint == EditorViewport::CutsceneCameraViewpoint) {
-			_transformFovSpin->setToolTip(tr("Field of view of the cutscene camera, from its set-camera-fov "
-											 "(or the in-game FOV). Change it with the sexp."));
+		} else if (cameraView) {
+			_transformFovSpin->setToolTip(editable
+				? tr("Field of view of the cutscene camera, written into the selected set-camera-fov.")
+				: tr("Field of view of the cutscene camera, from the last set-camera-fov (or the in-game FOV). "
+					 "Select a set-camera-fov to change it here."));
 		} else {
 			_transformFovSpin->setToolTip(tr("Field of view of the editor camera (fixed). View through an object "
 											 "to use and adjust the in-game FOV."));
@@ -3126,7 +3140,9 @@ void FredView::updateCameraPlaybackControls() {
 
 	// Transport
 	const bool playing = _viewport->cameraPlaying();
-	_cameraPlayBtn->setIcon(style()->standardIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay));
+	// Drawn in the theme's text color; redrawn here each tick, so it follows a theme change too
+	_cameraPlayBtn->setIcon(makeThemedIcon(playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay,
+		qApp->palette().color(QPalette::ButtonText)));
 	_cameraPlayBtn->setToolTip(playing ? tr("Pause") : tr("Play the event's shot"));
 	const bool moves = preview.duration > 0.0f;
 	_cameraPlayBtn->setEnabled(moves);

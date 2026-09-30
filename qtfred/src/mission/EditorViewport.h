@@ -47,8 +47,11 @@ struct CameraGizmo {
 	std::function<bool(CameraSexpPreview&)> evaluate;
 	// Writes the operator's point (camera position or facing point) back into its arguments
 	std::function<void(const vec3d&)> movePoint;
-	// Sets the event's placing sexps from a view (camera position, and rotation or facing)
+	// Sets the selected sexp from a view: a position's position, a rotation's angles, or a
+	// facing's point
 	std::function<void(const vec3d&, const matrix&)> setFromView;
+	// Writes a field of view (engine zoom units) into the selected set-camera-fov
+	std::function<void(float)> setFov;
 	// The tree's events, when it holds events (the Events editor), and choosing an event's
 	// starts-after event; empty functions otherwise
 	std::function<SCP_vector<CameraEventInfo>()> events;
@@ -273,14 +276,18 @@ class EditorViewport {
 	bool hasCameraGizmo() const { return static_cast<bool>(_cameraGizmo.evaluate); }
 	// The selected camera sexp worked out now; false if there is none
 	bool cameraPreview(CameraSexpPreview* out) const;
-	// Whether the selected camera sexp's event can take the view (Set Camera SEXP from View),
-	// and doing it with the current eye
+	// Whether the selected camera sexp can take the view (Set Camera SEXP from View), and doing
+	// it with the current eye
 	bool canSetCameraFromView() const;
 	void setCameraFromView();
+	// Whether the selected camera sexp is a set-camera-fov that can take a field of view, and
+	// writing one (engine zoom units)
+	bool canSetCameraFov() const;
+	void setCameraFov(float fov);
 
-	// Playing the selected event's shot. Stopped, the preview is the end of the selected sexp;
-	// once started (Play, |< or >|) it is the whole event at the playback time, until
-	// stopCameraPlayback() or another camera sexp is selected.
+	// Playing the selected sexp's shot. Stopped, the preview is the shot's start or end (see
+	// CameraSexpPreview); once started (Play, |< or >|) it is the shot at the playback time, until
+	// stopCameraPlayback() or another camera sexp is selected. Editing waits while it is active.
 	bool cameraPlaybackActive() const { return _camPlayback; }
 	bool cameraPlaying() const { return _camPlaying; }
 	float cameraPlaybackTime() const { return _camTime; }
@@ -295,7 +302,7 @@ class EditorViewport {
 	void syncCameraPlayback();
 
 	// The selecting tree's events (empty unless it holds events), and choosing the selected
-	// event's starts-after event (empty = automatic, SEXP_NONE_STRING = a new camera)
+	// sexp's event's starts-after event (empty = automatic, SEXP_NONE_STRING = a new camera)
 	SCP_vector<CameraEventInfo> cameraEvents() const;
 	void setCameraStartsAfter(const SCP_string& name);
 	// The handle for the selected sexp's point, rebuilt each frame from the renderer. A drag
@@ -513,19 +520,19 @@ private:
 	bool _cameraDragActive = false;
 	vec3d _cameraDragPoint = vmd_zero_vector;
 
-	// Playback of the selected event's shot
-	bool _camPlayback = false;
-	bool _camPlaying = false;
-	float _camTime = 0.0f;
-	int _camPlayOpNode = -1;
-
-	// Flying the cutscene camera: where the controls have moved it. Its sexps take that place
-	// once the controls have been still for a moment.
+	// Flying the cutscene camera: where the controls have moved it. The selected sexp takes that
+	// place once the controls have been still for a moment.
 	bool _camFlying = false;
 	vec3d _camFlyPos = vmd_zero_vector;
 	matrix _camFlyOrient = vmd_identity_matrix;
 	int _camFlyLastMove = 0; // timer_get_milliseconds()
 	void commitCameraFly();
+
+	// Playback of the selected sexp's shot
+	bool _camPlayback = false;
+	bool _camPlaying = false;
+	float _camTime = 0.0f;
+	int _camPlayOpNode = -1;
 	bool rawCameraPreview(CameraSexpPreview* out) const;
 
 	// Viewport-owned volumetric gizmo state.

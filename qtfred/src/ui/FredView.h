@@ -382,7 +382,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 	QDoubleSpinBox* _transformC          = nullptr;
 	QComboBox*      _transformMoveSpeedCombo = nullptr;
 	QComboBox*      _transformRotSpeedCombo  = nullptr;
-	// FOV of the current view in degrees; editable only while viewing through an object
+	// FOV of the current view in degrees; editable while viewing through an object, or through
+	// a cutscene camera with a set-camera-fov selected (it writes that sexp)
 	QDoubleSpinBox* _transformFovSpin        = nullptr;
 	// Cutscene camera playback, shown while looking through a cutscene camera
 	QList<QAction*> _cameraPlaybackActions;
