@@ -1122,7 +1122,7 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			if (auto* item = ui->eventTree->currentItem()) {
 				const int node = ui->eventTree->get_node(item);
 				if (node >= 0)
-					selectedPath = SexpAnnotationModel::buildPath(node, ui->eventTree->tree_nodes, _model->getEventList());
+					selectedPath = SexpAnnotationModel::buildPath(node, ui->eventTree->_model.tree_nodes, _model->getEventList());
 			}
 			// Rebuilds the tree widget through the model's treeCleared/
 			// subtreeAdded/annotationApplied/rootSelected signals.
@@ -1137,7 +1137,7 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 				SCP_vector<int> identity(_model->getEventList().size());
 				for (int i = 0; i < static_cast<int>(identity.size()); ++i)
 					identity[i] = i;
-				const int node = SexpAnnotationModel::resolveFromPath(selectedPath, ui->eventTree->tree_nodes,
+				const int node = SexpAnnotationModel::resolveFromPath(selectedPath, ui->eventTree->_model.tree_nodes,
 					_model->getEventList(), identity);
 				if (node >= 0)
 					ui->eventTree->hilite_item(node);
