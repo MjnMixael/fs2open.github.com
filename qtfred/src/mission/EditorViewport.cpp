@@ -465,6 +465,9 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 	if (_camFlying && camera.getViewpoint() != CutsceneCameraViewpoint) {
 		commitCameraFly(); // left the camera's view mid-flight
 	}
+	if (_camPlayback && camera.getViewpoint() != CutsceneCameraViewpoint) {
+		stopCameraPlayback(); // playback only lives while looking through the camera
+	}
 
 	process_system_keys();
 	const auto controlsLocked = areControlsLocked();
@@ -559,13 +562,21 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 	case 3: // Looking through a cutscene camera: the controls fly it only the ways the selected sexp
 	        // can take (a position moves, a rotation or facing turns), like dragging its handle,
 	        // and the sexp takes the new place once the controls are still
-		if (!controlsLocked && !_camPlayback) {
+		if (!controlsLocked) {
 			vec3d pos = cameraView.shot.pos;
 			matrix orient = cameraView.shot.orient;
 			const bool canMove = cameraView.op == OP_CUTSCENES_SET_CAMERA_POSITION && cameraView.pointNodes[0] >= 0;
 			const bool canTurn = (cameraView.op == OP_CUTSCENES_SET_CAMERA_ROTATION && cameraView.angleNodes[0] >= 0) ||
 				(cameraView.op == OP_CUTSCENES_SET_CAMERA_FACING && cameraView.pointNodes[0] >= 0);
-			if ((canMove || canTurn) && camera.processControls(&pos, &orient, f2fl(Frametime), true)) {
+			if ((canMove || canTurn) && _camPlayback) {
+				// Flying ends playback; the flight starts next frame from the selected sexp's pose
+				vec3d probePos = pos;
+				matrix probeOrient = orient;
+				if (camera.processControls(&probePos, &probeOrient, f2fl(Frametime), true)) {
+					stopCameraPlayback();
+					camera.resetViewPhysics();
+				}
+			} else if ((canMove || canTurn) && camera.processControls(&pos, &orient, f2fl(Frametime), true)) {
 				if (!canMove)
 					pos = cameraView.shot.pos;
 				if (!canTurn)
@@ -2378,8 +2389,10 @@ void EditorViewport::setCameraGizmo(CameraGizmo gizmo) {
 		cancelCameraDrag();
 	}
 	// A new selection or edit mid-flight: the flight's place may no longer fit the selected
-	// sexp's event, so drop it rather than write it there
+	// sexp's event, so drop it rather than write it there. Playback ends too, so the preview
+	// shows the newly selected sexp.
 	_camFlying = false;
+	stopCameraPlayback();
 	_cameraGizmo = std::move(gizmo);
 	needsUpdate();
 }
@@ -2453,13 +2466,14 @@ bool EditorViewport::canSetCameraFromView() const {
 
 bool EditorViewport::canSetCameraFov() const {
 	CameraSexpPreview preview;
-	return !_camPlayback && _cameraGizmo.setFov && cameraPreview(&preview) && preview.fovNode >= 0;
+	return _cameraGizmo.setFov && cameraPreview(&preview) && preview.fovNode >= 0;
 }
 
 void EditorViewport::setCameraFov(float fov) {
 	if (!canSetCameraFov()) {
 		return;
 	}
+	stopCameraPlayback(); // editing ends playback
 	// Copied: the call edits the tree, which hands the viewport a new gizmo
 	const auto setFov = _cameraGizmo.setFov;
 	setFov(fov);

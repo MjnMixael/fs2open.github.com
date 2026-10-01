@@ -34,6 +34,10 @@ plays them; anything outside them may preview differently (see <a href="#outside
 own state), <code>set-camera-position</code>, <code>set-camera-rotation</code>, <code>set-camera-facing</code>,
 <code>set-camera-facing-object</code>, <code>set-camera-host</code> (positions are relative to the host),
 <code>set-camera-target</code> (turns the camera toward the target) and <code>set-camera-fov</code>.</p>
+<p>The field of view has a quirk of its own in the game: a <code>set-camera-fov</code> without a time sets
+the field of view, but a later timed <code>set-camera-fov</code> zooms from where the last <em>timed</em> one
+ended (or from the in-game FOV), not from the untimed value. So an untimed 30&deg; followed by a timed 90&deg;
+jumps back first, then zooms. The preview does the same, so it matches what the game shows.</p>
 <p>One thing the game does that may surprise you: a <code>set-camera-facing</code> aims from where the camera
 is when the SEXP runs, which is the start of the shot. If the same shot also moves the camera, it ends up
 pointing the way it was aimed from the start, not necessarily straight at the point. The preview shows it the
@@ -78,9 +82,9 @@ and its <strong>FOV</strong> box shows the camera's field of view. The box can b
 <h2>Playing a shot</h2>
 <p>The toolbar's <strong>|&lt;</strong>, <strong>Play</strong>/<strong>Pause</strong> and
 <strong>&gt;|</strong> buttons play the selected SEXP's shot, with the time into it beside them. The frustum
-plays too, so a shot can also be watched from outside with the editor camera. Stopped, the preview goes back
-to the start or end of the shot (rule 3); selecting another camera SEXP stops playback. Editing waits while
-the shot is being played or is paused part way through.</p>
+plays too, so a shot can also be watched from outside with the editor camera. Playback ends, and the preview
+goes back to the start or end of the shot (rule 3), when you select another node, edit the tree, fly the
+camera, change its FOV, or leave the cutscene camera view.</p>
 
 <h2 id="starts-after">Starts after</h2>
 <p>The <strong>Starts after</strong> box on the toolbar chooses the event whose shot this one starts from:</p>
@@ -94,8 +98,8 @@ the shot is being played or is paused part way through.</p>
 </ul>
 <p>A choice is saved with the mission for the editor only (the game ignores it), and follows the event if it
 is renamed. If the chosen event is deleted or loses its camera SEXPs, the box shows it as
-<em>(missing)</em>, the preview goes back to automatic, and the <a href="../dialogs/ErrorCheckerDialog.html">Error
-Checker</a> warns about it. Changing it can be undone in the Events editor.</p>
+<em>(missing)</em> and the preview goes back to automatic. If the event no longer exists, the
+<a href="../dialogs/ErrorCheckerDialog.html">Error Checker</a> also warns about it. Changing it can be undone in the Events editor.</p>
 
 <h2>Editing the selected SEXP</h2>
 <p>These only ever change the selected SEXP, and need its arguments to be plain numbers. Each change is one

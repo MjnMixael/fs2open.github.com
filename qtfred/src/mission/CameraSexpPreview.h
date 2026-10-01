@@ -37,7 +37,12 @@ struct CameraMove {
 struct CameraTrack {
 	CameraMove pos[3];
 	CameraMove rot[9];
+	// The engine keeps the field of view twice (camera::set_fov): a set-camera-fov without a
+	// time sets a fixed value and leaves the moving one alone, so a later timed one moves from
+	// where the last timed one ended (or the default), not from the fixed value
 	CameraMove fov;
+	bool fovFixed = false;
+	float fixedFov = 0.0f;
 	int host = -1;
 	int target = -1;
 	// What it is turned to face, at the end of the shot and at its start (a timed facing only

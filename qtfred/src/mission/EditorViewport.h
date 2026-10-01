@@ -286,8 +286,9 @@ class EditorViewport {
 	void setCameraFov(float fov);
 
 	// Playing the selected sexp's shot. Stopped, the preview is the shot's start or end (see
-	// CameraSexpPreview); once started (Play, |< or >|) it is the shot at the playback time, until
-	// stopCameraPlayback() or another camera sexp is selected. Editing waits while it is active.
+	// CameraSexpPreview); once started (Play, |< or >|) it is the shot at the playback time. It
+	// ends when the selection or the tree changes, the view leaves the cutscene camera, or the
+	// camera is edited (flown, or its FOV changed).
 	bool cameraPlaybackActive() const { return _camPlayback; }
 	bool cameraPlaying() const { return _camPlaying; }
 	float cameraPlaybackTime() const { return _camTime; }

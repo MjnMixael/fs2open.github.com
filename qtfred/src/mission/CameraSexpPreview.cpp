@@ -498,7 +498,15 @@ class CameraRun {
 		case OP_CUTSCENES_SET_CAMERA_FOV:
 			if (numberArg(nodes, args[0], values[0], plain)) {
 				moveTimes(nodes, args + 1, time, accel, decel);
-				moveTo(camera().fov, fl_radians(values[0] % 360), time, accel, decel);
+				auto& cam = camera();
+				const float fov = fl_radians(values[0] % 360);
+				if (time == 0.0f && accel == 0.0f && decel == 0.0f) {
+					cam.fovFixed = true; // the moving value is left where it was
+					cam.fixedFov = fov;
+				} else {
+					cam.fovFixed = false;
+					moveTo(cam.fov, fov, time, accel, decel);
+				}
 			}
 			break;
 
@@ -539,7 +547,7 @@ float CameraMove::at(float t) const
 
 float CameraTrack::duration() const
 {
-	float d = fov.time;
+	float d = fovFixed ? 0.0f : fov.time;
 	for (const auto& m : pos)
 		d = std::max(d, m.time);
 	for (const auto& m : rot)
@@ -563,7 +571,7 @@ CameraShot CameraTrack::at(float t) const
 	vm_matrix_x_matrix(&shot.orient, &base, &rotation);
 	vm_orthogonalize_matrix(&shot.orient);
 
-	shot.fov = fov.at(t);
+	shot.fov = fovFixed ? fixedFov : fov.at(t);
 	shot.hostObj = validObject(host) ? host : -1;
 	shot.targetObj = validObject(target) ? target : -1;
 	if (shot.targetObj >= 0) {
@@ -779,9 +787,33 @@ bool cameraFacingArgs(const CameraSexpPreview& preview, const matrix& orient, in
 {
 	if (preview.op != OP_CUTSCENES_SET_CAMERA_FACING || preview.pointNodes[0] < 0)
 		return false;
+
+	// camera::set_rotation_facing() turns the camera to face the point, and the engine then
+	// applies that on top of the target's facing or the host's orientation (unless it took
+	// the host's orientation out, with Use_host_orientation_for_set_camera_facing). So to end up
+	// looking along orient, face along orient with that base taken off.
+	vec3d dir = orient.vec.fvec;
+	const bool hostCancelled = Use_host_orientation_for_set_camera_facing && validObject(preview.shot.hostObj);
+	if (!hostCancelled) {
+		matrix base = vmd_identity_matrix;
+		if (validObject(preview.shot.targetObj) &&
+			vm_vec_dist(&Objects[preview.shot.targetObj].pos, &preview.facingFrom) > 0.001f) {
+			vec3d toTarget;
+			vm_vec_normalized_dir(&toTarget, &Objects[preview.shot.targetObj].pos, &preview.facingFrom);
+			vm_vector_2_matrix_norm(&base, &toTarget, nullptr, nullptr);
+		} else if (validObject(preview.shot.hostObj)) {
+			base = Objects[preview.shot.hostObj].orient;
+		}
+		matrix baseT = base;
+		vm_transpose(&baseT);
+		matrix facing;
+		vm_matrix_x_matrix(&facing, &baseT, &orient);
+		dir = facing.vec.fvec;
+	}
+
 	const float depth = std::max(vm_vec_dist(&preview.facingFrom, &preview.point), 100.0f);
 	vec3d point;
-	vm_vec_scale_add(&point, &preview.facingFrom, &orient.vec.fvec, depth);
+	vm_vec_scale_add(&point, &preview.facingFrom, &dir, depth);
 	return cameraPointArgs(preview, point, out);
 }
 

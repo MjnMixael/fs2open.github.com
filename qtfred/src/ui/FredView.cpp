@@ -3108,8 +3108,13 @@ void FredView::onUpdateCameraControlActions() {
 											 "to use and adjust the in-game FOV."));
 		}
 		QSignalBlocker blocker(_transformFovSpin);
-		// Only rewrite on a real change, so the idle tick doesn't reset the cursor or selection
-		const double degrees = fl_degrees(_viewport->viewFov());
+		// Only rewrite on a real change, so the idle tick doesn't reset the cursor or selection.
+		// Through a cutscene camera, the camera's own FOV: viewFov() is capped for rendering, and
+		// showing the cap would let one step overwrite a wider set-camera-fov.
+		double degrees = fl_degrees(_viewport->viewFov());
+		CameraSexpPreview cameraFov;
+		if (cameraView && _viewport->cameraPreview(&cameraFov))
+			degrees = fl_degrees(cameraFov.shot.fov);
 		if (std::abs(_transformFovSpin->value() - degrees) > 0.05)
 			_transformFovSpin->setValue(degrees);
 	}

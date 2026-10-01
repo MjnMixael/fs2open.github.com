@@ -1116,6 +1116,14 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 		[this](const QByteArray& blob) {
 			_suppressTreeUndo = true;
 			const auto expanded = ui->eventTree->captureExpansionState();
+			// The selected node, by path, so it can be selected again after the rebuild (the
+			// cutscene camera preview follows the selection, so this keeps it on screen)
+			SCP_list<int> selectedPath;
+			if (auto* item = ui->eventTree->currentItem()) {
+				const int node = ui->eventTree->get_node(item);
+				if (node >= 0)
+					selectedPath = SexpAnnotationModel::buildPath(node, ui->eventTree->tree_nodes, _model->getEventList());
+			}
 			// Rebuilds the tree widget through the model's treeCleared/
 			// subtreeAdded/annotationApplied/rootSelected signals.
 			_model->restoreEventWorkingState(blob);
@@ -1125,6 +1133,15 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			// way back, so don't hide rows by the wrong term here.
 			if (ui->eventViewStack->currentIndex() == TreeViewIndex)
 				applyEventFilter();
+			if (!selectedPath.empty() && ui->eventViewStack->currentIndex() == TreeViewIndex) {
+				SCP_vector<int> identity(_model->getEventList().size());
+				for (int i = 0; i < static_cast<int>(identity.size()); ++i)
+					identity[i] = i;
+				const int node = SexpAnnotationModel::resolveFromPath(selectedPath, ui->eventTree->tree_nodes,
+					_model->getEventList(), identity);
+				if (node >= 0)
+					ui->eventTree->hilite_item(node);
+			}
 			m_last_message_node = -1;
 			updateEventUi();
 			// If the advanced view is showing, the working events just changed
