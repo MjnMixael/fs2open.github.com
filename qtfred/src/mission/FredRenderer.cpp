@@ -1195,23 +1195,26 @@ void FredRenderer::render_camera_gizmo() {
 	if (!_viewport->cameraPreview(&preview)) {
 		return;
 	}
-	const auto& shot = preview.shot;
-	vec3d apex = shot.pos;
-	matrix orient = shot.orient;
-	bool hasAim = shot.hasAimPoint;
-	vec3d aim = shot.aimPoint;
 
-	// Follow a handle drag before it is written: the camera moves, or turns to the new point
+	// The selected sexp's own pose, when a later sexp of its shot overrides it: drawn faintly,
+	// so you can see what it does before it is overridden. Not while playing.
+	const bool ghost = preview.hasOwnShot && !_viewport->cameraPlaybackActive();
+	CameraShot shown = preview.shot;
+	CameraShot own = preview.ownShot;
+
+	// Follow a handle drag before it is written, on the selected sexp's own pose: the camera
+	// moves, or turns to the new point
 	vec3d dragged;
 	if (_viewport->cameraDragPoint(&dragged)) {
+		CameraShot& target = ghost ? own : shown;
 		if (preview.op == OP_CUTSCENES_SET_CAMERA_POSITION) {
-			apex = dragged;
-		} else if (!vm_vec_same(&dragged, &apex)) {
+			target.pos = dragged;
+		} else if (!vm_vec_same(&dragged, &target.pos)) {
 			vec3d dir;
-			vm_vec_normalized_dir(&dir, &dragged, &apex);
-			vm_vector_2_matrix_norm(&orient, &dir, nullptr, nullptr);
-			hasAim = true;
-			aim = dragged;
+			vm_vec_normalized_dir(&dir, &dragged, &target.pos);
+			vm_vector_2_matrix_norm(&target.orient, &dir, nullptr, nullptr);
+			target.hasAimPoint = true;
+			target.aimPoint = dragged;
 		}
 	}
 
@@ -1222,49 +1225,58 @@ void FredRenderer::render_camera_gizmo() {
 		g3_draw_line(&va, &vb);
 	};
 
-	// A fixed share of the distance from the eye, so it reads the same size from anywhere
-	const float len = std::max(vm_vec_dist(&apex, &_viewport->camera.eye_pos) * 0.12f, 5.0f);
 	// The shape the game would show: the vertical angle is zoom * PROJ_FOV_FACTOR, and the
 	// horizontal follows the screen's shape (this viewport's, as the look-through view uses it)
-	const float fov = std::clamp(shot.fov, 0.05f, 2.2f);
-	const float halfH = len * tanf(fov * PROJ_FOV_FACTOR * 0.5f);
 	const float screenW = i2fl(std::max(gr_screen.clip_width, 1));
 	const float screenH = i2fl(std::max(gr_screen.clip_height, 1));
-	const float halfW = halfH * screenW / screenH;
+	auto drawFrustum = [&](const CameraShot& shot, int r, int g, int b, int aimR, int aimG, int aimB) {
+		const vec3d& apex = shot.pos;
+		const matrix& orient = shot.orient;
+		// A fixed share of the distance from the eye, so it reads the same size from anywhere
+		const float len = std::max(vm_vec_dist(&apex, &_viewport->camera.eye_pos) * 0.12f, 5.0f);
+		const float fov = std::clamp(shot.fov, 0.05f, 2.2f);
+		const float halfH = len * tanf(fov * PROJ_FOV_FACTOR * 0.5f);
+		const float halfW = halfH * screenW / screenH;
 
-	vec3d center;
-	vm_vec_scale_add(&center, &apex, &orient.vec.fvec, len);
-	vec3d corners[4];
-	const float sx[4] = {-1.0f, 1.0f, 1.0f, -1.0f};
-	const float sy[4] = {1.0f, 1.0f, -1.0f, -1.0f};
-	for (int i = 0; i < 4; ++i) {
-		vm_vec_scale_add(&corners[i], &center, &orient.vec.rvec, sx[i] * halfW);
-		vm_vec_scale_add2(&corners[i], &orient.vec.uvec, sy[i] * halfH);
+		vec3d center;
+		vm_vec_scale_add(&center, &apex, &orient.vec.fvec, len);
+		vec3d corners[4];
+		const float sx[4] = {-1.0f, 1.0f, 1.0f, -1.0f};
+		const float sy[4] = {1.0f, 1.0f, -1.0f, -1.0f};
+		for (int i = 0; i < 4; ++i) {
+			vm_vec_scale_add(&corners[i], &center, &orient.vec.rvec, sx[i] * halfW);
+			vm_vec_scale_add2(&corners[i], &orient.vec.uvec, sy[i] * halfH);
+		}
+
+		gr_set_color(r, g, b);
+		for (int i = 0; i < 4; ++i) {
+			line(apex, corners[i]);
+			line(corners[i], corners[(i + 1) % 4]);
+		}
+
+		// Which way is up, for the roll
+		vec3d top, tipL, tipR;
+		vm_vec_scale_add(&top, &center, &orient.vec.uvec, halfH * 1.4f);
+		vm_vec_scale_add(&tipL, &center, &orient.vec.uvec, halfH);
+		vm_vec_scale_add2(&tipL, &orient.vec.rvec, -halfW * 0.25f);
+		vm_vec_scale_add(&tipR, &center, &orient.vec.uvec, halfH);
+		vm_vec_scale_add2(&tipR, &orient.vec.rvec, halfW * 0.25f);
+		line(tipL, top);
+		line(top, tipR);
+
+		if (shot.hasAimPoint) {
+			gr_set_color(aimR, aimG, aimB);
+			line(apex, shot.aimPoint);
+		}
+	};
+
+	if (ghost) {
+		drawFrustum(own, 50, 95, 115, 35, 65, 80);
 	}
-
-	gr_set_color(0, 200, 255);
-	for (int i = 0; i < 4; ++i) {
-		line(apex, corners[i]);
-		line(corners[i], corners[(i + 1) % 4]);
-	}
-
-	// Which way is up, for the roll
-	vec3d top, tipL, tipR;
-	vm_vec_scale_add(&top, &center, &orient.vec.uvec, halfH * 1.4f);
-	vm_vec_scale_add(&tipL, &center, &orient.vec.uvec, halfH);
-	vm_vec_scale_add2(&tipL, &orient.vec.rvec, -halfW * 0.25f);
-	vm_vec_scale_add(&tipR, &center, &orient.vec.uvec, halfH);
-	vm_vec_scale_add2(&tipR, &orient.vec.rvec, halfW * 0.25f);
-	line(tipL, top);
-	line(top, tipR);
-
-	if (hasAim) {
-		gr_set_color(0, 120, 160);
-		line(apex, aim);
-	}
-	if (shot.hostObj >= 0) {
+	drawFrustum(shown, 0, 200, 255, 0, 120, 160);
+	if (shown.hostObj >= 0) {
 		gr_set_color(0, 200, 120);
-		line(apex, Objects[shot.hostObj].pos);
+		line(shown.pos, Objects[shown.hostObj].pos);
 	}
 }
 

@@ -57,6 +57,11 @@ same way.</p>
 of view, with a small arrow on top so you can see which way is up. A darker line runs to what the camera
 faces (a <code>set-camera-facing</code> point, a <code>set-camera-facing-object</code> object, or a
 <code>set-camera-target</code> target), and a green line runs to its host (<code>set-camera-host</code>).</p>
+<p>When a later SEXP of the same shot overrides what the selected one does (for example, a
+<code>set-camera-rotation</code> right after a <code>set-camera-facing</code>, both without a time), a faint
+<em>ghost</em> frustum shows the selected SEXP's own pose, the camera as it leaves it. The game shows the
+bright one; the ghost is what the selected SEXP would do if nothing replaced it. Dragging its handle moves
+the ghost.</p>
 
 <h2>Looking through the camera</h2>
 <p><strong>View &rsaquo; Viewpoint &rsaquo; Cutscene Camera</strong>, <strong>Look Through Camera</strong> in

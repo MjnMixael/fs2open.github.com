@@ -234,6 +234,17 @@ vec3d localNow(const CameraTrack& cam)
 	return local;
 }
 
+// What the camera is turned to face; with no time, from the start of the shot
+void setAim(CameraTrack& cam, bool has, const vec3d& point, bool timed)
+{
+	cam.hasAimPoint = has;
+	cam.aimPoint = point;
+	if (!timed) {
+		cam.hasStartAim = has;
+		cam.startAim = point;
+	}
+}
+
 void rotateTo(CameraTrack& cam, const matrix& m, float time, float accel, float decel)
 {
 	for (int i = 0; i < 9; ++i)
@@ -263,8 +274,7 @@ void faceTowards(CameraTrack& cam, const vec3d& point, float time, float accel, 
 	}
 
 	rotateTo(cam, m, time, accel, decel);
-	cam.hasAimPoint = true;
-	cam.aimPoint = point;
+	setAim(cam, true, point, time > 0.0f);
 }
 
 int findEvent(const SCP_vector<CameraEventInfo>& events, const char* name)
@@ -340,10 +350,12 @@ class CameraRun {
   public:
 	explicit CameraRun(const SCP_vector<sexp_tree_item>& nodes) : _nodes(&nodes) {}
 
-	// Recorded as the selected sexp runs: which camera it works on, and where that camera is
+	// Recorded as the selected sexp runs: which camera it works on, where that camera is, and
+	// the camera just after it
 	int selected = -1;
 	SCP_string selectedCamera;
 	vec3d selectedFrom = vmd_zero_vector;
+	CameraTrack selectedTrack;
 
 	CameraTrack& camera(const SCP_string& name)
 	{
@@ -371,6 +383,8 @@ class CameraRun {
 			for (auto& m : entry.second.rot)
 				settle(m);
 			settle(entry.second.fov);
+			entry.second.hasStartAim = entry.second.hasAimPoint;
+			entry.second.startAim = entry.second.aimPoint;
 		}
 	}
 
@@ -392,8 +406,11 @@ class CameraRun {
 				selectedFrom = worldPosition(camera(), localNow(camera()));
 			}
 			apply(node, op);
-			if (node == selected && op == OP_CUTSCENES_SET_CAMERA)
-				selectedCamera = _current; // it selects the camera it names
+			if (node == selected) {
+				if (op == OP_CUTSCENES_SET_CAMERA)
+					selectedCamera = _current; // it selects the camera it names
+				selectedTrack = camera();
+			}
 		}
 
 		for (int c = nodes[node].child; validNode(nodes, c); c = nodes[c].next)
@@ -430,7 +447,7 @@ class CameraRun {
 					moveTo(cam.pos[i], i2fl(values[i]), time, accel, decel);
 				// The camera keeps its rotation, so it no longer looks at what it faced
 				if (!validObject(cam.target))
-					cam.hasAimPoint = false;
+					setAim(cam, false, vmd_zero_vector, time > 0.0f);
 			}
 			break;
 
@@ -446,7 +463,7 @@ class CameraRun {
 				vm_angles_2_matrix(&m, &a);
 				auto& cam = camera();
 				rotateTo(cam, m, time, accel, decel);
-				cam.hasAimPoint = false;
+				setAim(cam, false, vmd_zero_vector, time > 0.0f);
 			}
 			break;
 
@@ -552,6 +569,10 @@ CameraShot CameraTrack::at(float t) const
 	if (shot.targetObj >= 0) {
 		shot.hasAimPoint = true;
 		shot.aimPoint = Objects[shot.targetObj].pos;
+	} else if (t == 0.0f) {
+		// The start of the shot, before any timed facing has turned it
+		shot.hasAimPoint = hasStartAim;
+		shot.aimPoint = startAim;
 	} else {
 		shot.hasAimPoint = hasAimPoint;
 		shot.aimPoint = aimPoint;
@@ -649,6 +670,37 @@ bool previewCameraSexp(const SCP_vector<sexp_tree_item>& nodes, int opNode, Came
 		result.atEnd = time > 0.0f;
 	}
 	result.shot = track.at(result.atEnd ? -1.0f : 0.0f);
+
+	// The selected sexp's own pose, for when a later sexp of the shot overrides it
+	{
+		const CameraShot after = run.selectedTrack.at(-1.0f);
+		CameraShot own = result.shot;
+		bool sets = true;
+		switch (op) {
+		case OP_CUTSCENES_SET_CAMERA_POSITION:
+			own.pos = after.pos;
+			break;
+		case OP_CUTSCENES_SET_CAMERA_ROTATION:
+		case OP_CUTSCENES_SET_CAMERA_FACING:
+		case OP_CUTSCENES_SET_CAMERA_FACING_OBJECT:
+			own.orient = after.orient;
+			own.hasAimPoint = after.hasAimPoint;
+			own.aimPoint = after.aimPoint;
+			break;
+		case OP_CUTSCENES_SET_CAMERA_FOV:
+			own.fov = after.fov;
+			break;
+		default:
+			sets = false;
+			break;
+		}
+		const bool moved = vm_vec_dist(&own.pos, &result.shot.pos) > 0.5f;
+		const bool turned = vm_vec_dot(&own.orient.vec.fvec, &result.shot.orient.vec.fvec) < 0.9999f ||
+			vm_vec_dot(&own.orient.vec.uvec, &result.shot.orient.vec.uvec) < 0.9999f;
+		const bool zoomed = std::fabs(own.fov - result.shot.fov) > 0.001f;
+		result.ownShot = own;
+		result.hasOwnShot = sets && (moved || turned || zoomed);
+	}
 	result.rotationBase = rotationBase(track, result.shot.pos);
 	result.positionHost = result.shot.hostObj;
 	result.facingFrom = run.selectedFrom;

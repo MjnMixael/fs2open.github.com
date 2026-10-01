@@ -40,8 +40,12 @@ struct CameraTrack {
 	CameraMove fov;
 	int host = -1;
 	int target = -1;
+	// What it is turned to face, at the end of the shot and at its start (a timed facing only
+	// changes the end)
 	bool hasAimPoint = false;
 	vec3d aimPoint = vmd_zero_vector;
+	bool hasStartAim = false;
+	vec3d startAim = vmd_zero_vector;
 
 	float duration() const;       // seconds until every move has finished
 	CameraShot at(float t) const; // t seconds into the shot; a negative t is its end
@@ -77,6 +81,12 @@ struct CameraSexpPreview {
 	float duration = 0.0f;
 	bool atEnd = false;
 	CameraShot shot;
+
+	// The selected sexp's own pose: `shot` with what the sexp sets (position, direction or field
+	// of view) as the sexp leaves it. hasOwnShot only when that differs from `shot`, which is
+	// when a later sexp of the event overrides it; the viewport draws it as a ghost.
+	bool hasOwnShot = false;
+	CameraShot ownShot;
 
 	// The event the selected sexp is in, and the event its shot starts after, when the tree has
 	// events. startsAfterAutomatic: worked out rather than chosen. startsAfterMissing: the chosen
