@@ -487,6 +487,7 @@ void MissionEventsDialogModel::renameRootNode(int node, const SCP_string& name)
 		}
 	}
 	Assertion(i < static_cast<int>(m_events.size()), "Attempt to rename an invalid event!");
+	renameCameraStartsAfter(m_events[i].name, name);
 	m_events[i].name = name;
 	set_modified();
 }
@@ -676,6 +677,7 @@ void MissionEventsDialogModel::renameEvent(int id, const SCP_string& name)
 	SCP_string normalized = name.empty() ? SCP_string("<Unnamed>") : name;
 	SCP_truncate(normalized, NAME_LENGTH - 1);
 
+	renameCameraStartsAfter(m_events[idx].name, normalized);
 	modify(m_events[idx].name, normalized);
 }
 
@@ -715,6 +717,7 @@ void MissionEventsDialogModel::setEventNameAt(int index, const SCP_string& name)
 	if (!SCP_vector_inbounds(m_events, index)) {
 		return;
 	}
+	renameCameraStartsAfter(m_events[index].name, name);
 	modify(m_events[index].name, name);
 }
 
@@ -1082,6 +1085,38 @@ bool MissionEventsDialogModel::getNodeCollapsed(int key) const
 {
 	const event_annotation* ea = m_annotation_model.getByKey(key);
 	return ea != nullptr && ea->collapsed;
+}
+
+SCP_string MissionEventsDialogModel::getCameraStartsAfter(int index) const
+{
+	if (!SCP_vector_inbounds(m_events, index))
+		return {};
+	const event_annotation* ea = m_annotation_model.getByKey(SexpAnnotationModel::rootKey(m_events[index].formula));
+	return (ea != nullptr) ? ea->camera_starts_after : SCP_string();
+}
+
+void MissionEventsDialogModel::setCameraStartsAfterAt(int index, const SCP_string& name)
+{
+	if (!SCP_vector_inbounds(m_events, index))
+		return;
+	const int key = SexpAnnotationModel::rootKey(m_events[index].formula);
+	if (name.empty() && m_annotation_model.getByKey(key) == nullptr)
+		return;
+	auto& ea = m_annotation_model.ensureByKey(key);
+	if (ea.camera_starts_after == name)
+		return;
+	ea.camera_starts_after = name;
+	set_modified();
+}
+
+void MissionEventsDialogModel::renameCameraStartsAfter(const SCP_string& oldName, const SCP_string& newName)
+{
+	if (oldName.empty() || lcase_equal(oldName, newName))
+		return;
+	for (auto& ea : m_annotation_model.annotations()) {
+		if (!ea.camera_starts_after.empty() && lcase_equal(ea.camera_starts_after, oldName))
+			ea.camera_starts_after = newName;
+	}
 }
 
 void MissionEventsDialogModel::createMessage()
@@ -1912,6 +1947,7 @@ bool MissionEventsDialogModel::applyEventsText(const SCP_string& text, bool dryR
 		ea.pos_x = src.pos_x;
 		ea.pos_y = src.pos_y;
 		ea.collapsed = src.collapsed;
+		ea.camera_starts_after = src.camera_starts_after;
 		const bool hasColor = (src.r != 255) || (src.g != 255) || (src.b != 255);
 		Q_EMIT annotationApplied(key, ea.comment, src.r, src.g, src.b, hasColor);
 	}

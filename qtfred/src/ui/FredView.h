@@ -3,6 +3,7 @@
 #include <QMainWindow>
 #include <QAction>
 #include <QActionGroup>
+#include <QElapsedTimer>
 #include <QTimer>
 #include <QUndoGroup>
 #include <QUndoStack>
@@ -127,6 +128,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 
 	void on_actionCamera_triggered(bool enabled);
 	void on_actionCurrent_Ship_triggered(bool enabled);
+	void on_actionCutscene_Camera_triggered(bool enabled);
+	void on_actionSet_Camera_From_View_triggered(bool);
 	void on_actionToggle_Viewpoint_triggered(bool);
 
 	void on_actionMission_Events_triggered(bool);
@@ -379,8 +382,20 @@ class FredView: public QMainWindow, public IDialogProvider {
 	QDoubleSpinBox* _transformC          = nullptr;
 	QComboBox*      _transformMoveSpeedCombo = nullptr;
 	QComboBox*      _transformRotSpeedCombo  = nullptr;
-	// FOV of the current view in degrees; editable only while viewing through an object
+	// FOV of the current view in degrees; editable while viewing through an object, or through
+	// a cutscene camera with a set-camera-fov selected (it writes that sexp)
 	QDoubleSpinBox* _transformFovSpin        = nullptr;
+	// Cutscene camera playback, shown while looking through a cutscene camera
+	QList<QAction*> _cameraPlaybackActions;
+	QComboBox*      _cameraStartsAfterCombo  = nullptr;
+	QToolButton*    _cameraRewindBtn         = nullptr;
+	QToolButton*    _cameraPlayBtn           = nullptr;
+	QToolButton*    _cameraEndBtn            = nullptr;
+	QLabel*         _cameraTimeLabel         = nullptr;
+	QTimer*         _cameraPlaybackTimer     = nullptr;
+	QElapsedTimer   _cameraPlaybackClock;
+	QString         _cameraStartsAfterKey; // what the combo was last filled from
+	void updateCameraPlaybackControls();
 	// Last camera speeds written to QSettings; lets us persist on change instead of only on close.
 	int             _lastSavedCameraSpeedMove = -1;
 	int             _lastSavedCameraSpeedRot  = -1;

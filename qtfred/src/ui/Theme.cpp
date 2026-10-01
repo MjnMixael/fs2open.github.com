@@ -449,6 +449,13 @@ QIcon makeThemedIcon(QStyle::StandardPixmap sp, const QColor& color, int size)
 	case QStyle::SP_MediaStop:
 		p.drawRect(r);
 		break;
+	case QStyle::SP_MediaPause: {
+		// two vertical bars
+		const qreal barW = r.width() * 0.32;
+		p.drawRect(QRectF(r.left(), r.top(), barW, r.height()));
+		p.drawRect(QRectF(r.right() - barW, r.top(), barW, r.height()));
+		break;
+	}
 	case QStyle::SP_MediaSkipForward: {
 		// triangle pointing right + vertical bar on the right
 		const qreal barW = r.width() * 0.18;

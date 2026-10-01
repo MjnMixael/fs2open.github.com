@@ -109,6 +109,7 @@ QByteArray MissionEventsDialogModel::captureState() const
 		ds << ea.pos_x;
 		ds << ea.pos_y;
 		ds << static_cast<quint8>(ea.collapsed);
+		ds << QString::fromStdString(ea.camera_starts_after);
 	}
 
 	return data;
@@ -209,7 +210,8 @@ void MissionEventsDialogModel::restoreState(const QByteArray& state)
 		QString comment;
 		quint8 r, g, b, hasPos, collapsed;
 		float px, py;
-		ds >> comment >> r >> g >> b >> hasPos >> px >> py >> collapsed;
+		QString startsAfter;
+		ds >> comment >> r >> g >> b >> hasPos >> px >> py >> collapsed >> startsAfter;
 		ea.comment    = comment.toStdString();
 		ea.r          = r;
 		ea.g          = g;
@@ -218,6 +220,7 @@ void MissionEventsDialogModel::restoreState(const QByteArray& state)
 		ea.pos_x      = px;
 		ea.pos_y      = py;
 		ea.collapsed  = (collapsed != 0);
+		ea.camera_starts_after = startsAfter.toStdString();
 		ea.node_index = -1;
 		ea.item_image = -1;
 	}
@@ -329,6 +332,7 @@ QByteArray MissionEventsDialogModel::captureEventWorkingState() const
 		ds << static_cast<quint8>(ea->r) << static_cast<quint8>(ea->g) << static_cast<quint8>(ea->b);
 		ds << static_cast<quint8>(ea->has_pos) << ea->pos_x << ea->pos_y;
 		ds << static_cast<quint8>(ea->collapsed);
+		ds << QString::fromStdString(ea->camera_starts_after);
 	}
 
 	return data;
@@ -401,7 +405,8 @@ void MissionEventsDialogModel::restoreEventWorkingState(const QByteArray& state)
 		QString comment;
 		quint8 r, g, b, hasPos, collapsed;
 		float px, py;
-		ds >> comment >> r >> g >> b >> hasPos >> px >> py >> collapsed;
+		QString startsAfter;
+		ds >> comment >> r >> g >> b >> hasPos >> px >> py >> collapsed >> startsAfter;
 
 		const int key = SexpAnnotationModel::resolveFromPath(path, m_tree_model.tree_nodes, m_events, identity);
 		if (key == -1)
@@ -415,6 +420,7 @@ void MissionEventsDialogModel::restoreEventWorkingState(const QByteArray& state)
 		ea.pos_x = px;
 		ea.pos_y = py;
 		ea.collapsed = (collapsed != 0);
+		ea.camera_starts_after = startsAfter.toStdString();
 		const bool hasColor = (r != 255) || (g != 255) || (b != 255);
 		Q_EMIT annotationApplied(key, ea.comment, r, g, b, hasColor);
 	}

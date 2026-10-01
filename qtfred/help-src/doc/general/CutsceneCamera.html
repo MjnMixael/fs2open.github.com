@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Cutscene Camera Preview - QtFRED Help</title>
+    <link rel="stylesheet" type="text/css" href="../css/help.css"/>
+</head>
+<body>
+<nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; Cutscene Camera Preview</nav>
+<h1>Cutscene Camera Preview</h1>
+<p>While a camera SEXP is selected in a SEXP tree (usually in the <a href="../dialogs/MissionEventsDialog.html">Events
+editor</a>), the viewport shows the cutscene camera, and can play the shot it is part of. Select the operator
+itself or any of its arguments. Nothing here changes how the mission plays; it only helps you place the
+camera.</p>
+<p>The preview follows the rules below. Cutscenes written the way they describe preview exactly as the game
+plays them; anything outside them may preview differently (see <a href="#outside">Outside the rules</a>).</p>
+
+<h2>The rules</h2>
+<ol>
+    <li><strong>An event is one shot.</strong> All of an event's camera SEXPs run at the same moment, as they
+        do in the game. SEXPs <em>without</em> a time set the start of the shot; SEXPs <em>with</em> a time
+        move it from there to the end, easing in and out the way the game moves it. When the same thing
+        (position, direction, field of view) is set more than once, the last one wins, as in the game.</li>
+    <li><strong>A shot starts where the shot of its "Starts after" event ended.</strong> See
+        <a href="#starts-after">Starts after</a>. With no such event, the shot starts from a new camera at the
+        origin. The preview assumes each earlier shot has finished before the next one starts.</li>
+    <li><strong>What is shown depends on what is selected.</strong> Selecting a SEXP without a time shows the
+        start of the shot; selecting a timed one shows its end. <strong>Play</strong> runs the whole shot from
+        start to end.</li>
+    <li><strong>Editing only ever changes the selected SEXP</strong>, and only the part it holds: a position
+        moves, a rotation or facing turns, a field of view zooms.</li>
+</ol>
+<p>These camera SEXPs are understood: <code>set-camera</code> (switches between named cameras, each keeping its
+own state), <code>set-camera-position</code>, <code>set-camera-rotation</code>, <code>set-camera-facing</code>,
+<code>set-camera-facing-object</code>, <code>set-camera-host</code> (positions are relative to the host),
+<code>set-camera-target</code> (turns the camera toward the target) and <code>set-camera-fov</code>.</p>
+<p>The field of view has a quirk of its own in the game: a <code>set-camera-fov</code> without a time sets
+the field of view, but a later timed <code>set-camera-fov</code> zooms from where the last <em>timed</em> one
+ended (or from the in-game FOV), not from the untimed value. So an untimed 30&deg; followed by a timed 90&deg;
+jumps back first, then zooms. The preview does the same, so it matches what the game shows.</p>
+<p>One thing the game does that may surprise you: a <code>set-camera-facing</code> aims from where the camera
+is when the SEXP runs, which is the start of the shot. If the same shot also moves the camera, it ends up
+pointing the way it was aimed from the start, not necessarily straight at the point. The preview shows it the
+same way.</p>
+
+<h2 id="outside">Outside the rules</h2>
+<p>The preview doesn't try to handle these, and may differ from the game:</p>
+<ul>
+    <li>Camera SEXPs that might not run, such as those in <code>if-then-else</code> branches or behind
+        conditions: the preview runs all of them.</li>
+    <li>Repeating and <code>every-time</code> events, and shots that overlap because the next one starts before
+        the last one finishes.</li>
+    <li>An order of shots that neither chaining nor <code>is-event-true</code> describes. Set
+        <strong>Starts after</strong> by hand for those.</li>
+    <li>Arguments that are variables (their starting value is used) or operators such as <code>+</code> (that
+        SEXP is skipped).</li>
+</ul>
+
+<h2>What is shown</h2>
+<p>The camera is drawn as a cyan frustum: a pyramid pointing where the camera looks, as wide as its field
+of view, with a small arrow on top so you can see which way is up. A darker line runs to what the camera
+faces (a <code>set-camera-facing</code> point, a <code>set-camera-facing-object</code> object, or a
+<code>set-camera-target</code> target), and a green line runs to its host (<code>set-camera-host</code>).</p>
+<p>When a later SEXP of the same shot overrides what the selected one does (for example, a
+<code>set-camera-rotation</code> right after a <code>set-camera-facing</code>, both without a time), a faint
+<em>ghost</em> frustum shows the selected SEXP's own pose, the camera as it leaves it. The game shows the
+bright one; the ghost is what the selected SEXP would do if nothing replaced it. Dragging its handle moves
+the ghost.</p>
+
+<h2>Looking through the camera</h2>
+<p><strong>View &rsaquo; Viewpoint &rsaquo; Cutscene Camera</strong>, <strong>Look Through Camera</strong> in
+the SEXP tree's right-click menu, or <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> shows the viewport
+through the camera at its field of view: the last <code>set-camera-fov</code>, including one from an earlier
+shot, or else the in-game FOV. <kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>V</kbd> cycles the editor camera, the
+current ship and the cutscene camera, skipping the ones there is nothing to look through. Selecting a
+different camera SEXP updates the view, so you can step through a cutscene shot by shot. The view goes back
+to the editor camera when no camera SEXP is selected or the dialog is closed.</p>
+<p>While looking through the camera the toolbar shows the playback buttons and <strong>Starts after</strong>,
+and its <strong>FOV</strong> box shows the camera's field of view. The box can be changed while a
+<code>set-camera-fov</code> is selected, and writes into it.</p>
+
+<h2>Playing a shot</h2>
+<p>The toolbar's <strong>|&lt;</strong>, <strong>Play</strong>/<strong>Pause</strong> and
+<strong>&gt;|</strong> buttons play the selected SEXP's shot, with the time into it beside them. The frustum
+plays too, so a shot can also be watched from outside with the editor camera. Playback ends, and the preview
+goes back to the start or end of the shot (rule 3), when you select another node, edit the tree, fly the
+camera, change its FOV, or leave the cutscene camera view.</p>
+
+<h2 id="starts-after">Starts after</h2>
+<p>The <strong>Starts after</strong> box on the toolbar chooses the event whose shot this one starts from:</p>
+<ul>
+    <li><strong>Automatic</strong> works it out: a chained event starts after the event before it in the list,
+        and otherwise an event starts after an event its formula waits for with <code>is-event-true</code>,
+        <code>is-event-true-delay</code> or <code>is-event-true-msecs-delay</code>. Only events with camera
+        SEXPs count. The event it picked is shown in brackets.</li>
+    <li><strong>New camera</strong> starts from a new camera at the origin.</li>
+    <li>Or pick any event with camera SEXPs.</li>
+</ul>
+<p>A choice is saved with the mission for the editor only (the game ignores it), and follows the event if it
+is renamed. If the chosen event is deleted or loses its camera SEXPs, the box shows it as
+<em>(missing)</em> and the preview goes back to automatic. If the event no longer exists, the
+<a href="../dialogs/ErrorCheckerDialog.html">Error Checker</a> also warns about it. Changing it can be undone in the Events editor.</p>
+
+<h2>Editing the selected SEXP</h2>
+<p>These only ever change the selected SEXP, and need its arguments to be plain numbers. Each change is one
+step in the dialog's undo history.</p>
+<ul>
+    <li><strong>Dragging:</strong> a selected <code>set-camera-position</code> or <code>set-camera-facing</code>
+        puts a cyan handle on its point. In Move mode, drag it to move the camera or the point it faces. The
+        arguments are written when you let go; right-click or press Escape during the drag to cancel it. The
+        drag follows the usual constraint plane and the toolbar's axis locks.</li>
+    <li><strong>Flying:</strong> while looking through the camera, the usual movement keys (and a SpaceMouse)
+        fly it at the <strong>Camera Move</strong> and <strong>Camera Rot</strong> speeds, but only the way
+        the selected SEXP can take: a <code>set-camera-position</code> moves, a
+        <code>set-camera-rotation</code> or <code>set-camera-facing</code> turns, and anything else stays put.
+        When you stop, the SEXP takes the new place: a position (relative to the host, if the camera has one),
+        a rotation's angles, or a facing point straight ahead, as far away as it was, so the camera faces the
+        way you turned it.</li>
+    <li><strong>Set from the viewport:</strong> fly the editor camera to the view you want, then use
+        <strong>View &rsaquo; Viewpoint &rsaquo; Set Camera SEXP from View</strong> (also in the viewport's
+        right-click menu) or <strong>Set from Viewport</strong> in the SEXP tree's right-click menu. The
+        selected SEXP takes the view the same way: a position takes where the view is, and a rotation or
+        facing the way it looks. The editor camera uses a narrower field of view than the game, so look
+        through the camera afterwards to check the framing.</li>
+</ul>
+
+<h2>Showing and hiding</h2>
+<p><strong>View &rsaquo; Show Cutscene Camera</strong> turns the frustum and handle on or off. Looking
+through the camera still works while they are hidden.</p>
+</body>
+</html>

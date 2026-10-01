@@ -282,7 +282,15 @@ fields that change based on the active editing mode.</p>
             (<em>View &rsaquo; Viewpoint</em>), the view uses the in-game FOV so it matches what
             the player sees, and the box can be changed between 25&deg; and 90&deg;. Changes
             last for the session and reset to the in-game FOV when a mission is loaded or
-            created.</td>
+            created. Looking through a
+            <a href="CutsceneCamera.html">cutscene camera</a>, the box shows the camera's FOV. It
+            can be changed while a <code>set-camera-fov</code> is selected, and writes into it.</td>
+    </tr>
+    <tr>
+        <td>Starts after, |&lt; Play &gt;|</td>
+        <td>Shown only while looking through a <a href="CutsceneCamera.html">cutscene camera</a>.
+            <em>Starts after</em> chooses the event whose shot the selected one starts from, and the
+            buttons play the selected SEXP's shot, with the time into it beside them.</td>
     </tr>
 </table>
 
@@ -353,7 +361,8 @@ and a message area that shows transient notifications during loading.</p>
         <td>Right</td>
         <td><em>Viewpoint: Camera</em> normally; changes to
             <em>Viewpoint: &lt;name&gt;</em> when the camera is locked to a
-            ship's perspective.</td>
+            ship's perspective, and to <em>Viewpoint: Cutscene Camera</em> when looking
+            through a <a href="CutsceneCamera.html">cutscene camera</a>.</td>
     </tr>
     <tr>
         <td>Units</td>

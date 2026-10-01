@@ -158,6 +158,7 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	ui->editDirectiveKeypressText->setMaxLength(NAME_LENGTH - 1);
 
 	ui->eventTree->initializeEditor(viewport->editor, this, viewport, parent);
+	ui->eventTree->setCameraEventSource(this);
 	ui->eventTree->clear_tree();
 	ui->eventTree->_model.post_load();
 
@@ -299,7 +300,38 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	});
 }
 
-MissionEventsDialog::~MissionEventsDialog() = default;
+MissionEventsDialog::~MissionEventsDialog()
+{
+	// The tree outlives the model while the dialog's widgets are torn down
+	ui->eventTree->setCameraEventSource(nullptr);
+}
+
+SCP_vector<CameraEventInfo> MissionEventsDialog::cameraEventInfo() const
+{
+	SCP_vector<CameraEventInfo> events;
+	if (!_model)
+		return events;
+	const auto& list = _model->getEventList();
+	events.reserve(list.size());
+	for (int i = 0; i < static_cast<int>(list.size()); ++i) {
+		CameraEventInfo info;
+		info.name = list[i].name;
+		info.formula = list[i].formula;
+		info.chained = list[i].chain_delay >= 0;
+		info.startsAfter = _model->getCameraStartsAfter(i);
+		events.push_back(std::move(info));
+	}
+	return events;
+}
+
+void MissionEventsDialog::setCameraStartsAfter(int eventIndex, const SCP_string& name)
+{
+	if (!_model || _model->getCameraStartsAfter(eventIndex) == name)
+		return;
+	const QByteArray before = _model->captureEventWorkingState();
+	_model->setCameraStartsAfterAt(eventIndex, name);
+	pushEventStateSnapshot(before, tr("Set Camera Starts After"));
+}
 
 void MissionEventsDialog::initEventWidgets() {
 	initEventTeams();
@@ -1084,6 +1116,14 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 		[this](const QByteArray& blob) {
 			_suppressTreeUndo = true;
 			const auto expanded = ui->eventTree->captureExpansionState();
+			// The selected node, by path, so it can be selected again after the rebuild (the
+			// cutscene camera preview follows the selection, so this keeps it on screen)
+			SCP_list<int> selectedPath;
+			if (auto* item = ui->eventTree->currentItem()) {
+				const int node = ui->eventTree->get_node(item);
+				if (node >= 0)
+					selectedPath = SexpAnnotationModel::buildPath(node, ui->eventTree->_model.tree_nodes, _model->getEventList());
+			}
 			// Rebuilds the tree widget through the model's treeCleared/
 			// subtreeAdded/annotationApplied/rootSelected signals.
 			_model->restoreEventWorkingState(blob);
@@ -1093,6 +1133,15 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 			// way back, so don't hide rows by the wrong term here.
 			if (ui->eventViewStack->currentIndex() == TreeViewIndex)
 				applyEventFilter();
+			if (!selectedPath.empty() && ui->eventViewStack->currentIndex() == TreeViewIndex) {
+				SCP_vector<int> identity(_model->getEventList().size());
+				for (int i = 0; i < static_cast<int>(identity.size()); ++i)
+					identity[i] = i;
+				const int node = SexpAnnotationModel::resolveFromPath(selectedPath, ui->eventTree->_model.tree_nodes,
+					_model->getEventList(), identity);
+				if (node >= 0)
+					ui->eventTree->hilite_item(node);
+			}
 			m_last_message_node = -1;
 			updateEventUi();
 			// If the advanced view is showing, the working events just changed

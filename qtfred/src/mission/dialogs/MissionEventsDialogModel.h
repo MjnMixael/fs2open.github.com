@@ -147,6 +147,12 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setNodeCollapsed(int key, bool collapsed);
 	bool getNodeCollapsed(int key) const;
 
+	// Cutscene camera preview: the event (by name) whose camera an event's camera sexps
+	// carry on from, stored on the event's annotation. Empty = worked out automatically,
+	// SEXP_NONE_STRING = a new camera. Renaming an event updates the names that point at it.
+	SCP_string getCameraStartsAfter(int index) const;
+	void setCameraStartsAfterAt(int index, const SCP_string& name);
+
 	// The current working annotations (comment/color/position), keyed internally
 	// by node_index. Read-only view for the graph to render comment + color.
 	const SCP_vector<event_annotation>& nodeAnnotations() const { return m_annotation_model.annotations(); }
@@ -217,6 +223,9 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	int buildDefaultTreeStructure(const SCP_string& name);
 
 	void applyAnnotations();
+
+	// Points camera starts-after names at an event's new name
+	void renameCameraStartsAfter(const SCP_string& oldName, const SCP_string& newName);
 
 	void initializeMessages();
 	void initializeHeadAniList();

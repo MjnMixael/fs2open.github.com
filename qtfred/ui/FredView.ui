@@ -89,8 +89,11 @@
      </property>
      <addaction name="actionCamera"/>
      <addaction name="actionCurrent_Ship"/>
+     <addaction name="actionCutscene_Camera"/>
      <addaction name="separator"/>
      <addaction name="actionToggle_Viewpoint"/>
+     <addaction name="separator"/>
+     <addaction name="actionSet_Camera_From_View"/>
     </widget>
     <addaction name="actionSceneBrowser"/>
     <addaction name="separator"/>
@@ -113,6 +116,7 @@
     <addaction name="actionShow_Grid"/>
     <addaction name="actionShow_Horizon"/>
     <addaction name="actionShow_3D_Compass"/>
+    <addaction name="actionShow_Camera_Gizmo"/>
     <addaction name="separator"/>
     <addaction name="menuViewpoint"/>
     <addaction name="actionSave_Camera_Pos"/>
@@ -875,12 +879,42 @@
     <string>Current &amp;Ship</string>
    </property>
   </action>
+  <action name="actionCutscene_Camera">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Cutscene C&amp;amera</string>
+   </property>
+   <property name="toolTip">
+    <string>Look through the camera sexp selected in a sexp tree, at its FOV</string>
+   </property>
+  </action>
+  <action name="actionSet_Camera_From_View">
+   <property name="text">
+    <string>Set Camera SEXP from &amp;View</string>
+   </property>
+   <property name="toolTip">
+    <string>Set the selected set-camera-position, set-camera-rotation or set-camera-facing from the viewport</string>
+   </property>
+  </action>
+  <action name="actionShow_Camera_Gizmo">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Show Cutscene Ca&amp;mera</string>
+   </property>
+   <property name="toolTip">
+    <string>Show the camera sexp selected in a sexp tree in the viewport</string>
+   </property>
+  </action>
   <action name="actionToggle_Viewpoint">
    <property name="text">
     <string>&amp;Toggle Viewpoint</string>
    </property>
    <property name="toolTip">
-    <string>Toggle between the camera and the current ship's viewpoint (Ctrl+Shift+V)</string>
+    <string>Cycle between the editor camera, the current ship and the cutscene camera (Ctrl+Shift+V)</string>
    </property>
    <property name="shortcut">
     <string>Ctrl+Shift+V</string>

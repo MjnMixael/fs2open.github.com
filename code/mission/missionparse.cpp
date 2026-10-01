@@ -6233,7 +6233,15 @@ void parse_event(mission *pm)
 	if (optional_string("$Annotations Start")) {
 		// annotations are only used in FRED
 		if (Fred_running) {
-			while (check_for_string("+Comment:") || check_for_string("+Background Color:") || check_for_string("+Path:") || check_for_string("+Position:") || check_for_string("+Collapsed:")) {
+			while (check_for_string("+")) {
+				if (!check_for_string("+Comment:") && !check_for_string("+Background Color:") && !check_for_string("+Path:") &&
+					!check_for_string("+Position:") && !check_for_string("+Collapsed:") && !check_for_string("+Camera Starts After:")) {
+					// A single-line field from a newer editor: skip it, so missions it saved still open here
+					advance_to_eoln(nullptr);
+					ignore_white_space();
+					continue;
+				}
+
 				event_annotation ea;
 				ea.path.push_back((int)(event - &Mission_events[0]));
 
@@ -6272,6 +6280,10 @@ void parse_event(mission *pm)
 					int collapsed_val;
 					stuff_int(&collapsed_val);
 					ea.collapsed = (collapsed_val != 0);
+				}
+
+				if (optional_string("+Camera Starts After:")) {
+					stuff_string(ea.camera_starts_after, F_NAME);
 				}
 
 				Event_annotations.push_back(std::move(ea));
@@ -10406,8 +10418,8 @@ bool check_for_25_1_data()
 
 bool check_for_26_1_data()
 {
-	// Graph-view editor metadata on event annotations: saved node positions and
-	// collapsed subtrees.
+	// Editor metadata on event annotations: graph-view node positions and collapsed
+	// subtrees, and the cutscene camera preview's starts-after event.
 	return std::any_of(Event_annotations.begin(), Event_annotations.end(),
-		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed; });
+		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed || !ea.camera_starts_after.empty(); });
 }

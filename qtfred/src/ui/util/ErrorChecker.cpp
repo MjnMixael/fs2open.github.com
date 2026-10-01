@@ -10,6 +10,7 @@
 #include <mission/missionparse.h>
 #include <parse/sexp.h>
 #include <missioneditor/common.h>
+#include <missioneditor/sexp_annotation_model.h>
 #include <model/model.h>
 #include <object/object.h>
 #include <object/objectdock.h>
@@ -1105,6 +1106,21 @@ int ErrorChecker::checkMissionEvents() {
 
 		if (fred_check_sexp(event.formula, OPR_NULL, "mission event \"%s\"", event.name.c_str())) {
 			return -1;
+		}
+
+		// The cutscene camera preview's starts-after event (editor only) must still exist
+		for (const auto& ea : Event_annotations) {
+			if (ea.path.size() != 1 || ea.path.front() != static_cast<int>(i) || ea.camera_starts_after.empty() ||
+				!stricmp(ea.camera_starts_after.c_str(), SEXP_NONE_STRING))
+				continue;
+			const auto& name = ea.camera_starts_after;
+			const bool found = std::any_of(Mission_events.begin(), Mission_events.end(),
+				[&name](const mission_event& e) { return !stricmp(e.name.c_str(), name.c_str()); });
+			if (!found || !stricmp(event.name.c_str(), name.c_str())) {
+				warning("Mission event \"%s\" has its cutscene camera starting after event \"%s\", which %s. The "
+						"camera preview works out where it starts instead.",
+					event.name.c_str(), name.c_str(), found ? "is itself" : "does not exist");
+			}
 		}
 	}
 	return 0;

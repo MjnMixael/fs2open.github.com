@@ -2085,7 +2085,7 @@ int Fred_mission_save::save_events()
 			event_annotation default_ea;
 
 			// A record has no start token: the parser reads Comment, Color, Path, Position,
-			// Collapsed in that order and a record ends where the next field would go
+			// Collapsed, Camera Starts After in that order and a record ends where the next field would go
 			// backwards. Pre-26.1 records always began with a Comment or Color, so that
 			// was unambiguous. A 26.1 record can hold only a Position or Collapsed, so
 			// every record then writes +Path (empty for an event root) as its anchor;
@@ -2165,6 +2165,15 @@ int Fred_mission_save::save_events()
 						fout_version("\n+Collapsed:");
 
 					fout(" %d", 1);
+				}
+
+				if (!ea.camera_starts_after.empty() && The_mission.required_fso_version >= gameversion::version(26, 1)) {
+					if (optional_string_fred("+Camera Starts After:", "$Formula:"))
+						parse_comments();
+					else
+						fout_version("\n+Camera Starts After:");
+
+					fout(" %s", ea.camera_starts_after.c_str());
 				}
 			}
 

@@ -214,6 +214,10 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! actions that open dialogs participating in the undo stack (Add/Modify Variable).
 	void initializeEditor(Editor* edit, SexpTreeEditorInterface* editorInterface = nullptr, EditorViewport* viewport = nullptr, FredView* fredView = nullptr);
 
+	//! Hands the tree's events to the cutscene camera preview (the Events editor), so a shot
+	//! can start where an earlier event's shot ended, and its starts-after event can be chosen.
+	void setCameraEventSource(CameraEventSource* source) { _cameraEventSource = source; }
+
 	//! Public entry point for deleting the currently selected item. Calls deleteActionHandler().
 	void deleteCurrentItem();
 
@@ -309,6 +313,18 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	//! Slot for customContextMenuRequested. Gets the item at pos, builds and executes the context menu.
 	void customMenuHandler(const QPoint& pos);
 
+	// Cutscene camera preview. While a node in a camera sexp is selected, this tree hands the
+	// viewport a gizmo for it (EditorViewport::setCameraGizmo) that works the camera out from
+	// the current selection each time it is asked, so it never holds stale node indices.
+	void syncCameraGizmo();
+	bool evaluateCameraSexp(CameraSexpPreview& out) const;
+	SCP_vector<CameraEventInfo> cameraEventInfo() const;
+	// Writes number arguments as one tree edit: a single modified(), so one undo step
+	void writeCameraArgs(const int* nodes, const int* values, int count);
+	void moveCameraPoint(const vec3d& world);
+	void setCameraFromView(const vec3d& eye, const matrix& orient);
+	void setCameraFov(float fov);
+
 	//! Creates a persistent QShortcut on this widget bound to `key`. When the user presses
 	//! the shortcut while this widget has focus, recomputes the context menu state and only
 	//! invokes `action` if `gate(state)` returns true. Used to wire Cut/Copy/Paste/Delete
@@ -378,6 +394,7 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 
 	Editor* _editor = nullptr;                                   //!< The FRED Editor instance
 	EditorViewport* _viewport = nullptr;                         //!< The EditorViewport (set by initializeEditor)
+	CameraEventSource* _cameraEventSource = nullptr;             //!< The tree's events, for the cutscene camera preview
 	FredView* _fredView = nullptr;                               //!< The main window (set by initializeEditor)
 	SexpTreeEditorInterface*& _interface = _model._interface;    //!< Alias for _model._interface (flags for tree behavior)
 	std::unique_ptr<SexpTreeEditorInterface> _owned_interface;   //!< Default interface if none is supplied externally

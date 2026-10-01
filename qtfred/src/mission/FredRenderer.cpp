@@ -30,6 +30,10 @@
 #include <graphics/light.h>
 #include <mod_table/mod_table.h>
 #include <cfile/cfile.h>
+#include <parse/sexp.h>
+
+#include <algorithm>
+#include <cmath>
 
 #include "mission/object.h"
 #include "prop/prop.h"
@@ -1182,6 +1186,100 @@ void FredRenderer::render_volumetric_overlay() {
 	disable_htl();
 }
 
+void FredRenderer::render_camera_gizmo() {
+	// Looking through the camera, the frustum would only be in the way
+	if (!view().Show_camera_gizmo || _viewport->camera.getViewpoint() == EditorViewport::CutsceneCameraViewpoint) {
+		return;
+	}
+	CameraSexpPreview preview;
+	if (!_viewport->cameraPreview(&preview)) {
+		return;
+	}
+
+	// The selected sexp's own pose, when a later sexp of its shot overrides it: drawn faintly,
+	// so you can see what it does before it is overridden. Not while playing.
+	const bool ghost = preview.hasOwnShot && !_viewport->cameraPlaybackActive();
+	CameraShot shown = preview.shot;
+	CameraShot own = preview.ownShot;
+
+	// Follow a handle drag before it is written, on the selected sexp's own pose: the camera
+	// moves, or turns to the new point
+	vec3d dragged;
+	if (_viewport->cameraDragPoint(&dragged)) {
+		CameraShot& target = ghost ? own : shown;
+		if (preview.op == OP_CUTSCENES_SET_CAMERA_POSITION) {
+			target.pos = dragged;
+		} else if (!vm_vec_same(&dragged, &target.pos)) {
+			vec3d dir;
+			vm_vec_normalized_dir(&dir, &dragged, &target.pos);
+			vm_vector_2_matrix_norm(&target.orient, &dir, nullptr, nullptr);
+			target.hasAimPoint = true;
+			target.aimPoint = dragged;
+		}
+	}
+
+	auto line = [](const vec3d& a, const vec3d& b) {
+		vertex va, vb;
+		g3_rotate_vertex(&va, &a);
+		g3_rotate_vertex(&vb, &b);
+		g3_draw_line(&va, &vb);
+	};
+
+	// The shape the game would show: the vertical angle is zoom * PROJ_FOV_FACTOR, and the
+	// horizontal follows the screen's shape (this viewport's, as the look-through view uses it)
+	const float screenW = i2fl(std::max(gr_screen.clip_width, 1));
+	const float screenH = i2fl(std::max(gr_screen.clip_height, 1));
+	auto drawFrustum = [&](const CameraShot& shot, int r, int g, int b, int aimR, int aimG, int aimB) {
+		const vec3d& apex = shot.pos;
+		const matrix& orient = shot.orient;
+		// A fixed share of the distance from the eye, so it reads the same size from anywhere
+		const float len = std::max(vm_vec_dist(&apex, &_viewport->camera.eye_pos) * 0.12f, 5.0f);
+		const float fov = std::clamp(shot.fov, 0.05f, 2.2f);
+		const float halfH = len * tanf(fov * PROJ_FOV_FACTOR * 0.5f);
+		const float halfW = halfH * screenW / screenH;
+
+		vec3d center;
+		vm_vec_scale_add(&center, &apex, &orient.vec.fvec, len);
+		vec3d corners[4];
+		const float sx[4] = {-1.0f, 1.0f, 1.0f, -1.0f};
+		const float sy[4] = {1.0f, 1.0f, -1.0f, -1.0f};
+		for (int i = 0; i < 4; ++i) {
+			vm_vec_scale_add(&corners[i], &center, &orient.vec.rvec, sx[i] * halfW);
+			vm_vec_scale_add2(&corners[i], &orient.vec.uvec, sy[i] * halfH);
+		}
+
+		gr_set_color(r, g, b);
+		for (int i = 0; i < 4; ++i) {
+			line(apex, corners[i]);
+			line(corners[i], corners[(i + 1) % 4]);
+		}
+
+		// Which way is up, for the roll
+		vec3d top, tipL, tipR;
+		vm_vec_scale_add(&top, &center, &orient.vec.uvec, halfH * 1.4f);
+		vm_vec_scale_add(&tipL, &center, &orient.vec.uvec, halfH);
+		vm_vec_scale_add2(&tipL, &orient.vec.rvec, -halfW * 0.25f);
+		vm_vec_scale_add(&tipR, &center, &orient.vec.uvec, halfH);
+		vm_vec_scale_add2(&tipR, &orient.vec.rvec, halfW * 0.25f);
+		line(tipL, top);
+		line(top, tipR);
+
+		if (shot.hasAimPoint) {
+			gr_set_color(aimR, aimG, aimB);
+			line(apex, shot.aimPoint);
+		}
+	};
+
+	if (ghost) {
+		drawFrustum(own, 50, 95, 115, 35, 65, 80);
+	}
+	drawFrustum(shown, 0, 200, 255, 0, 120, 160);
+	if (shown.hostObj >= 0) {
+		gr_set_color(0, 200, 120);
+		line(shown.pos, Objects[shown.hostObj].pos);
+	}
+}
+
 void FredRenderer::render_models(int cur_object_index) {
 	gr_set_color_fast(&colour_white);
 
@@ -1298,6 +1396,7 @@ void FredRenderer::render_frame(int cur_object_index,
 	// drawn/picked (cheap no-ops unless the underlying state changed).
 	_viewport->refreshVolumetricHandle();
 	_viewport->refreshAsteroidHandles();
+	_viewport->refreshCameraHandle();
 
 	// Grid-position indicators for any handle that opts in (volumetric center,
 	// asteroid box centers), drawn like an object's so height above/below the
@@ -1316,6 +1415,8 @@ void FredRenderer::render_frame(int cur_object_index,
 		}
 		disable_htl();
 	}
+
+	render_camera_gizmo();
 
 	// Viewport handles overlay every visualizer (asteroid box, volumetric
 	// hull) and need to draw after them so the markers sit on top of the
