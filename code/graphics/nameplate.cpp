@@ -32,7 +32,7 @@ bool nameplate_font_usable(int font_index)
 		return false;
 
 	const auto* fnt = font::FontManager::getFont(font_index);
-	return fnt != nullptr && !(fnt->getType() == font::NVG_FONT && fnt->getAutoScaleBehavior());
+	return fnt != nullptr && (fnt->getType() != font::NVG_FONT || !fnt->getAutoScaleBehavior());
 }
 
 int nameplate_resolve_font(const SCP_string& font_name)

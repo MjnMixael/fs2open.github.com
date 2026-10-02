@@ -3215,11 +3215,9 @@ static bool nameplates_need_26_1(MissionFormat format)
 	if (format != MissionFormat::STANDARD)
 		return false;
 
-	for (const auto& so : list_range(&Ship_obj_list)) {
-		if (Ships[Objects[so->objnum].instance].nameplate.enabled)
-			return true;
-	}
-	return false;
+	const auto ships = list_range(&Ship_obj_list);
+	return std::any_of(ships.begin(), ships.end(),
+		[](const ship_obj* so) { return Ships[Objects[so->objnum].instance].nameplate.enabled; });
 }
 
 void Fred_mission_save::save_mission_internal(const char* pathname)

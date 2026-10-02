@@ -28,7 +28,7 @@ class NameplateDialogModel : public AbstractDialogModel {
 	bool getUseFile() const;
 
 	// false when no loaded font can draw nameplates; then only texture files are offered
-	bool canGenerate() const;
+	static bool canGenerate();
 
 	void setText(const SCP_string& text);
 	SCP_string getText() const;

@@ -19,7 +19,7 @@ NameplateDialogModel::NameplateDialogModel(QObject* parent, EditorViewport* view
 		_nameplate.use_file = true;
 }
 
-bool NameplateDialogModel::canGenerate() const
+bool NameplateDialogModel::canGenerate()
 {
 	return nameplate_resolve_font(SCP_string()) >= 0;
 }
