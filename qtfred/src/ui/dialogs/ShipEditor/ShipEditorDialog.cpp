@@ -1111,12 +1111,29 @@ void ShipEditorDialog::enableDisable()
 		ui->weaponsButton->setEnabled(false);
 		ui->miscButton->setEnabled(false);
 		ui->textureReplacementButton->setEnabled(false);
+		ui->nameplateButton->setEnabled(false);
 		ui->altShipClassButton->setEnabled(false);
 		ui->specialStatsButton->setEnabled(false);
 	}
 
 	// disable textures unless exactly one ship/player is selected
 	ui->textureReplacementButton->setEnabled(_model->getNumSelectedObjects() == 1);
+
+	// the nameplate editor is only available for a single ship whose model has a "nameplate" slot
+	{
+		bool hasNameplate = false;
+		const int ship = _model->getCustomDataShip(); // the same ship on_nameplateButton_clicked() edits
+		if (_model->getNumSelectedObjects() == 1 && ship >= 0) {
+			polymodel* pm = model_get(Ship_info[Ships[ship].ship_info_index].model_num);
+			for (int j = 0; j < pm->n_textures; ++j) {
+				if (pm->maps[j].FindTexture("nameplate") > -1) {
+					hasNameplate = true;
+					break;
+				}
+			}
+		}
+		ui->nameplateButton->setEnabled(hasNameplate);
+	}
 
 	ui->AIClassCombo->setEnabled(_model->getUIEnable());
 	ui->cargoCombo->setEnabled(_model->getUIEnable());
@@ -1449,6 +1466,44 @@ void ShipEditorDialog::on_customDataButton_clicked()
 		const int o = obj_get_by_signature(sig);
 		if (o >= 0) {
 			Ships[Objects[o].instance].custom_data = v;
+		}
+	});
+	_fredView->mainUndoStack()->push(cmd);
+}
+
+void ShipEditorDialog::on_nameplateButton_clicked()
+{
+	// Single-ship only, like custom data. Modal, so the ship can't change under the dialog. The dialog
+	// previews on the ship while open and puts it back on cancel, so before/after bracket the visit.
+	const int ship = _model->getCustomDataShip();
+	if (ship < 0 || Ships[ship].objnum < 0) {
+		return;
+	}
+
+	const nameplate_info before = Ships[ship].nameplate;
+
+	dialogs::NameplateDialog dlg(this, _viewport, ship);
+	if (dlg.exec() != QDialog::Accepted) {
+		return;
+	}
+
+	const nameplate_info after = Ships[ship].nameplate;
+	if (before == after) {
+		return; // dialog accepted but nothing actually changed
+	}
+
+	// Address the ship by object signature, as the custom data command does.
+	const int sig = Objects[Ships[ship].objnum].signature;
+
+	auto* cmd = new FieldEditCommand<nameplate_info>(
+		FieldId::Ship_Nameplate, _viewport->editor, tr("Edit Ship Nameplate"), true);
+	cmd->setNoMerge(); // each subdialog visit is a discrete action
+	cmd->addEntry(before, after, [sig](const nameplate_info& v) {
+		const int o = obj_get_by_signature(sig);
+		if (o >= 0) {
+			auto& shipp = Ships[Objects[o].instance];
+			shipp.nameplate = v;
+			shipp.apply_nameplate();
 		}
 	});
 	_fredView->mainUndoStack()->push(cmd);

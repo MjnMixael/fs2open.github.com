@@ -3208,6 +3208,18 @@ int Fred_mission_save::save_mission_info()
 	return err;
 }
 
+// Standard format writes every nameplate as a plain $Nameplate: block, which needs 26.1. Compatibility
+// mode writes file-mode nameplates the legacy way and comments the rest, so older builds still load it.
+static bool nameplates_need_26_1(MissionFormat format)
+{
+	if (format != MissionFormat::STANDARD)
+		return false;
+
+	const auto ships = list_range(&Ship_obj_list);
+	return std::any_of(ships.begin(), ships.end(),
+		[](const ship_obj* so) { return Ships[Objects[so->objnum].instance].nameplate.enabled; });
+}
+
 void Fred_mission_save::save_mission_internal(const char* pathname)
 {
 	time_t currentTime;
@@ -3230,7 +3242,7 @@ void Fred_mission_save::save_mission_internal(const char* pathname)
 			"Notify an SCP coder: now that the required mission version is at least 26.1, the check_for_26_1_data(), "
 			"check_for_25_1_data(), check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can be "
 			"removed");
-	} else if (check_for_26_1_data()) {
+	} else if (check_for_26_1_data() || nameplates_need_26_1(save_config.save_format)) {
 		The_mission.required_fso_version = version_26_1;
 	} else if (MISSION_VERSION >= version_25_1) {
 		Warning(LOCATION,
@@ -4338,37 +4350,50 @@ int Fred_mission_save::save_objects()
 		}
 
 		// Goober5000 - deal with texture replacement ----------------
-		if (!Fred_texture_replacements.empty()) {
+		// Compatibility mode writes a file-mode nameplate as the legacy "nameplate" replacement every
+		// build reads; the parser turns it back into a nameplate on load
+		const bool legacy_nameplate = save_config.save_format == MissionFormat::COMPATIBILITY_MODE &&
+			shipp->nameplate.enabled && shipp->nameplate.use_file && !shipp->nameplate.texture_file.empty();
+
+		if (!Fred_texture_replacements.empty() || legacy_nameplate) {
 			bool needs_header = true;
 			fso_comment_push(";;FSO 3.6.8;;");
 
-			for (auto& ii : Fred_texture_replacements) {
-				if (!stricmp(shipp->ship_name, ii.ship_name) && !(ii.from_table)) {
-					if (needs_header) {
-						if (optional_string_fred("$Texture Replace:")) {
-							parse_comments(1);
-						} else {
-							fout_version("\n$Texture Replace:");
-						}
-
-						needs_header = false;
-					}
-
-					// write out this entry
-					if (optional_string_fred("+old:")) {
+			auto write_entry = [&](const char* old_texture, const char* new_texture) {
+				if (needs_header) {
+					if (optional_string_fred("$Texture Replace:")) {
 						parse_comments(1);
-						fout(" %s", ii.old_texture);
 					} else {
-						fout_version("\n+old: %s", ii.old_texture);
+						fout_version("\n$Texture Replace:");
 					}
 
-					if (optional_string_fred("+new:")) {
-						parse_comments(1);
-						fout(" %s", ii.new_texture);
-					} else {
-						fout_version("\n+new: %s", ii.new_texture);
-					}
+					needs_header = false;
 				}
+
+				if (optional_string_fred("+old:")) {
+					parse_comments(1);
+					fout(" %s", old_texture);
+				} else {
+					fout_version("\n+old: %s", old_texture);
+				}
+
+				if (optional_string_fred("+new:")) {
+					parse_comments(1);
+					fout(" %s", new_texture);
+				} else {
+					fout_version("\n+new: %s", new_texture);
+				}
+			};
+
+			for (auto& ii : Fred_texture_replacements) {
+				// the "nameplate" slot comes from the ship's nameplate, not the replacement list
+				if (!stricmp(shipp->ship_name, ii.ship_name) && !(ii.from_table) && stricmp(ii.old_texture, "nameplate")) {
+					write_entry(ii.old_texture, ii.new_texture);
+				}
+			}
+
+			if (legacy_nameplate) {
+				write_entry("nameplate", shipp->nameplate.texture_file.c_str());
 			}
 
 			fso_comment_pop();
@@ -4396,6 +4421,102 @@ int Fred_mission_save::save_objects()
 				fout("\n$end_custom_data");
 			}
 		}
+		// nameplate ------------------------------------------------
+		// Standard format bumps the mission to 26.1 (nameplates_need_26_1); Compatibility mode comments it
+		// so older builds skip it, and a file-mode nameplate went out above as a texture replacement instead
+		if (shipp->nameplate.enabled && !legacy_nameplate) {
+			fso_comment_push(";;FSO 26.1.0;;");
+
+			if (optional_string_fred("$Nameplate:", "$Name:")) {
+				parse_comments(1);
+			} else {
+				fout_version("\n$Nameplate:");
+			}
+
+			if (optional_string_fred("+Mode:", "$Name:")) {
+				parse_comments(1);
+				fout(" %s", shipp->nameplate.use_file ? "file" : "generate");
+			} else {
+				fout_version("\n\t+Mode: %s", shipp->nameplate.use_file ? "file" : "generate");
+			}
+
+			if (shipp->nameplate.use_file) {
+				if (!shipp->nameplate.texture_file.empty()) {
+					if (optional_string_fred("+Texture:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", shipp->nameplate.texture_file.c_str());
+					} else {
+						fout_version("\n\t+Texture: %s", shipp->nameplate.texture_file.c_str());
+					}
+				}
+			} else {
+				if (!shipp->nameplate.text.empty()) {
+					if (optional_string_fred("+Text:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", shipp->nameplate.text.c_str());
+					} else {
+						fout_version("\n\t+Text: %s", shipp->nameplate.text.c_str());
+					}
+				}
+				if (!shipp->nameplate.font_name.empty()) {
+					if (optional_string_fred("+Font:", "$Name:")) {
+						parse_comments(1);
+						fout(" %s", shipp->nameplate.font_name.c_str());
+					} else {
+						fout_version("\n\t+Font: %s", shipp->nameplate.font_name.c_str());
+					}
+				}
+				if (optional_string_fred("+Font Scale:", "$Name:")) {
+					parse_comments(1);
+					fout(" %.2f", shipp->nameplate.font_scale);
+				} else {
+					fout_version("\n\t+Font Scale: %.2f", shipp->nameplate.font_scale);
+				}
+				const auto& np = shipp->nameplate;
+				if (np.letter_spacing != 0.0f) {
+					if (optional_string_fred("+Letter Spacing:", "$Name:")) {
+						parse_comments(1);
+						fout(" %.1f", np.letter_spacing);
+					} else {
+						fout_version("\n\t+Letter Spacing: %.1f", np.letter_spacing);
+					}
+				}
+				if (np.color_r != 255 || np.color_g != 255 || np.color_b != 255) {
+					if (optional_string_fred("+Color:", "$Name:")) {
+						parse_comments(1);
+						fout(" (%d, %d, %d)", np.color_r, np.color_g, np.color_b);
+					} else {
+						fout_version("\n\t+Color: (%d, %d, %d)", np.color_r, np.color_g, np.color_b);
+					}
+				}
+				if (np.offset_x != 0 || np.offset_y != 0) {
+					if (optional_string_fred("+Offset:", "$Name:")) {
+						parse_comments(1);
+						fout(" (%d, %d)", np.offset_x, np.offset_y);
+					} else {
+						fout_version("\n\t+Offset: (%d, %d)", np.offset_x, np.offset_y);
+					}
+				}
+				// only an override; without one the ship follows its model's size
+				if (np.width > 0 && np.height > 0) {
+					if (optional_string_fred("+Width:", "$Name:")) {
+						parse_comments(1);
+						fout(" %d", np.width);
+					} else {
+						fout_version("\n\t+Width: %d", np.width);
+					}
+					if (optional_string_fred("+Height:", "$Name:")) {
+						parse_comments(1);
+						fout(" %d", np.height);
+					} else {
+						fout_version("\n\t+Height: %d", np.height);
+					}
+				}
+			}
+
+			fso_comment_pop();
+		}
+		// end of nameplate -----------------------------------------
 
 		fso_comment_pop();
 	}

@@ -79,6 +79,10 @@ void ShipTextureReplacementDialogModel::initializeData(bool multi)
 			*p = 0;
 		}
 
+		// the "nameplate" slot has its own dedicated editor, so don't list it here
+		if (!stricmp(texture_file, "nameplate"))
+			continue;
+
 		// check for duplicate textures in list
 		duplicate = -1;
 		for (size_t k = 0; k < _defaultTextures.size(); k++)
@@ -377,6 +381,9 @@ bool ShipTextureReplacementDialogModel::apply()
 						(*pmi->texture_replace)[j * TM_NUM_TYPES + tnum] = id;
 				}
 			}
+
+			// the make_shared above wiped the nameplate slot too; re-apply it so it survives
+			shipp.apply_nameplate();
 		};
 
 		if (!_multi) {

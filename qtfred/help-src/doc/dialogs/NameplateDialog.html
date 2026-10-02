@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8"/>
+    <title>Nameplate - QtFRED Help</title>
+    <link rel="stylesheet" type="text/css" href="../css/help.css"/>
+</head>
+<body>
+<nav class="breadcrumb"><a href="../index.html">QtFRED Help</a> &rsaquo; <a href="ShipEditorDialog.html">Ship Editor</a> &rsaquo; Nameplate</nav>
+<h1>Nameplate</h1>
+<p>Accessed via the <strong>Nameplate</strong> button in the
+<a href="ShipEditorDialog.html">Ship Editor</a>. The button is available when a single
+ship is selected and its model has a texture named <code>nameplate</code>.</p>
+<p>Puts a ship's name, hull number, or any other marking on its hull without making a
+texture for every ship. The nameplate fills the model's <code>nameplate</code> texture,
+either with text the game draws for this ship or with a texture file. It belongs to this
+ship only; other ships of the same class are unaffected.</p>
+
+<h2>Enable and source</h2>
+<ul>
+    <li><strong>Enable nameplate for this ship</strong> - turns the nameplate on. When
+        it is off, the model shows its own <code>nameplate</code> texture.</li>
+    <li><strong>Generate from text</strong> - the game draws the text below onto a
+        transparent texture.</li>
+    <li><strong>Use texture file</strong> - uses a texture you made instead.</li>
+</ul>
+<p>If the mod has no font that can draw nameplates (see <strong>Font</strong> below),
+<strong>Generate from text</strong> is unavailable and only texture files can be used.</p>
+
+<h2>Generated Text</h2>
+<table>
+    <tr><th>Field</th><th>Description</th></tr>
+    <tr><td>Text</td><td>The text to draw, on one line. Text that does not fit is cut off
+        at the edges of the texture; use the scale, letter spacing, and offset to fit
+        it.</td></tr>
+    <tr><td>Font</td><td>A font from the mod's <code>fonts.tbl</code>. TrueType fonts
+        with <code>+Auto Size</code> are not listed: they are sized from the screen
+        resolution, so a nameplate would look different in game than in the editor.
+        <em>(default font)</em> uses the first font that is listed. If the mission names a
+        font that is not loaded or not listed, it shows as <em>(not available)</em>, the
+        game uses the first listed font instead, and the
+        <a href="ErrorCheckerDialog.html">Error Checker</a> warns about it.</td></tr>
+    <tr><td>Font Scale</td><td>Multiplies the font's size. A font set to scale with
+        the player's font size option or the screen resolution does not do so here, so a
+        nameplate looks the same in the editor and in game.</td></tr>
+    <tr><td>Letter Spacing</td><td>Extra space between characters, up to 100 pixels of
+        the model's size either way (see <strong>Texture Size</strong>). Negative values
+        tighten the text.</td></tr>
+    <tr><td>Color</td><td>The text color, as red, green, and blue from 0 to 255. The
+        swatch shows the result. White by default.</td></tr>
+    <tr><td>Offset</td><td>Moves the text this many pixels of the model's size from the
+        center of the texture. Positive X moves it right and positive Y moves it down.
+        Each can be up to 1024 either way.</td></tr>
+</table>
+
+<h2>Texture File</h2>
+<p>The name of the texture to use, without a file extension. <strong>Browse...</strong>
+fills it in from a file. Animated textures work as well.</p>
+
+<h2>Texture Size</h2>
+<p>The size in pixels of the texture generated text is drawn on, from 16 to 1024 per
+side. It starts at the size the model asks for (see <strong>For modelers</strong> below),
+or 256 by 64 if it asks for none, shown as <em>Model size</em>.</p>
+<ul>
+    <li>A larger size makes the text sharper without changing how it looks: the font
+        scale, letter spacing, and offsets are measured against the model's size, so
+        they grow with the texture. TrueType fonts gain the most; bitmap fonts only get
+        blockier.</li>
+    <li>The model stretches the whole texture over its nameplate area, so a size with
+        other proportions than the model's stretches the text.
+        <strong>Keep the model's proportions</strong>, on by default, changes the other
+        side to match. Turn it off to fit an older model whose nameplate area is not the
+        shape its size suggests.</li>
+    <li><strong>Reset to Model Size</strong> goes back to the model's size. A ship at
+        the model's size follows the model if its size changes later; any other size is
+        saved with the ship and kept if the ship changes class.</li>
+</ul>
+
+<h2>Things to know</h2>
+<ul>
+    <li>The <code>nameplate</code> texture is always drawn with transparency, so
+        generated text shows only the letters. A texture file should use its alpha
+        channel the same way.</li>
+    <li>Changes show on the ship in the viewport as you make them; move the dialog aside
+        to watch. <strong>Cancel</strong> puts the ship back as it was, and
+        <strong>OK</strong> keeps the changes as a single <strong>Edit Ship
+        Nameplate</strong> undo step.</li>
+    <li>The nameplate is included when the ship is duplicated.</li>
+    <li>Changing the ship's class keeps the nameplate and fits it to the new model. A
+        model without a <code>nameplate</code> texture shows nothing, but the nameplate
+        stays with the ship. This is also true in game, including when the player
+        changes a ship's class in ship selection.</li>
+    <li>The <code>nameplate</code> texture does not appear in
+        <a href="ShipTextureReplacementDialog.html">Texture Replacement</a>; this dialog
+        manages it.</li>
+</ul>
+
+<h2>Saving and compatibility</h2>
+<p>Nameplates are saved with the ship as a <code>$Nameplate:</code> section. How older
+builds see it depends on <strong>File &rsaquo; Save Format</strong>:</p>
+<ul>
+    <li><strong>FS2 Open</strong> - the mission requires FSO 26.1 or later.</li>
+    <li><strong>FSO Compatibility Mode</strong> - a texture file nameplate is saved as an ordinary
+        texture replacement of the <code>nameplate</code> texture, which every build
+        reads. Generated text is saved so that older builds skip it.</li>
+    <li><strong>FS2 Retail</strong> - nameplates are not saved.</li>
+</ul>
+
+<h2>For modelers</h2>
+<p>Give the part of the hull that carries the nameplate a texture named
+<code>nameplate</code>. To choose the size of generated nameplates for the model, add
+these to the properties of any submodel, in pixels from 16 to 1024:</p>
+<pre>$nameplate_width=512
+$nameplate_height=128</pre>
+<p>Match the proportions of the area the <code>nameplate</code> texture covers in the
+UVs, or the text comes out stretched.</p>
+</body>
+</html>

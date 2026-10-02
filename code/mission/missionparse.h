@@ -19,6 +19,7 @@
 #include "coordinate_points/coordinate_point_flags.h"
 #include "globalincs/version.h"
 #include "graphics/2d.h"
+#include "graphics/nameplate.h"
 #include "io/keycontrol.h"
 #include "model/model.h"
 #include "model/animation/modelanimation.h"
@@ -541,6 +542,9 @@ public:
 
 	// Goober5000
 	SCP_vector<texture_replace> replacement_textures;
+
+	// nameplate config for this ship's "nameplate" texture slot
+	nameplate_info nameplate;
 
 	SCP_vector<alt_class> alt_classes;
 	SCP_map<std::pair<int, int>, int> alt_iff_color;

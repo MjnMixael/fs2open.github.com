@@ -115,6 +115,9 @@ struct CapturedShip {
 	// overrides). Captured so deleting a ship and undoing brings it back.
 	SCP_map<SCP_string, SCP_string> custom_data;
 
+	// Nameplate settings; restoreShip() makes a fresh bitmap from them.
+	nameplate_info nameplate;
+
 	// ---- Arrival ----
 	ArrivalLocation arrival_location  = ArrivalLocation::AT_LOCATION;
 	int             arrival_distance  = 0;

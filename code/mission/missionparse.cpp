@@ -2529,6 +2529,10 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 	// handle the replacement textures
 	shipp->apply_replacement_textures(p_objp->replacement_textures);
 
+	// handle the nameplate (generate + inject its texture, if any)
+	shipp->nameplate = p_objp->nameplate;
+	shipp->apply_nameplate();
+
 	// Copy across the alt classes (if any) for FRED
 	if (Fred_running) {
 		shipp->s_alt_classes = p_objp->alt_classes; 
@@ -4065,6 +4069,15 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 				*p = 0;
 			}
 
+			// the "nameplate" slot is now owned by the dedicated nameplate feature; migrate any
+			// legacy nameplate texture replacement into this ship's nameplate config (file mode)
+			if (!stricmp(tr.old_texture, "nameplate")) {
+				p_objp->nameplate.enabled = true;
+				p_objp->nameplate.use_file = true;
+				p_objp->nameplate.texture_file = tr.new_texture;
+				continue;
+			}
+
 			// add it if we aren't over the limit
 			if (p_objp->replacement_textures.size() < MAX_MODEL_TEXTURES)
 				p_objp->replacement_textures.push_back(tr);
@@ -4077,6 +4090,72 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 	if (optional_string("$begin_custom_data")) {
 		parse_string_map(p_objp->custom_data, "$end_custom_data", "+Val:");
 	}
+
+	// nameplate - dedicated config for the model's "nameplate" texture slot.  Either generates
+	// a texture from text (handled at ship creation) or references a file (funnelled through the
+	// texture-replacement pipeline below).
+	if (optional_string("$Nameplate:"))
+	{
+		p_objp->nameplate.enabled = true;
+
+		if (optional_string("+Mode:")) {
+			SCP_string mode;
+			stuff_string(mode, F_NAME);
+			p_objp->nameplate.use_file = !stricmp(mode.c_str(), "file");
+		}
+		if (optional_string("+Text:")) {
+			stuff_string(p_objp->nameplate.text, F_NAME);
+		}
+		if (optional_string("+Font:")) {
+			stuff_string(p_objp->nameplate.font_name, F_NAME);
+		}
+		if (optional_string("+Font Scale:")) {
+			stuff_float(&p_objp->nameplate.font_scale);
+		}
+		if (optional_string("+Letter Spacing:")) {
+			stuff_float(&p_objp->nameplate.letter_spacing);
+			CLAMP(p_objp->nameplate.letter_spacing, -NAMEPLATE_MAX_LETTER_SPACING, NAMEPLATE_MAX_LETTER_SPACING);
+		}
+		if (optional_string("+Color:")) {
+			int rgb[3] = { 255, 255, 255 };
+			stuff_int_list(rgb, 3, ParseLookupType::RAW_INTEGER_TYPE);
+			for (int& c : rgb) {
+				CLAMP(c, 0, 255);
+			}
+			p_objp->nameplate.color_r = rgb[0];
+			p_objp->nameplate.color_g = rgb[1];
+			p_objp->nameplate.color_b = rgb[2];
+		}
+		if (optional_string("+Offset:")) {
+			int offset[2] = { 0, 0 };
+			stuff_int_list(offset, 2, ParseLookupType::RAW_INTEGER_TYPE);
+			for (int& o : offset) {
+				CLAMP(o, -NAMEPLATE_MAX_SIZE, NAMEPLATE_MAX_SIZE);
+			}
+			p_objp->nameplate.offset_x = offset[0];
+			p_objp->nameplate.offset_y = offset[1];
+		}
+		if (optional_string("+Texture:")) {
+			stuff_string(p_objp->nameplate.texture_file, F_NAME);
+			// strip any extension so it matches the bare texture name
+			auto dot = p_objp->nameplate.texture_file.find('.');
+			if (dot != SCP_string::npos)
+				p_objp->nameplate.texture_file.resize(dot);
+		}
+		if (optional_string("+Width:")) {
+			stuff_int(&p_objp->nameplate.width);
+			if (p_objp->nameplate.width > 0)
+				CLAMP(p_objp->nameplate.width, NAMEPLATE_MIN_SIZE, NAMEPLATE_MAX_SIZE);
+		}
+		if (optional_string("+Height:")) {
+			stuff_int(&p_objp->nameplate.height);
+			if (p_objp->nameplate.height > 0)
+				CLAMP(p_objp->nameplate.height, NAMEPLATE_MIN_SIZE, NAMEPLATE_MAX_SIZE);
+		}
+	}
+
+	// (both nameplate modes - file and generated - are applied at ship creation via
+	// ship::apply_nameplate(), so nothing needs to be funnelled into replacement_textures here)
 
 	// for multiplayer, assign a network signature to this parse object.  Doing this here will
 	// allow servers to use the signature with clients when creating new ships, instead of having

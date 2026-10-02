@@ -15,6 +15,7 @@
 #include "globalincs/globals.h"		// for defintions of token lengths -- maybe move this elsewhere later (Goober5000 - moved to globals.h)
 #include "globalincs/pstypes.h"
 #include "graphics/2d.h"			// for color def
+#include "graphics/nameplate.h"
 #include "hud/hud.h"
 #include "hud/hudparse.h"
 #include "model/model.h"
@@ -925,6 +926,10 @@ public:
 
 	int cockpit_model_instance;
 
+	// nameplate config + the bitmap applied for it, from nameplate_acquire (-1 if none)
+	nameplate_info nameplate;
+	int nameplate_bm_handle = -1;
+
 	TIMESTAMP	multi_client_collision_timestamp;
 
 	enum warpstage {
@@ -968,6 +973,11 @@ public:
 	bool has_display_name() const;
 
 	void apply_replacement_textures(const SCP_vector<texture_replace> &replacements);
+
+	// generate/apply the nameplate texture (from nameplate config) onto this ship's model instance
+	void apply_nameplate();
+	// let go of the applied nameplate bitmap (see nameplate_release)
+	void release_nameplate();
 };
 
 struct ai_target_priority {

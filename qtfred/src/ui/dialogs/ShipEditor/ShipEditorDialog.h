@@ -7,6 +7,7 @@
 #include "ShipSpecialStatsDialog.h"
 #include <ui/dialogs/TableViewerDialog.h>
 #include "ShipTextureReplacementDialog.h"
+#include "NameplateDialog.h"
 #include "ShipWeaponsDialog.h"
 #include "ShipAltShipClass.h"
 
@@ -42,6 +43,7 @@ class ShipEditorDialog : public QDialog, public SexpTreeEditorInterface {
 
 	void on_textureReplacementButton_clicked();
 	void on_customDataButton_clicked();
+	void on_nameplateButton_clicked();
 	void on_miscButton_clicked();
 	void on_initialStatusButton_clicked();
 	void on_initialOrdersButton_clicked();

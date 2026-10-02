@@ -66,6 +66,7 @@
                         <section title="Custom Warp Params"     ref="dialogs/ShipCustomWarpDialog.html"/>
                         <section title="Initial Orders"         ref="dialogs/ShipInitialOrdersDialog.html"/>
                         <section title="Initial Status"         ref="dialogs/ShipInitialStatusDialog.html"/>
+                        <section title="Nameplate"              ref="dialogs/NameplateDialog.html"/>
                         <section title="Player Orders"          ref="dialogs/ShipPlayerOrdersDialog.html"/>
                         <section title="Ship Flags"             ref="dialogs/ShipFlagsDialog.html"/>
                         <section title="Ship Weapons"           ref="dialogs/ShipWeaponsDialog.html"/>
@@ -142,6 +143,7 @@
             <keyword name="Ship Flags"              id="ShipFlagsDialog"                ref="dialogs/ShipFlagsDialog.html"/>
             <keyword name="Ship Initial Orders"     id="ShipInitialOrdersDialog"        ref="dialogs/ShipInitialOrdersDialog.html"/>
             <keyword name="Ship Initial Status"     id="ShipInitialStatusDialog"        ref="dialogs/ShipInitialStatusDialog.html"/>
+            <keyword name="Nameplate"               id="NameplateDialog"                ref="dialogs/NameplateDialog.html"/>
             <keyword name="Player Orders"           id="ShipPlayerOrdersDialog"         ref="dialogs/ShipPlayerOrdersDialog.html"/>
             <keyword name="Ship Special Stats"      id="ShipSpecialStatsDialog"         ref="dialogs/ShipSpecialStatsDialog.html"/>
             <keyword name="Texture Replacement"     id="ShipTextureReplacementDialog"   ref="dialogs/ShipTextureReplacementDialog.html"/>
@@ -202,6 +204,7 @@
             <file>dialogs/PropEditorDialog.html</file>
             <file>dialogs/ReinforcementsEditorDialog.html</file>
             <file>dialogs/RelativeCoordinatesDialog.html</file>
+            <file>dialogs/NameplateDialog.html</file>
             <file>dialogs/ReorderDialog.html</file>
             <file>dialogs/ShieldSystemDialog.html</file>
             <file>dialogs/ShipEditorDialog.html</file>
