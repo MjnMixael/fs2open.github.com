@@ -711,6 +711,15 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 		return;
 	}
 
+	// Camera bindings come first: a key bound to a camera control always moves the camera, even an
+	// arrow, Delete or Backspace, which otherwise act on the selected icons. Ctrl+arrows still nudge
+	// when only the plain arrows are bound.
+	if (ControlBindings::instance().matches(event)) {
+		ControlBindings::instance().handleKeyPress(event); // ignores auto-repeat; the key stays held
+		event->accept();
+		return;
+	}
+
 	if (event->key() == Qt::Key_Delete || event->key() == Qt::Key_Backspace) {
 		Q_EMIT deleteSelectedIconsRequested();
 		event->accept();
@@ -742,11 +751,7 @@ void BriefingMapWidget::keyPressEvent(QKeyEvent* event) {
 		return;
 	}
 
-	if (!ControlBindings::instance().handleKeyPress(event)) {
-		QWidget::keyPressEvent(event);
-		return;
-	}
-	event->accept();
+	QWidget::keyPressEvent(event);
 }
 
 void BriefingMapWidget::keyReleaseEvent(QKeyEvent* event) {
