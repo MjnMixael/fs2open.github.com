@@ -4107,10 +4107,33 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 			stuff_string(p_objp->nameplate.text, F_NAME);
 		}
 		if (optional_string("+Font:")) {
-			stuff_string(p_objp->nameplate.font_filename, F_NAME);
+			stuff_string(p_objp->nameplate.font_name, F_NAME);
 		}
 		if (optional_string("+Font Scale:")) {
 			stuff_float(&p_objp->nameplate.font_scale);
+		}
+		if (optional_string("+Letter Spacing:")) {
+			stuff_float(&p_objp->nameplate.letter_spacing);
+			CLAMP(p_objp->nameplate.letter_spacing, -NAMEPLATE_MAX_LETTER_SPACING, NAMEPLATE_MAX_LETTER_SPACING);
+		}
+		if (optional_string("+Color:")) {
+			int rgb[3] = { 255, 255, 255 };
+			stuff_int_list(rgb, 3, ParseLookupType::RAW_INTEGER_TYPE);
+			for (int& c : rgb) {
+				CLAMP(c, 0, 255);
+			}
+			p_objp->nameplate.color_r = rgb[0];
+			p_objp->nameplate.color_g = rgb[1];
+			p_objp->nameplate.color_b = rgb[2];
+		}
+		if (optional_string("+Offset:")) {
+			int offset[2] = { 0, 0 };
+			stuff_int_list(offset, 2, ParseLookupType::RAW_INTEGER_TYPE);
+			for (int& o : offset) {
+				CLAMP(o, -NAMEPLATE_MAX_SIZE, NAMEPLATE_MAX_SIZE);
+			}
+			p_objp->nameplate.offset_x = offset[0];
+			p_objp->nameplate.offset_y = offset[1];
 		}
 		if (optional_string("+Texture:")) {
 			stuff_string(p_objp->nameplate.texture_file, F_NAME);
@@ -4121,9 +4144,13 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 		}
 		if (optional_string("+Width:")) {
 			stuff_int(&p_objp->nameplate.width);
+			if (p_objp->nameplate.width > 0)
+				CLAMP(p_objp->nameplate.width, NAMEPLATE_MIN_SIZE, NAMEPLATE_MAX_SIZE);
 		}
 		if (optional_string("+Height:")) {
 			stuff_int(&p_objp->nameplate.height);
+			if (p_objp->nameplate.height > 0)
+				CLAMP(p_objp->nameplate.height, NAMEPLATE_MIN_SIZE, NAMEPLATE_MAX_SIZE);
 		}
 	}
 

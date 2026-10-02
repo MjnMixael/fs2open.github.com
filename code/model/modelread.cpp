@@ -40,6 +40,7 @@
 #include "render/3dinternal.h"
 #include "ship/ship.h"
 #include "starfield/starfield.h"
+#include "graphics/nameplate.h"
 #include "graphics/shadows.h"
 #include "weapon/weapon.h"
 #include "tracing/tracing.h"
@@ -1834,19 +1835,21 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 				// live in a subobject's user properties (usually the detail0/root hull); an
 				// unknown token is simply skipped, so no POF version bump is required.
 				{
+					static constexpr char width_prop[] = "$nameplate_width";
+					static constexpr char height_prop[] = "$nameplate_height";
 					char np_buf[NAME_LENGTH];
 					char *np_p;
-					if (in(np_p, props, "$nameplate_width")) {
-						get_user_prop_value(np_p + 16, np_buf);		// strlen("$nameplate_width")
+					if (in(np_p, props, width_prop)) {
+						get_user_prop_value(np_p + sizeof(width_prop) - 1, np_buf);
 						int val = atoi(np_buf);
 						if (val > 0)
-							pm->nameplate_width = val;
+							pm->nameplate_width = std::clamp(val, NAMEPLATE_MIN_SIZE, NAMEPLATE_MAX_SIZE);
 					}
-					if (in(np_p, props, "$nameplate_height")) {
-						get_user_prop_value(np_p + 17, np_buf);		// strlen("$nameplate_height")
+					if (in(np_p, props, height_prop)) {
+						get_user_prop_value(np_p + sizeof(height_prop) - 1, np_buf);
 						int val = atoi(np_buf);
 						if (val > 0)
-							pm->nameplate_height = val;
+							pm->nameplate_height = std::clamp(val, NAMEPLATE_MIN_SIZE, NAMEPLATE_MAX_SIZE);
 					}
 				}
 

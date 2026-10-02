@@ -1473,7 +1473,8 @@ void ShipEditorDialog::on_customDataButton_clicked()
 
 void ShipEditorDialog::on_nameplateButton_clicked()
 {
-	// Single-ship only, like custom data. Modal, so the ship can't change under the dialog.
+	// Single-ship only, like custom data. Modal, so the ship can't change under the dialog. The dialog
+	// previews on the ship while open and puts it back on cancel, so before/after bracket the visit.
 	const int ship = _model->getCustomDataShip();
 	if (ship < 0 || Ships[ship].objnum < 0) {
 		return;

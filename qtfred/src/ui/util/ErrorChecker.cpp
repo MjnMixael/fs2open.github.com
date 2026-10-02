@@ -432,6 +432,21 @@ int ErrorChecker::checkShips() {
 				return -1;
 			}
 
+			const auto& nameplate = Ships[i].nameplate;
+			if (nameplate.enabled && !nameplate.use_file) {
+				const int fontIndex = nameplate_font_index(nameplate.font_name);
+				if (nameplate_resolve_font(SCP_string()) < 0) {
+					warning("Ship \"%s\" has a text nameplate, but no loaded font can draw nameplates (TrueType "
+							"fonts with +Auto Size can't), so the game shows none.",
+						Ships[i].ship_name);
+				} else if (!nameplate.font_name.empty() && !nameplate_font_usable(fontIndex)) {
+					warning("Ship \"%s\" has a nameplate using font \"%s\", which %s. The game draws it with the "
+							"first usable font instead.",
+						Ships[i].ship_name, nameplate.font_name.c_str(),
+						(fontIndex < 0) ? "is not loaded" : "is a TrueType font with +Auto Size");
+				}
+			}
+
 			if (Ships[i].arrival_location != ArrivalLocation::AT_LOCATION) {
 				if (!Ships[i].arrival_anchor.isValid()) {
 					error("Ship \"%s\" requires a valid arrival target", Ships[i].ship_name);

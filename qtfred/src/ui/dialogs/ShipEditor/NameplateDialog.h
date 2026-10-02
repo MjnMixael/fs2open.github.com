@@ -3,6 +3,7 @@
 #include <mission/dialogs/ShipEditor/NameplateDialogModel.h>
 
 #include <QtWidgets/QDialog>
+#include <QTimer>
 
 namespace fso::fred::dialogs {
 
@@ -28,20 +29,35 @@ class NameplateDialog : public QDialog {
 	void on_buttonBox_rejected();
 	void on_enabledCheck_toggled(bool state);
 	void on_modeGenerateRadio_toggled(bool state);
-	void on_textEdit_editingFinished();
+	void on_textEdit_textChanged(const QString& text);
 	void on_fontCombo_currentIndexChanged(int index);
 	void on_fontScaleSpin_valueChanged(double value);
+	void on_letterSpacingSpin_valueChanged(double value);
+	void on_colorRSpin_valueChanged(int value);
+	void on_colorGSpin_valueChanged(int value);
+	void on_colorBSpin_valueChanged(int value);
+	void on_offsetXSpin_valueChanged(int value);
+	void on_offsetYSpin_valueChanged(int value);
 	void on_fileEdit_editingFinished();
 	void on_browseButton_clicked();
 	void on_widthSpin_valueChanged(int value);
 	void on_heightSpin_valueChanged(int value);
+	void on_keepProportionsCheck_toggled(bool checked);
+	void on_resetSizeButton_clicked();
 
   private: // NOLINT(readability-redundant-access-specifiers)
 	void updateUi();
+	void updateColorSwatch();
+	// the other side of a size with the model's proportions
+	int proportionalHeight(int width) const;
+	int proportionalWidth(int height) const;
 
 	std::unique_ptr<Ui::NameplateDialog> ui;
 	std::unique_ptr<NameplateDialogModel> _model;
 	EditorViewport* _viewport;
+
+	// coalesces edits so a held spinbox or typing builds one preview texture, not one per step
+	QTimer _previewTimer;
 };
 
 } // namespace fso::fred::dialogs

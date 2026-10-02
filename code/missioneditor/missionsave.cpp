@@ -4460,12 +4460,12 @@ int Fred_mission_save::save_objects()
 						fout_version("\n\t+Text: %s", shipp->nameplate.text.c_str());
 					}
 				}
-				if (!shipp->nameplate.font_filename.empty()) {
+				if (!shipp->nameplate.font_name.empty()) {
 					if (optional_string_fred("+Font:", "$Name:")) {
 						parse_comments(1);
-						fout(" %s", shipp->nameplate.font_filename.c_str());
+						fout(" %s", shipp->nameplate.font_name.c_str());
 					} else {
-						fout_version("\n\t+Font: %s", shipp->nameplate.font_filename.c_str());
+						fout_version("\n\t+Font: %s", shipp->nameplate.font_name.c_str());
 					}
 				}
 				if (optional_string_fred("+Font Scale:", "$Name:")) {
@@ -4474,22 +4474,45 @@ int Fred_mission_save::save_objects()
 				} else {
 					fout_version("\n\t+Font Scale: %.2f", shipp->nameplate.font_scale);
 				}
-			}
-
-			if (shipp->nameplate.width > 0) {
-				if (optional_string_fred("+Width:", "$Name:")) {
-					parse_comments(1);
-					fout(" %d", shipp->nameplate.width);
-				} else {
-					fout_version("\n\t+Width: %d", shipp->nameplate.width);
+				const auto& np = shipp->nameplate;
+				if (np.letter_spacing != 0.0f) {
+					if (optional_string_fred("+Letter Spacing:", "$Name:")) {
+						parse_comments(1);
+						fout(" %.1f", np.letter_spacing);
+					} else {
+						fout_version("\n\t+Letter Spacing: %.1f", np.letter_spacing);
+					}
 				}
-			}
-			if (shipp->nameplate.height > 0) {
-				if (optional_string_fred("+Height:", "$Name:")) {
-					parse_comments(1);
-					fout(" %d", shipp->nameplate.height);
-				} else {
-					fout_version("\n\t+Height: %d", shipp->nameplate.height);
+				if (np.color_r != 255 || np.color_g != 255 || np.color_b != 255) {
+					if (optional_string_fred("+Color:", "$Name:")) {
+						parse_comments(1);
+						fout(" (%d, %d, %d)", np.color_r, np.color_g, np.color_b);
+					} else {
+						fout_version("\n\t+Color: (%d, %d, %d)", np.color_r, np.color_g, np.color_b);
+					}
+				}
+				if (np.offset_x != 0 || np.offset_y != 0) {
+					if (optional_string_fred("+Offset:", "$Name:")) {
+						parse_comments(1);
+						fout(" (%d, %d)", np.offset_x, np.offset_y);
+					} else {
+						fout_version("\n\t+Offset: (%d, %d)", np.offset_x, np.offset_y);
+					}
+				}
+				// only an override; without one the ship follows its model's size
+				if (np.width > 0 && np.height > 0) {
+					if (optional_string_fred("+Width:", "$Name:")) {
+						parse_comments(1);
+						fout(" %d", np.width);
+					} else {
+						fout_version("\n\t+Width: %d", np.width);
+					}
+					if (optional_string_fred("+Height:", "$Name:")) {
+						parse_comments(1);
+						fout(" %d", np.height);
+					} else {
+						fout_version("\n\t+Height: %d", np.height);
+					}
 				}
 			}
 
