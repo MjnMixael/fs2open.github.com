@@ -1122,8 +1122,9 @@ void ShipEditorDialog::enableDisable()
 	// the nameplate editor is only available for a single ship whose model has a "nameplate" slot
 	{
 		bool hasNameplate = false;
-		if (_model->getNumSelectedObjects() == 1 && _viewport->editor->cur_ship >= 0) {
-			polymodel* pm = model_get(Ship_info[Ships[_viewport->editor->cur_ship].ship_info_index].model_num);
+		const int ship = _model->getCustomDataShip(); // the same ship on_nameplateButton_clicked() edits
+		if (_model->getNumSelectedObjects() == 1 && ship >= 0) {
+			polymodel* pm = model_get(Ship_info[Ships[ship].ship_info_index].model_num);
 			for (int j = 0; j < pm->n_textures; ++j) {
 				if (pm->maps[j].FindTexture("nameplate") > -1) {
 					hasNameplate = true;
@@ -1472,9 +1473,39 @@ void ShipEditorDialog::on_customDataButton_clicked()
 
 void ShipEditorDialog::on_nameplateButton_clicked()
 {
-	auto dialog = new dialogs::NameplateDialog(this, _viewport);
-	dialog->setAttribute(Qt::WA_DeleteOnClose);
-	dialog->show();
+	// Single-ship only, like custom data. Modal, so the ship can't change under the dialog.
+	const int ship = _model->getCustomDataShip();
+	if (ship < 0 || Ships[ship].objnum < 0) {
+		return;
+	}
+
+	const nameplate_info before = Ships[ship].nameplate;
+
+	dialogs::NameplateDialog dlg(this, _viewport, ship);
+	if (dlg.exec() != QDialog::Accepted) {
+		return;
+	}
+
+	const nameplate_info after = Ships[ship].nameplate;
+	if (before == after) {
+		return; // dialog accepted but nothing actually changed
+	}
+
+	// Address the ship by object signature, as the custom data command does.
+	const int sig = Objects[Ships[ship].objnum].signature;
+
+	auto* cmd = new FieldEditCommand<nameplate_info>(
+		FieldId::Ship_Nameplate, _viewport->editor, tr("Edit Ship Nameplate"), true);
+	cmd->setNoMerge(); // each subdialog visit is a discrete action
+	cmd->addEntry(before, after, [sig](const nameplate_info& v) {
+		const int o = obj_get_by_signature(sig);
+		if (o >= 0) {
+			auto& shipp = Ships[Objects[o].instance];
+			shipp.nameplate = v;
+			shipp.apply_nameplate();
+		}
+	});
+	_fredView->mainUndoStack()->push(cmd);
 }
 
 void ShipEditorDialog::on_playerShipButton_clicked()

@@ -4,15 +4,9 @@
 
 namespace fso::fred::dialogs {
 
-NameplateDialogModel::NameplateDialogModel(QObject* parent, EditorViewport* viewport)
-	: AbstractDialogModel(parent, viewport)
+NameplateDialogModel::NameplateDialogModel(QObject* parent, EditorViewport* viewport, int shipnum)
+	: AbstractDialogModel(parent, viewport), _shipnum(shipnum)
 {
-	initializeData();
-}
-
-void NameplateDialogModel::initializeData()
-{
-	_shipnum = _editor->cur_ship;
 	if (_shipnum >= 0)
 		_nameplate = Ships[_shipnum].nameplate;
 }

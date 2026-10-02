@@ -3208,6 +3208,20 @@ int Fred_mission_save::save_mission_info()
 	return err;
 }
 
+// Standard format writes every nameplate as a plain $Nameplate: block, which needs 26.1. Compatibility
+// mode writes file-mode nameplates the legacy way and comments the rest, so older builds still load it.
+static bool nameplates_need_26_1(MissionFormat format)
+{
+	if (format != MissionFormat::STANDARD)
+		return false;
+
+	for (const auto& so : list_range(&Ship_obj_list)) {
+		if (Ships[Objects[so->objnum].instance].nameplate.enabled)
+			return true;
+	}
+	return false;
+}
+
 void Fred_mission_save::save_mission_internal(const char* pathname)
 {
 	time_t currentTime;
@@ -3230,7 +3244,7 @@ void Fred_mission_save::save_mission_internal(const char* pathname)
 			"Notify an SCP coder: now that the required mission version is at least 26.1, the check_for_26_1_data(), "
 			"check_for_25_1_data(), check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can be "
 			"removed");
-	} else if (check_for_26_1_data()) {
+	} else if (check_for_26_1_data() || nameplates_need_26_1(save_config.save_format)) {
 		The_mission.required_fso_version = version_26_1;
 	} else if (MISSION_VERSION >= version_25_1) {
 		Warning(LOCATION,
@@ -4338,38 +4352,50 @@ int Fred_mission_save::save_objects()
 		}
 
 		// Goober5000 - deal with texture replacement ----------------
-		if (!Fred_texture_replacements.empty()) {
+		// Compatibility mode writes a file-mode nameplate as the legacy "nameplate" replacement every
+		// build reads; the parser turns it back into a nameplate on load
+		const bool legacy_nameplate = save_config.save_format == MissionFormat::COMPATIBILITY_MODE &&
+			shipp->nameplate.enabled && shipp->nameplate.use_file && !shipp->nameplate.texture_file.empty();
+
+		if (!Fred_texture_replacements.empty() || legacy_nameplate) {
 			bool needs_header = true;
 			fso_comment_push(";;FSO 3.6.8;;");
 
-			for (auto& ii : Fred_texture_replacements) {
-				// the "nameplate" slot is written via the dedicated $Nameplate: block below
-				if (!stricmp(shipp->ship_name, ii.ship_name) && !(ii.from_table) && stricmp(ii.old_texture, "nameplate")) {
-					if (needs_header) {
-						if (optional_string_fred("$Texture Replace:")) {
-							parse_comments(1);
-						} else {
-							fout_version("\n$Texture Replace:");
-						}
-
-						needs_header = false;
-					}
-
-					// write out this entry
-					if (optional_string_fred("+old:")) {
+			auto write_entry = [&](const char* old_texture, const char* new_texture) {
+				if (needs_header) {
+					if (optional_string_fred("$Texture Replace:")) {
 						parse_comments(1);
-						fout(" %s", ii.old_texture);
 					} else {
-						fout_version("\n+old: %s", ii.old_texture);
+						fout_version("\n$Texture Replace:");
 					}
 
-					if (optional_string_fred("+new:")) {
-						parse_comments(1);
-						fout(" %s", ii.new_texture);
-					} else {
-						fout_version("\n+new: %s", ii.new_texture);
-					}
+					needs_header = false;
 				}
+
+				if (optional_string_fred("+old:")) {
+					parse_comments(1);
+					fout(" %s", old_texture);
+				} else {
+					fout_version("\n+old: %s", old_texture);
+				}
+
+				if (optional_string_fred("+new:")) {
+					parse_comments(1);
+					fout(" %s", new_texture);
+				} else {
+					fout_version("\n+new: %s", new_texture);
+				}
+			};
+
+			for (auto& ii : Fred_texture_replacements) {
+				// the "nameplate" slot comes from the ship's nameplate, not the replacement list
+				if (!stricmp(shipp->ship_name, ii.ship_name) && !(ii.from_table) && stricmp(ii.old_texture, "nameplate")) {
+					write_entry(ii.old_texture, ii.new_texture);
+				}
+			}
+
+			if (legacy_nameplate) {
+				write_entry("nameplate", shipp->nameplate.texture_file.c_str());
 			}
 
 			fso_comment_pop();
@@ -4398,8 +4424,10 @@ int Fred_mission_save::save_objects()
 			}
 		}
 		// nameplate ------------------------------------------------
-		if (shipp->nameplate.enabled) {
-			fso_comment_push(";;FSO 25.0.0;;");
+		// Standard format bumps the mission to 26.1 (nameplates_need_26_1); Compatibility mode comments it
+		// so older builds skip it, and a file-mode nameplate went out above as a texture replacement instead
+		if (shipp->nameplate.enabled && !legacy_nameplate) {
+			fso_comment_push(";;FSO 26.1.0;;");
 
 			if (optional_string_fred("$Nameplate:", "$Name:")) {
 				parse_comments(1);

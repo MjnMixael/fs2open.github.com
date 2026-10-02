@@ -23,6 +23,13 @@ typedef struct nameplate_info {
 	SCP_string	texture_file;				// file mode: replacement texture (bare name, no extension)
 	int			width = -1;					// per-instance override, -1 = use POF/default
 	int			height = -1;				// per-instance override, -1 = use POF/default
+
+	bool operator==(const nameplate_info& o) const
+	{
+		return enabled == o.enabled && use_file == o.use_file && text == o.text && font_filename == o.font_filename &&
+			font_scale == o.font_scale && texture_file == o.texture_file && width == o.width && height == o.height;
+	}
+	bool operator!=(const nameplate_info& o) const { return !(*this == o); }
 } nameplate_info; // kept here rather than in missionparse.h so ship.h can hold one
 
 // Engine default size (in pixels) for a generated nameplate texture, used when neither the
@@ -34,8 +41,21 @@ constexpr int NAMEPLATE_DEFAULT_HEIGHT = 64;
 // specified font (by FontManager index) at the given scale.  This is used to fill a ship's
 // "nameplate" model texture slot without any file I/O.
 //
-// Returns a new bitmap handle; the caller owns it and is responsible for calling bm_release().
+// Returns a new render-target bitmap handle owned by the caller; ships get theirs via nameplate_acquire().
 // Returns -1 on failure (e.g. empty text, bad dimensions, or no render-target support).
 int nameplate_generate_texture(const char* text, int font_index, float font_scale, int width, int height, color text_color);
+
+// The bitmap for a nameplate on the given model (generated, or loaded in file mode), or -1 if there
+// is none. In game it comes from a cache that lives for the level: ship_page_in() fills it for every
+// ship the mission can bring in, so arrivals only look theirs up, and ships with the same nameplate
+// (wing waves, respawns) share one bitmap. The cache also outlives any one ship, which debris needs,
+// since it shares its ship's texture replacements. In the editor every call makes a new bitmap.
+int nameplate_acquire(const nameplate_info& np, int model_num);
+
+// Done with a bitmap from nameplate_acquire(): the editor frees it, in game the cache keeps it.
+void nameplate_release(int handle);
+
+// Frees the level's cached nameplate bitmaps.
+void nameplate_level_close();
 
 #endif // _NAMEPLATE_H

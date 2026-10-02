@@ -6,12 +6,12 @@
 
 namespace fso::fred::dialogs {
 
-// Model for the ship Nameplate sub-dialog.  Edits the current ship's nameplate config (either a
-// generated text texture or a picked file) and applies it to the ship on apply().
+// Model for the ship Nameplate sub-dialog.  Edits one ship's nameplate config (either a generated
+// text texture or a picked file) and applies it to the ship on apply(); the Ship Editor records the undo.
 class NameplateDialogModel : public AbstractDialogModel {
 	Q_OBJECT
   public:
-	NameplateDialogModel(QObject* parent, EditorViewport* viewport);
+	NameplateDialogModel(QObject* parent, EditorViewport* viewport, int shipnum);
 
 	bool apply() override;
 	void reject() override;
@@ -42,8 +42,6 @@ class NameplateDialogModel : public AbstractDialogModel {
 	int getHeight() const;
 
   private: // NOLINT(readability-redundant-access-specifiers)
-	void initializeData();
-
 	int _shipnum = -1;
 	nameplate_info _nameplate;
 };

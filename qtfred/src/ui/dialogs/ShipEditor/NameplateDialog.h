@@ -14,7 +14,7 @@ class NameplateDialog : public QDialog {
 	Q_OBJECT
 
   public:
-	explicit NameplateDialog(QDialog* parent, EditorViewport* viewport);
+	NameplateDialog(QDialog* parent, EditorViewport* viewport, int shipnum);
 	~NameplateDialog() override;
 
 	void accept() override;

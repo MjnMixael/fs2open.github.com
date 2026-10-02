@@ -13,9 +13,9 @@
 
 namespace fso::fred::dialogs {
 
-NameplateDialog::NameplateDialog(QDialog* parent, EditorViewport* viewport)
+NameplateDialog::NameplateDialog(QDialog* parent, EditorViewport* viewport, int shipnum)
 	: QDialog(parent), ui(new Ui::NameplateDialog()),
-	  _model(new NameplateDialogModel(this, viewport)), _viewport(viewport)
+	  _model(new NameplateDialogModel(this, viewport, shipnum)), _viewport(viewport)
 {
 	ui->setupUi(this);
 

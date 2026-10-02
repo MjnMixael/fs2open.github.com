@@ -68,6 +68,7 @@ CapturedShip& CapturedShip::operator=(CapturedShip&& o) noexcept
 	callsign_index    = o.callsign_index;
 	alt_classes       = std::move(o.alt_classes);
 	custom_data       = std::move(o.custom_data);
+	nameplate         = std::move(o.nameplate);
 
 	arrival_location  = o.arrival_location;
 	arrival_distance  = o.arrival_distance;
@@ -185,6 +186,7 @@ CapturedShip captureShip(int objNum)
 	c.alt_type_index = s.alt_type_index;
 	c.callsign_index = s.callsign_index;
 	c.custom_data    = s.custom_data;
+	c.nameplate      = s.nameplate;
 
 	for (const auto& ac : s.s_alt_classes) {
 		CapturedAltClass cac;
@@ -356,6 +358,7 @@ int restoreShip(CapturedShip& c, Editor* editor)
 	s.alt_type_index = c.alt_type_index;
 	s.callsign_index = c.callsign_index;
 	s.custom_data    = c.custom_data;
+	s.nameplate      = c.nameplate;
 
 	s.s_alt_classes.clear();
 	for (const auto& cac : c.alt_classes) {
@@ -476,6 +479,8 @@ int restoreShip(CapturedShip& c, Editor* editor)
 			Fred_texture_replacements.push_back(tr);
 		}
 		rebuildShipPmiTextures(o.instance);
+	} else {
+		Ships[o.instance].apply_nameplate();
 	}
 
 	// OBJ_START (player start): create_ship creates OBJ_SHIP; fix the type if needed.
@@ -560,6 +565,9 @@ void rebuildShipPmiTextures(int shipIndex)
 			}
 		}
 	}
+
+	// the arrays above were rebuilt without the nameplate, so put it back
+	shipp.apply_nameplate();
 }
 
 void recaptureShipForRedo(CapturedShip& data, int objNum)

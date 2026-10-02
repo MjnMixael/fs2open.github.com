@@ -6603,6 +6603,8 @@ void ship_level_close()
 	}
 
 	ship_close_cockpit_displays(Player_ship);
+
+	nameplate_level_close();
 }
 
 /**
@@ -7176,22 +7178,18 @@ void ship::apply_replacement_textures(const SCP_vector<texture_replace> &replace
 	}
 }
 
+void ship::release_nameplate()
+{
+	nameplate_release(nameplate_bm_handle);
+	nameplate_bm_handle = -1;
+}
+
 void ship::apply_nameplate()
 {
-	// release any previously generated nameplate texture before (re)applying.  Only the
-	// generated (render-target) texture is owned here; file-based bitmaps are managed by bmpman
-	// like any other replacement texture, so they are not tracked in nameplate_bm_handle.
-	if (nameplate_bm_handle >= 0) {
-		bm_release(nameplate_bm_handle);
-		nameplate_bm_handle = -1;
-	}
-
-	if (!nameplate.enabled)
-		return;
-
 	auto pm = model_get(Ship_info[ship_info_index].model_num);
+	polymodel_instance* pmi = model_get_instance(model_instance_num);
 
-	// find the "nameplate" texture slot on the model; bail if this model doesn't have one
+	// find the "nameplate" texture slot on the model
 	int np_map = -1;
 	int np_tnum = -1;
 	for (int j = 0; j < pm->n_textures; j++) {
@@ -7202,47 +7200,28 @@ void ship::apply_nameplate()
 			break;
 		}
 	}
-	if (np_map < 0)
+
+	// take out the bitmap applied before, so a disabled or failed nameplate shows the model's own
+	// texture rather than a freed handle. Only a slot we filled is cleared; a table replacement stays.
+	if (nameplate_bm_handle >= 0) {
+		if (np_map >= 0 && pmi->texture_replace != nullptr)
+			(*pmi->texture_replace)[np_map * TM_NUM_TYPES + np_tnum] = -1;
+		release_nameplate();
+	}
+
+	if (!nameplate.enabled || np_map < 0)
 		return;
 
-	// resolve the bitmap to place in the nameplate slot, either from a file or generated from text
-	int bm = -1;
-	if (nameplate.use_file) {
-		if (nameplate.texture_file.empty())
-			return;
-		bm = bm_load_either(nameplate.texture_file.c_str());
-		if (bm < 0)
-			return;
-	} else {
-		if (nameplate.text.empty())
-			return;
+	// the bitmap for the nameplate slot, generated from text or loaded from a file
+	const int bm = nameplate_acquire(nameplate, Ship_info[ship_info_index].model_num);
+	if (bm < 0)
+		return;
 
-		// resolve dimensions: per-ship override, then POF default, then engine default
-		int width = (nameplate.width > 0) ? nameplate.width
-			: ((pm->nameplate_width > 0) ? pm->nameplate_width : NAMEPLATE_DEFAULT_WIDTH);
-		int height = (nameplate.height > 0) ? nameplate.height
-			: ((pm->nameplate_height > 0) ? pm->nameplate_height : NAMEPLATE_DEFAULT_HEIGHT);
-
-		// resolve the font by filename; -1 means "use whatever font is current"
-		int font_index = -1;
-		if (!nameplate.font_filename.empty())
-			font_index = font::FontManager::getFontIndexByFilename(nameplate.font_filename);
-
-		color text_color;
-		gr_init_color(&text_color, 255, 255, 255);
-
-		bm = nameplate_generate_texture(nameplate.text.c_str(), font_index, nameplate.font_scale, width, height, text_color);
-		if (bm < 0)
-			return;
-
-		// we own this generated bitmap and must free it later
-		nameplate_bm_handle = bm;
-	}
+	nameplate_bm_handle = bm;
 
 	// inject the bitmap into the model instance's replacement array so the renderer draws it in
 	// place of the model's "nameplate" texture (no render-path changes required).  We only set
 	// the single nameplate slot, preserving any other replacement textures already applied.
-	polymodel_instance* pmi = model_get_instance(model_instance_num);
 	if (pmi->texture_replace == nullptr)
 		pmi->texture_replace = std::make_shared<model_texture_replace>();
 
@@ -8806,11 +8785,8 @@ void ship_delete( object * obj )
 	// glow point banks
 	shipp->glow_point_bank_active.clear();
 
-	// free any nameplate texture we generated for this ship
-	if ( shipp->nameplate_bm_handle >= 0 ) {
-		bm_release(shipp->nameplate_bm_handle);
-		shipp->nameplate_bm_handle = -1;
-	}
+	// done with this ship's nameplate bitmap (in game the level cache keeps it; see nameplate_release)
+	shipp->release_nameplate();
 
 	if ( shipp->ship_list_index != -1 ) {
 		ship_obj_list_remove(shipp->ship_list_index);
@@ -12158,6 +12134,12 @@ void change_ship_type(int n, int ship_type, int by_sexp)
 	// point to new ship data
 	ship_model_change(n, ship_type);
 	sp->ship_info_index = ship_type;
+
+	// The new model instance starts without the nameplate, so put it back, sized for the new model.
+	// A nameplate stays with its ship through every class change: ship select, red alert, multiplayer
+	// loadouts and respawns, and the SEXP and Lua calls. Only the last can be mid-mission, and then a
+	// generated nameplate not already in the level cache is made on the spot.
+	sp->apply_nameplate();
 
 	// get the before and after models (the new model may have only been loaded in ship_model_change)
 	auto pm = model_get(sip->model_num);
@@ -19599,6 +19581,14 @@ void ship_page_in()
 				}
 			}
 		}
+	}
+
+	// Make every nameplate a future arrival (wing ships included) can show while the level loads, so an
+	// arrival only looks its bitmap up (see nameplate_acquire). Ships already present made theirs when
+	// they were created during mission load.
+	for (auto p_objp : list_range(&Ship_arrival_list)) {
+		if (p_objp->nameplate.enabled)
+			nameplate_acquire(p_objp->nameplate, Ship_info[p_objp->ship_class].model_num);
 	}
 
 	// should never be NULL, this entire function wouldn't work
