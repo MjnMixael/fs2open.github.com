@@ -20,6 +20,11 @@ namespace fso::fred::util {
 // Tab by default, so Tab could never move past a description or message box (only Ctrl+Tab
 // could). Every such box is switched to tabChangesFocus when it is first shown, unless it
 // opted out with allowTabInput().
+//
+// Tapping a letter cycles lists and dropdowns. Pressing F jumps to the next item starting
+// with F, but in list views and combo boxes Qt stopped cycling when F was tapped quickly
+// (within keyboardInputInterval()): it searched for "FF" instead of the next F. A repeated
+// letter is handled here; tree views already get it right and are left alone.
 
 // Install once at startup; the filter is parented to `owner`.
 void installKeyboardNavigation(QObject* owner);
