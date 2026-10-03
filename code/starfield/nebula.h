@@ -22,7 +22,8 @@ extern int Nebula_heading;
 struct angles;
 
 // A procedural "old" (FS1-style) background nebula pattern.  The built-in FS1 set (Nebula01..03)
-// is hardcoded in old_nebula_init(); mods add/modify patterns via #Old Nebula Patterns sections in
+// is hardcoded in old_nebula_init(); mods add/modify patterns via #Old Nebula Patterns sections (or
+// #Generated Nebula Patterns, accepted as another name) in
 // a game-data nebula.tbl or any *-neb.tbm (matched by name, so redefining a built-in overrides it).
 struct old_nebula_pattern {
 	SCP_string name;
@@ -55,8 +56,8 @@ extern SCP_vector<old_nebula_color>   Old_nebula_colors;
 // Called once from neb2_init(), before the neb2 tables are parsed (game data overrides/extends).
 void old_nebula_init();
 
-// Parse any #Old Nebula Patterns / #Old Nebula Colors sections out of the table text already
-// loaded in the parse buffer.  Called by parse_nebula_table() so the old-nebula data is read as
+// Parse any #Old Nebula Patterns / #Old Nebula Colors sections (or their #Generated Nebula names)
+// out of the table text already loaded in the parse buffer.  Called by parse_nebula_table() so the old-nebula data is read as
 // part of the neb2 nebula.tbl / *-neb.tbm pass rather than re-reading those files.
 void old_nebula_parse_buffer();
 
@@ -67,6 +68,12 @@ int old_nebula_color_lookup(const char *name);
 // Safe name accessors for the registries (return "" when the index is out of range).
 const char *old_nebula_pattern_name(int index);
 const char *old_nebula_color_name(int index);
+
+// Temporary, for comparing against FS1 while the look is tuned: when set, nebula_init() shows the
+// original FS1 .neb mesh for the pattern (the pattern name + ".neb") instead of the generated
+// nebula, falling back to the generated one if that file isn't found.  QtFRED's Background
+// Editor has a checkbox for it.
+extern bool Nebula_show_fs1_mesh;
 
 // PBH = Pitch, Bank, Heading (in degrees).  index < 0 disables the nebula.
 void nebula_init( int index, int pitch, int bank, int heading );

@@ -15,6 +15,7 @@
 #include "bmpman/bmpman.h"
 #include "cfile/cfile.h"
 #include "debugconsole/console.h"
+#include "globalincs/systemvars.h"
 #include "graphics/2d.h"
 #include "graphics/material.h"
 #include "graphics/matrix.h"
@@ -67,15 +68,18 @@ const char *old_nebula_color_name(int index)
 	return Old_nebula_colors[index].name.c_str();
 }
 
-// parse the #Old Nebula Patterns / #Old Nebula Colors sections out of whatever table text is
+// parse the #Old Nebula Patterns / #Old Nebula Colors sections (also accepted as #Generated Nebula
+// Patterns / #Generated Nebula Colors) out of whatever table text is
 // currently loaded into the parse buffer.  Entries are matched by name, so a later table can
 // either override an existing entry in place or append a brand-new one.  Called by
 // parse_nebula_table() so the old-nebula data rides along on the neb2 table read pass.
 void old_nebula_parse_buffer()
 {
-	// patterns
-	reset_parse();
-	if (skip_to_string("#Old Nebula Patterns") == 1) {
+	// patterns ("#Generated Nebula Patterns" is accepted as another name for the section)
+	for (const char *header : {"#Old Nebula Patterns", "#Generated Nebula Patterns"}) {
+		reset_parse();
+		if (skip_to_string(header) != 1)
+			continue;
 		while (optional_string("$Name:")) {
 			SCP_string nm;
 			stuff_string(nm, F_NAME);
@@ -123,9 +127,11 @@ void old_nebula_parse_buffer()
 		}
 	}
 
-	// colors
-	reset_parse();
-	if (skip_to_string("#Old Nebula Colors") == 1) {
+	// colors ("#Generated Nebula Colors" is accepted as another name for the section)
+	for (const char *header : {"#Old Nebula Colors", "#Generated Nebula Colors"}) {
+		reset_parse();
+		if (skip_to_string(header) != 1)
+			continue;
 		while (optional_string("$Name:")) {
 			SCP_string nm;
 			stuff_string(nm, F_NAME);
@@ -213,10 +219,17 @@ static int Nebula_n_verts = 0;
 // bm_create() keeps the pointer without copying, so we hold it until bm_release + delete[].
 static ubyte *Nebula_tex_data = nullptr;
 static int Nebula_bitmap = -1;
+// the pattern and color index the texture was baked from, so an orientation change can keep it
+static int Nebula_baked_pattern = -1;
+static int Nebula_baked_color = -1;
 
 static int Nebula_loaded = 0;
 static angles Nebula_pbh;
 static matrix Nebula_orient;
+
+bool Nebula_show_fs1_mesh = false;
+
+static int load_nebula_sub(const char *filename);
 
 int Nebula_pitch;
 int Nebula_bank;
@@ -234,6 +247,8 @@ void nebula_close()
 	}
 	delete[] Nebula_tex_data;
 	Nebula_tex_data = nullptr;
+	Nebula_baked_pattern = -1;
+	Nebula_baked_color = -1;
 
 	if (!Nebula_loaded)
 		return;
@@ -367,8 +382,8 @@ static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p
 }
 
 // dimensions of the baked equirectangular brightness texture
-#define NEBULA_TEX_W 1024
-#define NEBULA_TEX_H 512
+constexpr int NEBULA_TEX_W = 1024;
+constexpr int NEBULA_TEX_H = 512;
 
 static ubyte nebula_chan(float c, float b)
 {
@@ -480,22 +495,48 @@ static void nebula_generate_sphere(const old_nebula_pattern &p, const matrix *or
 
 void nebula_init(int index, int pitch, int bank, int heading)
 {
-	nebula_close();
+	const bool valid = index >= 0 && index < static_cast<int>(Old_nebula_patterns.size()) && !Is_standalone;
+	const bool fs1_mesh = valid && Nebula_show_fs1_mesh;
+
+	// Only the sphere depends on the orientation, so a change of pitch, bank or heading alone (the
+	// editor's spinboxes, or undoing one) keeps the baked texture instead of baking it again.
+	const bool same_texture = valid && !fs1_mesh && Nebula_bitmap >= 0 && Nebula_baked_pattern == index &&
+		Nebula_baked_color == Mission_palette;
+	if (same_texture) {
+		delete[] Nebula_verts;
+		Nebula_verts = nullptr;
+		Nebula_n_verts = 0;
+	} else {
+		nebula_close();
+	}
 
 	Nebula_pbh.p = fl_radians(pitch);
 	Nebula_pbh.b = fl_radians(bank);
 	Nebula_pbh.h = fl_radians(heading);
 	vm_angles_2_matrix(&Nebula_orient, &Nebula_pbh);
 
-	if (index < 0 || index >= static_cast<int>(Old_nebula_patterns.size()))
+	if (!valid)
 		return;
 
-	// pick the tint color (fall back to white if the palette index is out of range)
-	old_nebula_color col;
-	if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size()))
-		col = Old_nebula_colors[Mission_palette];
+	if (fs1_mesh) {
+		// load_nebula_sub() builds its own buffers, tinted and oriented like the generated nebula
+		const SCP_string& name = Old_nebula_patterns[index].name;
+		if (load_nebula_sub(cf_add_ext(name.c_str(), NOX(".neb"))))
+			return;
+		mprintf(("Nebula: no FS1 mesh %s.neb found, so the generated nebula is shown\n", name.c_str()));
+	}
 
-	nebula_bake_texture(Old_nebula_patterns[index], col);
+	if (!same_texture) {
+		// pick the tint color (fall back to white if the palette index is out of range)
+		old_nebula_color col;
+		if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size()))
+			col = Old_nebula_colors[Mission_palette];
+
+		nebula_bake_texture(Old_nebula_patterns[index], col);
+		Nebula_baked_pattern = index;
+		Nebula_baked_color = Mission_palette;
+	}
+
 	nebula_generate_sphere(Old_nebula_patterns[index], &Nebula_orient);
 	Nebula_loaded = 1;
 }
@@ -530,11 +571,11 @@ void nebula_render()
 // original FS1 nebula files.  NOT used by the normal game path.
 // ----------------------------------------------------------------------------------------------------
 
-#define MAX_TRIS 200
-#define MAX_POINTS 300
+constexpr int MAX_TRIS = 200;
+constexpr int MAX_POINTS = 300;
 
 #define NEBULA_FILE_ID NOX("NEBU")
-#define NEBULA_MAJOR_VERSION 1
+constexpr int NEBULA_MAJOR_VERSION = 1;
 
 static int load_nebula_sub(const char *filename)
 {

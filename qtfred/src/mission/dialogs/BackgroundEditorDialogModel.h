@@ -173,6 +173,10 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	void setOldNebulaBank(int deg);
 	static int getOldNebulaHeading();
 	void setOldNebulaHeading(int deg);
+	// temporary testing aid: show the original FS1 .neb mesh instead of the generated nebula
+	// (a view setting only; not saved with the mission and not an undo step)
+	static bool getOldNebulaShowFs1Mesh();
+	void setOldNebulaShowFs1Mesh(bool show);
 
 	// ambient light group
 	static int getAmbientR();

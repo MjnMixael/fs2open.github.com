@@ -261,6 +261,9 @@ std::pair<int, int> BackgroundEditorDialogModel::restoreGlobalState(const QByteA
 	std::strncpy(The_mission.envmap_name, qs.toUtf8().constData(), sizeof(The_mission.envmap_name) - 1);
 	ds >> qs; The_mission.lighting_profile_name = qs.toStdString();
 
+	// the generated nebula is built from the globals restored above
+	nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
+
 	refreshPreview(editor); // rebuilds starfield + skybox, fires missionChanged()
 
 	return { selectedBitmapIndex, selectedSunIndex };
@@ -1444,6 +1447,17 @@ void BackgroundEditorDialogModel::setOldNebulaHeading(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
 	modify(Nebula_heading, deg);
+	regenerateOldNebula();
+}
+
+bool BackgroundEditorDialogModel::getOldNebulaShowFs1Mesh()
+{
+	return Nebula_show_fs1_mesh;
+}
+
+void BackgroundEditorDialogModel::setOldNebulaShowFs1Mesh(bool show)
+{
+	Nebula_show_fs1_mesh = show;
 	regenerateOldNebula();
 }
 

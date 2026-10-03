@@ -753,6 +753,16 @@
             <item row="1" column="1">
              <widget class="QComboBox" name="oldNebulaColorCombo"/>
             </item>
+            <item row="2" column="0" colspan="2">
+             <widget class="QCheckBox" name="oldNebulaFs1MeshCheck">
+              <property name="text">
+               <string>Show original FS1 mesh (testing)</string>
+              </property>
+              <property name="toolTip">
+               <string>Shows the pattern's original FS1 .neb mesh instead of the generated nebula, for comparing the two. A view setting only; it isn't saved with the mission.</string>
+              </property>
+             </widget>
+            </item>
            </layout>
           </item>
           <item>

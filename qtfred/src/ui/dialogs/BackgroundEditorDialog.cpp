@@ -405,6 +405,8 @@ void BackgroundEditorDialog::updateOldNebulaControls()
 	ui->oldNebulaPitchSpinBox->setEnabled(!fullNeb && patternSet);
 	ui->oldNebulaBankSpinBox->setEnabled(!fullNeb && patternSet);
 	ui->oldNebulaHeadingSpinBox->setEnabled(!fullNeb && patternSet);
+	ui->oldNebulaFs1MeshCheck->setEnabled(!fullNeb && patternSet);
+	ui->oldNebulaFs1MeshCheck->setChecked(_model->getOldNebulaShowFs1Mesh());
 
 	ui->oldNebulaPatternCombo->setCurrentIndex(ui->oldNebulaPatternCombo->findText(QString::fromStdString(_model->getOldNebulaPattern())));
 	ui->oldNebulaColorCombo->setCurrentIndex(ui->oldNebulaColorCombo->findText(QString::fromStdString(_model->getOldNebulaColorName())));
@@ -947,6 +949,12 @@ void BackgroundEditorDialog::on_oldNebulaBankSpinBox_valueChanged(int arg1)
 void BackgroundEditorDialog::on_oldNebulaHeadingSpinBox_valueChanged(int arg1)
 {
 	BG_PUSH(BG_OldNebHeading, _model->setOldNebulaHeading(arg1), "Change Old Nebula Heading");
+}
+
+void BackgroundEditorDialog::on_oldNebulaFs1MeshCheck_toggled(bool checked)
+{
+	// a view setting only, so no undo step
+	_model->setOldNebulaShowFs1Mesh(checked);
 }
 
 // ---- Ambient Light ----
