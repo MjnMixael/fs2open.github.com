@@ -4,6 +4,7 @@
 
 #include <globalincs/linklist.h>
 #include <localization/localize.h>
+#include <missioneditor/common.h>
 #include <mod_table/mod_table.h>
 
 #include <QtWidgets>
@@ -803,11 +804,7 @@ void ShipInitialStatusDialogModel::changeSubsys(int subsysIndex)
 {
 	int z, cargo_index;
 	ship_subsys* ptr;
-	// Goober5000
-	_shipHasScannableSubsystems = Ship_info[Ships[_ship].ship_info_index].is_huge_ship();
-	if (Ships[_ship].flags[Ship::Ship_Flags::Toggle_subsystem_scanning]) {
-		_shipHasScannableSubsystems = ~_shipHasScannableSubsystems;
-	}
+	_shipHasScannableSubsystems = ship_scans_subsystems(Ships[_ship]);
 
 	if (_curSubsys != -1) {
 		ptr = GET_FIRST(&Ships[_ship].subsys_list);
@@ -878,7 +875,7 @@ int ShipInitialStatusDialogModel::getNumDockPoints() const
 	return _numDockPoints;
 }
 
-int ShipInitialStatusDialogModel::getShipHasScannableSubsystems() const
+bool ShipInitialStatusDialogModel::getShipHasScannableSubsystems() const
 {
 	return _shipHasScannableSubsystems;
 }
