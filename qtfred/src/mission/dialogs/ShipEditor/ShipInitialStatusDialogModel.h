@@ -76,7 +76,7 @@ class ShipInitialStatusDialogModel : public AbstractDialogModel {
 
 	int getShip() const;
 	int getNumDockPoints() const;
-	int getShipHasScannableSubsystems() const;
+	bool getShipHasScannableSubsystems() const;
 	dockpoint_information* getDockpointArray() const;
 	void setDockee(int dockPointIndex, int dockeeShipnum);
 	void setDockeePoint(int dockPointIndex, int dockeePoint);
@@ -126,7 +126,7 @@ class ShipInitialStatusDialogModel : public AbstractDialogModel {
 	int _turretsLocked;
 	int _afterburnerLocked;
 	SCP_string _teamColorSetting;
-	int _shipHasScannableSubsystems;
+	bool _shipHasScannableSubsystems = false;
 	int _numDockPoints;
 	std::unique_ptr<dockpoint_information[]> _dockpointArray;
 	bool _multiEdit;

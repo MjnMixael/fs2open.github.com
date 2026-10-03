@@ -10,6 +10,7 @@
 #include "io/cursor.h"
 #include "jumpnode/jumpnode.h"
 #include "localization/fhash.h"
+#include "mod_table/mod_table.h"
 #include "mission/missionbriefcommon.h"
 #include "mission/missioncampaign.h"
 #include "model/model.h"
@@ -398,6 +399,14 @@ void editor_free_engine_data()
 		delete[] Cmdline_mod;
 		Cmdline_mod = nullptr;
 	}
+}
+
+bool ship_scans_subsystems(const ship& shipp)
+{
+	const bool toggled = shipp.flags[Ship::Ship_Flags::Toggle_subsystem_scanning];
+	if (Use_new_scanning_behavior)
+		return toggled;
+	return Ship_info[shipp.ship_info_index].is_huge_ship() != toggled;
 }
 
 int load_and_find_campaign_mission(const char *mission_filename)

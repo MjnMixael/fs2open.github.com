@@ -165,13 +165,9 @@ sexp_list_item *SexpTreeOPF::get_listing_opf_ship(int parent_node) const
 				head.add_data(Ships[ptr->instance].ship_name );
 		}
 		else if (op == OP_CAP_SUBSYS_CARGO_KNOWN_DELAY) {
-			if ( ((Ship_info[Ships[ptr->instance].ship_info_index].is_huge_ship()) &&	// big ship
-				!(Ships[ptr->instance].flags[Ship::Ship_Flags::Toggle_subsystem_scanning]) )||				// which is not flagged OR
-				((!(Ship_info[Ships[ptr->instance].ship_info_index].is_huge_ship())) &&  // small ship
-				(Ships[ptr->instance].flags[Ship::Ship_Flags::Toggle_subsystem_scanning]) ) ) {				// which is flagged
-
-					head.add_data(Ships[ptr->instance].ship_name);
-			}
+			// only ships whose subsystems get scanned, by the same rule as player_inspect_cargo()
+			if (ship_scans_subsystems(Ships[ptr->instance]))
+				head.add_data(Ships[ptr->instance].ship_name);
 		}
 		else {
 			head.add_data(Ships[ptr->instance].ship_name);

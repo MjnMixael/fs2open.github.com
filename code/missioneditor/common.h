@@ -3,6 +3,8 @@
 #include "mission/missionmessage.h"
 #include "ship/anchor_t.h"
 
+class ship;
+
 // Default AWACS range applied when the nebula intensity is unset or invalid
 constexpr float DEFAULT_NEBULA_RANGE = 3000.0f;
 
@@ -77,6 +79,11 @@ bool set_single_player_start(int objnum);
 // (e.g. "The name is already being used by a wing").  The exclude parameters prevent matching
 // against the entity currently being renamed.
 SCP_string check_name_conflict(const char *entity_type, const char *name, int exclude_ship = -1, int exclude_wing = -1, int exclude_waypoint_list = -1, int exclude_jump_node = -1, int exclude_prop = -1);
+
+// Whether a ship's cargo is scanned per subsystem, by the rule the game uses (player_inspect_cargo()).
+// With $Unify scanning behavior the toggle-subsystem-scanning flag alone decides; without it the flag
+// inverts the class default, where huge ships scan subsystems.
+bool ship_scans_subsystems(const ship& shipp);
 
 // Free the engine data that the editors keep for their whole session.  Call at shutdown, while the graphics
 // system is still up, since models own GPU buffers and cursors own bitmaps.
