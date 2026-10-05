@@ -173,6 +173,9 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	void setGeneratedNebulaBank(int deg);
 	static int getGeneratedNebulaHeading();
 	void setGeneratedNebulaHeading(int deg);
+	// the mission's +Generated Nebula: nothing is drawn until it's on
+	static bool getGeneratedNebulaEnabled();
+	void setGeneratedNebulaEnabled(bool enabled);
 
 	// ambient light group
 	static int getAmbientR();

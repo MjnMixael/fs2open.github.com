@@ -724,6 +724,7 @@ namespace FieldId {
     constexpr int BG_Subspace       = 4243;
     constexpr int BG_EnvMap         = 4244;
     constexpr int BG_LightProfile   = 4245;
+    constexpr int BG_GeneratedNebEnabled  = 4246;
     // Wing editor             4301–4399
     constexpr int Wing_Name              = 4301;
     constexpr int Wing_DisplayName       = 4302;

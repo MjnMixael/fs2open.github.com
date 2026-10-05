@@ -601,7 +601,9 @@ void bg_bitmap_dlg::OnSelchangeNebcolor()
 
 	UpdateData(TRUE);
 	Mission_palette = m_nebula_color;
-	
+	Nebula_unknown_color.clear();
+	nebula_init(Nebula_index, m_pitch, m_bank, m_heading);
+
 	Update_window = 1;
 }
 
@@ -612,7 +614,8 @@ void bg_bitmap_dlg::OnSelchangeNebpattern()
 	UpdateData(TRUE);
 
 	// fullneb indexes differently	
-	Nebula_index = m_nebula_index - 1;			
+	Nebula_index = m_nebula_index - 1;
+	Nebula_unknown_pattern.clear();
 
 	GetDlgItem(IDC_NEBCOLOR)->EnableWindow(m_nebula_index ? TRUE : FALSE);
 	nebula_init(Nebula_index, m_pitch, m_bank, m_heading);

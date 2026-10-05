@@ -21,7 +21,6 @@
 #include "graphics/matrix.h"
 #include "math/vecmat.h"
 #include "mission/missionparse.h"
-#include "nebula/neb.h"
 #include "parse/parselo.h"
 #include "render/3d.h"
 #include "starfield/nebula.h"
@@ -59,6 +58,14 @@ const char *generated_nebula_pattern_name(int index)
 	if (index < 0 || index >= static_cast<int>(Generated_nebula_patterns.size()))
 		return "";
 	return Generated_nebula_patterns[index].name.c_str();
+}
+
+int generated_nebula_default_color()
+{
+	const int blue = generated_nebula_color_lookup("Blue");
+	if (blue >= 0)
+		return blue;
+	return Generated_nebula_colors.empty() ? -1 : 0;
 }
 
 const char *generated_nebula_color_name(int index)
@@ -152,17 +159,29 @@ void parse_generated_nebula_patterns()
 			parse_float_list(f, 2);
 			p->freq_u = f[0];
 			p->freq_v = f[1];
+			CLAMP(p->freq_u, 0.1f, 64.0f);
+			CLAMP(p->freq_v, 0.1f, 64.0f);
 		}
-		if (optional_string("+Octaves:"))
+		if (optional_string("+Octaves:")) {
 			stuff_int(&p->octaves);
-		if (optional_string("+Warp:"))
+			CLAMP(p->octaves, 1, 8);
+		}
+		if (optional_string("+Warp:")) {
 			stuff_float(&p->warp);
-		if (optional_string("+Contrast:"))
+			CLAMP(p->warp, 0.0f, 8.0f);
+		}
+		if (optional_string("+Contrast:")) {
 			stuff_float(&p->contrast);
-		if (optional_string("+Intensity:"))
+			CLAMP(p->contrast, 0.05f, 10.0f);
+		}
+		if (optional_string("+Intensity:")) {
 			stuff_float(&p->intensity);
-		if (optional_string("+Seed:"))
+			p->intensity = std::max(p->intensity, 0.0f);
+		}
+		if (optional_string("+Seed:")) {
 			stuff_int(&p->seed);
+			CLAMP(p->seed, -1000000, 1000000);
+		}
 		if (optional_string("+Resolution:")) {
 			int r[2];
 			parse_int_list(r, 2);
@@ -189,14 +208,21 @@ void parse_generated_nebula_table(const char *filename)
 			read_file_text_from_default(defaults_get_file(GENERATED_NEBULA_TABLE));
 		reset_parse();
 
-		if (optional_string("#Generated Nebula Colors")) {
-			parse_generated_nebula_colors();
-			required_string("#End");
+		// either section may come first, and either may be left out
+		while (true) {
+			if (optional_string("#Generated Nebula Colors")) {
+				parse_generated_nebula_colors();
+				required_string("#End");
+			} else if (optional_string("#Generated Nebula Patterns")) {
+				parse_generated_nebula_patterns();
+				required_string("#End");
+			} else {
+				break;
+			}
 		}
-		if (optional_string("#Generated Nebula Patterns")) {
-			parse_generated_nebula_patterns();
-			required_string("#End");
-		}
+		if (!check_for_eof())
+			error_display(0, "Unexpected text in %s; expected #Generated Nebula Colors or #Generated Nebula Patterns.",
+				filename != nullptr ? filename : GENERATED_NEBULA_TABLE);
 	} catch (const parse::ParseException &e) {
 		mprintf(("TABLES: Unable to parse '%s'!  Error message = %s.\n",
 			filename != nullptr ? filename : GENERATED_NEBULA_TABLE, e.what()));
@@ -235,13 +261,15 @@ static int Nebula_bitmap = -1;
 static int Nebula_baked_pattern = -1;
 static int Nebula_baked_color = -1;
 
-static int Nebula_loaded = 0;
-static angles Nebula_pbh;
 static matrix Nebula_orient;
 
 int Nebula_pitch;
 int Nebula_bank;
 int Nebula_heading;
+
+bool generated_nebula_enabled = false;
+SCP_string Nebula_unknown_pattern;
+SCP_string Nebula_unknown_color;
 
 void nebula_close()
 {
@@ -257,11 +285,6 @@ void nebula_close()
 	Nebula_tex_data = nullptr;
 	Nebula_baked_pattern = -1;
 	Nebula_baked_color = -1;
-
-	if (!Nebula_loaded)
-		return;
-
-	Nebula_loaded = 0;
 }
 
 // classic 2d -> sphere projection.  u,v in range 0..1.
@@ -293,8 +316,8 @@ static uint32_t neb_hash(uint32_t x)
 
 static float neb_hash2(int ix, int iy, int seed)
 {
-	uint32_t h = neb_hash(static_cast<uint32_t>(ix) * 73856093U ^ static_cast<uint32_t>(iy) * 19349663U ^
-						   static_cast<uint32_t>(seed) * 83492791U);
+	uint32_t h = neb_hash((static_cast<uint32_t>(ix) * 73856093U) ^ (static_cast<uint32_t>(iy) * 19349663U) ^
+						   (static_cast<uint32_t>(seed) * 83492791U));
 	return (h & 0xffffffU) / static_cast<float>(0x1000000);
 }
 
@@ -328,15 +351,13 @@ static float neb_vnoise(float x, float y, int seed, int xperiod)
 	float u = neb_smooth(fx);
 	float v = neb_smooth(fy);
 
-	return (h00 * (1.0f - u) + h10 * u) * (1.0f - v) + (h01 * (1.0f - u) + h11 * u) * v;
+	return (((h00 * (1.0f - u)) + (h10 * u)) * (1.0f - v)) + (((h01 * (1.0f - u)) + (h11 * u)) * v);
 }
 
 // multi-octave, anisotropic, longitude-seamless fbm in 0..1
 static float neb_fbm(float lon, float lat, const generated_nebula_pattern &p)
 {
-	int base = (int)std::lround(p.freq_u);
-	if (base < 1)
-		base = 1;
+	const int base = std::max(static_cast<int>(std::lround(p.freq_u)), 1);
 
 	// low-frequency directional warp to stretch the wisps
 	float w = (neb_vnoise(lon * base, lat * p.freq_v, p.seed + 777, base) - 0.5f) * p.warp;
@@ -364,10 +385,8 @@ static float neb_fbm(float lon, float lat, const generated_nebula_pattern &p)
 
 // brightness 0..1 of the procedural background for a texel: mostly black, a soft scatter of
 // bright cloud masses
-static float nebula_background_brightness(float lon, float lat, const generated_nebula_pattern &p)
+static float nebula_background_brightness(float n, float lat, const generated_nebula_pattern &p)
 {
-	float n = neb_fbm(lon, lat, p);
-
 	float density = p.density;
 	CLAMP(density, 0.0f, 1.0f);
 	if (density <= 0.0f)
@@ -432,7 +451,15 @@ static SCP_vector<nebula_cloud_eval> nebula_prepare_clouds(const generated_nebul
 static float nebula_brightness(float lon, float lat, const generated_nebula_pattern &p,
 	const SCP_vector<nebula_cloud_eval> &clouds)
 {
-	const float bg = p.clouds_only ? 0.0f : nebula_background_brightness(lon, lat, p);
+	// the noise is shared by the background and the cloud breakup, so compute it at most once
+	float noise = -1.0f;
+	auto get_noise = [&]() {
+		if (noise < 0.0f)
+			noise = neb_fbm(lon, lat, p);
+		return noise;
+	};
+
+	const float bg = p.clouds_only ? 0.0f : nebula_background_brightness(get_noise(), lat, p);
 	if (clouds.empty())
 		return bg;
 
@@ -458,8 +485,7 @@ static float nebula_brightness(float lon, float lat, const generated_nebula_patt
 	if (c > 0.0f && p.cloud_detail > 0.0f) {
 		// the noise averages about 0.5, so this keeps the clouds' overall brightness while
 		// carving them into brighter and darker wisps
-		const float n = neb_fbm(lon, lat, p);
-		c *= std::max(0.0f, 1.0f + p.cloud_detail * (2.0f * n - 1.0f) * 2.0f);
+		c *= std::max(0.0f, 1.0f + (p.cloud_detail * ((2.0f * get_noise()) - 1.0f) * 2.0f));
 	}
 	c = std::min(c, 1.0f);
 
@@ -482,10 +508,10 @@ static ubyte nebula_chan(float c, float b)
 // facets; the smooth brightness field + bilinear filtering give the soft, feathered FS1 look.
 static void nebula_bake_texture(const generated_nebula_pattern &p, const generated_nebula_color &col)
 {
-	if (Nebula_tex_data == nullptr)
-		Nebula_tex_data = new ubyte[NEBULA_TEX_W * NEBULA_TEX_H * 3];
+	// nebula_init() closed the previous texture before baking, so these start fresh
+	Nebula_tex_data = new ubyte[NEBULA_TEX_W * NEBULA_TEX_H * 3];
 
-	float intensity = (p.intensity > 0.0f) ? p.intensity : 1.0f;
+	const float intensity = std::max(p.intensity, 0.0f);
 	const auto clouds = nebula_prepare_clouds(p);
 
 	ubyte *px = Nebula_tex_data;
@@ -501,8 +527,6 @@ static void nebula_bake_texture(const generated_nebula_pattern &p, const generat
 		}
 	}
 
-	if (Nebula_bitmap >= 0)
-		bm_release(Nebula_bitmap);
 	// 24-bit (no alpha) so material_set_unlit() picks additive blending
 	Nebula_bitmap = bm_create(24, NEBULA_TEX_W, NEBULA_TEX_H, Nebula_tex_data, 0);
 }
@@ -581,7 +605,8 @@ static void nebula_generate_sphere(const generated_nebula_pattern &p, const matr
 
 void nebula_init(int index, int pitch, int bank, int heading)
 {
-	const bool valid = index >= 0 && index < static_cast<int>(Generated_nebula_patterns.size()) && !Is_standalone;
+	const bool valid = generated_nebula_enabled && index >= 0 && index < static_cast<int>(Generated_nebula_patterns.size()) &&
+		!Is_standalone;
 
 	// Only the sphere depends on the orientation, so a change of pitch, bank or heading alone (the
 	// editor's spinboxes, or undoing one) keeps the baked texture instead of baking it again.
@@ -595,10 +620,11 @@ void nebula_init(int index, int pitch, int bank, int heading)
 		nebula_close();
 	}
 
-	Nebula_pbh.p = fl_radians(pitch);
-	Nebula_pbh.b = fl_radians(bank);
-	Nebula_pbh.h = fl_radians(heading);
-	vm_angles_2_matrix(&Nebula_orient, &Nebula_pbh);
+	angles pbh;
+	pbh.p = fl_radians(pitch);
+	pbh.b = fl_radians(bank);
+	pbh.h = fl_radians(heading);
+	vm_angles_2_matrix(&Nebula_orient, &pbh);
 
 	if (!valid)
 		return;
@@ -615,7 +641,6 @@ void nebula_init(int index, int pitch, int bank, int heading)
 	}
 
 	nebula_generate_sphere(Generated_nebula_patterns[index], &Nebula_orient);
-	Nebula_loaded = 1;
 }
 
 void nebula_render()

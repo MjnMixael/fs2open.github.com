@@ -120,6 +120,9 @@ QByteArray BackgroundEditorDialogModel::captureState() const
 	ds << (qint32)Nebula_pitch;
 	ds << (qint32)Nebula_bank;
 	ds << (qint32)Nebula_heading;
+	ds << generated_nebula_enabled;
+	ds << QString::fromStdString(Nebula_unknown_pattern);
+	ds << QString::fromStdString(Nebula_unknown_color);
 
 	// Ambient light (packed int: R | G<<8 | B<<16)
 	ds << (qint32)The_mission.ambient_light_level;
@@ -238,6 +241,9 @@ std::pair<int, int> BackgroundEditorDialogModel::restoreGlobalState(const QByteA
 	ds >> i32; Nebula_pitch   = i32;
 	ds >> i32; Nebula_bank    = i32;
 	ds >> i32; Nebula_heading = i32;
+	ds >> generated_nebula_enabled;
+	ds >> qs; Nebula_unknown_pattern = qs.toStdString();
+	ds >> qs; Nebula_unknown_color = qs.toStdString();
 
 	// Ambient light
 	ds >> i32; The_mission.ambient_light_level = i32;
@@ -1391,6 +1397,7 @@ void BackgroundEditorDialogModel::setGeneratedNebulaPattern(const SCP_string& na
 	}
 
 	modify(Nebula_index, newIndex);
+	Nebula_unknown_pattern.clear(); // a choice replaces a name the tables didn't know
 	regenerateGeneratedNebula();
 }
 
@@ -1409,9 +1416,21 @@ void BackgroundEditorDialogModel::setGeneratedNebulaColorName(const SCP_string& 
 	int idx = generated_nebula_color_lookup(name.c_str());
 	if (idx >= 0) {
 		modify(Mission_palette, idx);
+		Nebula_unknown_color.clear(); // a choice replaces a name the tables didn't know
 		regenerateGeneratedNebula();
 	}
 	// name not found: ignore
+}
+
+bool BackgroundEditorDialogModel::getGeneratedNebulaEnabled()
+{
+	return generated_nebula_enabled;
+}
+
+void BackgroundEditorDialogModel::setGeneratedNebulaEnabled(bool enabled)
+{
+	modify(generated_nebula_enabled, enabled);
+	regenerateGeneratedNebula();
 }
 
 int BackgroundEditorDialogModel::getGeneratedNebulaPitch()

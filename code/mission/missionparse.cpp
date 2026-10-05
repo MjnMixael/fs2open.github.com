@@ -6865,18 +6865,23 @@ void parse_bitmaps(mission *pm)
 		if (optional_string("+Nebula:")) {
 			stuff_string(str, F_NAME, MAX_FILENAME_LEN);
 
-			// look up the generated nebula pattern in the registry
+			// look up the generated nebula pattern in the registry; an unknown name is kept so a
+			// save writes it back unchanged
 			Nebula_index = generated_nebula_pattern_lookup(str);
-			if (Nebula_index < 0)
+			if (Nebula_index < 0) {
 				WarningEx(LOCATION, "Mission %s\nUnknown nebula %s!", pm->name.c_str(), str);
+				Nebula_unknown_pattern = str;
+			}
 
 			if (optional_string("+Color:")) {
 				stuff_string(str, F_NAME, MAX_FILENAME_LEN);
 				int color_idx = generated_nebula_color_lookup(str);
-				if (color_idx < 0)
+				if (color_idx < 0) {
 					WarningEx(LOCATION, "Mission %s\nUnknown nebula color %s!", pm->name.c_str(), str);
-				else
+					Nebula_unknown_color = str;
+				} else {
 					Mission_palette = color_idx;
+				}
 			}
 
 			if (optional_string("+Pitch:")){
@@ -6895,7 +6900,11 @@ void parse_bitmaps(mission *pm)
 				stuff_int(&Nebula_heading);
 			} else {
 				Nebula_heading = 0;
-			}						
+			}
+
+			// the backdrop is only drawn when the mission turns it on (26.1)
+			if (optional_string("+Generated Nebula:"))
+				stuff_boolean(&generated_nebula_enabled);
 		}
 
 		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
@@ -8149,7 +8158,10 @@ void mission_init(mission *pm, bool quick_init)
 	Nebula_bank = (int)((float)(Random::next() & 0x0fff) * 360.0f / 4096.0f);
 	Nebula_heading = (int)((float)(Random::next() & 0x0fff) * 360.0f / 4096.0f);
 	Nebula_index = -1;
-	Mission_palette = 1;
+	Mission_palette = std::max(generated_nebula_default_color(), 0);
+	generated_nebula_enabled = false;
+	Nebula_unknown_pattern.clear();
+	Nebula_unknown_color.clear();
 }
 
 // Main parse routine for parsing a mission.  The default parameter flags tells us which information
@@ -10486,6 +10498,10 @@ bool check_for_26_1_data()
 	// subtrees, and the cutscene camera preview's starts-after event.
 	if (std::any_of(Event_annotations.begin(), Event_annotations.end(),
 		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed || !ea.camera_starts_after.empty(); }))
+		return true;
+
+	// a mission that turns on the generated nebula (+Generated Nebula:)
+	if (generated_nebula_enabled && (Nebula_index >= 0 || !Nebula_unknown_pattern.empty()))
 		return true;
 
 	// Editor transform locks (+Transform Locked:)

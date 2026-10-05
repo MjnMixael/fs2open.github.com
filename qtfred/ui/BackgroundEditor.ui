@@ -708,6 +708,18 @@
          <property name="title">
           <string>Generated BG Nebula</string>
          </property>
+         <layout class="QVBoxLayout" name="generatedNebulaOuterLayout">
+          <item>
+           <widget class="QCheckBox" name="generatedNebulaCheckBox">
+            <property name="text">
+             <string>Generated Nebula</string>
+            </property>
+            <property name="toolTip">
+             <string>Draws the generated nebula in this mission. Saved with the mission; off for missions that never turned it on, so older missions are unchanged.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
          <layout class="QHBoxLayout" name="horizontalLayout_14" stretch="0,0">
           <item>
            <layout class="QFormLayout" name="generatedNebulaLeftForm">
@@ -805,6 +817,8 @@
              </widget>
             </item>
            </layout>
+          </item>
+         </layout>
           </item>
          </layout>
         </widget>
@@ -1177,6 +1191,7 @@
   <tabstop>fogOverrideGreenSpinBox</tabstop>
   <tabstop>fogOverrideBlueSpinBox</tabstop>
   <tabstop>poofsListWidget</tabstop>
+  <tabstop>generatedNebulaCheckBox</tabstop>
   <tabstop>generatedNebulaPatternCombo</tabstop>
   <tabstop>generatedNebulaColorCombo</tabstop>
   <tabstop>generatedNebulaPitchSpinBox</tabstop>

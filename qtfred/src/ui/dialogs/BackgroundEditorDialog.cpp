@@ -383,12 +383,16 @@ void BackgroundEditorDialog::updateGeneratedNebulaControls()
 
 	const bool fullNeb = _model->getFullNebulaEnabled();
 	const bool patternSet = _model->getGeneratedNebulaPattern() != "<None>";
+	// like Full Nebula, the rest of the group follows the checkbox
+	const bool on = !fullNeb && _model->getGeneratedNebulaEnabled();
 
-	ui->generatedNebulaPatternCombo->setEnabled(!fullNeb);
-	ui->generatedNebulaColorCombo->setEnabled(!fullNeb && patternSet);
-	ui->generatedNebulaPitchSpinBox->setEnabled(!fullNeb && patternSet);
-	ui->generatedNebulaBankSpinBox->setEnabled(!fullNeb && patternSet);
-	ui->generatedNebulaHeadingSpinBox->setEnabled(!fullNeb && patternSet);
+	ui->generatedNebulaCheckBox->setEnabled(!fullNeb);
+	ui->generatedNebulaCheckBox->setChecked(_model->getGeneratedNebulaEnabled());
+	ui->generatedNebulaPatternCombo->setEnabled(on);
+	ui->generatedNebulaColorCombo->setEnabled(on && patternSet);
+	ui->generatedNebulaPitchSpinBox->setEnabled(on && patternSet);
+	ui->generatedNebulaBankSpinBox->setEnabled(on && patternSet);
+	ui->generatedNebulaHeadingSpinBox->setEnabled(on && patternSet);
 
 	ui->generatedNebulaPatternCombo->setCurrentIndex(ui->generatedNebulaPatternCombo->findText(QString::fromStdString(_model->getGeneratedNebulaPattern())));
 	ui->generatedNebulaColorCombo->setCurrentIndex(ui->generatedNebulaColorCombo->findText(QString::fromStdString(_model->getGeneratedNebulaColorName())));
@@ -900,6 +904,12 @@ void BackgroundEditorDialog::on_fogOverrideBlueSpinBox_valueChanged(int arg1)
 }
 
 // ---- Generated Nebula ----
+
+void BackgroundEditorDialog::on_generatedNebulaCheckBox_toggled(bool checked)
+{
+	BG_PUSH(BG_GeneratedNebEnabled, _model->setGeneratedNebulaEnabled(checked), "Toggle Generated Nebula");
+	updateGeneratedNebulaControls();
+}
 
 void BackgroundEditorDialog::on_generatedNebulaPatternCombo_currentIndexChanged(int index)
 {

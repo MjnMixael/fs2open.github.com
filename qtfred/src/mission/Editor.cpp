@@ -375,8 +375,6 @@ bool Editor::loadMission(const std::string& mission_name, int flags, const std::
 		// Weapons used in wings but missing from the loadout pool are flagged by the error checker.
 	}
 
-	Assert(Mission_palette >= 0);
-	Assert(Mission_palette <= 98);
 
 	// go through all ships and translate their callsign and alternate name indices
 	objp = GET_FIRST(&obj_used_list);
