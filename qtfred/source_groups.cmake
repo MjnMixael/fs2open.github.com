@@ -496,8 +496,12 @@ add_file_folder("Resources/Images"
     resources/images/toolbar/constz-light.png
     resources/images/toolbar/orbitsel-dark.png
     resources/images/toolbar/orbitsel-light.png
-    resources/images/toolbar/rotlocal-dark.png
-    resources/images/toolbar/rotlocal-light.png
+    resources/images/toolbar/pivotalign-dark.png
+    resources/images/toolbar/pivotalign-light.png
+    resources/images/toolbar/pivotgroup-dark.png
+    resources/images/toolbar/pivotgroup-light.png
+    resources/images/toolbar/pivotlocal-dark.png
+    resources/images/toolbar/pivotlocal-light.png
     resources/images/toolbar/select-dark.png
     resources/images/toolbar/select-light.png
     resources/images/toolbar/selectlist-dark.png

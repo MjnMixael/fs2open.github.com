@@ -21,6 +21,13 @@ enum class CursorMode {
 	Selecting, Moving, Rotating
 };
 
+// How the other marked objects follow the current object when it is moved or rotated.
+// Group: they keep formation, orbiting it. Individual: each turns in place by the same amount.
+// Align: each takes its orientation, and typed toolbar values set them all to the same value.
+enum class PivotMode {
+	Group, Individual, Align
+};
+
 class Editor;
 class EditorViewport;
 struct ViewSettings;

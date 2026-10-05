@@ -30,8 +30,12 @@
     <file>images/toolbar/constz-light.png</file>
     <file>images/toolbar/orbitsel-dark.png</file>
     <file>images/toolbar/orbitsel-light.png</file>
-    <file>images/toolbar/rotlocal-dark.png</file>
-    <file>images/toolbar/rotlocal-light.png</file>
+    <file>images/toolbar/pivotalign-dark.png</file>
+    <file>images/toolbar/pivotalign-light.png</file>
+    <file>images/toolbar/pivotgroup-dark.png</file>
+    <file>images/toolbar/pivotgroup-light.png</file>
+    <file>images/toolbar/pivotlocal-dark.png</file>
+    <file>images/toolbar/pivotlocal-light.png</file>
     <file>images/toolbar/select-dark.png</file>
     <file>images/toolbar/select-light.png</file>
     <file>images/toolbar/selectlist-dark.png</file>

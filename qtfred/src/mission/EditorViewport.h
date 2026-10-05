@@ -377,6 +377,11 @@ class EditorViewport {
 	int drag_objects(int x, int y);
 
 	int drag_rotate_objects(int mouse_dx, int mouse_dy);
+	// Carries the other marked objects along after the leader moved and turned. rotmat is the
+	// leader's turn (new orient = vm_matrix_x_matrix(old orient, rotmat)); the old pos/orient are
+	// the leader's from before the change. Follows Pivot_mode.
+	void follow_leader(const object* leader, const vec3d& leader_old_pos, const matrix& leader_old_orient,
+		const matrix& rotmat) const;
 	void cancel_drag();
 
 	void view_universe(bool just_marked);
@@ -430,7 +435,7 @@ class EditorViewport {
 
 	int Duped_wing;
 
-	bool Group_rotate = true;
+	PivotMode Pivot_mode = PivotMode::Group;
 	int  toolbar_icon_size = 24;  ///< Toolbar icon size in pixels (16, 24, or 32)
 	int  sexp_number_every_n = 5; ///< Show a numbered badge on every Nth argument in sexp trees (0 = disabled)
 	bool Offer_autosave_recovery   = true;
