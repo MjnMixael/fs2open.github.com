@@ -17,6 +17,7 @@
 #include <QLineEdit>
 #include <QAbstractSpinBox>
 #include <QToolBar>
+#include <QMenu>
 #include <QApplication>
 #include <QProcess>
 #include <QSignalBlocker>
@@ -355,8 +356,20 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	// Restore per-mode Local preferences and camera speeds from last session.
 	{
 		QSettings settings;
-		_tbLocalMove   = settings.value("FredView/transformLocalMove",   false).toBool();
-		_tbLocalRotate = settings.value("FredView/transformLocalRotate", false).toBool();
+		// Older settings stored a Local on/off bool per mode; on was Individual, off Group
+		auto loadPivot = [&settings](const char* key, const char* oldLocalKey) {
+			const int fallback = static_cast<int>(settings.value(oldLocalKey, false).toBool() ? PivotMode::Individual : PivotMode::Group);
+			const int v = settings.value(key, fallback).toInt();
+			return (v >= 0 && v <= static_cast<int>(PivotMode::Align)) ? static_cast<PivotMode>(v) : PivotMode::Group;
+		};
+		_tbPivotMove   = loadPivot("FredView/transformPivotMove",   "FredView/transformLocalMove");
+		_tbPivotRotate = loadPivot("FredView/transformPivotRotate", "FredView/transformLocalRotate");
+		_constraintMove   = std::clamp(settings.value("FredView/constraintMove",   3).toInt(), 0, 5);
+		_constraintRotate = std::clamp(settings.value("FredView/constraintRotate", 3).toInt(), 0, 5);
+		if (_viewport->Editing_mode == CursorMode::Moving)
+			setConstraint(_constraintMove);
+		else if (_viewport->Editing_mode == CursorMode::Rotating)
+			setConstraint(_constraintRotate);
 		_viewport->camera.setPhysicsSpeed(settings.value("FredView/cameraSpeedMove", 1).toInt());
 		_viewport->camera.setPhysicsRot(settings.value("FredView/cameraSpeedRot",  25).toInt());
 		_lastSavedCameraSpeedMove = _viewport->camera.getPhysicsSpeed();
@@ -1668,25 +1681,50 @@ void FredView::initializeTransformBar() {
 
 	addFixedSpacer(8);
 
-	// ---- Local-axes toggle ----
-	_transformLocalBtn = new QToolButton(_transformToolBar);
-	_transformLocalBtn->setCheckable(true);
-	_transformLocalBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
-	_transformLocalBtn->setFixedSize(28, 24);
-	_transformLocalBtn->setToolTip(tr("Local mode: in multi-selection, apply position/orientation as a delta to each object rather than setting all to the same absolute value. (X)"));
-	// FRED2 bound "Rotate Locally" to the X key; route it through the button so the per-mode local memory stays in sync.
-	_transformLocalBtn->setShortcut(QKeySequence(Qt::Key_X));
-	bindThemeIcon(_transformLocalBtn, QStringLiteral("rotlocal"));
-	_transformToolBar->addWidget(_transformLocalBtn);
-	connect(_transformLocalBtn, &QToolButton::toggled, this, [this](bool checked) {
-		if (!_viewport) return;
-		// Local ON  = each object rotates/moves individually -> Group_rotate = false
-		// Local OFF = formation (group orbits leader)        -> Group_rotate = true
-		_viewport->Group_rotate = !checked;
-		if (_viewport->Editing_mode == CursorMode::Moving)
-			_tbLocalMove = checked;
-		else if (_viewport->Editing_mode == CursorMode::Rotating)
-			_tbLocalRotate = checked;
+	// ---- Pivot mode: how the other marked objects follow the current one ----
+	_transformPivotBtn = new QToolButton(_transformToolBar);
+	_transformPivotBtn->setToolButtonStyle(Qt::ToolButtonIconOnly);
+	_transformPivotBtn->setPopupMode(QToolButton::InstantPopup);
+	_transformPivotBtn->setFixedSize(28, 24);
+	_transformPivotBtn->setToolTip(tr("Pivot: how the other marked objects follow the current one (X cycles)\n"
+	                                  "Group: they keep formation, orbiting the current object\n"
+	                                  "Individual: each moves and turns in place by the same amount\n"
+	                                  "Align: each turns to the current object's facing, and typed values set them all to the same value"));
+	auto* pivotMenu = new QMenu(_transformPivotBtn);
+	auto* pivotGroup = new QActionGroup(pivotMenu);
+	struct PivotInfo {
+		const char* text;
+		const char* icon;
+	};
+	// in PivotMode order
+	static const PivotInfo pivotInfo[] = {
+		{QT_TR_NOOP("Group"), "pivotgroup"},
+		{QT_TR_NOOP("Individual"), "pivotlocal"},
+		{QT_TR_NOOP("Align"), "pivotalign"},
+	};
+	for (int i = 0; i < 3; ++i) {
+		auto* act = pivotMenu->addAction(tr(pivotInfo[i].text));
+		act->setCheckable(true);
+		pivotGroup->addAction(act);
+		bindThemeIcon(act, QString::fromLatin1(pivotInfo[i].icon));
+		// The button shows the checked mode's icon; changed also fires when a theme swaps the icon
+		connect(act, &QAction::changed, this, [this, act]() {
+			if (act->isChecked())
+				_transformPivotBtn->setIcon(act->icon());
+		});
+		connect(act, &QAction::triggered, this, [this, i]() { setPivotMode(static_cast<PivotMode>(i)); });
+		_pivotActions[i] = act;
+	}
+	_transformPivotBtn->setMenu(pivotMenu);
+	_transformToolBar->addWidget(_transformPivotBtn);
+	// FRED2 bound "Rotate Locally" to X; here it steps through the three modes
+	auto* cyclePivot = new QAction(this);
+	cyclePivot->setShortcut(QKeySequence(Qt::Key_X));
+	addAction(cyclePivot);
+	connect(cyclePivot, &QAction::triggered, this, [this]() {
+		if (!_viewport || !_transformPivotBtn->isEnabled())
+			return;
+		setPivotMode(static_cast<PivotMode>((static_cast<int>(_viewport->Pivot_mode) + 1) % 3));
 	});
 
 	addFixedSpacer(8);
@@ -1697,18 +1735,29 @@ void FredView::initializeTransformBar() {
 	_transformLabel->setMinimumWidth(24);
 	_transformToolBar->addWidget(_transformLabel);
 
-	auto makeSpinBox = [this](QLabel*& lbl, const QString& axisName, QDoubleSpinBox*& sb) {
+	auto makeSpinBox = [this](QLabel*& lbl, const QString& axisName, QDoubleSpinBox*& sb, int axis) {
 		lbl = new QLabel(axisName, _transformToolBar);
 		lbl->setContentsMargins(4, 0, 2, 0);
 		_transformToolBar->addWidget(lbl);
 		sb = new QDoubleSpinBox(_transformToolBar);
-		sb->setDecimals(1);
-		sb->setRange(-99999.9, 99999.9);
-		sb->setFixedWidth(90);
+		// Two decimals: positions are floats, which can't hold a third far from the origin (at 65 km
+		// the step is about 8 mm), so more would only show noise
+		sb->setDecimals(2);
+		sb->setRange(-99999.99, 99999.99);
+		sb->setFixedWidth(96);
 		sb->setKeyboardTracking(false);
 		_transformToolBar->addWidget(sb);
-		connect(sb, &QDoubleSpinBox::editingFinished, this, [this, box = sb]() {
-			onTransformEditingFinished();
+		// editingFinished also fires when focus just passes through the box, so it applies only after
+		// the user typed in it. Comparing values instead would break typing the shown value to put
+		// every marked object on it. textEdited fires for user edits only, never for setValue().
+		if (auto* edit = sb->findChild<QLineEdit*>()) {
+			connect(edit, &QLineEdit::textEdited, sb, [box = sb]() { box->setProperty("fred_typed", true); });
+		}
+		connect(sb, &QDoubleSpinBox::editingFinished, this, [this, box = sb, axis]() {
+			if (box->property("fred_typed").toBool()) {
+				box->setProperty("fred_typed", false);
+				onTransformEditingFinished(axis);
+			}
 			// editingFinished fires on Enter and on focus-out. Only Enter leaves the box
 			// focused, and then hand focus back to the viewport so its keys work again;
 			// Tab/click-away already moved focus where the user wanted it.
@@ -1720,15 +1769,15 @@ void FredView::initializeTransformBar() {
 		// digit, only per step or on commit. The focus check skips the values
 		// onUpdateTransformBar() pushes in, which it only ever sets on unfocused boxes.
 		// An unchanged apply records no undo step, so Enter re-applying is harmless.
-		connect(sb, &QDoubleSpinBox::valueChanged, this, [this, box = sb]() {
+		connect(sb, &QDoubleSpinBox::valueChanged, this, [this, box = sb, axis]() {
 			if (box->hasFocus())
-				onTransformEditingFinished();
+				onTransformEditingFinished(axis);
 		});
 	};
 
-	makeSpinBox(_transformLabelA, tr("X"), _transformA);
-	makeSpinBox(_transformLabelB, tr("Y"), _transformB);
-	makeSpinBox(_transformLabelC, tr("Z"), _transformC);
+	makeSpinBox(_transformLabelA, tr("X"), _transformA, 0);
+	makeSpinBox(_transformLabelB, tr("Y"), _transformB, 1);
+	makeSpinBox(_transformLabelC, tr("Z"), _transformC, 2);
 
 	// ---- Object radius (read-only) -----------------------------------------
 	addFixedSpacer(8);
@@ -1820,9 +1869,9 @@ void FredView::onUpdateTransformBar() {
 		_transformLabelA->setText(tr("X"));
 		_transformLabelB->setText(tr("Y"));
 		_transformLabelC->setText(tr("Z"));
-		_transformA->setRange(-99999.9, 99999.9);
-		_transformB->setRange(-99999.9, 99999.9);
-		_transformC->setRange(-99999.9, 99999.9);
+		_transformA->setRange(-99999.99, 99999.99);
+		_transformB->setRange(-99999.99, 99999.99);
+		_transformC->setRange(-99999.99, 99999.99);
 	}
 
 	const bool editable = valid && !selectMode;
@@ -1847,23 +1896,20 @@ void FredView::onUpdateTransformBar() {
 		_transformC->setEnabled(envMove && (astAxes & 0x4));
 	}
 
-	// ---- Local-axes toggle: per-mode preference + inverted Group_rotate mapping ----
-	// When the cursor mode changes, restore the last Local setting for that mode.
+	// ---- Pivot mode: per-mode preference ----
+	// When the cursor mode changes, restore the last pivot mode used in that mode.
 	const int curModeInt = static_cast<int>(_viewport->Editing_mode);
 	if (curModeInt != _tbCachedCursorMode) {
 		_tbCachedCursorMode = curModeInt;
 		if (_viewport->Editing_mode == CursorMode::Moving)
-			_viewport->Group_rotate = !_tbLocalMove;
+			_viewport->Pivot_mode = _tbPivotMove;
 		else if (_viewport->Editing_mode == CursorMode::Rotating)
-			_viewport->Group_rotate = !_tbLocalRotate;
-		// Select mode: leave Group_rotate unchanged
+			_viewport->Pivot_mode = _tbPivotRotate;
+		// Select mode: leave Pivot_mode unchanged
 	}
-	// Local ON = individual axes = Group_rotate false, so button reflects !Group_rotate
-	{
-		QSignalBlocker bl(_transformLocalBtn);
-		_transformLocalBtn->setChecked(!_viewport->Group_rotate);
-	}
-	_transformLocalBtn->setEnabled(editable);
+	// checking an action doesn't emit triggered, so this only updates the button
+	_pivotActions[static_cast<int>(_viewport->Pivot_mode)]->setChecked(true);
+	_transformPivotBtn->setEnabled(editable);
 
 	// ---- IFF combo: populate lazily once Iff_info is loaded by the game tables --
 	if (!_tbIffPopulated && !Iff_info.empty()) {
@@ -2011,7 +2057,28 @@ void FredView::onUpdateTransformBar() {
 	}
 }
 
-void FredView::onTransformEditingFinished() {
+void FredView::setPivotMode(PivotMode mode) {
+	if (!_viewport)
+		return;
+	_viewport->Pivot_mode = mode;
+	if (_viewport->Editing_mode == CursorMode::Moving)
+		_tbPivotMove = mode;
+	else if (_viewport->Editing_mode == CursorMode::Rotating)
+		_tbPivotRotate = mode;
+	_pivotActions[static_cast<int>(mode)]->setChecked(true);
+}
+
+void FredView::onTransformEditingFinished(int axis) {
+	// Only the axis whose box was edited is applied (X/Y/Z, or heading/pitch/bank). The other two
+	// keep each object's real values: lining several ships up on Y leaves their X and Z alone, and
+	// the boxes' rounded display never rounds an axis nobody touched.
+	if (axis < 0 || axis > 2)
+		return;
+	const QDoubleSpinBox* boxes[] = {_transformA, _transformB, _transformC};
+	const auto value = static_cast<float>(boxes[axis]->value());
+	// heading, pitch, bank in box order
+	auto angle = [axis](angles& a) -> float& { return axis == 0 ? a.h : (axis == 1 ? a.p : a.b); };
+
 	const int  curObj      = fred->currentObject;
 
 	// Environment entity: move it through the same path as a gizmo drag (no
@@ -2020,10 +2087,18 @@ void FredView::onTransformEditingFinished() {
 	const EnvironmentObject env = fred->currentEnvironment;
 	if (env == EnvironmentObject::VolumetricNebula || env == EnvironmentObject::AsteroidField) {
 		if (_viewport->Editing_mode != CursorMode::Rotating) {
-			vec3d p;
-			p.xyz.x = static_cast<float>(_transformA->value());
-			p.xyz.y = static_cast<float>(_transformB->value());
-			p.xyz.z = static_cast<float>(_transformC->value());
+			// start from where the entity really is and change the edited axis only
+			vec3d p = vmd_zero_vector;
+			if (env == EnvironmentObject::VolumetricNebula) {
+				if (!The_mission.volumetrics.has_value())
+					return;
+				p = The_mission.volumetrics->getPos();
+			} else {
+				int axes = 0;
+				if (!_viewport->asteroidSpinboxTarget(&p, &axes))
+					return;
+			}
+			p.a1d[axis] = value;
 			_viewport->beginEnvEdit(env);
 			if (env == EnvironmentObject::VolumetricNebula) {
 				_viewport->moveVolumetricTo(p);
@@ -2041,7 +2116,7 @@ void FredView::onTransformEditingFinished() {
 	if (!query_valid_object(curObj)) return;
 
 	const bool rotateMode  = _viewport->Editing_mode == CursorMode::Rotating;
-	const bool localMode   = !_viewport->Group_rotate;  // Local ON = individual = !Group_rotate
+	const PivotMode pivot  = _viewport->Pivot_mode;
 	const int  numMarked   = fred->getNumMarked();
 	const bool isMulti     = numMarked > 1;
 
@@ -2057,68 +2132,65 @@ void FredView::onTransformEditingFinished() {
 	}
 
 	if (rotateMode) {
-		if (isMulti && localMode) {
-			// Local delta: compute angle delta from curObj, apply to every marked object.
+		const float target = fl_radians(value);
+		if (isMulti && pivot == PivotMode::Group) {
+			// Group: turn curObj, then carry the formation around it exactly as a rotate drag does.
+			object* leader = &Objects[curObj];
+			const matrix oldOrient = leader->orient;
+			angles a{};
+			vm_extract_angles_matrix(&a, &oldOrient);
+			angle(a) = target;
+			vm_angles_2_matrix(&leader->orient, &a);
+			// the turn a drag would have made: new = vm_matrix_x_matrix(old, rotmat)
+			matrix oldTranspose, rotmat;
+			vm_copy_transpose(&oldTranspose, &oldOrient);
+			vm_matrix_x_matrix(&rotmat, &oldTranspose, &leader->orient);
+			_viewport->follow_leader(leader, leader->pos, oldOrient, rotmat);
+		} else if (isMulti && pivot == PivotMode::Individual) {
+			// Individual: turn every marked object in place by the change to curObj's angle.
 			angles oldAng{};
 			vm_extract_angles_matrix(&oldAng, &Objects[curObj].orient);
-			const float dh = fl_radians(static_cast<float>(_transformA->value())) - oldAng.h;
-			const float dp = fl_radians(static_cast<float>(_transformB->value())) - oldAng.p;
-			const float db = fl_radians(static_cast<float>(_transformC->value())) - oldAng.b;
+			const float delta = target - angle(oldAng);
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
 				if (!p->flags[Object::Object_Flags::Marked]) continue;
 				angles a{};
 				vm_extract_angles_matrix(&a, &p->orient);
-				a.h += dh; a.p += dp; a.b += db;
+				angle(a) += delta;
 				vm_angles_2_matrix(&p->orient, &a);
 			}
 		} else if (isMulti) {
-			// Global multi: align every marked object to the same absolute orientation.
-			angles ang{};
-			ang.h = fl_radians(static_cast<float>(_transformA->value()));
-			ang.p = fl_radians(static_cast<float>(_transformB->value()));
-			ang.b = fl_radians(static_cast<float>(_transformC->value()));
-			matrix m{};
-			vm_angles_2_matrix(&m, &ang);
+			// Align: give every marked object the same angle, each keeping its other two.
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
 				if (!p->flags[Object::Object_Flags::Marked]) continue;
-				p->orient = m;
+				angles a{};
+				vm_extract_angles_matrix(&a, &p->orient);
+				angle(a) = target;
+				vm_angles_2_matrix(&p->orient, &a);
 			}
 		} else {
 			// Single object.
-			angles ang{};
-			ang.h = fl_radians(static_cast<float>(_transformA->value()));
-			ang.p = fl_radians(static_cast<float>(_transformB->value()));
-			ang.b = fl_radians(static_cast<float>(_transformC->value()));
-			vm_angles_2_matrix(&Objects[curObj].orient, &ang);
+			angles a{};
+			vm_extract_angles_matrix(&a, &Objects[curObj].orient);
+			angle(a) = target;
+			vm_angles_2_matrix(&Objects[curObj].orient, &a);
 		}
 	} else {
-		if (isMulti && localMode) {
-			// Local delta: shift every marked object by the same offset relative to curObj.
-			const float dx = static_cast<float>(_transformA->value()) - Objects[curObj].pos.xyz.x;
-			const float dy = static_cast<float>(_transformB->value()) - Objects[curObj].pos.xyz.y;
-			const float dz = static_cast<float>(_transformC->value()) - Objects[curObj].pos.xyz.z;
+		if (isMulti && pivot != PivotMode::Align) {
+			// Group/Individual: shift every marked object along the axis by curObj's change.
+			const float delta = value - Objects[curObj].pos.a1d[axis];
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
 				if (!p->flags[Object::Object_Flags::Marked]) continue;
-				p->pos.xyz.x += dx;
-				p->pos.xyz.y += dy;
-				p->pos.xyz.z += dz;
+				p->pos.a1d[axis] += delta;
 			}
 		} else if (isMulti) {
-			// Global multi: move every marked object to the same absolute position.
-			const auto nx = static_cast<float>(_transformA->value());
-			const auto ny = static_cast<float>(_transformB->value());
-			const auto nz = static_cast<float>(_transformC->value());
+			// Align: put every marked object at the same value on this axis.
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
 				if (!p->flags[Object::Object_Flags::Marked]) continue;
-				p->pos.xyz.x = nx;
-				p->pos.xyz.y = ny;
-				p->pos.xyz.z = nz;
+				p->pos.a1d[axis] = value;
 			}
 		} else {
 			// Single object.
-			Objects[curObj].pos.xyz.x = static_cast<float>(_transformA->value());
-			Objects[curObj].pos.xyz.y = static_cast<float>(_transformB->value());
-			Objects[curObj].pos.xyz.z = static_cast<float>(_transformC->value());
+			Objects[curObj].pos.a1d[axis] = value;
 		}
 	}
 
@@ -2766,47 +2838,46 @@ void FredView::onUpdateConstrains() {
 	ui->actionConstrainYZ->setChecked(
 		!_viewport->Constraint.xyz.x && _viewport->Constraint.xyz.y && _viewport->Constraint.xyz.z);
 }
+void FredView::setConstraint(int index) {
+	// constraint and anticonstraint (the axes it leaves out), in index order
+	static const float axes[6][3] = {
+		{1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f},
+		{1.0f, 0.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {0.0f, 1.0f, 1.0f},
+	};
+	if (index < 0 || index > 5)
+		return;
+	const float* c = axes[index];
+	vm_vec_make(&_viewport->Constraint, c[0], c[1], c[2]);
+	vm_vec_make(&_viewport->Anticonstraint, 1.0f - c[0], 1.0f - c[1], 1.0f - c[2]);
+	_viewport->Single_axis_constraint = index < 3;
+	if (_viewport->Editing_mode == CursorMode::Moving)
+		_constraintMove = index;
+	else if (_viewport->Editing_mode == CursorMode::Rotating)
+		_constraintRotate = index;
+}
 void FredView::on_actionConstrainX_triggered(bool enabled) {
-	if (enabled) {
-		vm_vec_make(&_viewport->Constraint, 1.0f, 0.0f, 0.0f);
-		vm_vec_make(&_viewport->Anticonstraint, 0.0f, 1.0f, 1.0f);
-		_viewport->Single_axis_constraint = true;
-	}
+	if (enabled)
+		setConstraint(0);
 }
 void FredView::on_actionConstrainY_triggered(bool enabled) {
-	if (enabled) {
-		vm_vec_make(&_viewport->Constraint, 0.0f, 1.0f, 0.0f);
-		vm_vec_make(&_viewport->Anticonstraint, 1.0f, 0.0f, 1.0f);
-		_viewport->Single_axis_constraint = true;
-	}
+	if (enabled)
+		setConstraint(1);
 }
 void FredView::on_actionConstrainZ_triggered(bool enabled) {
-	if (enabled) {
-		vm_vec_make(&_viewport->Constraint, 0.0f, 0.0f, 1.0f);
-		vm_vec_make(&_viewport->Anticonstraint, 1.0f, 1.0f, 0.0f);
-		_viewport->Single_axis_constraint = true;
-	}
+	if (enabled)
+		setConstraint(2);
 }
 void FredView::on_actionConstrainXZ_triggered(bool enabled) {
-	if (enabled) {
-		vm_vec_make(&_viewport->Constraint, 1.0f, 0.0f, 1.0f);
-		vm_vec_make(&_viewport->Anticonstraint, 0.0f, 1.0f, 0.0f);
-		_viewport->Single_axis_constraint = false;
-	}
+	if (enabled)
+		setConstraint(3);
 }
 void FredView::on_actionConstrainXY_triggered(bool enabled) {
-	if (enabled) {
-		vm_vec_make(&_viewport->Constraint, 1.0f, 1.0f, 0.0f);
-		vm_vec_make(&_viewport->Anticonstraint, 0.0f, 0.0f, 1.0f);
-		_viewport->Single_axis_constraint = false;
-	}
+	if (enabled)
+		setConstraint(4);
 }
 void FredView::on_actionConstrainYZ_triggered(bool enabled) {
-	if (enabled) {
-		vm_vec_make(&_viewport->Constraint, 0.0f, 1.0f, 1.0f);
-		vm_vec_make(&_viewport->Anticonstraint, 1.0f, 0.0f, 0.0f);
-		_viewport->Single_axis_constraint = false;
-	}
+	if (enabled)
+		setConstraint(5);
 }
 RenderWidget* FredView::getRenderWidget() {
 	return ui->centralWidget;
@@ -2819,11 +2890,13 @@ void FredView::on_actionSelect_triggered(bool enabled) {
 void FredView::on_actionSelectMove_triggered(bool enabled) {
 	if (enabled) {
 		_viewport->Editing_mode = CursorMode::Moving;
+		setConstraint(_constraintMove);
 	}
 }
 void FredView::on_actionSelectRotate_triggered(bool enabled) {
 	if (enabled) {
 		_viewport->Editing_mode = CursorMode::Rotating;
+		setConstraint(_constraintRotate);
 	}
 }
 void FredView::onUpdateEditingMode() {
@@ -2875,6 +2948,19 @@ bool FredView::eventFilter(QObject* watched, QEvent* event) {
 			}
 		}
 	}
+	// Toolbar spin boxes drop their text selection when they lose focus or are disabled. The
+	// viewport is a separate native window, so clicking it sends an ActiveWindowFocusReason
+	// focus-out, which QLineEdit deliberately leaves selected; the box then looked focused next
+	// to whichever box really was.
+	if ((event->type() == QEvent::FocusOut || event->type() == QEvent::EnabledChange) && _transformToolBar) {
+		auto* spin = qobject_cast<QAbstractSpinBox*>(watched);
+		if (!spin && qobject_cast<QLineEdit*>(watched))
+			spin = qobject_cast<QAbstractSpinBox*>(watched->parent());
+		if (spin && _transformToolBar->isAncestorOf(spin) && (event->type() == QEvent::FocusOut || !spin->isEnabled())) {
+			if (auto* edit = spin->findChild<QLineEdit*>())
+				edit->deselect();
+		}
+	}
 	return QMainWindow::eventFilter(watched, event);
 }
 void FredView::changeEvent(QEvent* event) {
@@ -2894,8 +2980,10 @@ void FredView::closeEvent(QCloseEvent* event) {
 	QSettings settings;
 	settings.setValue("FredView/mainWindowState",      saveState());
 	settings.setValue("FredView/geometry",             saveGeometry());
-	settings.setValue("FredView/transformLocalMove",   _tbLocalMove);
-	settings.setValue("FredView/transformLocalRotate", _tbLocalRotate);
+	settings.setValue("FredView/transformPivotMove",   static_cast<int>(_tbPivotMove));
+	settings.setValue("FredView/transformPivotRotate", static_cast<int>(_tbPivotRotate));
+	settings.setValue("FredView/constraintMove",       _constraintMove);
+	settings.setValue("FredView/constraintRotate",     _constraintRotate);
 	// Camera speeds are persisted on change in onUpdateViewSpeeds(), so no need to save them here.
 
 	// The campaign editor saves to its own file, so close it first: that asks about unsaved

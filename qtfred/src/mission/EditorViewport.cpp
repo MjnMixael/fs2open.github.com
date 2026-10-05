@@ -503,47 +503,15 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 
 	case 1: //	Control the current object's location and orientation
 		if (!controlsLocked && query_valid_object(cur_object_index) && !Objects[cur_object_index].flags[Object::Object_Flags::Locked_from_editing]) {
-			vec3d delta_pos, leader_old_pos;
-			matrix leader_orient, leader_transpose, tmp;
-			object* leader;
-
-			leader = &Objects[cur_object_index];
-			leader_old_pos = leader->pos;
-			leader_orient = leader->orient;
-			vm_copy_transpose(&leader_transpose, &leader_orient);
+			object* leader = &Objects[cur_object_index];
+			const vec3d leader_old_pos = leader->pos;
+			const matrix leader_old_orient = leader->orient;
 
 			camera.processControls(&leader->pos, &leader->orient, f2fl(Frametime), false);
-			vm_vec_sub(&delta_pos, &leader->pos, &leader_old_pos);
 			control_pos = leader->pos;
 			control_orient = leader->orient;
 
-			objp = GET_FIRST(&obj_used_list);
-			while (objp != END_OF_LIST(&obj_used_list)) {
-				Assert(objp->type != OBJ_NONE);
-				if ((objp->flags[Object::Object_Flags::Marked]) && (cur_object_index != OBJ_INDEX(objp))) {
-					if (Group_rotate) {
-						matrix rot_trans;
-						vec3d tmpv1, tmpv2;
-
-						vm_copy_transpose(&rot_trans, &camera.getLastRotMat());
-						vm_vec_sub(&tmpv1, &objp->pos, &leader_old_pos);
-						vm_vec_rotate(&tmpv2, &tmpv1, &leader_orient);
-						vm_vec_rotate(&tmpv1, &tmpv2, &rot_trans);
-						vm_vec_rotate(&tmpv2, &tmpv1, &leader_transpose);
-						vm_vec_add(&objp->pos, &leader->pos, &tmpv2);
-
-						vm_matrix_x_matrix(&tmp, &objp->orient, &camera.getLastRotMat());
-						vm_orthogonalize_matrix(&tmp);
-						objp->orient = tmp;
-					} else {
-						vm_vec_add2(&objp->pos, &delta_pos);
-						vm_matrix_x_matrix(&tmp, &objp->orient, &camera.getLastRotMat());
-						objp->orient = tmp;
-					}
-				}
-
-				objp = GET_NEXT(objp);
-			}
+			follow_leader(leader, leader_old_pos, leader_old_orient, camera.getLastRotMat());
 
 			objp = GET_FIRST(&obj_used_list);
 			while (objp != END_OF_LIST(&obj_used_list)) {
@@ -1791,7 +1759,7 @@ int EditorViewport::drag_rotate_objects(int mouse_dx, int mouse_dy) {
 	int rval = 1;
 	vec3d int_pnt, obj;
 	angles a;
-	matrix leader_orient, leader_transpose, tmp, newmat, rotmat;
+	matrix newmat, rotmat;
 	object *leader, *objp;
 	// starfield_bitmaps *bmp;
 
@@ -1838,55 +1806,13 @@ int EditorViewport::drag_rotate_objects(int mouse_dx, int mouse_dy) {
 	}
 
 	leader = &Objects[editor->currentObject];
-	leader_orient = leader->orient;			// save original orientation
-	vm_copy_transpose(&leader_transpose, &leader_orient);
+	const matrix leader_old_orient = leader->orient;
 
 	vm_angles_2_matrix(&rotmat, &a);
 	vm_matrix_x_matrix(&newmat, &leader->orient, &rotmat);
 	leader->orient = newmat;
 
-	objp = GET_FIRST(&obj_used_list);
-	while (objp != END_OF_LIST(&obj_used_list))			{
-		Assert(objp->type != OBJ_NONE);
-		if ((objp->flags[Object::Object_Flags::Marked]) && (editor->currentObject != OBJ_INDEX(objp) )) {
-			if (Group_rotate) {
-				matrix rot_trans;
-				vec3d tmpv1, tmpv2;
-
-				// change rotation matrix to rotate in opposite direction.  This rotation
-				// matrix is what the leader ship has rotated by.
-				vm_copy_transpose(&rot_trans, &rotmat);
-
-				// get point relative to our point of rotation (make POR the origin).
-				vm_vec_sub(&tmpv1, &objp->pos, &leader->pos);
-
-				// convert point from real-world coordinates to leader's relative coordinate
-				// system (z=forward vec, y=up vec, x=right vec
-				vm_vec_rotate(&tmpv2, &tmpv1, &leader_orient);
-
-				// now rotate the point by the transpose from above.
-				vm_vec_rotate(&tmpv1, &tmpv2, &rot_trans);
-
-				// convert point back into real-world coordinates
-				vm_vec_rotate(&tmpv2, &tmpv1, &leader_transpose);
-
-				// and move origin back to real-world origin.  Object is now at its correct
-				// position.
-				vm_vec_add(&objp->pos, &leader->pos, &tmpv2);
-
-				// Now fix the object's orientation to what it should be.
-				vm_matrix_x_matrix(&tmp, &objp->orient, &rotmat);
-				vm_orthogonalize_matrix(&tmp);  // safety check
-				objp->orient = tmp;
-
-			} else {
-				vm_matrix_x_matrix(&tmp, &objp->orient, &rotmat);
-				objp->orient = tmp;
-			}
-		}
-
-		objp = GET_NEXT(objp);
-	}
+	follow_leader(leader, leader->pos, leader_old_orient, rotmat);
 
 	objp = GET_FIRST(&obj_used_list);
 	while (objp != END_OF_LIST(&obj_used_list)) {
@@ -1898,6 +1824,47 @@ int EditorViewport::drag_rotate_objects(int mouse_dx, int mouse_dy) {
 
 	editor->missionChanged();
 	return rval;
+}
+void EditorViewport::follow_leader(const object* leader, const vec3d& leader_old_pos, const matrix& leader_old_orient,
+	const matrix& rotmat) {
+	vec3d delta_pos;
+	vm_vec_sub(&delta_pos, &leader->pos, &leader_old_pos);
+	matrix leader_old_transpose, rot_trans;
+	vm_copy_transpose(&leader_old_transpose, &leader_old_orient);
+	vm_copy_transpose(&rot_trans, &rotmat);
+
+	for (object* objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
+		Assert(objp->type != OBJ_NONE);
+		if (!objp->flags[Object::Object_Flags::Marked] || objp == leader)
+			continue;
+		matrix tmp;
+		switch (Pivot_mode) {
+		case PivotMode::Group: {
+			// Orbit: rotate the offset from the leader by the leader's turn, in the leader's own
+			// frame, then turn the object with it
+			vec3d tmpv1, tmpv2;
+			vm_vec_sub(&tmpv1, &objp->pos, &leader_old_pos);
+			vm_vec_rotate(&tmpv2, &tmpv1, &leader_old_orient);
+			vm_vec_rotate(&tmpv1, &tmpv2, &rot_trans);
+			vm_vec_rotate(&tmpv2, &tmpv1, &leader_old_transpose);
+			vm_vec_add(&objp->pos, &leader->pos, &tmpv2);
+
+			vm_matrix_x_matrix(&tmp, &objp->orient, &rotmat);
+			vm_orthogonalize_matrix(&tmp); // safety check
+			objp->orient = tmp;
+			break;
+		}
+		case PivotMode::Individual:
+			vm_vec_add2(&objp->pos, &delta_pos);
+			vm_matrix_x_matrix(&tmp, &objp->orient, &rotmat);
+			objp->orient = tmp;
+			break;
+		case PivotMode::Align:
+			vm_vec_add2(&objp->pos, &delta_pos);
+			objp->orient = leader->orient;
+			break;
+		}
+	}
 }
 void EditorViewport::cancel_drag() {
 	if (!button_down) {

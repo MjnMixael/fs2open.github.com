@@ -342,6 +342,11 @@ class FredView: public QMainWindow, public IDialogProvider {
 	bool _recoveredFromAutosave = false;
 
 	void onUpdateConstrains();
+	// Axis constraint by index: 0 X, 1 Y, 2 Z, 3 XZ, 4 XY, 5 YZ. Applies it to the viewport and,
+	// in Move or Rotate mode, remembers it for that mode.
+	void setConstraint(int index);
+	int _constraintMove   = 3; // XZ
+	int _constraintRotate = 3;
 	void onUpdateEditingMode();
 	void onUpdateViewSpeeds();
 	void onUpdateCameraControlActions();
@@ -358,7 +363,10 @@ class FredView: public QMainWindow, public IDialogProvider {
 
 	void initializeTransformBar();
 	void onUpdateTransformBar();
-	void onTransformEditingFinished();
+	// axis: 0, 1 or 2 for the X/Y/Z (or heading/pitch/bank) box that was edited
+	void onTransformEditingFinished(int axis);
+	// Applies a pivot mode to the viewport, the toolbar button, and the current mode's memory
+	void setPivotMode(PivotMode mode);
 
 	QToolBar* _contextToolBar = nullptr;
 	QLabel*   _contextLabel   = nullptr;
@@ -401,12 +409,13 @@ class FredView: public QMainWindow, public IDialogProvider {
 	int             _lastSavedCameraSpeedRot  = -1;
 	QComboBox*      _transformIffCombo   = nullptr;
 	QLabel*         _transformRadiusLabel = nullptr;
-	QToolButton*    _transformLocalBtn   = nullptr;
+	QToolButton*    _transformPivotBtn   = nullptr;
+	QAction*        _pivotActions[3]     = {};      // Group, Individual, Align, in PivotMode order
 	QComboBox*      _transformLayerCombo = nullptr;
 	bool            _tbLayerComboDirty   = true;  // rebuild layer combo only when layer structure changes
 	bool            _tbIffPopulated      = false; // IFF items are populated lazily (tables load after init)
-	bool            _tbLocalMove         = false; // remembered Local preference while in move mode
-	bool            _tbLocalRotate       = false; // remembered Local preference while in rotate mode
+	PivotMode       _tbPivotMove         = PivotMode::Group; // remembered pivot mode while in move mode
+	PivotMode       _tbPivotRotate       = PivotMode::Group; // remembered pivot mode while in rotate mode
 	int             _tbCachedCursorMode  = -1;    // -1 forces per-mode restore on first update
 
 	void onShipClassSelected(int ship_class);

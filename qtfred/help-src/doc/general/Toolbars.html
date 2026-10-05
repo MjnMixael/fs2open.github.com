@@ -38,7 +38,8 @@ The active mode determines how clicks and drags behave in the
         <td>Click to select objects; drag a selected object to rotate it.</td>
     </tr>
 
-    <tr><td colspan="3"><strong>Axis constraints</strong></td></tr>
+    <tr><td colspan="3"><strong>Axis constraints</strong> (Move and Rotate modes each remember
+        their own; switching modes brings back the one last used in that mode)</td></tr>
     <tr>
         <td>X Constraint</td>
         <td></td>
@@ -306,28 +307,40 @@ nothing is selected or when the toolbar is in Select mode.</p>
             have different IFFs. Changing the value applies to all marked ships.</td>
     </tr>
     <tr>
-        <td>Local toggle</td>
-        <td>Icon button that switches between local and group transform behaviour
-            for multi-object edits. In <strong>Move</strong> mode: when on, each object moves
-            along its own axes independently; when off, all objects move together
-            as a formation. In <strong>Rotate</strong> mode: when on, each object rotates
-            around its own centre; when off, all objects orbit around the primary
-            selected object. The last setting is remembered separately for Move and
-            Rotate modes.</td>
+        <td>Pivot</td>
+        <td>Icon button with a menu that sets how the other marked objects follow the
+            current object when it is dragged, flown with the camera controls, or edited
+            in the boxes below. <strong>X</strong> steps through the three modes.
+            <ul>
+                <li><strong>Group</strong>: the marked objects keep formation. Rotating
+                    swings them around the current object.</li>
+                <li><strong>Individual</strong>: each object moves and turns in place by the
+                    same amount as the current object.</li>
+                <li><strong>Align</strong>: each object turns to face the same way as the
+                    current object, and a typed value sets every marked object to that value
+                    (see the boxes below). The first rotate drag snaps the others to the
+                    current object's facing.</li>
+            </ul>
+            The last mode is remembered separately for Move and Rotate modes.</td>
     </tr>
     <tr>
         <td>Pos X / Y / Z</td>
         <td>Three spin boxes showing the world-space position of the selected
             object. Visible in <strong>Select</strong> and <strong>Move</strong> modes. Editing a
-            value moves the object (or, with the Local toggle off and multiple
-            objects marked, the whole group) to the entered coordinate. Disabled
-            in Select mode.</td>
+            value changes only that axis. With several objects marked, Align puts every
+            marked object at the entered value on that axis (for example, setting Y lines
+            them all up on one Y and leaves their X and Z as they were); Group and
+            Individual move them all along that axis by the same amount.
+            Disabled in Select mode.</td>
     </tr>
     <tr>
         <td>Ori H / P / B</td>
         <td>Three spin boxes showing the heading, pitch, and bank of the selected
             object in degrees. Visible in <strong>Rotate</strong> mode. Editing a value
-            rotates the object (or group, depending on the Local toggle).</td>
+            changes only that angle; the other two are kept. With several objects marked,
+            Group turns the formation around the current object like a rotate drag,
+            Individual turns each object in place by the same amount, and Align gives
+            every marked object the entered angle.</td>
     </tr>
     <tr>
         <td>Radius</td>
