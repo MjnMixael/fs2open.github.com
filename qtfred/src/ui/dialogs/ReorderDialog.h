@@ -15,8 +15,9 @@ class ReorderDialog;
 }
 
 // Direct-edit dialog for reordering ships, wings, props, waypoint lists and jump
-// nodes.  Each tab is a plain list plus a move-to-top / up / down / to-bottom
-// button strip; every move is applied to the mission immediately.
+// nodes.  Each tab is a multi-select list plus a move-to-top / up / down / to-bottom
+// button strip that moves the selected items as a group; every move is applied to
+// the mission immediately and is one undo step.
 class ReorderDialog : public QDialog {
 	Q_OBJECT
 
@@ -42,7 +43,10 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void setupTab(const Tab& tab);
 	void rebuildList(const Tab& tab);
 	static void updateButtons(const Tab& tab);
-	void move(const Tab& tab, bool up, bool all_the_way);
+	void move(const Tab& tab, ReorderDialogModel::MoveKind kind);
+	static SCP_vector<int> selectedRows(const Tab& tab);
+	static void selectRows(const Tab& tab, const SCP_vector<int>& rows);
+	void showShipContextMenu(const QPoint& pos);
 
 	FredView*       _fredView = nullptr;
 	EditorViewport* _viewport = nullptr;

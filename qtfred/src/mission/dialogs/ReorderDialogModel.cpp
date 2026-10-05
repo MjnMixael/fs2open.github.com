@@ -7,6 +7,8 @@
 #include "prop/prop.h"
 #include "ship/ship.h"
 
+#include <algorithm>
+
 // Fred_alt_names[] / Fred_callsigns[] are the FRED-side parallel arrays that
 // reassign_ship_slot keeps in sync; they are declared extern in Editor.h.
 
@@ -143,12 +145,94 @@ void ReorderDialogModel::applyMove(EditorViewport* viewport, Type type, int from
 	}
 }
 
-void ReorderDialogModel::moveItem(Type type, int from_pos, int to_pos)
+SCP_vector<int> ReorderDialogModel::moveItems(Type type, const SCP_vector<int>& rows, MoveKind kind,
+	SCP_vector<Step>& steps)
 {
-	applyMove(_viewport, type, from_pos, to_pos);
+	const int count = static_cast<int>(getSlots(type).size());
 
-	set_modified();
-	_editor->missionChanged();
+	SCP_vector<int> sel;
+	for (int row : rows) {
+		if (row >= 0 && row < count)
+			sel.push_back(row);
+	}
+	std::sort(sel.begin(), sel.end());
+	sel.erase(std::unique(sel.begin(), sel.end()), sel.end());
+	const int n = static_cast<int>(sel.size());
+
+	// Each single move only shifts the items between its two positions, so working from the end
+	// the items move toward keeps the positions of the selected items not yet moved valid.
+	auto step_to = [&](int from, int to) {
+		if (from != to) {
+			applyMove(_viewport, type, from, to);
+			steps.emplace_back(from, to);
+		}
+		return to;
+	};
+
+	SCP_vector<int> result(n);
+	switch (kind) {
+	case MoveKind::Top:
+		for (int k = 0; k < n; ++k)
+			result[k] = step_to(sel[k], k);
+		break;
+	case MoveKind::Bottom:
+		for (int k = n - 1; k >= 0; --k)
+			result[k] = step_to(sel[k], count - n + k);
+		break;
+	case MoveKind::Up: {
+		// limit is the first row a selected item may still move into, so one stuck at the top
+		// holds back the selected item right below it
+		int limit = 0;
+		for (int k = 0; k < n; ++k) {
+			result[k] = step_to(sel[k], std::max(sel[k] - 1, limit));
+			limit = result[k] + 1;
+		}
+		break;
+	}
+	case MoveKind::Down: {
+		int limit = count - 1;
+		for (int k = n - 1; k >= 0; --k) {
+			result[k] = step_to(sel[k], std::min(sel[k] + 1, limit));
+			limit = result[k] - 1;
+		}
+		break;
+	}
+	}
+
+	if (!steps.empty()) {
+		set_modified();
+		_editor->missionChanged();
+	}
+	return result;
+}
+
+void ReorderDialogModel::applySteps(EditorViewport* viewport, Type type, const SCP_vector<Step>& steps, bool reverse)
+{
+	if (reverse) {
+		for (auto it = steps.rbegin(); it != steps.rend(); ++it)
+			applyMove(viewport, type, it->second, it->first);
+	} else {
+		for (const auto& step : steps)
+			applyMove(viewport, type, step.first, step.second);
+	}
+}
+
+SCP_vector<int> ReorderDialogModel::getSameWingShipRows(int row)
+{
+	const SCP_vector<int> slotList = getSlots(Type::Ships);
+	if (row < 0 || row >= static_cast<int>(slotList.size()))
+		return {};
+
+	const int wingnum = Ships[slotList[row]].wingnum;
+	if (wingnum < 0)
+		return {};
+
+	SCP_vector<int> rows;
+	for (int i = 0; i < static_cast<int>(slotList.size()); ++i) {
+		if (Ships[slotList[i]].wingnum == wingnum)
+			rows.push_back(i);
+	}
+	return rows;
 }
 
 } // namespace fso::fred::dialogs

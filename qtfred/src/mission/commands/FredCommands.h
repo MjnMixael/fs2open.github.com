@@ -336,27 +336,27 @@ private:
 };
 
 // ---------------------------------------------------------------------------
-// ReorderCommand — move one item within the mission-file ordering of a type
+// ReorderCommand - move one item, or a group of items, within the mission-file
+// ordering of a type
 //
-// The underlying rotate_*_slots() helpers preserve the set of occupied storage
-// slots (they only permute which item lives in which slot), so moving the item
-// back from to_pos to from_pos is an exact inverse.
+// A group move is stored as the sequence of single moves that made it.  The
+// underlying rotate_*_slots() helpers preserve the set of occupied storage slots
+// (they only permute which item lives in which slot), so each move is exactly
+// inverted by the opposite move, and undo replays the inverses in reverse order.
 // ---------------------------------------------------------------------------
 
 class ReorderCommand : public QUndoCommand {
 	int             _type;    // dialogs::ReorderDialogModel::Type, stored as int to avoid the include
-	int             _fromPos;
-	int             _toPos;
+	SCP_vector<std::pair<int, int>> _steps; // (from, to) display positions, in the order applied
 	EditorViewport* _viewport;
 	bool            _skipFirstRedo;
 
 public:
-	// Construct AFTER the move has been applied; the first redo() is a no-op.
-	ReorderCommand(int             type,
-	               int             fromPos,
-	               int             toPos,
-	               EditorViewport* viewport,
-	               QUndoCommand*   parent = nullptr);
+	// Construct AFTER the moves have been applied; the first redo() is a no-op.
+	ReorderCommand(int                             type,
+	               SCP_vector<std::pair<int, int>> steps,
+	               EditorViewport*                 viewport,
+	               QUndoCommand*                   parent = nullptr);
 	void undo() override;
 	void redo() override;
 };

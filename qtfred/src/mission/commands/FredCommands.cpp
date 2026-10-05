@@ -951,15 +951,13 @@ void LayerStructureCommand::redo()
 // ReorderCommand
 // ===========================================================================
 
-ReorderCommand::ReorderCommand(int             type,
-                               int             fromPos,
-                               int             toPos,
-                               EditorViewport* viewport,
-                               QUndoCommand*   parent)
+ReorderCommand::ReorderCommand(int                             type,
+                               SCP_vector<std::pair<int, int>> steps,
+                               EditorViewport*                 viewport,
+                               QUndoCommand*                   parent)
     : QUndoCommand(QObject::tr("Reorder Objects"), parent)
     , _type(type)
-    , _fromPos(fromPos)
-    , _toPos(toPos)
+    , _steps(std::move(steps))
     , _viewport(viewport)
     , _skipFirstRedo(true)
 {}
@@ -967,7 +965,7 @@ ReorderCommand::ReorderCommand(int             type,
 void ReorderCommand::undo()
 {
 	using Model = dialogs::ReorderDialogModel;
-	Model::applyMove(_viewport, static_cast<Model::Type>(_type), _toPos, _fromPos);
+	Model::applySteps(_viewport, static_cast<Model::Type>(_type), _steps, true);
 	_viewport->editor->missionChanged();
 }
 
@@ -975,7 +973,7 @@ void ReorderCommand::redo()
 {
 	if (_skipFirstRedo) { _skipFirstRedo = false; return; }
 	using Model = dialogs::ReorderDialogModel;
-	Model::applyMove(_viewport, static_cast<Model::Type>(_type), _fromPos, _toPos);
+	Model::applySteps(_viewport, static_cast<Model::Type>(_type), _steps, false);
 	_viewport->editor->missionChanged();
 }
 
