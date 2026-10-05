@@ -7,6 +7,7 @@
 
 #include <globalincs/globals.h>
 #include <jumpnode/jumpnode.h>
+#include <mission/commands/FredCommands.h>
 #include <mission/util.h>
 #include <object/object.h>
 #include <ui/util/menu.h>
@@ -115,6 +116,7 @@ void JumpNodeEditorDialog::initializeUi()
 	ui->alphaSpinBox->setEnabled(enabled);
 	ui->hiddenByDefaultCheckBox->setEnabled(enabled);
 	ui->layerCombo->setEnabled(enabled);
+	ui->transformLockCheck->setEnabled(enabled);
 	ui->prevNodeButton->setEnabled(hasAny);
 	ui->nextNodeButton->setEnabled(hasAny);
 
@@ -143,6 +145,11 @@ void JumpNodeEditorDialog::updateUi()
 
 	ui->layerCombo->setCurrentIndex(
 	    ui->layerCombo->findData(QString::fromStdString(_model->getLayer())));
+	{
+		const auto lockState = transformLockState(transformLockObjects());
+		ui->transformLockCheck->setTristate(lockState == Qt::PartiallyChecked);
+		ui->transformLockCheck->setCheckState(lockState);
+	}
 
 	updateColorSwatch();
 }
@@ -466,6 +473,19 @@ void JumpNodeEditorDialog::on_layerCombo_currentIndexChanged(int index)
 	// do not also call _model->setLayer().
 	_fredView->mainUndoStack()->push(
 	    new MoveLayerCommand(std::move(changes), _viewport, _viewport->editor));
+}
+
+SCP_vector<int> JumpNodeEditorDialog::transformLockObjects() const
+{
+	return _model->getSelectedObjNums();
+}
+
+void JumpNodeEditorDialog::on_transformLockCheck_clicked()
+{
+	const auto objs = transformLockObjects();
+	// a partly locked selection locks the rest
+	pushTransformLock(objs, transformLockState(objs) != Qt::Checked, _viewport->editor, _fredView->mainUndoStack());
+	updateUi();
 }
 
 } // namespace fso::fred::dialogs

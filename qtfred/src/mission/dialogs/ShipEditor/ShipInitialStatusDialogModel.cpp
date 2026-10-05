@@ -337,19 +337,25 @@ void ShipInitialStatusDialogModel::undock(object* objp1, object* objp2)
 	ship_num = get_ship_from_obj(OBJ_INDEX(objp1));
 	other_ship_num = get_ship_from_obj(OBJ_INDEX(objp2));
 
+	ai_do_objects_undocked_stuff(objp1, objp2);
+
+	// Move one ship clear, normally the smaller class. Done after undocking so each side's lock
+	// is judged on its own: a locked ship (or one still docked to a locked ship) stays put, and
+	// the other one moves instead; if both are held, neither moves.
 	if (_moveShipsWhenUndocking) {
-		if (ship_class_compare(Ships[ship_num].ship_info_index, Ships[other_ship_num].ship_info_index) <= 0) {
+		const bool moveSecond = ship_class_compare(Ships[ship_num].ship_info_index, Ships[other_ship_num].ship_info_index) <= 0;
+		const bool held1 = Editor::isTransformHeld(OBJ_INDEX(objp1));
+		const bool held2 = Editor::isTransformHeld(OBJ_INDEX(objp2));
+		if (!held2 && (moveSecond || held1)) {
 			vm_vec_scale_add2(&objp2->pos,
 				&v,
 				ship_class_get_length(&Ship_info[Ships[objp2->instance].ship_info_index]));
-		} else {
+		} else if (!held1) {
 			vm_vec_scale_add2(&objp1->pos,
 				&v,
 				ship_class_get_length(&Ship_info[Ships[objp1->instance].ship_info_index]) * -1.0f);
 		}
 	}
-
-	ai_do_objects_undocked_stuff(objp1, objp2);
 
 	// check to see if one of these ships has an arrival cue of false.  If so, then
 	// reset it back to default value of true.  be sure to correctly update before
@@ -382,14 +388,26 @@ void ShipInitialStatusDialogModel::dock(object* objp, int dockpoint, object* oth
 
 	dock_function_info dfi;
 
-	// do the docking (do it in reverse so that the current object stays put)
-	ai_dock_with_object(otherObjp, otherDockpoint, objp, dockpoint, AIDO_DOCK_NOW);
+	// The other ship normally moves onto this one. If it's held by a lock, this ship moves to it
+	// instead; if both are held, they can't dock.
+	const bool otherHeld = Editor::isTransformHeld(OBJ_INDEX(otherObjp));
+	if (otherHeld && Editor::isTransformHeld(OBJ_INDEX(objp))) {
+		_editor->reportTransformHeld(OBJ_INDEX(objp));
+		return;
+	}
+	object* const anchor = otherHeld ? otherObjp : objp;
+
+	// do the docking (normally in reverse so that the current object stays put)
+	if (otherHeld)
+		ai_dock_with_object(objp, dockpoint, otherObjp, otherDockpoint, AIDO_DOCK_NOW);
+	else
+		ai_dock_with_object(otherObjp, otherDockpoint, objp, dockpoint, AIDO_DOCK_NOW);
 
 	// unmark the handled flag in preparation for the next step
-	dockEvaluateAllDockedObjects(objp, &dfi, initialStatusUnmarkDockHandledFlag);
+	dockEvaluateAllDockedObjects(anchor, &dfi, initialStatusUnmarkDockHandledFlag);
 
 	// move all other objects to catch up with it
-	dock_move_docked_objects(objp);
+	dock_move_docked_objects(anchor);
 
 	// set the dock leader
 	dockEvaluateAllDockedObjects(objp, &dfi, initialStatusMarkDockLeaderHelper);

@@ -459,6 +459,16 @@
            <item row="0" column="1">
             <widget class="QComboBox" name="layerCombo"/>
            </item>
+           <item row="1" column="1">
+            <widget class="QCheckBox" name="transformLockCheck">
+             <property name="toolTip">
+              <string>Locked objects stay where they are: dragging, the transform toolbar, the Orient editor, Level and Align, and formation changes all leave them alone. A ship docked to a locked ship is held too.</string>
+             </property>
+             <property name="text">
+              <string>Lock position and orientation</string>
+             </property>
+            </widget>
+           </item>
           </layout>
          </item>
          <item>
@@ -1008,6 +1018,7 @@
   <tabstop>prevButton</tabstop>
   <tabstop>nextButton</tabstop>
   <tabstop>layerCombo</tabstop>
+  <tabstop>transformLockCheck</tabstop>
   <tabstop>deleteButton</tabstop>
   <tabstop>resetButton</tabstop>
   <tabstop>weaponsButton</tabstop>

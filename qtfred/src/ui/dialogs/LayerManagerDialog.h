@@ -35,6 +35,7 @@ private slots:
 	void on_addLayerButton_clicked();
 	void on_renameLayerButton_clicked();
 	void on_deleteLayerButton_clicked();
+	void on_lockLayerButton_clicked();
 	void on_layerList_currentRowChanged(int row);
 	void on_layerList_itemChanged(QListWidgetItem* item);
 	void on_showShipsCheck_toggled(bool checked);
@@ -47,6 +48,8 @@ private slots:
 private: // NOLINT(readability-redundant-access-specifiers)
 	void initializeUi();
 	void updateUi();
+	// The lock button shows the selected layer's objects: unlocked, locked, or mixed (faded lock)
+	void updateLockButton();
 
 	// Runs a layer add/delete/rename wrapped in a LayerStructureCommand: the
 	// command captures the before-state, op() applies the change, and the command
@@ -56,6 +59,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	FredView*       _fredView = nullptr;
 	EditorViewport* _viewport = nullptr;
 	bool _refreshing = false;
+	bool _uiReady = false; // setupUi() has run; palette changes can arrive before it
 	QVector<QCheckBox*> _iffChecks;
 	std::unique_ptr<Ui::LayerManagerDialog> ui;
 	std::unique_ptr<LayerManagerDialogModel> _model;

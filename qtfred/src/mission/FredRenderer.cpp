@@ -501,6 +501,19 @@ void FredRenderer::display_distances() {
 	}
 }
 
+// A small padlock to the left of a label at (x, y), in the current color, sized with the labels
+static void draw_lock_badge(int x, int y, float scale) {
+	const int w = std::max(6, fl2i(8.0f * scale));
+	const int shackleH = w / 2;
+	const int inset = w / 4;
+	const int left = x - w - 4;
+	// shackle: an upside-down U on top of the body
+	gr_line(left + inset, y + shackleH, left + inset, y);
+	gr_line(left + inset, y, left + w - 1 - inset, y);
+	gr_line(left + w - 1 - inset, y, left + w - 1 - inset, y + shackleH);
+	gr_rect(left, y + shackleH, w, w * 3 / 4);
+}
+
 void FredRenderer::display_ship_info(int cur_object_index) {
 	char buf[512], pos[80];
 	int render = 1;
@@ -608,16 +621,21 @@ void FredRenderer::display_ship_info(int cur_object_index) {
 					strcat_s(buf, pos);
 				}
 
-				if (*buf) {
-					if (Fred_outline == FRED_COLOUR_WHITE) {
-						gr_set_color_fast(&colour_green);
-					} else if (Fred_outline == FRED_COLOUR_YELLOW_GREEN) {
-						gr_set_color_fast(&colour_yellow_green);
-					} else {
-						gr_set_color_fast(&colour_white);
-					}
+				if (Fred_outline == FRED_COLOUR_WHITE) {
+					gr_set_color_fast(&colour_green);
+				} else if (Fred_outline == FRED_COLOUR_YELLOW_GREEN) {
+					gr_set_color_fast(&colour_yellow_green);
+				} else {
+					gr_set_color_fast(&colour_white);
+				}
 
+				if (*buf) {
 					gr_string((int) v.screen.xyw.x, (int) v.screen.xyw.y, buf, GR_RESIZE_FULL, view().Label_font_scale);
+				}
+
+				// transform-locked objects get a padlock beside the label; it shows and hides with the labels
+				if (view().Show_ship_info && Editor::isTransformLocked(OBJ_INDEX(objp))) {
+					draw_lock_badge((int) v.screen.xyw.x, (int) v.screen.xyw.y, view().Label_font_scale);
 				}
 			}
 		}

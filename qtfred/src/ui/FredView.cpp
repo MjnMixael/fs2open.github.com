@@ -389,6 +389,7 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 		save.save_autosave_file(savePath.toUtf8().constData());
 	});
 	connect(fred, &Editor::layerListChanged, this, [this]() { _tbLayerComboDirty = true; });
+	connect(fred, &Editor::statusMessage, this, [this](const QString& text) { statusBar()->showMessage(text, 5000); });
 
 	// Camera undo: fires from any input source (keyboard, SpaceMouse, future mouse camera)
 	// via CameraController::onViewChanged. An idle timer collapses continuous movement
@@ -1875,9 +1876,11 @@ void FredView::onUpdateTransformBar() {
 	}
 
 	const bool editable = valid && !selectMode;
-	_transformA->setEnabled(editable);
-	_transformB->setEnabled(editable);
-	_transformC->setEnabled(editable);
+	// a locked current object (or one docked to a locked ship) can't be moved or turned
+	const bool boxesEditable = editable && !Editor::isTransformHeld(curObj);
+	_transformA->setEnabled(boxesEditable);
+	_transformB->setEnabled(boxesEditable);
+	_transformC->setEnabled(boxesEditable);
 
 	if (volEnv) {
 		// A volumetric has position but no orientation, so its spinboxes are
@@ -2114,6 +2117,12 @@ void FredView::onTransformEditingFinished(int axis) {
 	}
 
 	if (!query_valid_object(curObj)) return;
+	if (Editor::isTransformHeld(curObj)) {
+		fred->reportTransformHeld(curObj);
+		return;
+	}
+	// locked objects, and ships docked to one, stay put
+	auto held = [](const object* p) { return Editor::isTransformHeld(OBJ_INDEX(p)); };
 
 	const bool rotateMode  = _viewport->Editing_mode == CursorMode::Rotating;
 	const PivotMode pivot  = _viewport->Pivot_mode;
@@ -2152,7 +2161,7 @@ void FredView::onTransformEditingFinished(int axis) {
 			vm_extract_angles_matrix(&oldAng, &Objects[curObj].orient);
 			const float delta = target - angle(oldAng);
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
-				if (!p->flags[Object::Object_Flags::Marked]) continue;
+				if (!p->flags[Object::Object_Flags::Marked] || held(p)) continue;
 				angles a{};
 				vm_extract_angles_matrix(&a, &p->orient);
 				angle(a) += delta;
@@ -2161,7 +2170,7 @@ void FredView::onTransformEditingFinished(int axis) {
 		} else if (isMulti) {
 			// Align: give every marked object the same angle, each keeping its other two.
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
-				if (!p->flags[Object::Object_Flags::Marked]) continue;
+				if (!p->flags[Object::Object_Flags::Marked] || held(p)) continue;
 				angles a{};
 				vm_extract_angles_matrix(&a, &p->orient);
 				angle(a) = target;
@@ -2179,13 +2188,13 @@ void FredView::onTransformEditingFinished(int axis) {
 			// Group/Individual: shift every marked object along the axis by curObj's change.
 			const float delta = value - Objects[curObj].pos.a1d[axis];
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
-				if (!p->flags[Object::Object_Flags::Marked]) continue;
+				if (!p->flags[Object::Object_Flags::Marked] || held(p)) continue;
 				p->pos.a1d[axis] += delta;
 			}
 		} else if (isMulti) {
 			// Align: put every marked object at the same value on this axis.
 			for (object* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
-				if (!p->flags[Object::Object_Flags::Marked]) continue;
+				if (!p->flags[Object::Object_Flags::Marked] || held(p)) continue;
 				p->pos.a1d[axis] = value;
 			}
 		} else {
@@ -3727,6 +3736,10 @@ void FredView::mouseDoubleClickEvent(QMouseEvent* event) {
 	}
 }
 void FredView::orientEditorTriggered() {
+	if (Editor::isTransformHeld(fred->currentObject)) {
+		fred->reportTransformHeld(fred->currentObject);
+		return;
+	}
 	auto dialog = new dialogs::ObjectOrientEditorDialog(this, _viewport);
 	dialog->setAttribute(Qt::WA_DeleteOnClose);
 	// This is a modal dialog

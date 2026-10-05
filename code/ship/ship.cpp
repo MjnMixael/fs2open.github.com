@@ -7010,6 +7010,7 @@ void ship::clear()
 
 	group = -1;
 	fred_layer = "Default";
+	fred_locked = false;
 	death_roll_snd  = sound_handle::invalid();
 	ship_list_index = -1;
 

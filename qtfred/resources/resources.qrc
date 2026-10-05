@@ -28,6 +28,8 @@
     <file>images/toolbar/constyz-light.png</file>
     <file>images/toolbar/constz-dark.png</file>
     <file>images/toolbar/constz-light.png</file>
+    <file>images/toolbar/lock-dark.png</file>
+    <file>images/toolbar/lock-light.png</file>
     <file>images/toolbar/orbitsel-dark.png</file>
     <file>images/toolbar/orbitsel-light.png</file>
     <file>images/toolbar/pivotalign-dark.png</file>
@@ -48,6 +50,8 @@
     <file>images/toolbar/selectrot-light.png</file>
     <file>images/toolbar/showdist-dark.png</file>
     <file>images/toolbar/showdist-light.png</file>
+    <file>images/toolbar/unlock-dark.png</file>
+    <file>images/toolbar/unlock-light.png</file>
     <file>images/toolbar/wingdisband-dark.png</file>
     <file>images/toolbar/wingdisband-light.png</file>
     <file>images/toolbar/wingform-dark.png</file>

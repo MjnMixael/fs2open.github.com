@@ -21,6 +21,20 @@ are automatically assigned to the Default layer.</p>
 to rename the selected layer; every object on it is updated to the new name. Use
 <strong>Delete Layer</strong> to remove the selected layer, reassigning its objects to the
 Default layer. The <em>Default</em> layer cannot be renamed or deleted.</p>
+<p>The lock button next to them locks or unlocks the position and orientation of every
+object on the selected layer (see <a href="Viewport.html#locking">Locking objects in
+place</a>). Its icon shows the layer's current state:</p>
+<ul>
+    <li><strong>Open padlock:</strong> nothing on the layer is locked. Click to lock it
+        all.</li>
+    <li><strong>Closed padlock:</strong> everything on the layer is locked. Click to
+        unlock it all.</li>
+    <li><strong>Faded closed padlock:</strong> only some objects are locked. Click to lock
+        the rest.</li>
+</ul>
+<p>The button is disabled for an empty layer. It sets each object's own lock, so an
+object moved onto a locked layer later is not locked by it, and one undo step reverses
+the whole change.</p>
 
 <h2>Filters tab</h2>
 <p>Works in conjunction with layers to provide additional visibility control. Allows

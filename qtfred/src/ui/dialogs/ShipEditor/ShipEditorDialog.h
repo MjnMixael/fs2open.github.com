@@ -70,6 +70,9 @@ class ShipEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	void on_AIClassCombo_currentIndexChanged(int);
 	void on_teamCombo_currentIndexChanged(int);
 	void on_layerCombo_currentIndexChanged(int);
+	void on_transformLockCheck_clicked();
+	// the objects the lock checkbox covers (a waypoint stands for its path)
+	SCP_vector<int> transformLockObjects() const;
 
 	// column two
 	void on_hotkeyCombo_currentIndexChanged(int);

@@ -4295,6 +4295,14 @@ int Fred_mission_save::save_objects()
 			fout(" %s", shipp->fred_layer.c_str());
 		}
 
+		if (save_config.save_format != MissionFormat::RETAIL && shipp->fred_locked) {
+			if (optional_string_fred("+Transform Locked:", "$Name:"))
+				parse_comments();
+			else
+				fout("\n+Transform Locked:");
+			fout(" true");
+		}
+
 		// always write out the score to ensure backwards compatibility. If the score is the same as the value
 		// in the table write out a flag to tell the game to simply use whatever is in the table instead
 		if (Ship_info[shipp->ship_info_index].score == shipp->score) {
@@ -5213,6 +5221,14 @@ int Fred_mission_save::save_waypoints()
 					fout("\n+Layer:");
 				fout(" %s", jn_layer.c_str());
 			}
+
+			if (jn.GetFredLocked()) {
+				if (optional_string_fred("+Transform Locked:", "$Jump Node:"))
+					parse_comments();
+				else
+					fout("\n+Transform Locked:");
+				fout(" true");
+			}
 		}
 
 		fso_comment_pop();
@@ -5256,6 +5272,14 @@ int Fred_mission_save::save_waypoints()
 				else
 					fout("\n+Layer:");
 				fout(" %s", wpt_layer.c_str());
+			}
+
+			if (ii.get_fred_locked()) {
+				if (optional_string_fred("+Transform Locked:", "$List:"))
+					parse_comments();
+				else
+					fout("\n+Transform Locked:");
+				fout(" true");
 			}
 		}
 
@@ -5636,6 +5660,14 @@ int Fred_mission_save::save_props()
 					fout(" %s", p->fred_layer.c_str());
 				}
 
+				if (save_config.save_format != MissionFormat::RETAIL && p->fred_locked) {
+					if (optional_string_fred("+Transform Locked:", "$Name:"))
+						parse_comments();
+					else
+						fout("\n+Transform Locked:");
+					fout(" true");
+				}
+
 				// texture replacement - only the instance-level entries; class replacements
 				// live in props.tbl and are re-applied on load
 				bool needs_tex_header = true;
@@ -5892,6 +5924,14 @@ int Fred_mission_save::save_coordinate_points()
 				fout("\n+Layer:");
 			}
 			fout(" %s", cp.fred_layer.c_str());
+		}
+
+		if (save_config.save_format != MissionFormat::RETAIL && cp.fred_locked) {
+			if (optional_string_fred("+Transform Locked:", "$Name:"))
+				parse_comments();
+			else
+				fout("\n+Transform Locked:");
+			fout(" true");
 		}
 
 		fso_comment_pop();

@@ -45,6 +45,7 @@ struct mission_coordinate_point
 	int        multi_team = -1;          // -1 = visible to all; otherwise TVT team index (0..MAX_TVT_TEAMS-1)
 	flagset<CoordinatePoint::Flags> flags;
 	SCP_string fred_layer = "Default";   // FRED view layer assignment
+	bool       fred_locked = false;      // FRED transform lock: position can't be edited
 	int        objnum = -1;
 
 	mission_coordinate_point();
@@ -72,6 +73,7 @@ struct parsed_coordinate_point
 	int        multi_team = -1;
 	flagset<CoordinatePoint::Flags> flags;
 	SCP_string fred_layer = "Default";
+	bool       fred_locked = false;
 
 	parsed_coordinate_point();
 };

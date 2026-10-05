@@ -194,6 +194,7 @@ void PropEditorDialog::initializeUi() {
 	ui->nextButton->setEnabled(has_props);
 	ui->prevButton->setEnabled(has_props);
 	ui->layerCombo->setEnabled(enable);
+	ui->transformLockCheck->setEnabled(enable);
 	ui->propClassCombo->setEnabled(enable);
 	// texture replacement operates on a single prop
 	ui->textureReplacementButton->setEnabled(_model->getSelectedPropObject() >= 0);
@@ -204,6 +205,11 @@ void PropEditorDialog::updateUi() {
 
 	ui->propNameLineEdit->setText(QString::fromStdString(_model->getPropName()));
 	ui->layerCombo->setCurrentIndex(ui->layerCombo->findData(QString::fromStdString(_model->getLayer())));
+	{
+		const auto lockState = transformLockState(transformLockObjects());
+		ui->transformLockCheck->setTristate(lockState == Qt::PartiallyChecked);
+		ui->transformLockCheck->setCheckState(lockState);
+	}
 	ui->propClassCombo->setCurrentIndex(ui->propClassCombo->findData(_model->getPropClass()));
 }
 
@@ -490,6 +496,24 @@ void PropEditorDialog::on_despawnDelaySpinBox_valueChanged(int value) {
 		if (p) p->despawn_delay = v;
 	});
 	_fredView->mainUndoStack()->push(cmd);
+}
+
+SCP_vector<int> PropEditorDialog::transformLockObjects() const
+{
+	SCP_vector<int> objs;
+	for (int obj_idx : _model->getSelectedPropObjects()) {
+		if (query_valid_object(obj_idx) && Objects[obj_idx].type == OBJ_PROP)
+			objs.push_back(obj_idx);
+	}
+	return objs;
+}
+
+void PropEditorDialog::on_transformLockCheck_clicked()
+{
+	const auto objs = transformLockObjects();
+	// a partly locked selection locks the rest
+	pushTransformLock(objs, transformLockState(objs) != Qt::Checked, _viewport->editor, _fredView->mainUndoStack());
+	updateUi();
 }
 
 } // namespace fso::fred::dialogs

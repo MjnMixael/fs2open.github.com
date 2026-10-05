@@ -2433,6 +2433,7 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 
 	shipp->group = p_objp->group;
 	shipp->fred_layer = p_objp->fred_layer;
+	shipp->fred_locked = p_objp->fred_locked;
 	shipp->custom_data = p_objp->custom_data;
 	shipp->escort_priority = p_objp->escort_priority;
 	shipp->ship_guardian_threshold = p_objp->ship_guardian_threshold;
@@ -3988,6 +3989,9 @@ int parse_object(mission *pm, int  /*flag*/, p_object *p_objp)
 		}
 	}
 
+	if (optional_string("+Transform Locked:"))
+		stuff_boolean(&p_objp->fred_locked);
+
 	bool table_score = false; 
 	if (optional_string("+Use Table Score:")) {
 		table_score = true; 
@@ -5514,6 +5518,9 @@ void parse_prop(mission* /*pm*/)
 		}
 	}
 
+	if (optional_string("+Transform Locked:"))
+		stuff_boolean(&p.fred_locked);
+
 	// texture replacement - mirrors the ship $Texture Replace: handling.  These are the
 	// instance-level (from_table == false) replacements; class replacements are layered on
 	// automatically at prop_create time.
@@ -5737,6 +5744,9 @@ void parse_coordinate_point(mission* /*pm*/)
 		}
 	}
 
+	if (optional_string("+Transform Locked:"))
+		stuff_boolean(&cp.fred_locked);
+
 	Parse_coordinate_points.emplace_back(std::move(cp));
 }
 
@@ -5902,6 +5912,7 @@ static int create_prop_from_parsed(parsed_prop& propp)
 	auto createdProp = prop_id_lookup(obj.instance);
 	if (createdProp != nullptr) {
 		createdProp->fred_layer = propp.fred_layer;
+		createdProp->fred_locked = propp.fred_locked;
 
 		// layer the mission's instance-level texture replacements on top of the class
 		// replacements already seeded by prop_create, then (re)apply them all
@@ -6485,6 +6496,10 @@ void parse_waypoint_list(mission *pm)
 		}
 	}
 
+	bool wpt_fred_locked = false;
+	if (optional_string("+Transform Locked:"))
+		stuff_boolean(&wpt_fred_locked);
+
 	SCP_vector<vec3d> vec_list;
 	required_string("$List:");
 	stuff_vec3d_list(vec_list);
@@ -6500,6 +6515,7 @@ void parse_waypoint_list(mission *pm)
 				wl->set_color(cr, cg, cb);
 		}
 		wl->set_fred_layer(wpt_fred_layer);
+		wl->set_fred_locked(wpt_fred_locked);
 	}
 }
 
@@ -6562,6 +6578,12 @@ void parse_waypoints_and_jumpnodes(mission *pm)
 				}
 			}
 			jnp.SetFredLayer(layer_name);
+		}
+
+		if (optional_string("+Transform Locked:")) {
+			bool locked = false;
+			stuff_boolean(&locked);
+			jnp.SetFredLocked(locked);
 		}
 
 		Jump_nodes.push_back(std::move(jnp));
@@ -10499,6 +10521,23 @@ bool check_for_26_1_data()
 {
 	// Editor metadata on event annotations: graph-view node positions and collapsed
 	// subtrees, and the cutscene camera preview's starts-after event.
-	return std::any_of(Event_annotations.begin(), Event_annotations.end(),
-		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed || !ea.camera_starts_after.empty(); });
+	if (std::any_of(Event_annotations.begin(), Event_annotations.end(),
+		[](const event_annotation& ea) { return ea.has_pos || ea.collapsed || !ea.camera_starts_after.empty(); }))
+		return true;
+
+	// Editor transform locks (+Transform Locked:)
+	for (const auto& so : list_range(&Ship_obj_list)) {
+		if (Ships[Objects[so->objnum].instance].fred_locked)
+			return true;
+	}
+	for (const auto& p : Props) {
+		if (p.has_value() && p->fred_locked)
+			return true;
+	}
+	if (std::any_of(Waypoint_lists.begin(), Waypoint_lists.end(), [](const waypoint_list& wl) { return wl.get_fred_locked(); }))
+		return true;
+	if (std::any_of(Jump_nodes.begin(), Jump_nodes.end(), [](const CJumpNode& jn) { return jn.GetFredLocked(); }))
+		return true;
+	return std::any_of(Coordinate_points.begin(), Coordinate_points.end(),
+		[](const mission_coordinate_point& cp) { return cp.fred_locked; });
 }

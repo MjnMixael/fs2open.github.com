@@ -31,6 +31,45 @@ the viewport. Each dropdown is paired with its own modifier chord:</p>
 <h2>Moving objects</h2>
 <p><strong>Drag</strong> a selected object to reposition it in the mission.</p>
 
+<h2 id="locking">Locking objects in place</h2>
+<p>Lock an object when it is placed where you want it and you don't want to nudge it by
+accident. A locked object keeps its position and orientation, but it can still be
+selected and everything else about it can be edited: its name, cues, flags, and so on.</p>
+<ul>
+    <li><strong>What can be locked:</strong> ships and player starts, props, waypoint
+        paths (the whole path, not single points), jump nodes, and coordinate
+        points.</li>
+    <li><strong>Locking and unlocking:</strong> use the lock checkbox under the Layer
+        selector in the object's editor, or the lock button in the
+        <a href="LayerManagerDialog.html">Layer Manager</a> to lock or unlock everything
+        on a layer at once. Both are undoable.</li>
+    <li><strong>In the viewport:</strong> a locked object shows a small padlock beside
+        its label. It shows and hides with the labels (<strong>View &rsaquo; Show Ship
+        Info</strong>).</li>
+    <li><strong>What it stops:</strong> dragging and rotating in the viewport, flying the
+        object with the camera controls, the transform toolbar, the
+        <a href="../dialogs/ObjectOrientEditorDialog.html">Object Orientation Editor</a>,
+        Level and Align, and the Wing Editor's Align Formation. Undo and redo still move
+        locked objects back and forth.</li>
+    <li><strong>Moving a group:</strong> when several objects are selected, the locked
+        ones stay put and the rest move. If the object you are dragging or editing is
+        locked itself, nothing moves, and the status bar says why.</li>
+    <li><strong>Docked ships:</strong> docked ships can only move together, so if any
+        ship in a docked group is locked, the whole group is held in place. When
+        docking in <a href="../dialogs/ShipInitialStatusDialog.html">Initial Status</a>,
+        the unlocked ship moves to the locked one; two held ships can't be docked to
+        each other. When undocking with "move ships when undocking" on, the unlocked
+        ship is the one moved clear.</li>
+    <li><strong>Waypoint paths:</strong> a locked path's points stay where they are and
+        Ctrl+Shift+drag can't insert new points into it. Points can still be deleted.</li>
+    <li><strong>Copies:</strong> a Ctrl+drag copy of a locked object starts unlocked.</li>
+</ul>
+<p>Locks are saved in the mission file. They are editor-only: the game ignores them, and
+a mission with locked objects needs FSO 26.1 or later to load.</p>
+<div class="note">This is not the same as <strong>Edit &rsaquo; Lock Marked
+Objects</strong>, which makes objects unselectable until you use <strong>Unlock All
+Objects</strong> and isn't saved.</div>
+
 <h2>Duplicating objects</h2>
 <ul>
     <li><strong>Ctrl+drag</strong> a selected object to duplicate everything that is
@@ -41,7 +80,8 @@ the viewport. Each dropdown is paired with its own modifier chord:</p>
         waypoints: each marked waypoint is inserted into its source path right after
         the original, extending the path rather than creating a new one. Useful when
         you want to add more points to an existing path without redrawing it. Other
-        object types in the marked set are duplicated normally.</li>
+        object types in the marked set are duplicated normally. Points can't be inserted
+        into a <a href="#locking">locked</a> path.</li>
 </ul>
 
 <h2>Context menu</h2>

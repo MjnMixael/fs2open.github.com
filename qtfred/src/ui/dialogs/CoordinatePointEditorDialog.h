@@ -37,6 +37,9 @@ private slots:
 	void on_escortPrioritySpinBox_valueChanged(int value);
 	void on_multiTeamCombo_currentIndexChanged(int index);
 	void on_layerCombo_currentIndexChanged(int index);
+	void on_transformLockCheck_clicked();
+	// the objects the lock checkbox covers (a waypoint stands for its path)
+	SCP_vector<int> transformLockObjects() const;
 	void on_flagsButton_clicked();
 	void on_colorRSpinBox_valueChanged(int value);
 	void on_colorGSpinBox_valueChanged(int value);
