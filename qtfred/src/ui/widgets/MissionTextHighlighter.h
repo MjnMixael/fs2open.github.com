@@ -2,6 +2,7 @@
 
 #include "ui/SyntaxColors.h"
 
+#include <QPointer>
 #include <QSet>
 #include <QSyntaxHighlighter>
 #include <QTextCharFormat>
@@ -20,7 +21,8 @@ namespace fso::fred {
 // comment forms (; line, /* */ and !* *! blocks). Optional rainbow parentheses.
 //
 // Colors come from SyntaxColorScheme and follow the light/dark palette; the
-// highlighter restyles itself when either changes.
+// highlighter restyles itself when either changes. A scheme with its own
+// background (Solarized) also sets the text box's background and text color.
 class MissionTextHighlighter final : public QSyntaxHighlighter {
 	Q_OBJECT
 
@@ -38,12 +40,14 @@ class MissionTextHighlighter final : public QSyntaxHighlighter {
 
   private:
 	void restyle();
+	void applyEditorColors(bool dark);
 	const QTextCharFormat& fmt(SyntaxRole role) const { return m_formats[static_cast<int>(role)]; }
 
 	std::array<QTextCharFormat, SyntaxRoleCount> m_formats;
 	QVector<QTextCharFormat> m_parenFormats;
 	bool m_rainbow = false;
 	QSet<QString> m_operators; // exact names: the parser matches operators case-sensitively
+	QPointer<QPlainTextEdit> m_editor;
 };
 
 } // namespace fso::fred

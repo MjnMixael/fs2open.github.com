@@ -76,9 +76,23 @@ public:
 	double getLabelFontScale() const;
 	void setLabelFontScale(double value);
 
-	// Syntax colors (the Events editor's Advanced view). Colors are per theme;
-	// dark selects which theme's set is read or written.
+	// Syntax colors (the Events editor's Advanced view). Colors belong to the chosen scheme and are
+	// per version of it; dark selects which version is read or written.
+	SyntaxScheme getSyntaxScheme() const;
+	void setSyntaxScheme(SyntaxScheme scheme);
+	// Whether the user changed any color in this version of a scheme (it's marked with a *).
+	bool syntaxSchemeHasChanges(SyntaxScheme scheme, bool dark) const;
 	SyntaxStyle getSyntaxStyle(SyntaxRole role, bool dark) const;
+	// The text box background and plain text color in the chosen scheme (the scheme's own, or the app
+	// theme's, unless changed).
+	QColor getEditorBackground(bool dark) const;
+	QColor getEditorText(bool dark) const;
+	bool isEditorBackgroundCustom(bool dark) const;
+	bool isEditorTextCustom(bool dark) const;
+	void setEditorBackground(bool dark, const QColor& color);
+	void setEditorText(bool dark, const QColor& color);
+	void resetEditorBackground(bool dark);
+	void resetEditorText(bool dark);
 	bool isSyntaxStyleCustom(SyntaxRole role, bool dark) const;
 	void setSyntaxStyle(SyntaxRole role, bool dark, const SyntaxStyle& style);
 	void resetSyntaxStyle(SyntaxRole role, bool dark);

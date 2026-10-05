@@ -196,7 +196,8 @@ QTextCharFormat makeFormat(const SyntaxStyle& style)
 
 } // namespace
 
-MissionTextHighlighter::MissionTextHighlighter(QPlainTextEdit* editor) : QSyntaxHighlighter(editor->document())
+MissionTextHighlighter::MissionTextHighlighter(QPlainTextEdit* editor)
+	: QSyntaxHighlighter(editor->document()), m_editor(editor)
 {
 	for (const auto& op : Operators)
 		m_operators.insert(QString::fromStdString(op.text));
@@ -224,10 +225,30 @@ void MissionTextHighlighter::restyle()
 	m_parenFormats.clear();
 	for (int d = 0; d < 6; ++d) {
 		QTextCharFormat f;
-		f.setForeground(SyntaxColorScheme::parenColor(d, dark));
+		f.setForeground(SyntaxColorScheme::parenColor(scheme.scheme(), d, dark));
 		m_parenFormats.push_back(f);
 	}
+	applyEditorColors(dark);
 	rehighlight();
+}
+
+void MissionTextHighlighter::applyEditorColors(bool dark)
+{
+	if (m_editor == nullptr)
+		return;
+
+	// A style sheet rather than the palette: with the app's style sheet active, Qt's style sheet style
+	// re-applies a widget's saved palette whenever it repolishes, so a palette change only showed after
+	// the next theme switch. Only the background and text color are set, so the selection, the
+	// bracket match tint and the scroll bars keep following the app theme; an empty sheet clears them.
+	// A repolish sends PaletteChange, which restyles, so the sheet is only set when it differs.
+	QString sheet;
+	if (const auto colors = SyntaxColorScheme::instance().editorColors(dark)) {
+		sheet = QStringLiteral("QPlainTextEdit { background-color: %1; color: %2; }")
+					.arg(colors->background.name(), colors->text.name());
+	}
+	if (m_editor->styleSheet() != sheet)
+		m_editor->setStyleSheet(sheet);
 }
 
 bool MissionTextHighlighter::eventFilter(QObject* watched, QEvent* event)

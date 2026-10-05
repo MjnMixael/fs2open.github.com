@@ -197,39 +197,106 @@ void PreferencesDialogModel::setOutlineLod(int value) { modify(_outlineLod, valu
 
 double PreferencesDialogModel::getLabelFontScale() const { return _labelFontScale; }
 
+SyntaxScheme PreferencesDialogModel::getSyntaxScheme() const
+{
+	return _syntax.scheme;
+}
+
+void PreferencesDialogModel::setSyntaxScheme(SyntaxScheme scheme)
+{
+	modify(_syntax.scheme, scheme);
+}
+
+bool PreferencesDialogModel::syntaxSchemeHasChanges(SyntaxScheme scheme, bool dark) const
+{
+	return _syntax.hasOverrides(scheme, dark);
+}
+
+QColor PreferencesDialogModel::getEditorBackground(bool dark) const
+{
+	const auto& over = _syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].background;
+	return over ? *over : SyntaxColorScheme::defaultEditorColors(_syntax.scheme, dark).background;
+}
+
+QColor PreferencesDialogModel::getEditorText(bool dark) const
+{
+	const auto& over = _syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].text;
+	return over ? *over : SyntaxColorScheme::defaultEditorColors(_syntax.scheme, dark).text;
+}
+
+bool PreferencesDialogModel::isEditorBackgroundCustom(bool dark) const
+{
+	return _syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].background.has_value();
+}
+
+bool PreferencesDialogModel::isEditorTextCustom(bool dark) const
+{
+	return _syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].text.has_value();
+}
+
+void PreferencesDialogModel::setEditorBackground(bool dark, const QColor& color)
+{
+	// picking exactly the default stores no change, as for the role colors
+	std::optional<QColor> next;
+	if (color != SyntaxColorScheme::defaultEditorColors(_syntax.scheme, dark).background)
+		next = color;
+	modify(_syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].background, next);
+}
+
+void PreferencesDialogModel::setEditorText(bool dark, const QColor& color)
+{
+	std::optional<QColor> next;
+	if (color != SyntaxColorScheme::defaultEditorColors(_syntax.scheme, dark).text)
+		next = color;
+	modify(_syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].text, next);
+}
+
+void PreferencesDialogModel::resetEditorBackground(bool dark)
+{
+	modify(_syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].background, std::optional<QColor>());
+}
+
+void PreferencesDialogModel::resetEditorText(bool dark)
+{
+	modify(_syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0].text, std::optional<QColor>());
+}
+
 SyntaxStyle PreferencesDialogModel::getSyntaxStyle(SyntaxRole role, bool dark) const
 {
-	const auto& over = _syntax.overrides[dark ? 1 : 0][static_cast<int>(role)];
-	return over ? *over : SyntaxColorScheme::defaultStyle(role, dark);
+	const auto& over = _syntax.overrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0][static_cast<int>(role)];
+	return over ? *over : SyntaxColorScheme::defaultStyle(_syntax.scheme, role, dark);
 }
 
 bool PreferencesDialogModel::isSyntaxStyleCustom(SyntaxRole role, bool dark) const
 {
-	return _syntax.overrides[dark ? 1 : 0][static_cast<int>(role)].has_value();
+	return _syntax.overrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0][static_cast<int>(role)].has_value();
 }
 
 void PreferencesDialogModel::setSyntaxStyle(SyntaxRole role, bool dark, const SyntaxStyle& style)
 {
-	auto& over = _syntax.overrides[dark ? 1 : 0][static_cast<int>(role)];
-	// Picking exactly the default stores no override, so the role keeps following
-	// future default changes.
+	auto& over = _syntax.overrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0][static_cast<int>(role)];
+	// Picking exactly the scheme's own style stores no override, so the role keeps following the
+	// scheme if its colors change in a later build.
 	std::optional<SyntaxStyle> next;
-	if (style != SyntaxColorScheme::defaultStyle(role, dark))
+	if (style != SyntaxColorScheme::defaultStyle(_syntax.scheme, role, dark))
 		next = style;
 	modify(over, next);
 }
 
 void PreferencesDialogModel::resetSyntaxStyle(SyntaxRole role, bool dark)
 {
-	modify(_syntax.overrides[dark ? 1 : 0][static_cast<int>(role)], std::optional<SyntaxStyle>());
+	modify(_syntax.overrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0][static_cast<int>(role)],
+		std::optional<SyntaxStyle>());
 }
 
 void PreferencesDialogModel::resetAllSyntaxStyles(bool dark)
 {
+	// only the version of the chosen scheme that's showing; the other keeps its changes
 	auto cleared = _syntax.overrides;
-	for (auto& over : cleared[dark ? 1 : 0])
+	for (auto& over : cleared[static_cast<int>(_syntax.scheme)][dark ? 1 : 0])
 		over.reset();
 	modify(_syntax.overrides, cleared);
+	modify(_syntax.editorOverrides[static_cast<int>(_syntax.scheme)][dark ? 1 : 0], SyntaxEditorOverrides());
 }
 
 bool PreferencesDialogModel::getRainbowParens() const { return _syntax.rainbowParens; }
