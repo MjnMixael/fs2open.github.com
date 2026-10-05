@@ -239,7 +239,7 @@ void PreferencesDialog::buildSyntaxColorsUi()
 		});
 	}
 	// Background and plain text: a color and a reset each, on the grid's last row
-	auto addColorRow = [this, group, roleGrid](SyntaxRow& w, const QString& label, int row, int col) {
+	auto addColorRow = [group, roleGrid](SyntaxRow& w, const QString& label, int row, int col) {
 		roleGrid->addWidget(new QLabel(label, group), row, col);
 		w.color = new QToolButton(group);
 		w.color->setToolTip(tr("Choose a color"));
