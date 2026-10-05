@@ -75,21 +75,31 @@
          </property>
         </widget>
        </item>
-       <item row="3" column="0" colspan="2">
+       <item row="3" column="1">
+        <widget class="QCheckBox" name="transformLockCheck">
+         <property name="toolTip">
+          <string>Locks every point of the path: dragging, the transform toolbar, and the Orient editor leave them alone, and new points can't be inserted into it. Points can still be deleted.</string>
+         </property>
+         <property name="text">
+          <string>Lock path position</string>
+         </property>
+        </widget>
+       </item>
+       <item row="4" column="0" colspan="2">
         <widget class="QCheckBox" name="noDrawLinesCheck">
          <property name="text">
           <string>No Draw Lines</string>
          </property>
         </widget>
        </item>
-       <item row="4" column="0" colspan="2">
+       <item row="5" column="0" colspan="2">
         <widget class="QCheckBox" name="customColorCheck">
          <property name="text">
           <string>Custom Color</string>
          </property>
         </widget>
        </item>
-       <item row="5" column="0" colspan="2">
+       <item row="6" column="0" colspan="2">
         <layout class="QHBoxLayout" name="colorLayout">
          <item>
           <widget class="QLabel" name="colorRLabel">

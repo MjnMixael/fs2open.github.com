@@ -7,6 +7,7 @@
 #include <QRadioButton>
 
 #include <coordinate_points/coordinate_point.h>
+#include <mission/commands/FredCommands.h>
 #include <coordinate_points/coordinate_shapes.h>
 #include <globalincs/globals.h>
 #include <globalincs/linklist.h>
@@ -226,6 +227,7 @@ void CoordinatePointEditorDialog::initializeUi()
 	ui->multiTeamCombo->setEnabled(enabled && CoordinatePointEditorDialogModel::missionIsMultiTeam());
 	ui->flagsButton->setEnabled(enabled);
 	ui->layerCombo->setEnabled(enabled);
+	ui->transformLockCheck->setEnabled(enabled);
 	ui->colorRSpinBox->setEnabled(enabled);
 	ui->colorGSpinBox->setEnabled(enabled);
 	ui->colorBSpinBox->setEnabled(enabled);
@@ -332,6 +334,11 @@ void CoordinatePointEditorDialog::updateUi()
 	}
 
 	ui->layerCombo->setCurrentIndex(ui->layerCombo->findData(QString::fromStdString(_model->getLayer())));
+	{
+		const auto lockState = transformLockState(transformLockObjects());
+		ui->transformLockCheck->setTristate(lockState == Qt::PartiallyChecked);
+		ui->transformLockCheck->setCheckState(lockState);
+	}
 
 	ui->colorRSpinBox->setValue(_model->isColorRMixed() ? ui->colorRSpinBox->minimum() : _model->getColorR());
 	ui->colorGSpinBox->setValue(_model->isColorGMixed() ? ui->colorGSpinBox->minimum() : _model->getColorG());
@@ -641,6 +648,19 @@ void CoordinatePointEditorDialog::on_colorASpinBox_valueChanged(int value)
 			gr_init_alphacolor(&cp.display_color, cp.display_color.red, cp.display_color.green, cp.display_color.blue, v);
 		},
 		[&] { _model->setColorA(value); });
+	updateUi();
+}
+
+SCP_vector<int> CoordinatePointEditorDialog::transformLockObjects() const
+{
+	return _model->getSelectedObjnums();
+}
+
+void CoordinatePointEditorDialog::on_transformLockCheck_clicked()
+{
+	const auto objs = transformLockObjects();
+	// a partly locked selection locks the rest
+	pushTransformLock(objs, transformLockState(objs) != Qt::Checked, _viewport->editor, _fredView->mainUndoStack());
 	updateUi();
 }
 

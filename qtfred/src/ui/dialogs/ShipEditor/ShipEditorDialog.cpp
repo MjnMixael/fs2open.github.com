@@ -798,6 +798,12 @@ void ShipEditorDialog::initializeUi()
 	}
 	ui->layerCombo->setCurrentIndex(ui->layerCombo->findData(QString::fromStdString(_model->getLayer())));
 	ui->layerCombo->setEnabled(_model->getNumSelectedObjects() > 0);
+	ui->transformLockCheck->setEnabled(_model->getNumSelectedObjects() > 0);
+	{
+		const auto lockState = transformLockState(transformLockObjects());
+		ui->transformLockCheck->setTristate(lockState == Qt::PartiallyChecked);
+		ui->transformLockCheck->setCheckState(lockState);
+	}
 
 	// Arrival target combo — contents depend on which ships are currently marked
 	object* objp;
@@ -2942,6 +2948,24 @@ void ShipEditorDialog::on_dockWarpoutCheckBox_stateChanged(int state)
 		_fredView->mainUndoStack()->push(cmd);
 	else
 		delete cmd;
+}
+
+SCP_vector<int> ShipEditorDialog::transformLockObjects()
+{
+	SCP_vector<int> objs;
+	for (auto* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
+		if ((p->type == OBJ_SHIP || p->type == OBJ_START) && p->flags[Object::Object_Flags::Marked])
+			objs.push_back(OBJ_INDEX(p));
+	}
+	return objs;
+}
+
+void ShipEditorDialog::on_transformLockCheck_clicked()
+{
+	const auto objs = transformLockObjects();
+	// a partly locked selection locks the rest
+	pushTransformLock(objs, transformLockState(objs) != Qt::Checked, _viewport->editor, _fredView->mainUndoStack());
+	initializeUi();
 }
 
 } // namespace fso::fred::dialogs

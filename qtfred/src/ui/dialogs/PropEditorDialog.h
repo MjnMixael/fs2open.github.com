@@ -27,6 +27,9 @@ class PropEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	void on_nextButton_clicked();
 	void on_prevButton_clicked();
 	void on_layerCombo_currentIndexChanged(int index);
+	void on_transformLockCheck_clicked();
+	// the objects the lock checkbox covers (a waypoint stands for its path)
+	SCP_vector<int> transformLockObjects() const;
 	void on_propClassCombo_currentIndexChanged(int index);
 	void on_textureReplacementButton_clicked();
 

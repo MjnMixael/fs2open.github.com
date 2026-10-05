@@ -472,6 +472,9 @@ void Editor::unmark_all() {
 }
 void Editor::markObject(int obj) {
 	Assert(query_valid_object(obj));
+	// Lock Marked Objects makes objects unselectable; every way of marking goes through here
+	if (Objects[obj].flags[Object::Object_Flags::Locked_from_editing])
+		return;
 	if (!(Objects[obj].flags[Object::Object_Flags::Marked])) {
 		Objects[obj].flags.set(Object::Object_Flags::Marked);  // set as marked
 		objectMarkingChanged(obj, true);
@@ -672,6 +675,8 @@ void Editor::setupCurrentObjectIndices(int selectedObj) {
 	currentObjectChanged(currentObject);
 }
 void Editor::selectObject(int objId) {
+	if (objId >= 0 && Objects[objId].flags[Object::Object_Flags::Locked_from_editing])
+		return;
 	if (objId < 0) {
 		unmark_all();
 	} else {
@@ -918,6 +923,108 @@ void Editor::showHiddenObjects() {
 
 	updateAllViewports();
 }
+bool Editor::supportsTransformLock(int objnum) {
+	if (!query_valid_object(objnum))
+		return false;
+	switch (Objects[objnum].type) {
+	case OBJ_SHIP:
+	case OBJ_START:
+	case OBJ_PROP:
+	case OBJ_WAYPOINT:
+	case OBJ_JUMP_NODE:
+	case OBJ_COORDINATE_POINT:
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool Editor::isTransformLocked(int objnum) {
+	if (!supportsTransformLock(objnum))
+		return false;
+	const object& obj = Objects[objnum];
+	switch (obj.type) {
+	case OBJ_SHIP:
+	case OBJ_START:
+		return Ships[obj.instance].fred_locked;
+	case OBJ_PROP: {
+		const auto* p = prop_id_lookup(obj.instance);
+		return p != nullptr && p->fred_locked;
+	}
+	case OBJ_WAYPOINT: {
+		const auto* wl = find_waypoint_list_with_instance(obj.instance);
+		return wl != nullptr && wl->get_fred_locked();
+	}
+	case OBJ_JUMP_NODE: {
+		const auto* jn = jumpnode_get_by_objnum(objnum);
+		return jn != nullptr && jn->GetFredLocked();
+	}
+	case OBJ_COORDINATE_POINT: {
+		const auto* cp = find_coordinate_point_by_objnum(objnum);
+		return cp != nullptr && cp->fred_locked;
+	}
+	default:
+		return false;
+	}
+}
+
+void Editor::setTransformLocked(int objnum, bool locked) {
+	if (!supportsTransformLock(objnum))
+		return;
+	const object& obj = Objects[objnum];
+	switch (obj.type) {
+	case OBJ_SHIP:
+	case OBJ_START:
+		Ships[obj.instance].fred_locked = locked;
+		break;
+	case OBJ_PROP:
+		if (auto* p = prop_id_lookup(obj.instance))
+			p->fred_locked = locked;
+		break;
+	case OBJ_WAYPOINT:
+		if (auto* wl = find_waypoint_list_with_instance(obj.instance))
+			wl->set_fred_locked(locked);
+		break;
+	case OBJ_JUMP_NODE:
+		if (auto* jn = jumpnode_get_by_objnum(objnum))
+			jn->SetFredLocked(locked);
+		break;
+	case OBJ_COORDINATE_POINT:
+		if (auto* cp = find_coordinate_point_by_objnum(objnum))
+			cp->fred_locked = locked;
+		break;
+	default:
+		break;
+	}
+}
+
+static void dock_group_locked_helper(object* objp, dock_function_info* infop) {
+	if ((objp->type == OBJ_SHIP || objp->type == OBJ_START) && Ships[objp->instance].fred_locked) {
+		infop->maintained_variables.bool_value = true;
+		infop->early_return_condition = true;
+	}
+}
+
+bool Editor::isTransformHeld(int objnum) {
+	if (isTransformLocked(objnum))
+		return true;
+	if (!query_valid_object(objnum))
+		return false;
+	object* objp = &Objects[objnum];
+	if ((objp->type != OBJ_SHIP && objp->type != OBJ_START) || objp->dock_list == nullptr)
+		return false;
+	dock_function_info dfi;
+	dock_evaluate_all_docked_objects(objp, &dfi, dock_group_locked_helper);
+	return dfi.maintained_variables.bool_value;
+}
+
+void Editor::reportTransformHeld(int objnum) {
+	const QString name = QString::fromUtf8(object_name(objnum));
+	statusMessage(isTransformLocked(objnum)
+		? tr("%1 is locked: its position and orientation can't be changed.").arg(name)
+		: tr("%1 is docked to a locked ship, so it can't be moved.").arg(name));
+}
+
 void Editor::lockMarkedObjects() {
 	object* ptr;
 

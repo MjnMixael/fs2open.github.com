@@ -656,6 +656,9 @@ void WingEditorDialogModel::alignWingFormation()
 
 	for (int i = 1; i < wingp->wave_count; i++) {
 		auto objp = &Objects[Ships[wingp->ship_index[i]].objnum];
+		// locked members, and ships docked to a locked ship, stay put
+		if (Editor::isTransformHeld(OBJ_INDEX(objp)))
+			continue;
 
 		get_absolute_wing_pos(&objp->pos, leader_objp, _currentWingIndex, i, false);
 		objp->orient = leader_objp->orient;

@@ -138,6 +138,18 @@ class Editor : public QObject {
 	void lockMarkedObjects();
 	void unlockAllObjects();
 
+	// Transform lock (+Transform Locked:): the object's position and orientation can't be edited.
+	// Waypoints share their path's lock. Unrelated to lockMarkedObjects(), which makes objects
+	// unselectable for the session.
+	static bool supportsTransformLock(int objnum);
+	static bool isTransformLocked(int objnum);
+	static void setTransformLocked(int objnum, bool locked);
+	// Locked, or docked (directly or through others) to a locked ship: docked ships move together,
+	// so one locked ship holds its whole dock group
+	static bool isTransformHeld(int objnum);
+	// Says in the status bar why objnum (a held object) can't move
+	void reportTransformHeld(int objnum);
+
 	int dup_object(object* objp);
 
 	int delete_object(int obj);
@@ -217,6 +229,9 @@ class Editor : public QObject {
 	 * @brief A signal emitted when the layer name list itself changes (add/remove/reload)
 	 */
 	void layerListChanged();
+
+	// A short note for the main window's status bar, e.g. why a locked object didn't move
+	void statusMessage(const QString& text);
 
   public:
 	// object numbers for ships in a wing.

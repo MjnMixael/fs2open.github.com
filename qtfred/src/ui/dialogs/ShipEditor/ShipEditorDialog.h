@@ -70,6 +70,7 @@ class ShipEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	void on_AIClassCombo_currentIndexChanged(int);
 	void on_teamCombo_currentIndexChanged(int);
 	void on_layerCombo_currentIndexChanged(int);
+	void on_transformLockCheck_clicked();
 
 	// column two
 	void on_hotkeyCombo_currentIndexChanged(int);
@@ -102,6 +103,8 @@ class ShipEditorDialog : public QDialog, public SexpTreeEditorInterface {
 	void on_noDepartureWarpCheckBox_stateChanged(int);
 	void on_dockWarpoutCheckBox_stateChanged(int);
   private: // NOLINT(readability-redundant-access-specifiers)
+	// the marked ships, which the lock checkbox covers
+	static SCP_vector<int> transformLockObjects();
 	std::unique_ptr<Ui::ShipEditorDialog> ui;
 	std::unique_ptr<ShipEditorDialogModel> _model;
 	EditorViewport* _viewport;

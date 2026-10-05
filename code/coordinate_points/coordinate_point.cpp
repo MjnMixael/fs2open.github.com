@@ -155,6 +155,7 @@ void post_process_mission_coordinate_points()
 		cp->multi_team         = parsed.multi_team;
 		cp->flags              = parsed.flags;
 		cp->fred_layer         = parsed.fred_layer;
+		cp->fred_locked        = parsed.fred_locked;
 
 		// Resolve a tabled-shape name to an index. If the name doesn't match anything in the
 		// registry (default table + TBMs), fall back to NGon(3) with a warning so the mission

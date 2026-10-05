@@ -142,6 +142,12 @@ bool ObjectOrientEditorDialogModel::apply()
 	matrix desired_orient = vmd_identity_matrix;
 	bool change_pos = false, change_orient = false;
 
+	// FredView doesn't open the dialog for a held object, but a lock can come later
+	if (Editor::isTransformHeld(_editor->currentObject)) {
+		_editor->reportTransformHeld(_editor->currentObject);
+		return false;
+	}
+
 	auto& obj = Objects[_editor->currentObject];
 
 	// ----- Position -----
@@ -225,7 +231,8 @@ bool ObjectOrientEditorDialogModel::apply()
 
 	// Apply to all marked objects
 	for (auto ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
-		if (!ptr->flags[Object::Object_Flags::Marked])
+		// locked objects, and ships docked to one, stay put
+		if (!ptr->flags[Object::Object_Flags::Marked] || Editor::isTransformHeld(OBJ_INDEX(ptr)))
 			continue;
 
 		// Skip the origin in the second pass
@@ -262,7 +269,7 @@ bool ObjectOrientEditorDialogModel::apply()
 	// Notify the engine about moved objects
 	if (change_pos || relativeToOrigin) {
 		for (auto ptr = GET_FIRST(&obj_used_list); ptr != END_OF_LIST(&obj_used_list); ptr = GET_NEXT(ptr)) {
-			if (ptr->flags[Object::Object_Flags::Marked]) {
+			if (ptr->flags[Object::Object_Flags::Marked] && !Editor::isTransformHeld(OBJ_INDEX(ptr))) {
 				object_moved(ptr);
 			}
 		}

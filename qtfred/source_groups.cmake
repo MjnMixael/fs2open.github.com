@@ -494,6 +494,8 @@ add_file_folder("Resources/Images"
     resources/images/toolbar/constyz-light.png
     resources/images/toolbar/constz-dark.png
     resources/images/toolbar/constz-light.png
+    resources/images/toolbar/lock-dark.png
+    resources/images/toolbar/lock-light.png
     resources/images/toolbar/orbitsel-dark.png
     resources/images/toolbar/orbitsel-light.png
     resources/images/toolbar/pivotalign-dark.png
@@ -514,6 +516,8 @@ add_file_folder("Resources/Images"
     resources/images/toolbar/selectrot-light.png
     resources/images/toolbar/showdist-dark.png
     resources/images/toolbar/showdist-light.png
+    resources/images/toolbar/unlock-dark.png
+    resources/images/toolbar/unlock-light.png
     resources/images/toolbar/wingdisband-dark.png
     resources/images/toolbar/wingdisband-light.png
     resources/images/toolbar/wingform-dark.png

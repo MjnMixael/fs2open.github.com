@@ -71,6 +71,16 @@ bool LayerManagerDialogModel::isDefaultLayer(const SCP_string& name) {
 	return name == EditorViewport::DefaultLayerName;
 }
 
+SCP_vector<int> LayerManagerDialogModel::getLayerLockObjects(const SCP_string& name) const {
+	SCP_vector<int> objs;
+	for (auto* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
+		const int objnum = OBJ_INDEX(p);
+		if (Editor::supportsTransformLock(objnum) && _viewport->getObjectLayerName(objnum) == name)
+			objs.push_back(objnum);
+	}
+	return objs;
+}
+
 // --- Object type filters ---
 
 bool LayerManagerDialogModel::getShowShips() const      { return _viewport->view.Show_ships; }

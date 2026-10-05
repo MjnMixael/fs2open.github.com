@@ -119,6 +119,7 @@ void WaypointEditorDialog::initializeUi()
 	ui->noDrawLinesCheck->setEnabled(enabled);
 	ui->customColorCheck->setEnabled(enabled);
 	ui->layerCombo->setEnabled(enabled);
+	ui->transformLockCheck->setEnabled(enabled);
 	ui->prevPathButton->setEnabled(hasAny);
 	ui->nextPathButton->setEnabled(hasAny);
 
@@ -134,6 +135,11 @@ void WaypointEditorDialog::updateUi()
 	util::SignalBlockers blockers(this);
 	ui->nameEdit->setText(QString::fromStdString(_model->getCurrentName()));
 	ui->layerCombo->setCurrentIndex(ui->layerCombo->findData(QString::fromStdString(_model->getLayer())));
+	{
+		const auto lockState = transformLockState(transformLockObjects());
+		ui->transformLockCheck->setTristate(lockState == Qt::PartiallyChecked);
+		ui->transformLockCheck->setCheckState(lockState);
+	}
 
 	const int noDrawState = _model->getNoDrawLinesState();
 	ui->noDrawLinesCheck->setTristate(noDrawState == Qt::PartiallyChecked);
@@ -428,6 +434,26 @@ void WaypointEditorDialog::on_layerCombo_currentIndexChanged(int index)
 	if (changes.empty()) return;
 	_fredView->mainUndoStack()->push(
 	    new MoveLayerCommand(std::move(changes), _viewport, _viewport->editor));
+}
+
+SCP_vector<int> WaypointEditorDialog::transformLockObjects() const
+{
+	// one point per selected path; the lock is on the whole path
+	SCP_vector<int> objs;
+	for (int idx : _model->getSelectedPathIndices()) {
+		if (!SCP_vector_inbounds(Waypoint_lists, idx) || Waypoint_lists[idx].get_waypoints().empty())
+			continue;
+		objs.push_back(Waypoint_lists[idx].get_waypoints().front().get_objnum());
+	}
+	return objs;
+}
+
+void WaypointEditorDialog::on_transformLockCheck_clicked()
+{
+	const auto objs = transformLockObjects();
+	// a partly locked selection locks the rest
+	pushTransformLock(objs, transformLockState(objs) != Qt::Checked, _viewport->editor, _fredView->mainUndoStack());
+	updateUi();
 }
 
 } // namespace fso::fred::dialogs

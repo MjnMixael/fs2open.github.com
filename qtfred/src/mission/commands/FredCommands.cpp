@@ -3,6 +3,8 @@
 
 #include <algorithm>
 
+#include <QUndoStack>
+
 #include <object/object.h>
 #include <object/waypoint.h>
 #include <ship/ship.h>
@@ -1007,6 +1009,76 @@ void ChangeIFFCommand::redo()
 		Ships[Objects[objNum].instance].team = c.iffAfter;
 	}
 	_editor->missionChanged();
+}
+
+// ===========================================================================
+// TransformLockCommand
+// ===========================================================================
+
+TransformLockCommand::TransformLockCommand(SCP_vector<TransformLockChange> changes,
+                                           Editor*                         editor,
+                                           const QString&                  text,
+                                           QUndoCommand*                   parent)
+    : QUndoCommand(text, parent)
+    , _changes(std::move(changes))
+    , _editor(editor)
+{}
+
+void TransformLockCommand::apply(bool after)
+{
+	for (const auto& c : _changes) {
+		const int objNum = obj_get_by_signature(c.signature);
+		if (objNum < 0) continue;
+		Editor::setTransformLocked(objNum, after ? c.after : c.before);
+	}
+	_editor->missionChanged();
+}
+
+void TransformLockCommand::undo()
+{
+	apply(false);
+}
+
+void TransformLockCommand::redo()
+{
+	apply(true);
+}
+
+void pushTransformLock(const SCP_vector<int>& objnums, bool locked, Editor* editor, QUndoStack* stack)
+{
+	SCP_vector<TransformLockChange> changes;
+	SCP_vector<const waypoint_list*> pathsSeen;
+	for (const int objnum : objnums) {
+		if (!Editor::supportsTransformLock(objnum) || Editor::isTransformLocked(objnum) == locked)
+			continue;
+		if (Objects[objnum].type == OBJ_WAYPOINT) {
+			const auto* wl = find_waypoint_list_with_instance(Objects[objnum].instance);
+			if (std::find(pathsSeen.begin(), pathsSeen.end(), wl) != pathsSeen.end())
+				continue;
+			pathsSeen.push_back(wl);
+		}
+		changes.push_back({Objects[objnum].signature, !locked, locked});
+	}
+	if (changes.empty())
+		return;
+	stack->push(new TransformLockCommand(std::move(changes), editor,
+		locked ? QObject::tr("Lock Position and Orientation") : QObject::tr("Unlock Position and Orientation")));
+}
+
+Qt::CheckState transformLockState(const SCP_vector<int>& objnums)
+{
+	bool any = false, all = true;
+	for (const int objnum : objnums) {
+		if (!Editor::supportsTransformLock(objnum))
+			continue;
+		if (Editor::isTransformLocked(objnum))
+			any = true;
+		else
+			all = false;
+	}
+	if (!any)
+		return Qt::Unchecked;
+	return all ? Qt::Checked : Qt::PartiallyChecked;
 }
 
 // ===========================================================================

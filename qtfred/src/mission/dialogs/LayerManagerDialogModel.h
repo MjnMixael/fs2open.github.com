@@ -22,6 +22,8 @@ public:
 	bool deleteLayer(const SCP_string& name, SCP_string* error);
 	bool renameLayer(const SCP_string& oldName, const SCP_string& newName, SCP_string* error);
 	static bool isDefaultLayer(const SCP_string& name);
+	// Objects on the layer that can take a transform lock (every point of a waypoint path)
+	SCP_vector<int> getLayerLockObjects(const SCP_string& name) const;
 
 	// Object type filters
 	bool getShowShips() const;

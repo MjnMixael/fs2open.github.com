@@ -46,6 +46,7 @@ private:
 	int m_flags {0};
 	color m_display_color;			// Color node will be shown in (Default:0/255/0/255)
 	SCP_string m_fred_layer = "Default";	// FRED view layer assignment
+	bool m_fred_locked {false};				// FRED transform lock: position can't be edited
 
 	// jumpnode_delete() detaches the node from its object by resetting m_objnum
 	friend void jumpnode_delete(object *objp);
@@ -88,6 +89,8 @@ public:
 	//Getting/Setting FRED layer
 	const SCP_string& GetFredLayer() const { return m_fred_layer; }
 	void SetFredLayer(const SCP_string& layer) { m_fred_layer = layer; }
+	bool GetFredLocked() const { return m_fred_locked; }
+	void SetFredLocked(bool locked) { m_fred_locked = locked; }
 
 	//Query
 	bool IsHidden() const;

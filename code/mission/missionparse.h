@@ -509,6 +509,7 @@ public:
 	int collision_group_id = 0;							// Goober5000
 	int	group = -1;								// group object is within or -1 if none.
 	SCP_string fred_layer = "Default";
+	bool fred_locked = false;
 	int	persona_index = -1;
 	int	kamikaze_damage = 0;					// base damage for a kamikaze attack
 

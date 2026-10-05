@@ -6,12 +6,34 @@
 #include <QInputDialog>
 #include <QListWidget>
 #include <QMessageBox>
+#include <QPainter>
 #include <QUndoStack>
 
 #include "mission/commands/FredCommands.h"
+#include "ui/Theme.h"
 #include "ui/util/DialogUndo.h"
 
 namespace fso::fred::dialogs {
+
+namespace {
+
+// A toolbar lock icon for the current theme; faded marks a layer whose objects are only partly locked
+QIcon layerLockIcon(const QString& baseName, bool faded)
+{
+	const QPixmap pm(QStringLiteral(":/images/toolbar/") + baseName +
+		(currentThemeIsDark() ? QStringLiteral("-dark.png") : QStringLiteral("-light.png")));
+	if (!faded)
+		return {pm};
+	QPixmap out(pm.size());
+	out.fill(Qt::transparent);
+	QPainter painter(&out);
+	painter.setOpacity(0.4);
+	painter.drawPixmap(0, 0, pm);
+	painter.end();
+	return {out};
+}
+
+} // namespace
 
 LayerManagerDialog::LayerManagerDialog(FredView* parent, EditorViewport* viewport)
 	: QDialog(parent)
@@ -31,6 +53,7 @@ LayerManagerDialog::LayerManagerDialog(FredView* parent, EditorViewport* viewpor
 	// Undo/redo rewrites the layer structure behind our back, so refresh on any
 	// mission change rather than only on our own model's signal.
 	connect(_viewport->editor, &Editor::missionChanged, this, &LayerManagerDialog::updateUi);
+	_uiReady = true;
 }
 
 LayerManagerDialog::~LayerManagerDialog() = default;
@@ -39,6 +62,8 @@ void LayerManagerDialog::changeEvent(QEvent* e)
 {
 	if (e->type() == QEvent::ActivationChange && isActiveWindow())
 		_fredView->undoGroup()->setActiveStack(_fredView->mainUndoStack());
+	if (e->type() == QEvent::PaletteChange && _uiReady)
+		updateLockButton(); // theme switch: the light/dark icon set
 	QDialog::changeEvent(e);
 }
 
@@ -121,6 +146,35 @@ void LayerManagerDialog::updateUi() {
 	const bool nonDefaultSelected = ui->layerList->currentRow() > 0;
 	ui->renameLayerButton->setEnabled(nonDefaultSelected);
 	ui->deleteLayerButton->setEnabled(nonDefaultSelected);
+	updateLockButton();
+}
+
+void LayerManagerDialog::updateLockButton() {
+	const auto* item = ui->layerList->currentItem();
+	const auto objs = item != nullptr ? _model->getLayerLockObjects(item->text().toUtf8().constData()) : SCP_vector<int>();
+	const auto state = transformLockState(objs);
+
+	ui->lockLayerButton->setEnabled(!objs.empty());
+	ui->lockLayerButton->setIcon(layerLockIcon(state == Qt::Unchecked ? QStringLiteral("unlock") : QStringLiteral("lock"),
+		state == Qt::PartiallyChecked));
+	if (objs.empty()) {
+		ui->lockLayerButton->setToolTip(tr("Lock the position and orientation of every object in the layer (the layer is empty)"));
+	} else if (state == Qt::Checked) {
+		ui->lockLayerButton->setToolTip(tr("Every object in this layer is locked. Click to unlock them all."));
+	} else if (state == Qt::PartiallyChecked) {
+		ui->lockLayerButton->setToolTip(tr("Some objects in this layer are locked. Click to lock them all."));
+	} else {
+		ui->lockLayerButton->setToolTip(tr("No object in this layer is locked. Click to lock the position and orientation of them all."));
+	}
+}
+
+void LayerManagerDialog::on_lockLayerButton_clicked() {
+	const auto* item = ui->layerList->currentItem();
+	if (item == nullptr)
+		return;
+	const auto objs = _model->getLayerLockObjects(item->text().toUtf8().constData());
+	// a partly locked layer locks the rest; the mission change refreshes the button
+	pushTransformLock(objs, transformLockState(objs) != Qt::Checked, _viewport->editor, _fredView->mainUndoStack());
 }
 
 void LayerManagerDialog::on_addLayerButton_clicked() {
@@ -207,6 +261,7 @@ void LayerManagerDialog::on_deleteLayerButton_clicked() {
 void LayerManagerDialog::on_layerList_currentRowChanged(int row) {
 	ui->renameLayerButton->setEnabled(row > 0);
 	ui->deleteLayerButton->setEnabled(row > 0);
+	updateLockButton();
 }
 
 void LayerManagerDialog::on_layerList_itemChanged(QListWidgetItem* item) {

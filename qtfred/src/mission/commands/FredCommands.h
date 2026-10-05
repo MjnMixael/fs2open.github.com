@@ -16,6 +16,8 @@
 
 #include "ObjectCapture.h"
 
+class QUndoStack;
+
 namespace fso::fred {
 
 class Editor;
@@ -184,6 +186,38 @@ public:
 	void undo() override;
 	void redo() override;
 };
+
+// ---------------------------------------------------------------------------
+// TransformLockCommand - lock or unlock objects' position and orientation
+// ---------------------------------------------------------------------------
+
+struct TransformLockChange {
+	int  signature; // any object of a waypoint path stands for the whole path
+	bool before;
+	bool after;
+};
+
+class TransformLockCommand : public QUndoCommand {
+	SCP_vector<TransformLockChange> _changes;
+	Editor*                         _editor;
+
+	void apply(bool after);
+
+public:
+	TransformLockCommand(SCP_vector<TransformLockChange> changes,
+	                     Editor*                         editor,
+	                     const QString&                  text,
+	                     QUndoCommand*                   parent = nullptr);
+	void undo() override;
+	void redo() override;
+};
+
+// Locks or unlocks objects as one undo step on stack. A waypoint stands for its whole path, which
+// is changed once however many of its points are listed. Pushes nothing if nothing would change.
+void pushTransformLock(const SCP_vector<int>& objnums, bool locked, Editor* editor, QUndoStack* stack);
+// Qt::Checked if every listed object is locked, Qt::Unchecked if none (or the list is empty),
+// Qt::PartiallyChecked if they differ
+Qt::CheckState transformLockState(const SCP_vector<int>& objnums);
 
 // ---------------------------------------------------------------------------
 // LevelObjectsCommand / AlignObjectsCommand — orientation-only changes

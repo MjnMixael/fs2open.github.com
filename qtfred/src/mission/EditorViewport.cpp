@@ -492,7 +492,8 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 		break;
 
 	case 2: // Control viewpoint object
-		if (!controlsLocked && !Objects[camera.getViewObj()].flags[Object::Object_Flags::Locked_from_editing]) {
+		if (!controlsLocked && !Objects[camera.getViewObj()].flags[Object::Object_Flags::Locked_from_editing] &&
+			!Editor::isTransformHeld(camera.getViewObj())) {
 			camera.processControls(&Objects[camera.getViewObj()].pos, &Objects[camera.getViewObj()].orient,
 			                       f2fl(Frametime), false);
 			object_moved(&Objects[camera.getViewObj()]);
@@ -502,7 +503,8 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 		break;
 
 	case 1: //	Control the current object's location and orientation
-		if (!controlsLocked && query_valid_object(cur_object_index) && !Objects[cur_object_index].flags[Object::Object_Flags::Locked_from_editing]) {
+		if (!controlsLocked && query_valid_object(cur_object_index) && !Objects[cur_object_index].flags[Object::Object_Flags::Locked_from_editing] &&
+			!Editor::isTransformHeld(cur_object_index)) {
 			object* leader = &Objects[cur_object_index];
 			const vec3d leader_old_pos = leader->pos;
 			const matrix leader_old_orient = leader->orient;
@@ -641,7 +643,8 @@ void EditorViewport::level_controlled() {
 		break;
 
 	case 2: // Control viewpoint object
-		if (!Objects[camera.getViewObj()].flags[Object::Object_Flags::Locked_from_editing]) {
+		if (!Objects[camera.getViewObj()].flags[Object::Object_Flags::Locked_from_editing] &&
+			!Editor::isTransformHeld(camera.getViewObj())) {
 			level_object(&Objects[camera.getViewObj()].orient);
 			object_moved(&Objects[camera.getViewObj()]);
 			///! \todo Notify.
@@ -652,7 +655,7 @@ void EditorViewport::level_controlled() {
 	case 1: //	Control the current object's location and orientation
 		objp = GET_FIRST(&obj_used_list);
 		while (objp != END_OF_LIST(&obj_used_list)) {
-			if (objp->flags[Object::Object_Flags::Marked]) {
+			if (objp->flags[Object::Object_Flags::Marked] && !Editor::isTransformHeld(OBJ_INDEX(objp))) {
 				level_object(&objp->orient);
 			}
 
@@ -698,7 +701,8 @@ void EditorViewport::verticalize_controlled() {
 		break;
 
 	case 2: // Control viewpoint object
-		if (!Objects[camera.getViewObj()].flags[Object::Object_Flags::Locked_from_editing]) {
+		if (!Objects[camera.getViewObj()].flags[Object::Object_Flags::Locked_from_editing] &&
+			!Editor::isTransformHeld(camera.getViewObj())) {
 			verticalize_object(&Objects[camera.getViewObj()].orient);
 			object_moved(&Objects[camera.getViewObj()]);
 			///! \todo notify.
@@ -709,7 +713,7 @@ void EditorViewport::verticalize_controlled() {
 	case 1: //	Control the current object's location and orientation
 		objp = GET_FIRST(&obj_used_list);
 		while (objp != END_OF_LIST(&obj_used_list)) {
-			if (objp->flags[Object::Object_Flags::Marked]) {
+			if (objp->flags[Object::Object_Flags::Marked] && !Editor::isTransformHeld(OBJ_INDEX(objp))) {
 				verticalize_object(&objp->orient);
 			}
 
@@ -1660,6 +1664,16 @@ int EditorViewport::drag_objects(int x, int y)
 	if (!query_valid_object(editor->currentObject) || camera.getLookatMode())
 		return -1;
 
+	if (Dup_drag == DUP_DRAG_INSERT) {
+		// inserting points changes a path's shape, which its lock holds
+		for (auto* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {
+			if (p->flags[Object::Object_Flags::Marked] && p->type == OBJ_WAYPOINT && Editor::isTransformLocked(OBJ_INDEX(p))) {
+				editor->reportTransformHeld(OBJ_INDEX(p));
+				return -1;
+			}
+		}
+	}
+
 	if (Dup_drag == 1 || Dup_drag == DUP_DRAG_INSERT) {
 		const bool insert_waypoints = (Dup_drag == DUP_DRAG_INSERT);
 		if (duplicate_marked_objects(insert_waypoints) < 0)
@@ -1673,6 +1687,12 @@ int EditorViewport::drag_objects(int x, int y)
 		drag_rotate_save_backup();
 
 		editor->missionChanged();
+	}
+
+	// Blender style: locked objects stay put, but if the one being dragged is held, nothing moves
+	if (Editor::isTransformHeld(editor->currentObject)) {
+		editor->reportTransformHeld(editor->currentObject);
+		return -1;
 	}
 
 	objp = &Objects[editor->currentObject];
@@ -1731,7 +1751,7 @@ int EditorViewport::drag_objects(int x, int y)
 		objp = GET_FIRST(&obj_used_list);
 		while (objp != END_OF_LIST(&obj_used_list))	{
 			Assert(objp->type != OBJ_NONE);
-			if (objp->flags[Object::Object_Flags::Marked]) {
+			if (objp->flags[Object::Object_Flags::Marked] && !Editor::isTransformHeld(OBJ_INDEX(objp))) {
 				vm_vec_add(&objp->pos, &objp->pos, &movement_vector);
 				if (objp->type == OBJ_WAYPOINT) {
 					waypoint *wpt = find_waypoint_with_instance(objp->instance);
@@ -1776,6 +1796,10 @@ int EditorViewport::drag_rotate_objects(int mouse_dx, int mouse_dy) {
     */
 
 	if (!query_valid_object(editor->currentObject)){
+		return -1;
+	}
+	if (Editor::isTransformHeld(editor->currentObject)) {
+		editor->reportTransformHeld(editor->currentObject);
 		return -1;
 	}
 
@@ -1835,7 +1859,8 @@ void EditorViewport::follow_leader(const object* leader, const vec3d& leader_old
 
 	for (object* objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
 		Assert(objp->type != OBJ_NONE);
-		if (!objp->flags[Object::Object_Flags::Marked] || objp == leader)
+		// locked objects, and ships docked to one, stay put
+		if (!objp->flags[Object::Object_Flags::Marked] || objp == leader || Editor::isTransformHeld(OBJ_INDEX(objp)))
 			continue;
 		matrix tmp;
 		switch (Pivot_mode) {
