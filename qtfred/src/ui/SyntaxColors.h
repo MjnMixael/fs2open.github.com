@@ -4,6 +4,7 @@
 #include <QObject>
 #include <QString>
 
+#include <algorithm>
 #include <array>
 #include <optional>
 
@@ -77,11 +78,8 @@ struct SyntaxColorSettings {
 		const auto& editor = editorOverrides[static_cast<int>(which)][dark ? 1 : 0];
 		if (editor.background || editor.text)
 			return true;
-		for (const auto& over : overrides[static_cast<int>(which)][dark ? 1 : 0]) {
-			if (over)
-				return true;
-		}
-		return false;
+		const auto& roles = overrides[static_cast<int>(which)][dark ? 1 : 0];
+		return std::any_of(roles.begin(), roles.end(), [](const auto& over) { return over.has_value(); });
 	}
 
 	bool operator==(const SyntaxColorSettings& o) const
