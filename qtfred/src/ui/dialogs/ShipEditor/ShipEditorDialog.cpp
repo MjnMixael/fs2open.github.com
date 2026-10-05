@@ -2950,7 +2950,7 @@ void ShipEditorDialog::on_dockWarpoutCheckBox_stateChanged(int state)
 		delete cmd;
 }
 
-SCP_vector<int> ShipEditorDialog::transformLockObjects() const
+SCP_vector<int> ShipEditorDialog::transformLockObjects()
 {
 	SCP_vector<int> objs;
 	for (auto* p = GET_FIRST(&obj_used_list); p != END_OF_LIST(&obj_used_list); p = GET_NEXT(p)) {

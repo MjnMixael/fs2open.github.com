@@ -23,14 +23,14 @@ QIcon layerLockIcon(const QString& baseName, bool faded)
 	const QPixmap pm(QStringLiteral(":/images/toolbar/") + baseName +
 		(currentThemeIsDark() ? QStringLiteral("-dark.png") : QStringLiteral("-light.png")));
 	if (!faded)
-		return QIcon(pm);
+		return {pm};
 	QPixmap out(pm.size());
 	out.fill(Qt::transparent);
 	QPainter painter(&out);
 	painter.setOpacity(0.4);
 	painter.drawPixmap(0, 0, pm);
 	painter.end();
-	return QIcon(out);
+	return {out};
 }
 
 } // namespace
