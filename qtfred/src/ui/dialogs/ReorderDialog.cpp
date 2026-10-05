@@ -5,7 +5,9 @@
 #include "ui_ReorderDialog.h"
 
 #include <QListWidget>
+#include <QMenu>
 #include <QPushButton>
+#include <QSet>
 #include <QSignalBlocker>
 
 #include <algorithm>
@@ -62,11 +64,20 @@ void ReorderDialog::setupTab(const Tab& tab)
 	fso::fred::bindStandardIcon(tab.down, QStyle::SP_ArrowDown);
 	fso::fred::bindCustomIcon(tab.bottom, CustomIcon::MoveToBottom);
 
-	connect(tab.top, &QAbstractButton::clicked, this, [this, tab] { move(tab, true, true); });
-	connect(tab.up, &QAbstractButton::clicked, this, [this, tab] { move(tab, true, false); });
-	connect(tab.down, &QAbstractButton::clicked, this, [this, tab] { move(tab, false, false); });
-	connect(tab.bottom, &QAbstractButton::clicked, this, [this, tab] { move(tab, false, true); });
-	connect(tab.list, &QListWidget::currentRowChanged, this, [tab] { updateButtons(tab); });
+	using MoveKind = ReorderDialogModel::MoveKind;
+	connect(tab.top, &QAbstractButton::clicked, this, [this, tab] { move(tab, MoveKind::Top); });
+	connect(tab.up, &QAbstractButton::clicked, this, [this, tab] { move(tab, MoveKind::Up); });
+	connect(tab.down, &QAbstractButton::clicked, this, [this, tab] { move(tab, MoveKind::Down); });
+	connect(tab.bottom, &QAbstractButton::clicked, this, [this, tab] { move(tab, MoveKind::Bottom); });
+
+	// Ctrl/Shift+click select several items, which the buttons then move together
+	tab.list->setSelectionMode(QAbstractItemView::ExtendedSelection);
+	connect(tab.list, &QListWidget::itemSelectionChanged, this, [tab] { updateButtons(tab); });
+
+	if (tab.type == ReorderDialogModel::Type::Ships) {
+		tab.list->setContextMenuPolicy(Qt::CustomContextMenu);
+		connect(tab.list, &QWidget::customContextMenuRequested, this, &ReorderDialog::showShipContextMenu);
+	}
 
 	rebuildList(tab);
 	// Select the first item so the move buttons start in a sensible state.
@@ -79,26 +90,77 @@ void ReorderDialog::rebuildList(const Tab& tab)
 {
 	QSignalBlocker blocker(tab.list);
 
-	const int prevRow = tab.list->currentRow();
+	const SCP_vector<int> prevRows = selectedRows(tab);
+	const int prevCurrent = tab.list->currentRow();
+	QSet<QString> prevNames;
+	for (int row : prevRows)
+		prevNames.insert(tab.list->item(row)->text());
 
 	tab.list->clear();
 	for (const auto& name : _model->getItemNames(tab.type)) {
 		tab.list->addItem(QString::fromStdString(name));
 	}
 
-	// Keep the previous row selected where possible (clamped to the new count).
 	const int count = tab.list->count();
-	if (count > 0 && prevRow >= 0)
-		tab.list->setCurrentRow(std::min(prevRow, count - 1));
+	if (count == 0)
+		return;
+
+	// The selection follows the items, so it moves with them on undo and redo too (names are unique
+	// within each type). If none of them is left, fall back to the previous rows, clamped.
+	SCP_vector<int> rows;
+	for (int row = 0; row < count; ++row) {
+		if (prevNames.contains(tab.list->item(row)->text()))
+			rows.push_back(row);
+	}
+	if (rows.empty()) {
+		for (int row : prevRows)
+			rows.push_back(std::min(row, count - 1));
+		if (rows.empty() && prevCurrent >= 0)
+			rows.push_back(std::min(prevCurrent, count - 1));
+		std::sort(rows.begin(), rows.end());
+		rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+	}
+	selectRows(tab, rows);
+	if (!rows.empty())
+		tab.list->scrollToItem(tab.list->item(rows.front())); // only scrolls if it's out of view
+}
+
+SCP_vector<int> ReorderDialog::selectedRows(const Tab& tab)
+{
+	SCP_vector<int> rows;
+	for (const auto& index : tab.list->selectionModel()->selectedRows())
+		rows.push_back(index.row());
+	std::sort(rows.begin(), rows.end());
+	rows.erase(std::unique(rows.begin(), rows.end()), rows.end());
+	return rows;
+}
+
+void ReorderDialog::selectRows(const Tab& tab, const SCP_vector<int>& rows)
+{
+	tab.list->clearSelection();
+	for (int row : rows) {
+		if (auto* item = tab.list->item(row))
+			item->setSelected(true);
+	}
+	if (!rows.empty()) {
+		// move the current item without disturbing the selection just made
+		tab.list->setCurrentRow(rows.front(), QItemSelectionModel::NoUpdate);
+	}
 }
 
 void ReorderDialog::updateButtons(const Tab& tab)
 {
-	const int row = tab.list->currentRow();
+	const SCP_vector<int> rows = selectedRows(tab);
 	const int count = tab.list->count();
+	const int n = static_cast<int>(rows.size());
 
-	const bool canUp = (row > 0);
-	const bool canDown = (row >= 0 && row < count - 1);
+	// a selection can move up unless it is already a block at the top, and likewise down
+	bool canUp = false;
+	bool canDown = false;
+	for (int k = 0; k < n; ++k) {
+		canUp = canUp || rows[k] != k;
+		canDown = canDown || rows[k] != count - n + k;
+	}
 
 	tab.top->setEnabled(canUp);
 	tab.up->setEnabled(canUp);
@@ -106,32 +168,47 @@ void ReorderDialog::updateButtons(const Tab& tab)
 	tab.bottom->setEnabled(canDown);
 }
 
-void ReorderDialog::move(const Tab& tab, bool up, bool all_the_way)
+void ReorderDialog::move(const Tab& tab, ReorderDialogModel::MoveKind kind)
 {
-	const int from = tab.list->currentRow();
-	const int count = tab.list->count();
-	if (from < 0 || from >= count)
+	const SCP_vector<int> rows = selectedRows(tab);
+	if (rows.empty())
 		return;
 
-	int to;
-	if (up)
-		to = all_the_way ? 0 : from - 1;
-	else
-		to = all_the_way ? count - 1 : from + 1;
-
-	if (to < 0 || to >= count || to == from)
+	SCP_vector<ReorderDialogModel::Step> steps;
+	const SCP_vector<int> newRows = _model->moveItems(tab.type, rows, kind, steps);
+	if (steps.empty())
 		return;
 
-	_model->moveItem(tab.type, from, to);
+	// The moves are already applied, so the command's first redo() is a no-op.
+	_fredView->mainUndoStack()->push(new ReorderCommand(static_cast<int>(tab.type), std::move(steps), _viewport));
 
-	// The move is already applied, so the command's first redo() is a no-op.
-	_fredView->mainUndoStack()->push(
-		new ReorderCommand(static_cast<int>(tab.type), from, to, _viewport));
-
-	rebuildList(tab);
-	tab.list->setCurrentRow(to);
-	tab.list->scrollToItem(tab.list->currentItem());
+	// moveItems() fired missionChanged(), which rebuilt the lists; select where the items went
+	{
+		QSignalBlocker blocker(tab.list);
+		selectRows(tab, newRows);
+	}
+	tab.list->scrollToItem(tab.list->item(kind == ReorderDialogModel::MoveKind::Down ||
+		kind == ReorderDialogModel::MoveKind::Bottom ? newRows.back() : newRows.front()));
 	updateButtons(tab);
+}
+
+void ReorderDialog::showShipContextMenu(const QPoint& pos)
+{
+	const auto it = std::find_if(_tabs.begin(), _tabs.end(),
+		[](const Tab& t) { return t.type == ReorderDialogModel::Type::Ships; });
+	if (it == _tabs.end())
+		return;
+	const Tab& tab = *it;
+	const int row = tab.list->row(tab.list->itemAt(pos));
+	const SCP_vector<int> wingRows = ReorderDialogModel::getSameWingShipRows(row);
+
+	QMenu menu(this);
+	auto* selectWing = menu.addAction(tr("Select Wing"));
+	selectWing->setEnabled(!wingRows.empty());
+	connect(selectWing, &QAction::triggered, this, [&tab, &wingRows] {
+		selectRows(tab, wingRows); // itemSelectionChanged updates the buttons
+	});
+	menu.exec(tab.list->viewport()->mapToGlobal(pos));
 }
 
 } // namespace fso::fred::dialogs

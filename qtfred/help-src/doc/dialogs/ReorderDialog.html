@@ -39,15 +39,24 @@ whatever order you have set.</div>
 </table>
 
 <h2>Moving items</h2>
-<p>Select an item in the list, then use the buttons beside it to reposition it.
-The buttons act on the selected item and are disabled when a move would have no
-effect (for example, <strong>Move up</strong> on the top item).</p>
+<p>Select one or more items in the list, then use the buttons beside it to reposition
+them. Ctrl+click adds or removes an item and Shift+click selects a range, so the
+selection does not have to be in one piece. The buttons move all selected items
+together and are disabled when a move would have no effect (for example,
+<strong>Move up</strong> when the selection is already at the top). Each button press
+is a single undo step.</p>
 <table>
     <tr><th>Button</th><th>Action</th></tr>
-    <tr><td>Move to top</td><td>Moves the selected item to the first position.</td></tr>
-    <tr><td>Move up</td><td>Moves the selected item one position earlier.</td></tr>
-    <tr><td>Move down</td><td>Moves the selected item one position later.</td></tr>
-    <tr><td>Move to bottom</td><td>Moves the selected item to the last position.</td></tr>
+    <tr><td>Move to top</td><td>Moves the selected items to the first positions, keeping
+        their order.</td></tr>
+    <tr><td>Move up</td><td>Moves each selected item one position earlier. An item already
+        at the top stays, and so does a selected item right below it, so a block of
+        selected items moves as one and the gaps between selected items are kept.</td></tr>
+    <tr><td>Move down</td><td>The same, one position later.</td></tr>
+    <tr><td>Move to bottom</td><td>Moves the selected items to the last positions, keeping
+        their order.</td></tr>
 </table>
+<p>On the <strong>Ships</strong> tab, right-click a ship and choose <strong>Select
+Wing</strong> to select every ship in its wing, then move them as a group.</p>
 </body>
 </html>

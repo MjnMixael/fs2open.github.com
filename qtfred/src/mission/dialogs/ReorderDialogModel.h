@@ -1,6 +1,8 @@
 #pragma once
 #include "mission/dialogs/AbstractDialogModel.h"
 
+#include <utility>
+
 namespace fso::fred::dialogs {
 
 // Model for the Reorder dialog.  A direct-edit model: each move is applied to the
@@ -19,6 +21,19 @@ public:
 		CoordinatePoints,
 	};
 
+	// How a group move places the selected items.  Up and Down move each item one position and
+	// stop at the end of the list, so a block of selected items slides as a unit and gaps between
+	// selected items are kept; Top and Bottom gather the items at that end in their current order.
+	enum class MoveKind {
+		Top,
+		Up,
+		Down,
+		Bottom,
+	};
+
+	// A single move from one display position to another; a group move is a sequence of these.
+	using Step = std::pair<int, int>;
+
 	ReorderDialogModel(QObject* parent, EditorViewport* viewport);
 
 	bool apply() override;
@@ -27,10 +42,16 @@ public:
 	// Display names for the given type, in current storage (mission-file) order.
 	static SCP_vector<SCP_string> getItemNames(Type type);
 
-	// Move the item at display position from_pos to to_pos for the given type,
-	// applying the reorder to the mission immediately.  No-op if from_pos == to_pos
-	// or either position is out of range.
-	void moveItem(Type type, int from_pos, int to_pos);
+	// Move the items at the given display rows as a group, applying the reorder to the mission
+	// immediately.  Returns the items' new rows; the single moves it made are appended to steps,
+	// for the undo command.
+	SCP_vector<int> moveItems(Type type, const SCP_vector<int>& rows, MoveKind kind, SCP_vector<Step>& steps);
+
+	// Replay a group move's steps (forward), or undo them (reverse order, each move inverted).
+	static void applySteps(EditorViewport* viewport, Type type, const SCP_vector<Step>& steps, bool reverse);
+
+	// Ships tab: the rows of every ship in the same wing as the ship at row (empty if it has none).
+	static SCP_vector<int> getSameWingShipRows(int row);
 
 	// The reorder itself, without the modified/changed bookkeeping.  Shared with
 	// ReorderCommand so undo/redo can replay a move without standing up a model.
