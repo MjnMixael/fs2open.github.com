@@ -329,6 +329,11 @@ initialize(const std::string& cfilepath, int argc, char* argv[], Editor* editor,
 }
 
 void shutdown() {
+	// Like game_shutdown(): close Lua while the rest is still alive. Left to Script_system's
+	// destructor at exit, its state-destroy listeners (e.g. the one clearing controlconfig's
+	// Lua_hooks) run after those globals may already be destroyed, and crash.
+	Script_system.Clear();
+
 	audiostream_close();
 	snd_close();
 
