@@ -114,7 +114,7 @@ QByteArray BackgroundEditorDialogModel::captureState() const
 	ds << (qint32)Neb2_fog_color[1];
 	ds << (qint32)Neb2_fog_color[2];
 
-	// Old nebula
+	// Generated nebula
 	ds << (qint32)Nebula_index;
 	ds << (qint32)Mission_palette;
 	ds << (qint32)Nebula_pitch;
@@ -232,7 +232,7 @@ std::pair<int, int> BackgroundEditorDialogModel::restoreGlobalState(const QByteA
 	ds >> i32; Neb2_fog_color[1] = static_cast<ubyte>(i32);
 	ds >> i32; Neb2_fog_color[2] = static_cast<ubyte>(i32);
 
-	// Old nebula
+	// Generated nebula
 	ds >> i32; Nebula_index   = i32;
 	ds >> i32; Mission_palette = i32;
 	ds >> i32; Nebula_pitch   = i32;
@@ -1343,39 +1343,39 @@ void BackgroundEditorDialogModel::setFogB(int b)
 	modify(Neb2_fog_color[2], v);
 }
 
-SCP_vector<SCP_string> BackgroundEditorDialogModel::getOldNebulaPatternOptions()
+SCP_vector<SCP_string> BackgroundEditorDialogModel::getGeneratedNebulaPatternOptions()
 {
 	SCP_vector<SCP_string> out;
 	out.emplace_back("<None>");
-	for (auto& neb : Old_nebula_patterns) {
+	for (auto& neb : Generated_nebula_patterns) {
 		out.emplace_back(neb.name);
 	}
 	return out;
 }
 
-SCP_vector<SCP_string> BackgroundEditorDialogModel::getOldNebulaColorOptions()
+SCP_vector<SCP_string> BackgroundEditorDialogModel::getGeneratedNebulaColorOptions()
 {
 	SCP_vector<SCP_string> out;
-	out.reserve(Old_nebula_colors.size());
-	for (auto& color : Old_nebula_colors) {
+	out.reserve(Generated_nebula_colors.size());
+	for (auto& color : Generated_nebula_colors) {
 		out.emplace_back(color.name);
 	}
 	return out;
 }
 
-SCP_string BackgroundEditorDialogModel::getOldNebulaPattern()
+SCP_string BackgroundEditorDialogModel::getGeneratedNebulaPattern()
 {
 	if (Nebula_index < 0)
 		return "<None>";
 
-	if (Nebula_index < static_cast<int>(Old_nebula_patterns.size())) {
-		return Old_nebula_patterns[Nebula_index].name;
+	if (Nebula_index < static_cast<int>(Generated_nebula_patterns.size())) {
+		return Generated_nebula_patterns[Nebula_index].name;
 	}
 
 	return SCP_string{};
 }
 
-void BackgroundEditorDialogModel::regenerateOldNebula()
+void BackgroundEditorDialogModel::regenerateGeneratedNebula()
 {
 	// rebuild the procedural mesh from the current settings and repaint the viewport
 	nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
@@ -1383,82 +1383,71 @@ void BackgroundEditorDialogModel::regenerateOldNebula()
 		_viewport->needsUpdate();
 }
 
-void BackgroundEditorDialogModel::setOldNebulaPattern(const SCP_string& name)
+void BackgroundEditorDialogModel::setGeneratedNebulaPattern(const SCP_string& name)
 {
 	int newIndex = -1;
 	if (!name.empty() && stricmp(name.c_str(), "<None>") != 0) {
-		newIndex = old_nebula_pattern_lookup(name.c_str());
+		newIndex = generated_nebula_pattern_lookup(name.c_str());
 	}
 
 	modify(Nebula_index, newIndex);
-	regenerateOldNebula();
+	regenerateGeneratedNebula();
 }
 
-SCP_string BackgroundEditorDialogModel::getOldNebulaColorName()
+SCP_string BackgroundEditorDialogModel::getGeneratedNebulaColorName()
 {
-	if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size())) {
-		return Old_nebula_colors[Mission_palette].name;
+	if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Generated_nebula_colors.size())) {
+		return Generated_nebula_colors[Mission_palette].name;
 	}
 	return SCP_string{};
 }
 
-void BackgroundEditorDialogModel::setOldNebulaColorName(const SCP_string& name)
+void BackgroundEditorDialogModel::setGeneratedNebulaColorName(const SCP_string& name)
 {
 	if (name.empty())
 		return;
-	int idx = old_nebula_color_lookup(name.c_str());
+	int idx = generated_nebula_color_lookup(name.c_str());
 	if (idx >= 0) {
 		modify(Mission_palette, idx);
-		regenerateOldNebula();
+		regenerateGeneratedNebula();
 	}
 	// name not found: ignore
 }
 
-int BackgroundEditorDialogModel::getOldNebulaPitch()
+int BackgroundEditorDialogModel::getGeneratedNebulaPitch()
 {
 	return Nebula_pitch;
 }
 
-void BackgroundEditorDialogModel::setOldNebulaPitch(int deg)
+void BackgroundEditorDialogModel::setGeneratedNebulaPitch(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
 	modify(Nebula_pitch, deg);
-	regenerateOldNebula();
+	regenerateGeneratedNebula();
 }
 
-int BackgroundEditorDialogModel::getOldNebulaBank()
+int BackgroundEditorDialogModel::getGeneratedNebulaBank()
 {
 	return Nebula_bank;
 }
 
-void BackgroundEditorDialogModel::setOldNebulaBank(int deg)
+void BackgroundEditorDialogModel::setGeneratedNebulaBank(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
 	modify(Nebula_bank, deg);
-	regenerateOldNebula();
+	regenerateGeneratedNebula();
 }
 
-int BackgroundEditorDialogModel::getOldNebulaHeading()
+int BackgroundEditorDialogModel::getGeneratedNebulaHeading()
 {
 	return Nebula_heading;
 }
 
-void BackgroundEditorDialogModel::setOldNebulaHeading(int deg)
+void BackgroundEditorDialogModel::setGeneratedNebulaHeading(int deg)
 {
 	CLAMP(deg, getIntOrientLimit().first, getIntOrientLimit().second);
 	modify(Nebula_heading, deg);
-	regenerateOldNebula();
-}
-
-bool BackgroundEditorDialogModel::getOldNebulaShowFs1Mesh()
-{
-	return Nebula_show_fs1_mesh;
-}
-
-void BackgroundEditorDialogModel::setOldNebulaShowFs1Mesh(bool show)
-{
-	Nebula_show_fs1_mesh = show;
-	regenerateOldNebula();
+	regenerateGeneratedNebula();
 }
 
 int BackgroundEditorDialogModel::getAmbientR()

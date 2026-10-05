@@ -160,23 +160,19 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	static int getFogB();
 	void setFogB(int b);
 
-	// old nebula group
-	static SCP_vector<SCP_string> getOldNebulaPatternOptions();
-	static SCP_vector<SCP_string> getOldNebulaColorOptions();
-	static SCP_string getOldNebulaColorName();
-	void setOldNebulaColorName(const SCP_string& name);
-	static SCP_string getOldNebulaPattern();
-	void setOldNebulaPattern(const SCP_string& name);
-	static int getOldNebulaPitch();
-	void setOldNebulaPitch(int deg);
-	static int getOldNebulaBank();
-	void setOldNebulaBank(int deg);
-	static int getOldNebulaHeading();
-	void setOldNebulaHeading(int deg);
-	// temporary testing aid: show the original FS1 .neb mesh instead of the generated nebula
-	// (a view setting only; not saved with the mission and not an undo step)
-	static bool getOldNebulaShowFs1Mesh();
-	void setOldNebulaShowFs1Mesh(bool show);
+	// generated nebula group
+	static SCP_vector<SCP_string> getGeneratedNebulaPatternOptions();
+	static SCP_vector<SCP_string> getGeneratedNebulaColorOptions();
+	static SCP_string getGeneratedNebulaColorName();
+	void setGeneratedNebulaColorName(const SCP_string& name);
+	static SCP_string getGeneratedNebulaPattern();
+	void setGeneratedNebulaPattern(const SCP_string& name);
+	static int getGeneratedNebulaPitch();
+	void setGeneratedNebulaPitch(int deg);
+	static int getGeneratedNebulaBank();
+	void setGeneratedNebulaBank(int deg);
+	static int getGeneratedNebulaHeading();
+	void setGeneratedNebulaHeading(int deg);
 
 	// ambient light group
 	static int getAmbientR();
@@ -226,8 +222,8 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	void initializeData();
 	void refreshBackgroundPreview();
 	static void refreshPreview(Editor* editor);
-	// regenerate the old nebula mesh and request a viewport redraw
-	void regenerateOldNebula();
+	// regenerate the generated nebula mesh and request a viewport redraw
+	void regenerateGeneratedNebula();
 	static background_t& getActiveBackground();
 	starfield_list_entry* getActiveBitmap() const;
 	starfield_list_entry* getActiveSun() const;

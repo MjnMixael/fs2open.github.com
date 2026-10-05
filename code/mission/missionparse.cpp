@@ -106,8 +106,8 @@ int Total_initially_docked;
 mission	The_mission;
 char Mission_filename[80];
 
-int Mission_palette;  // index into Old_nebula_colors of the old nebula tint color
-int Nebula_index;  // index into Old_nebula_patterns of the old nebula to use in mission (-1 = none)
+int Mission_palette;  // index into Generated_nebula_colors of the generated nebula tint color
+int Nebula_index;  // index into Generated_nebula_patterns of the generated nebula to use in mission (-1 = none)
 int Num_ai_behaviors = MAX_AI_BEHAVIORS;
 int Num_cargo = 0;
 int Num_arrival_names = MAX_ARRIVAL_NAMES;
@@ -6865,14 +6865,14 @@ void parse_bitmaps(mission *pm)
 		if (optional_string("+Nebula:")) {
 			stuff_string(str, F_NAME, MAX_FILENAME_LEN);
 
-			// look up the old nebula pattern in the registry
-			Nebula_index = old_nebula_pattern_lookup(str);
+			// look up the generated nebula pattern in the registry
+			Nebula_index = generated_nebula_pattern_lookup(str);
 			if (Nebula_index < 0)
 				WarningEx(LOCATION, "Mission %s\nUnknown nebula %s!", pm->name.c_str(), str);
 
 			if (optional_string("+Color:")) {
 				stuff_string(str, F_NAME, MAX_FILENAME_LEN);
-				int color_idx = old_nebula_color_lookup(str);
+				int color_idx = generated_nebula_color_lookup(str);
 				if (color_idx < 0)
 					WarningEx(LOCATION, "Mission %s\nUnknown nebula color %s!", pm->name.c_str(), str);
 				else

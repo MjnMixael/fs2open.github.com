@@ -626,8 +626,8 @@ extern char			Player_start_shipname[NAME_LENGTH];
 extern int			Player_start_shipnum;
 extern p_object	*Player_start_pobject;
 
-extern int Mission_palette;  // index into Old_nebula_colors of the old nebula tint color
-extern int Nebula_index;  // index into Old_nebula_patterns of the old nebula to use in mission (-1 = none)
+extern int Mission_palette;  // index into Generated_nebula_colors of the generated nebula tint color
+extern int Nebula_index;  // index into Generated_nebula_patterns of the generated nebula to use in mission (-1 = none)
 extern p_object *Arriving_support_ship;
 
 extern char Neb2_texture_name[MAX_FILENAME_LEN];

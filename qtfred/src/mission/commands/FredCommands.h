@@ -707,11 +707,11 @@ namespace FieldId {
     constexpr int BG_FogR           = 4226;
     constexpr int BG_FogG           = 4227;
     constexpr int BG_FogB           = 4228;
-    constexpr int BG_OldNebPattern  = 4229;
-    constexpr int BG_OldNebColor    = 4230;
-    constexpr int BG_OldNebPitch    = 4231;
-    constexpr int BG_OldNebBank     = 4232;
-    constexpr int BG_OldNebHeading  = 4233;
+    constexpr int BG_GeneratedNebPattern  = 4229;
+    constexpr int BG_GeneratedNebColor    = 4230;
+    constexpr int BG_GeneratedNebPitch    = 4231;
+    constexpr int BG_GeneratedNebBank     = 4232;
+    constexpr int BG_GeneratedNebHeading  = 4233;
     constexpr int BG_AmbientR       = 4234;
     constexpr int BG_AmbientG       = 4235;
     constexpr int BG_AmbientB       = 4236;

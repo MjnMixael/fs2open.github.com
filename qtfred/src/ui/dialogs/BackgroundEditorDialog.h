@@ -71,12 +71,11 @@ private slots:
 	void on_fogOverrideBlueSpinBox_valueChanged(int arg1);
 
 	// Generated BG Nebula
-	void on_oldNebulaPatternCombo_currentIndexChanged(int index);
-	void on_oldNebulaColorCombo_currentIndexChanged(int index);
-	void on_oldNebulaPitchSpinBox_valueChanged(int arg1);
-	void on_oldNebulaBankSpinBox_valueChanged(int arg1);
-	void on_oldNebulaHeadingSpinBox_valueChanged(int arg1);
-	void on_oldNebulaFs1MeshCheck_toggled(bool checked);
+	void on_generatedNebulaPatternCombo_currentIndexChanged(int index);
+	void on_generatedNebulaColorCombo_currentIndexChanged(int index);
+	void on_generatedNebulaPitchSpinBox_valueChanged(int arg1);
+	void on_generatedNebulaBankSpinBox_valueChanged(int arg1);
+	void on_generatedNebulaHeadingSpinBox_valueChanged(int arg1);
 
 	// Ambient Light
 	void on_ambientLightRedSlider_valueChanged(int value);
@@ -126,7 +125,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void updateSunControls();
 	void updateNebulaControls();
 	void updateFogSwatch();
-	void updateOldNebulaControls();
+	void updateGeneratedNebulaControls();
 	void updateAmbientLightControls();
 	void updateAmbientSwatch();
 	void updateSkyboxControls();

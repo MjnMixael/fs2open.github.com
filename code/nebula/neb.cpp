@@ -197,29 +197,7 @@ void parse_nebula_table(const char* filename)
 	{
 		// read in the nebula.tbl
 		read_file_text(filename, CF_TYPE_TABLES);
-
-		// let the old (FS1-style) nebula parser pick any #Old / #Generated Nebula sections out of the same
-		// buffer, so we don't re-read every nebula.tbl / *-neb.tbm a second time.  Isolated so a
-		// malformed old-nebula section can't abort neb2 poof parsing.
-		try {
-			old_nebula_parse_buffer();
-		} catch (const parse::ParseException& e) {
-			mprintf(("TABLES: Unable to parse old nebula data in '%s'!  Error message = %s.\n", filename, e.what()));
-		}
-
 		reset_parse();
-
-		// old_nebula_parse_buffer() above already consumed any #Old / #Generated Nebula Patterns/Colors sections.
-		// A game table may contain nothing but those (or lead with them), so skip past any leading
-		// old-nebula sections here -- otherwise the neb2 bitmap parser reads the "#Old Nebula ..." or
-		// "#Generated Nebula ..." header as a bitmap name and warns.  (Trailing old-nebula sections after the neb2 #end are
-		// never reached, so they need no handling.)
-		while (check_for_string("#Old Nebula") || check_for_string("#Generated Nebula"))
-			skip_to_string("#End");
-
-		// if that was the whole file, there's no neb2 content left to parse
-		if (check_for_eof())
-			return;
 
 		// allow modular tables to not define bitmaps
 		bool skip_background_bitmaps = false;
@@ -371,9 +349,8 @@ void parse_nebula_table(const char* filename)
 // initialize neb2 stuff at game startup
 void neb2_init()
 {
-	// load the built-in old (FS1-style) nebula defaults first, so game data can override them;
-	// parse_nebula_table() below picks up any #Old / #Generated Nebula sections as it reads the neb2 tables
-	old_nebula_init();
+	// the generated (FS1-style) background nebula's patterns and colors: generated_nebula.tbl
+	generated_nebula_init();
 
 	// first parse the default table
 	parse_nebula_table("nebula.tbl");

@@ -1966,7 +1966,7 @@ void stars_draw(int show_stars, int show_suns, int  /*show_nebulas*/, int show_s
 		stars_draw_background();
 	}
 
-	// old (FS1-style) procedural background nebula -- a skybox-level backdrop that sits in front of
+	// generated (FS1-style) background nebula -- a skybox-level backdrop that sits in front of
 	// the background pof and behind the stars.  Gate it like stars_draw_background() above (render
 	// whenever the background does, including into the env map for reflections) but never under neb2.
 	if ( (show_stars || !show_subspace) && !(The_mission.flags[Mission::Mission_Flags::Fullneb]) ) {

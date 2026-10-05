@@ -14,7 +14,7 @@
 
 #include "bmpman/bmpman.h"
 #include "cfile/cfile.h"
-#include "debugconsole/console.h"
+#include "def_files/def_files.h"
 #include "globalincs/systemvars.h"
 #include "graphics/2d.h"
 #include "graphics/material.h"
@@ -33,179 +33,191 @@
 // data-driven pattern / color registries
 // ----------------------------------------------------------------------------------------------------
 
-SCP_vector<old_nebula_pattern> Old_nebula_patterns;
-SCP_vector<old_nebula_color>   Old_nebula_colors;
+SCP_vector<generated_nebula_pattern> Generated_nebula_patterns;
+SCP_vector<generated_nebula_color>   Generated_nebula_colors;
 
-int old_nebula_pattern_lookup(const char *name)
+int generated_nebula_pattern_lookup(const char *name)
 {
-	for (int i = 0; i < static_cast<int>(Old_nebula_patterns.size()); i++) {
-		if (!stricmp(Old_nebula_patterns[i].name.c_str(), name))
+	for (int i = 0; i < static_cast<int>(Generated_nebula_patterns.size()); i++) {
+		if (!stricmp(Generated_nebula_patterns[i].name.c_str(), name))
 			return i;
 	}
 	return -1;
 }
 
-int old_nebula_color_lookup(const char *name)
+int generated_nebula_color_lookup(const char *name)
 {
-	for (int i = 0; i < static_cast<int>(Old_nebula_colors.size()); i++) {
-		if (!stricmp(Old_nebula_colors[i].name.c_str(), name))
+	for (int i = 0; i < static_cast<int>(Generated_nebula_colors.size()); i++) {
+		if (!stricmp(Generated_nebula_colors[i].name.c_str(), name))
 			return i;
 	}
 	return -1;
 }
 
-const char *old_nebula_pattern_name(int index)
+const char *generated_nebula_pattern_name(int index)
 {
-	if (index < 0 || index >= static_cast<int>(Old_nebula_patterns.size()))
+	if (index < 0 || index >= static_cast<int>(Generated_nebula_patterns.size()))
 		return "";
-	return Old_nebula_patterns[index].name.c_str();
+	return Generated_nebula_patterns[index].name.c_str();
 }
 
-const char *old_nebula_color_name(int index)
+const char *generated_nebula_color_name(int index)
 {
-	if (index < 0 || index >= static_cast<int>(Old_nebula_colors.size()))
+	if (index < 0 || index >= static_cast<int>(Generated_nebula_colors.size()))
 		return "";
-	return Old_nebula_colors[index].name.c_str();
+	return Generated_nebula_colors[index].name.c_str();
 }
 
-// parse the #Old Nebula Patterns / #Old Nebula Colors sections (also accepted as #Generated Nebula
-// Patterns / #Generated Nebula Colors) out of whatever table text is
-// currently loaded into the parse buffer.  Entries are matched by name, so a later table can
-// either override an existing entry in place or append a brand-new one.  Called by
-// parse_nebula_table() so the old-nebula data rides along on the neb2 table read pass.
-void old_nebula_parse_buffer()
+namespace {
+
+constexpr const char *GENERATED_NEBULA_TABLE = "generated_nebula.tbl";
+constexpr const char *GENERATED_NEBULA_MODULAR_GLOB = "*-gneb.tbm";
+
+void parse_generated_nebula_colors()
 {
-	// patterns ("#Generated Nebula Patterns" is accepted as another name for the section)
-	for (const char *header : {"#Old Nebula Patterns", "#Generated Nebula Patterns"}) {
-		reset_parse();
-		if (skip_to_string(header) != 1)
-			continue;
-		while (optional_string("$Name:")) {
-			SCP_string nm;
-			stuff_string(nm, F_NAME);
+	while (optional_string("$Name:")) {
+		SCP_string nm;
+		stuff_string(nm, F_NAME);
 
-			int idx = old_nebula_pattern_lookup(nm.c_str());
-			old_nebula_pattern *p;
-			if (idx < 0) {
-				Old_nebula_patterns.emplace_back();
-				p = &Old_nebula_patterns.back();
-				p->name = nm;
-			} else {
-				p = &Old_nebula_patterns[idx];
-			}
-
-			if (optional_string("+Density:"))
-				stuff_float(&p->density);
-			if (optional_string("+Frequency:")) {
-				float f[2];
-				parse_float_list(f, 2);
-				p->freq_u = f[0];
-				p->freq_v = f[1];
-			}
-			if (optional_string("+Octaves:"))
-				stuff_int(&p->octaves);
-			if (optional_string("+Warp:"))
-				stuff_float(&p->warp);
-			if (optional_string("+Contrast:"))
-				stuff_float(&p->contrast);
-			if (optional_string("+Intensity:"))
-				stuff_float(&p->intensity);
-			if (optional_string("+Seed:"))
-				stuff_int(&p->seed);
-			if (optional_string("+Resolution:")) {
-				int r[2];
-				parse_int_list(r, 2);
-				p->res_lon = r[0];
-				p->res_lat = r[1];
-			}
-			if (optional_string("+Band:")) {
-				float b[2];
-				parse_float_list(b, 2);
-				p->band_min = b[0];
-				p->band_max = b[1];
-			}
+		// a name already defined (by the base table or an earlier .tbm) is overridden in place
+		int idx = generated_nebula_color_lookup(nm.c_str());
+		generated_nebula_color *c;
+		if (idx < 0) {
+			Generated_nebula_colors.emplace_back();
+			c = &Generated_nebula_colors.back();
+			c->name = nm;
+		} else {
+			c = &Generated_nebula_colors[idx];
 		}
-	}
 
-	// colors ("#Generated Nebula Colors" is accepted as another name for the section)
-	for (const char *header : {"#Old Nebula Colors", "#Generated Nebula Colors"}) {
-		reset_parse();
-		if (skip_to_string(header) != 1)
-			continue;
-		while (optional_string("$Name:")) {
-			SCP_string nm;
-			stuff_string(nm, F_NAME);
-
-			int idx = old_nebula_color_lookup(nm.c_str());
-			old_nebula_color *c;
-			if (idx < 0) {
-				Old_nebula_colors.emplace_back();
-				c = &Old_nebula_colors.back();
-				c->name = nm;
-			} else {
-				c = &Old_nebula_colors[idx];
-			}
-
-			if (optional_string("+RGB:")) {
-				int rgb[3];
-				parse_int_list(rgb, 3);
-				CLAMP(rgb[0], 0, 255);
-				CLAMP(rgb[1], 0, 255);
-				CLAMP(rgb[2], 0, 255);
-				c->r = static_cast<ubyte>(rgb[0]);
-				c->g = static_cast<ubyte>(rgb[1]);
-				c->b = static_cast<ubyte>(rgb[2]);
-			}
+		if (optional_string("+RGB:")) {
+			int rgb[3];
+			parse_int_list(rgb, 3);
+			CLAMP(rgb[0], 0, 255);
+			CLAMP(rgb[1], 0, 255);
+			CLAMP(rgb[2], 0, 255);
+			c->r = static_cast<ubyte>(rgb[0]);
+			c->g = static_cast<ubyte>(rgb[1]);
+			c->b = static_cast<ubyte>(rgb[2]);
 		}
 	}
 }
 
-void old_nebula_init()
+void parse_generated_nebula_patterns()
 {
-	Old_nebula_patterns.clear();
-	Old_nebula_colors.clear();
+	while (optional_string("$Name:")) {
+		SCP_string nm;
+		stuff_string(nm, F_NAME);
 
-	// Hardcoded built-in FS1 set, always present.  neb2_init() calls this before parsing the neb2
-	// tables, so a game-data nebula.tbl / *-neb.tbm can override any of these by name (or add its
-	// own) via #Old Nebula Patterns / #Old Nebula Colors sections.  band left at the struct default
-	// (full sphere); all fields not set here use the struct defaults.
-	auto add_pattern = [](const char *name, float density, float freq_u, float freq_v, float warp,
-						   float contrast, float intensity, int seed, int res_lon, int res_lat) {
-		old_nebula_pattern p;
-		p.name = name;
-		p.density = density;
-		p.freq_u = freq_u;
-		p.freq_v = freq_v;
-		p.warp = warp;
-		p.contrast = contrast;
-		p.intensity = intensity;
-		p.seed = seed;
-		p.res_lon = res_lon;
-		p.res_lat = res_lat;
-		Old_nebula_patterns.push_back(p);
-	};
-	//           name         density  freq_u  freq_v  warp   contrast  intensity  seed  res_lon  res_lat
-	add_pattern("Nebula01",   0.42f,   5.0f,   6.0f,   0.40f, 1.5f,     3.5f,      1,    48,      20);
-	add_pattern("Nebula02",   0.45f,   6.0f,   5.0f,   0.50f, 1.4f,     3.5f,      2,    48,      20);
-	add_pattern("Nebula03",   0.40f,   5.0f,   7.0f,   0.60f, 1.6f,     3.5f,      3,    48,      20);
+		// a name already defined (by the base table or an earlier .tbm) is overridden in place
+		int idx = generated_nebula_pattern_lookup(nm.c_str());
+		generated_nebula_pattern *p;
+		if (idx < 0) {
+			Generated_nebula_patterns.emplace_back();
+			p = &Generated_nebula_patterns.back();
+			p->name = nm;
+		} else {
+			p = &Generated_nebula_patterns[idx];
+		}
 
-	auto add_color = [](const char *name, int r, int g, int b) {
-		old_nebula_color c;
-		c.name = name;
-		c.r = static_cast<ubyte>(r);
-		c.g = static_cast<ubyte>(g);
-		c.b = static_cast<ubyte>(b);
-		Old_nebula_colors.push_back(c);
-	};
-	add_color("Red",        200,  40,  40);
-	add_color("Blue",        60,  90, 220);
-	add_color("Gold",       220, 170,  60);
-	add_color("Purple",     150,  70, 200);
-	add_color("Maroon",     140,  40,  60);
-	add_color("Green",       60, 180,  90);
-	add_color("Grey blue",  110, 130, 170);
-	add_color("Violet",     170, 100, 220);
-	add_color("Grey Green", 120, 150, 130);
+		if (optional_string("+Clouds Only:"))
+			stuff_boolean(&p->clouds_only);
+		if (optional_string("+Cloud Detail:")) {
+			stuff_float(&p->cloud_detail);
+			CLAMP(p->cloud_detail, 0.0f, 1.0f);
+		}
+		// any +Cloud entries replace the pattern's whole cloud list
+		bool first_cloud = true;
+		while (optional_string("+Cloud:")) {
+			float c[6];
+			parse_float_list(c, 6);
+			if (first_cloud) {
+				p->clouds.clear();
+				first_cloud = false;
+			}
+			generated_nebula_cloud cloud;
+			cloud.lon = c[0];
+			cloud.lat = c[1];
+			CLAMP(cloud.lat, -90.0f, 90.0f);
+			cloud.width = std::max(c[2], 0.1f);
+			cloud.height = std::max(c[3], 0.1f);
+			cloud.angle = c[4];
+			cloud.brightness = std::max(c[5], 0.0f);
+			p->clouds.push_back(cloud);
+		}
+		if (optional_string("+Density:"))
+			stuff_float(&p->density);
+		if (optional_string("+Frequency:")) {
+			float f[2];
+			parse_float_list(f, 2);
+			p->freq_u = f[0];
+			p->freq_v = f[1];
+		}
+		if (optional_string("+Octaves:"))
+			stuff_int(&p->octaves);
+		if (optional_string("+Warp:"))
+			stuff_float(&p->warp);
+		if (optional_string("+Contrast:"))
+			stuff_float(&p->contrast);
+		if (optional_string("+Intensity:"))
+			stuff_float(&p->intensity);
+		if (optional_string("+Seed:"))
+			stuff_int(&p->seed);
+		if (optional_string("+Resolution:")) {
+			int r[2];
+			parse_int_list(r, 2);
+			p->res_lon = r[0];
+			p->res_lat = r[1];
+		}
+		if (optional_string("+Band:")) {
+			float b[2];
+			parse_float_list(b, 2);
+			p->band_min = b[0];
+			p->band_max = b[1];
+		}
+	}
+}
+
+// generated_nebula.tbl or a *-gneb.tbm (filename), or the built-in default (nullptr).  Both
+// sections are optional, so a .tbm can carry just colors or just patterns.
+void parse_generated_nebula_table(const char *filename)
+{
+	try {
+		if (filename != nullptr)
+			read_file_text(filename, CF_TYPE_TABLES);
+		else
+			read_file_text_from_default(defaults_get_file(GENERATED_NEBULA_TABLE));
+		reset_parse();
+
+		if (optional_string("#Generated Nebula Colors")) {
+			parse_generated_nebula_colors();
+			required_string("#End");
+		}
+		if (optional_string("#Generated Nebula Patterns")) {
+			parse_generated_nebula_patterns();
+			required_string("#End");
+		}
+	} catch (const parse::ParseException &e) {
+		mprintf(("TABLES: Unable to parse '%s'!  Error message = %s.\n",
+			filename != nullptr ? filename : GENERATED_NEBULA_TABLE, e.what()));
+	}
+}
+
+} // namespace
+
+void generated_nebula_init()
+{
+	Generated_nebula_patterns.clear();
+	Generated_nebula_colors.clear();
+
+	// The base table holds the built-in FS1 patterns and colors (a mod's own generated_nebula.tbl
+	// replaces it), then *-gneb.tbm files add to it and override entries by name
+	if (cf_exists_full(GENERATED_NEBULA_TABLE, CF_TYPE_TABLES))
+		parse_generated_nebula_table(GENERATED_NEBULA_TABLE);
+	else
+		parse_generated_nebula_table(nullptr);
+
+	parse_modular_table(GENERATED_NEBULA_MODULAR_GLOB, parse_generated_nebula_table);
 }
 
 // ----------------------------------------------------------------------------------------------------
@@ -226,10 +238,6 @@ static int Nebula_baked_color = -1;
 static int Nebula_loaded = 0;
 static angles Nebula_pbh;
 static matrix Nebula_orient;
-
-bool Nebula_show_fs1_mesh = false;
-
-static int load_nebula_sub(const char *filename);
 
 int Nebula_pitch;
 int Nebula_bank;
@@ -324,7 +332,7 @@ static float neb_vnoise(float x, float y, int seed, int xperiod)
 }
 
 // multi-octave, anisotropic, longitude-seamless fbm in 0..1
-static float neb_fbm(float lon, float lat, const old_nebula_pattern &p)
+static float neb_fbm(float lon, float lat, const generated_nebula_pattern &p)
 {
 	int base = (int)std::lround(p.freq_u);
 	if (base < 1)
@@ -354,8 +362,9 @@ static float neb_fbm(float lon, float lat, const old_nebula_pattern &p)
 // pole caps black-on-black against space, instead of trying to render coherent detail at the seam.
 #define NEBULA_POLE_FADE 0.15f
 
-// brightness 0..1 for a texel: mostly black, a soft scatter of bright cloud masses
-static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p)
+// brightness 0..1 of the procedural background for a texel: mostly black, a soft scatter of
+// bright cloud masses
+static float nebula_background_brightness(float lon, float lat, const generated_nebula_pattern &p)
 {
 	float n = neb_fbm(lon, lat, p);
 
@@ -381,6 +390,82 @@ static float nebula_brightness(float lon, float lat, const old_nebula_pattern &p
 	return b;
 }
 
+// A cloud ready to evaluate on the flat map: x is longitude in degrees (0..360, wrapping), y runs
+// 0..180 along the map's other axis (y = v * 180, where v is the texture's 0..1 coordinate)
+struct nebula_cloud_eval {
+	float x, y;
+	float cos_a, sin_a;
+	float inv_wx2, inv_wy2;   // Gaussian falloff factors along the cloud's own axes
+	float brightness;
+	float reach;              // beyond this distance on either axis the cloud adds nothing visible
+};
+
+static SCP_vector<nebula_cloud_eval> nebula_prepare_clouds(const generated_nebula_pattern &p)
+{
+	SCP_vector<nebula_cloud_eval> out;
+	out.reserve(p.clouds.size());
+	// width/height are full widths at half brightness: sigma = width / (2 * sqrt(2 * ln 2))
+	constexpr float fwhm_to_sigma = 1.0f / 2.3548f;
+	for (const auto &c : p.clouds) {
+		nebula_cloud_eval e;
+		e.x = fmodf(c.lon, 360.0f);
+		if (e.x < 0.0f)
+			e.x += 360.0f;
+		// the map's other axis is linear in sin(latitude), like the FS1 meshes
+		e.y = (sinf(fl_radians(c.lat)) + 1.0f) * 90.0f;
+		const float a = fl_radians(c.angle);
+		e.cos_a = cosf(a);
+		e.sin_a = sinf(a);
+		const float sx = c.width * fwhm_to_sigma;
+		const float sy = c.height * fwhm_to_sigma;
+		e.inv_wx2 = 0.5f / (sx * sx);
+		e.inv_wy2 = 0.5f / (sy * sy);
+		e.brightness = c.brightness;
+		e.reach = 3.5f * std::max(sx, sy);
+		out.push_back(e);
+	}
+	return out;
+}
+
+// brightness 0..1 of the whole pattern for a texel: the procedural background (unless clouds
+// only) screened with the placed clouds, which the noise breaks up per +Cloud Detail
+static float nebula_brightness(float lon, float lat, const generated_nebula_pattern &p,
+	const SCP_vector<nebula_cloud_eval> &clouds)
+{
+	const float bg = p.clouds_only ? 0.0f : nebula_background_brightness(lon, lat, p);
+	if (clouds.empty())
+		return bg;
+
+	const float x = lon * 360.0f;
+	const float y = lat * 180.0f;
+	float c = 0.0f;
+	for (const auto &e : clouds) {
+		const float dy = y - e.y;
+		if (fabsf(dy) > e.reach)
+			continue;
+		float dx = x - e.x;
+		if (dx > 180.0f)
+			dx -= 360.0f;
+		else if (dx < -180.0f)
+			dx += 360.0f;
+		if (fabsf(dx) > e.reach)
+			continue;
+		const float xr = dx * e.cos_a + dy * e.sin_a;
+		const float yr = -dx * e.sin_a + dy * e.cos_a;
+		c += e.brightness * expf(-(xr * xr * e.inv_wx2 + yr * yr * e.inv_wy2));
+	}
+
+	if (c > 0.0f && p.cloud_detail > 0.0f) {
+		// the noise averages about 0.5, so this keeps the clouds' overall brightness while
+		// carving them into brighter and darker wisps
+		const float n = neb_fbm(lon, lat, p);
+		c *= std::max(0.0f, 1.0f + p.cloud_detail * (2.0f * n - 1.0f) * 2.0f);
+	}
+	c = std::min(c, 1.0f);
+
+	return 1.0f - (1.0f - bg) * (1.0f - c);
+}
+
 // dimensions of the baked equirectangular brightness texture
 constexpr int NEBULA_TEX_W = 1024;
 constexpr int NEBULA_TEX_H = 512;
@@ -395,19 +480,20 @@ static ubyte nebula_chan(float c, float b)
 // bake the procedural pattern into an equirectangular RGB texture, tinted by the mission color.
 // sampling per-texel here (rather than per-vertex on a coarse mesh) is what removes the triangle
 // facets; the smooth brightness field + bilinear filtering give the soft, feathered FS1 look.
-static void nebula_bake_texture(const old_nebula_pattern &p, const old_nebula_color &col)
+static void nebula_bake_texture(const generated_nebula_pattern &p, const generated_nebula_color &col)
 {
 	if (Nebula_tex_data == nullptr)
 		Nebula_tex_data = new ubyte[NEBULA_TEX_W * NEBULA_TEX_H * 3];
 
 	float intensity = (p.intensity > 0.0f) ? p.intensity : 1.0f;
+	const auto clouds = nebula_prepare_clouds(p);
 
 	ubyte *px = Nebula_tex_data;
 	for (int j = 0; j < NEBULA_TEX_H; j++) {
 		float v = (static_cast<float>(j) + 0.5f) / static_cast<float>(NEBULA_TEX_H); // latitude 0..1
 		for (int i = 0; i < NEBULA_TEX_W; i++) {
 			float u = (static_cast<float>(i) + 0.5f) / static_cast<float>(NEBULA_TEX_W); // longitude 0..1
-			float b = nebula_brightness(u, v, p) * intensity;
+			float b = nebula_brightness(u, v, p, clouds) * intensity;
 			// 24-bit user bitmaps upload as GL_BGR, so store blue-green-red
 			*px++ = nebula_chan(col.b, b);
 			*px++ = nebula_chan(col.g, b);
@@ -423,7 +509,7 @@ static void nebula_bake_texture(const old_nebula_pattern &p, const old_nebula_co
 
 // build the background sphere (positions + equirectangular UVs) into Nebula_verts.  brightness and
 // color live in the baked texture now, so the geometry only needs to be a smooth-enough sphere.
-static void nebula_generate_sphere(const old_nebula_pattern &p, const matrix *orient)
+static void nebula_generate_sphere(const generated_nebula_pattern &p, const matrix *orient)
 {
 	delete[] Nebula_verts;
 	Nebula_verts = nullptr;
@@ -490,17 +576,16 @@ static void nebula_generate_sphere(const old_nebula_pattern &p, const matrix *or
 		}
 	}
 
-	Assertion(k == Nebula_n_verts, "old nebula sphere vertex count mismatch (%d != %d)", k, Nebula_n_verts);
+	Assertion(k == Nebula_n_verts, "generated nebula sphere vertex count mismatch (%d != %d)", k, Nebula_n_verts);
 }
 
 void nebula_init(int index, int pitch, int bank, int heading)
 {
-	const bool valid = index >= 0 && index < static_cast<int>(Old_nebula_patterns.size()) && !Is_standalone;
-	const bool fs1_mesh = valid && Nebula_show_fs1_mesh;
+	const bool valid = index >= 0 && index < static_cast<int>(Generated_nebula_patterns.size()) && !Is_standalone;
 
 	// Only the sphere depends on the orientation, so a change of pitch, bank or heading alone (the
 	// editor's spinboxes, or undoing one) keeps the baked texture instead of baking it again.
-	const bool same_texture = valid && !fs1_mesh && Nebula_bitmap >= 0 && Nebula_baked_pattern == index &&
+	const bool same_texture = valid && Nebula_bitmap >= 0 && Nebula_baked_pattern == index &&
 		Nebula_baked_color == Mission_palette;
 	if (same_texture) {
 		delete[] Nebula_verts;
@@ -518,166 +603,31 @@ void nebula_init(int index, int pitch, int bank, int heading)
 	if (!valid)
 		return;
 
-	if (fs1_mesh) {
-		// load_nebula_sub() builds its own buffers, tinted and oriented like the generated nebula
-		const SCP_string& name = Old_nebula_patterns[index].name;
-		if (load_nebula_sub(cf_add_ext(name.c_str(), NOX(".neb"))))
-			return;
-		mprintf(("Nebula: no FS1 mesh %s.neb found, so the generated nebula is shown\n", name.c_str()));
-	}
-
 	if (!same_texture) {
 		// pick the tint color (fall back to white if the palette index is out of range)
-		old_nebula_color col;
-		if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size()))
-			col = Old_nebula_colors[Mission_palette];
+		generated_nebula_color col;
+		if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Generated_nebula_colors.size()))
+			col = Generated_nebula_colors[Mission_palette];
 
-		nebula_bake_texture(Old_nebula_patterns[index], col);
+		nebula_bake_texture(Generated_nebula_patterns[index], col);
 		Nebula_baked_pattern = index;
 		Nebula_baked_color = Mission_palette;
 	}
 
-	nebula_generate_sphere(Old_nebula_patterns[index], &Nebula_orient);
+	nebula_generate_sphere(Generated_nebula_patterns[index], &Nebula_orient);
 	Nebula_loaded = 1;
 }
 
 void nebula_render()
 {
-	if (Nebula_verts == nullptr || Nebula_n_verts <= 0)
+	if (Nebula_verts == nullptr || Nebula_n_verts <= 0 || Nebula_bitmap < 0)
 		return;
 
-	if (Nebula_bitmap >= 0) {
-		// procedural path: additive textured sphere (no depth), instanced around the eye
-		material mat;
-		material_set_unlit(&mat, Nebula_bitmap, 1.0f, true, false);
+	// additive textured sphere (no depth), instanced around the eye
+	material mat;
+	material_set_unlit(&mat, Nebula_bitmap, 1.0f, true, false);
 
-		gr_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
-		g3_render_primitives_textured(&mat, Nebula_verts, Nebula_n_verts, PRIM_TYPE_TRIS, false);
-		gr_end_instance_matrix();
-	} else {
-		// debug .neb reference mesh: per-vertex gouraud (see load_nebula_sub)
-		material mat;
-		mat.set_depth_mode(ZBUFFER_TYPE_NONE);
-		mat.set_blend_mode(ALPHA_BLEND_ADDITIVE);
-
-		g3_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
-		g3_render_primitives_colored(&mat, Nebula_verts, Nebula_n_verts, PRIM_TYPE_TRIS, false);
-		g3_done_instance(true);
-	}
-}
-
-// ----------------------------------------------------------------------------------------------------
-// debug-only: load and render a real legacy .neb mesh, for tuning the procedural look against the
-// original FS1 nebula files.  NOT used by the normal game path.
-// ----------------------------------------------------------------------------------------------------
-
-constexpr int MAX_TRIS = 200;
-constexpr int MAX_POINTS = 300;
-
-#define NEBULA_FILE_ID NOX("NEBU")
-constexpr int NEBULA_MAJOR_VERSION = 1;
-
-static int load_nebula_sub(const char *filename)
-{
-	CFILE *fp;
-	char id[16];
-	int version, major;
-	int num_pts = 0;
-	int num_tris = 0;
-	static vec3d nebula_vecs[MAX_POINTS];
-	static int neb_light[MAX_POINTS];
-	static int tri[MAX_TRIS][3];
-
-	fp = cfopen(filename, "rb");
-	if (!fp)
-		return 0;
-
-	cfread(id, 4, 1, fp);
-	if (strncmp(id, NEBULA_FILE_ID, 4) != 0) {
-		mprintf(("Not a valid nebula file.\n"));
-		cfclose(fp);
-		return 0;
-	}
-	cfread(&version, sizeof(int), 1, fp);
-	major = version / 100;
-	if (major != NEBULA_MAJOR_VERSION) {
-		mprintf(("An out of date nebula file.\n"));
-		cfclose(fp);
-		return 0;
-	}
-
-	cfread(&num_pts, sizeof(int), 1, fp);
-	cfread(&num_tris, sizeof(int), 1, fp);
-
-	if (num_pts <= 0 || num_pts >= MAX_POINTS || num_tris <= 0 || num_tris >= MAX_TRIS) {
-		cfclose(fp);
-		return 0;
-	}
-
-	for (int i = 0; i < num_pts; i++) {
-		float xf, yf;
-		int l;
-		cfread(&xf, sizeof(float), 1, fp);
-		cfread(&yf, sizeof(float), 1, fp);
-		cfread(&l, sizeof(int), 1, fp);
-		project_2d_onto_sphere(&nebula_vecs[i], 1.0f - xf, yf);
-		vm_vec_scale(&nebula_vecs[i], NEBULA_RADIUS);
-		// orient to match the procedural mesh (built with the current mission's PBH) so the two
-		// line up when comparing them
-		vm_vec_unrotate(&nebula_vecs[i], &nebula_vecs[i], &Nebula_orient);
-		neb_light[i] = l;
-	}
-
-	for (int i = 0; i < num_tris; i++) {
-		cfread(&tri[i][0], sizeof(int), 1, fp);
-		cfread(&tri[i][1], sizeof(int), 1, fp);
-		cfread(&tri[i][2], sizeof(int), 1, fp);
-	}
-
-	cfclose(fp);
-
-	// build a render buffer tinted by the current mission palette, mirroring the procedural path
-	nebula_close();
-
-	old_nebula_color col;
-	if (Mission_palette >= 0 && Mission_palette < static_cast<int>(Old_nebula_colors.size()))
-		col = Old_nebula_colors[Mission_palette];
-
-	Nebula_n_verts = num_tris * 3;
-	Nebula_verts = new vertex[Nebula_n_verts];
-
-	int k = 0;
-	for (int i = 0; i < num_tris; i++) {
-		for (int e = 0; e < 3; e++) {
-			int idx = tri[i][e];
-			float b = neb_light[idx] / 31.0f;
-			vertex *vt = &Nebula_verts[k++];
-			g3_transfer_vertex(vt, &nebula_vecs[idx]);
-			vt->r = static_cast<ubyte>(col.r * b);
-			vt->g = static_cast<ubyte>(col.g * b);
-			vt->b = static_cast<ubyte>(col.b * b);
-			vt->a = 255;
-		}
-	}
-
-	Nebula_loaded = 1;
-	return 1;
-}
-
-DCF(nebula, "Loads a real legacy .neb mesh for reference, or regenerates the procedural nebula")
-{
-	SCP_string filename;
-
-	if (dc_optional_string_either("help", "--help")) {
-		dc_printf("Usage: nebula [filename]\n");
-		dc_printf("With a filename (no extension), loads the original FS1 .neb mesh for reference.\n");
-		dc_printf("With no argument, restores the current mission's procedural nebula.\n");
-		return;
-	}
-
-	if (dc_maybe_stuff_string_white(filename)) {
-		load_nebula_sub(cf_add_ext(filename.c_str(), NOX(".neb")));
-	} else {
-		nebula_init(Nebula_index, Nebula_pitch, Nebula_bank, Nebula_heading);
-	}
+	gr_start_instance_matrix(&Eye_position, &vmd_identity_matrix);
+	g3_render_primitives_textured(&mat, Nebula_verts, Nebula_n_verts, PRIM_TYPE_TRIS, false);
+	gr_end_instance_matrix();
 }

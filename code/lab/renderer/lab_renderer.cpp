@@ -510,14 +510,14 @@ void LabRenderer::useBackground(const SCP_string& mission_name) {
 					char str[MAX_FILENAME_LEN];
 					stuff_string(str, F_NAME, MAX_FILENAME_LEN);
 
-					// look up the old nebula pattern in the registry
-					Nebula_index = old_nebula_pattern_lookup(str);
+					// look up the generated nebula pattern in the registry
+					Nebula_index = generated_nebula_pattern_lookup(str);
 					if (Nebula_index < 0)
 						WarningEx(LOCATION, "Unknown nebula %s!", str);
 
 					if (optional_string("+Color:")) {
 						stuff_string(str, F_NAME, MAX_FILENAME_LEN);
-						int color_idx = old_nebula_color_lookup(str);
+						int color_idx = generated_nebula_color_lookup(str);
 						if (color_idx < 0)
 							WarningEx(LOCATION, "Unknown nebula color %s!", str);
 						else
