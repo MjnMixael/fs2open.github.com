@@ -957,6 +957,8 @@ void ShipEditorDialog::updateUi()
 	ui->arrivalLocationCombo->setCurrentIndex(ui->arrivalLocationCombo->findData(arrivalLocation));
 
 	ui->arrivalDistanceEdit->clear();
+	// like the Wing Editor: the minimum follows the arrival target
+	ui->arrivalDistanceEdit->setMinimum(_model->getMinArrivalDistance());
 	ui->arrivalDistanceEdit->setValue(_model->getArrivalDistance());
 	ui->arrivalDelaySpinBox->setValue(_model->getArrivalDelay());
 
