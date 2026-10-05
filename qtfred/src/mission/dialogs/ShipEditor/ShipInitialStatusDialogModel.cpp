@@ -346,15 +346,21 @@ void ShipInitialStatusDialogModel::undock(object* objp1, object* objp2)
 		const bool moveSecond = ship_class_compare(Ships[ship_num].ship_info_index, Ships[other_ship_num].ship_info_index) <= 0;
 		const bool held1 = Editor::isTransformHeld(OBJ_INDEX(objp1));
 		const bool held2 = Editor::isTransformHeld(OBJ_INDEX(objp2));
+		object* mover = nullptr;
 		if (!held2 && (moveSecond || held1)) {
 			vm_vec_scale_add2(&objp2->pos,
 				&v,
 				ship_class_get_length(&Ship_info[Ships[objp2->instance].ship_info_index]));
+			mover = objp2;
 		} else if (!held1) {
 			vm_vec_scale_add2(&objp1->pos,
 				&v,
 				ship_class_get_length(&Ship_info[Ships[objp1->instance].ship_info_index]) * -1.0f);
+			mover = objp1;
 		}
+		// the moved ship may still be docked to others; they come along
+		if (mover != nullptr)
+			object_moved(mover);
 	}
 
 	// check to see if one of these ships has an arrival cue of false.  If so, then
