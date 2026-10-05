@@ -381,7 +381,7 @@ class EditorViewport {
 	// leader's turn (new orient = vm_matrix_x_matrix(old orient, rotmat)); the old pos/orient are
 	// the leader's from before the change. Follows Pivot_mode.
 	void follow_leader(const object* leader, const vec3d& leader_old_pos, const matrix& leader_old_orient,
-		const matrix& rotmat);
+		const matrix& rotmat) const;
 	void cancel_drag();
 
 	void view_universe(bool just_marked);

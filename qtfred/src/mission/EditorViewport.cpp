@@ -1826,7 +1826,7 @@ int EditorViewport::drag_rotate_objects(int mouse_dx, int mouse_dy) {
 	return rval;
 }
 void EditorViewport::follow_leader(const object* leader, const vec3d& leader_old_pos, const matrix& leader_old_orient,
-	const matrix& rotmat) {
+	const matrix& rotmat) const {
 	vec3d delta_pos;
 	vm_vec_sub(&delta_pos, &leader->pos, &leader_old_pos);
 	matrix leader_old_transpose, rot_trans;
