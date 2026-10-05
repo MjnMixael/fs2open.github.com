@@ -2592,10 +2592,10 @@ void EditorViewport::cancelCameraDrag() {
 void EditorViewport::noteObjectFly(const object* flown, const vec3d& oldPos, const matrix& oldOrient, bool input) {
 	// The controls drive the object through physics, so it coasts to a stop after the keys are
 	// released; once they are, movement under about a centimeter counts as still
-	const bool moved = input || vm_vec_dist_squared(&oldPos, &flown->pos) > 1e-4f ||
+	const bool flew = input || vm_vec_dist_squared(&oldPos, &flown->pos) > 1e-4f ||
 		vm_vec_dist_squared(&oldOrient.vec.fvec, &flown->orient.vec.fvec) > 1e-8f ||
 		vm_vec_dist_squared(&oldOrient.vec.uvec, &flown->orient.vec.uvec) > 1e-8f;
-	if (!moved)
+	if (!flew)
 		return;
 	_objFlyLastMove = timer_get_milliseconds();
 	if (_objFlying)
