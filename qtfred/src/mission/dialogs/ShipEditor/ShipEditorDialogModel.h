@@ -79,6 +79,9 @@ class ShipEditorDialogModel : public AbstractDialogModel {
 
 	void setArrivalDistance(int distance);
 	int getArrivalDistance() const;
+	// The lowest arrival distance allowed: min(500, 2 * the target's radius) when arriving near a
+	// ship, else 0. The distance spinbox uses it as its minimum.
+	int getMinArrivalDistance() const;
 
 	void setArrivalDelay(int delay);
 	int getArrivalDelay() const;
@@ -168,12 +171,13 @@ class ShipEditorDialogModel : public AbstractDialogModel {
 	void onSelectedObjectMarkingChanged(int, bool);
 
   private: // NOLINT(readability-redundant-access-specifiers)
+	// Raise each marked ship's arrival distance that is below the minimum; true if any changed.
+	bool raiseArrivalDistancesToMinimum();
 	void setModified();
 	void scheduleInitializeData();
 	void shipAltNameClose(int baseShip);
 	void shipCallsignClose(int baseShip);
 	static int makeShipList(int* arr);
-	int computeArrivalMinDist() const;
 
 	int _noDepartureWarp;
 	int _noArrivalWarp;
