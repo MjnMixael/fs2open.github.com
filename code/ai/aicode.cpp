@@ -3126,6 +3126,7 @@ void create_model_path(object *pl_objp, object *mobjp, int path_num, int subsys_
 	aip->path_dir = PD_FORWARD;
 	aip->path_objnum = OBJ_INDEX(mobjp);
 	aip->mp_index = path_num;
+	aip->mp_randomized_vert = subsys_path ? mp->nverts-2 : -1;
 	aip->path_length = (int)(Ppfp - ppfp_start);
 	aip->path_next_check_time = timestamp(1);
 
@@ -3185,6 +3186,7 @@ void create_model_exit_path(object *pl_objp, object *mobjp, int path_num, int co
 	aip->path_dir = PD_FORWARD;
 	aip->path_objnum = OBJ_INDEX(mobjp);
 	aip->mp_index = path_num;
+	aip->mp_randomized_vert = -1;
 	aip->path_length = (int)(Ppfp - ppfp_start);
 	aip->path_next_check_time = timestamp(1);
 
@@ -3880,14 +3882,14 @@ void ai_afterburn_hard(object* objp, ai_info* aip) {
 	accelerate_ship(aip, 1.0f);
 };
 
-//	Given an ai_info struct, by reading current goal and path information,
-//	extract base path information and return in pmp and pmpv.
+//	Given an ai_info struct, by reading global path information,
+//	extract model path information and return in pmp and pmpv.
 //	Return true if found, else return false.
 //	false means the current point is not on the original path.
-int get_base_path_info(int path_cur, int goal_objnum, model_path **pmp, mp_vert **pmpv)
+int get_base_path_info(int path_cur, int path_objnum, model_path **pmp, mp_vert **pmpv)
 {
 	pnode			*pn = &Path_points[path_cur];
-	ship *shipp = &Ships[Objects[goal_objnum].instance];
+	ship *shipp = &Ships[Objects[path_objnum].instance];
 	polymodel	*pm = model_get(Ship_info[shipp->ship_info_index].model_num);
 	
 	*pmpv = NULL;
@@ -3932,7 +3934,14 @@ void modify_model_path_points(object *objp)
 		dir = -1;
 	}
 
-	copy_xlate_model_path_points(mobjp, &pm->paths[path_num], dir, pm->paths[path_num].nverts, path_num, pnp);
+	// an exit path may have been created with fewer than nverts points, so don't write past its end
+	int count = aip->path_length - static_cast<int>(pnp - &Path_points[aip->path_start]);
+
+	int randomize_pnt = -1;
+	if (The_mission.ai_profile->flags[AI::Profile_Flags::Fix_model_path_refresh_randomization])
+		randomize_pnt = aip->mp_randomized_vert;
+
+	copy_xlate_model_path_points(mobjp, &pm->paths[path_num], dir, count, path_num, pnp, randomize_pnt);
 }
 
 //	Return an indication of the distance between two matrices.
@@ -4035,12 +4044,18 @@ void set_accel_for_docking(object *objp, ai_info *aip, float dot, float dot_to_n
 		ai_afterburn_hard(Pl_objp, aip);
 	} else {
 		float max_bay_speed = sip->max_speed;
+		bool fix_bay_speed_ramp = The_mission.ai_profile->flags[AI::Profile_Flags::Fix_bay_speed_ramp];
+		ship_info *gsip = &Ship_info[Ships[gobjp->instance].ship_info_index];
+		polymodel *pm = model_get(gsip->model_num);
+
+		// a departure path can begin with points that route the ship around the carrier, ahead of the bay path itself
+		int ramp_start = aip->path_start;
+		if (aip->mode == AIM_BAY_DEPART && fix_bay_speed_ramp)
+			ramp_start = MAX(aip->path_start, aip->path_start + aip->path_length - pm->paths[aip->mp_index].nverts);
 
 		// Maybe gradually ramp up/down the speed of a ship flying a fighterbay path
-		if (aip->mode == AIM_BAY_EMERGE || (aip->mode == AIM_BAY_DEPART && aip->path_cur != aip->path_start)) {
-			ship_info *gsip = &Ship_info[Ships[gobjp->instance].ship_info_index];
-			polymodel *pm = model_get(gsip->model_num);
-			SCP_string pathName(pm->paths[Path_points[aip->path_start].path_num].name);
+		if (aip->mode == AIM_BAY_EMERGE || (aip->mode == AIM_BAY_DEPART && aip->path_cur > ramp_start)) {
+			SCP_string pathName(pm->paths[aip->mp_index].name);
 			float speed_mult = FLT_MIN;
 
 			if (aip->mode == AIM_BAY_EMERGE) { // Arriving
@@ -4064,7 +4079,7 @@ void set_accel_for_docking(object *objp, ai_info *aip, float dot, float dot_to_n
 			if (speed_mult != FLT_MIN && speed_mult != 1.0f) {
 				// We use the distance between the first and last point on the path here; it's not accurate
 				// if the path is not straight, but should be good enough usually; can be changed if necessary.
-				float total_path_length = vm_vec_dist_quick(&Path_points[aip->path_start].pos, &Path_points[aip->path_start + aip->path_length - 1].pos);
+				float total_path_length = vm_vec_dist_quick(&Path_points[ramp_start].pos, &Path_points[aip->path_start + aip->path_length - 1].pos);
 				float dist_to_end;
 
 				if (aip->mode == AIM_BAY_EMERGE) { // Arriving
@@ -4073,8 +4088,12 @@ void set_accel_for_docking(object *objp, ai_info *aip, float dot, float dot_to_n
 					dist_to_end = vm_vec_dist_quick(&Pl_objp->pos, &Path_points[aip->path_start + aip->path_length - 1].pos);
 				}
 
+				float ramp_fraction = dist_to_end / total_path_length;
+				if (fix_bay_speed_ramp)
+					CLAMP(ramp_fraction, 0.0f, 1.0f);
+
 				// Calculate max speed, but respect the waypoint speed cap if it's lower
-				max_bay_speed = sip->max_speed * (speed_mult + (1.0f - speed_mult) * (dist_to_end / total_path_length));
+				max_bay_speed = sip->max_speed * (speed_mult + (1.0f - speed_mult) * ramp_fraction);
 			}
 		}
 
@@ -15881,6 +15900,7 @@ void init_ai_object(int objnum)
 	aip->path_start = -1;
 	aip->path_goal_dist = -1;
 	aip->path_length = 0;
+	aip->mp_randomized_vert = -1;
 	aip->path_subsystem_next_check = 1;
 
 	aip->support_ship_objnum = -1;

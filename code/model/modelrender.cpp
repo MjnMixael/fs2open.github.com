@@ -2307,14 +2307,14 @@ void model_queue_render_thrusters(const model_render_params *interp, const polym
 			// start primary thruster glows
 			if ( (thruster_info.primary_glow_bitmap >= 0) && (d > 0.0f) ) {
 				p.r = p.g = p.b = p.a = (ubyte)(255.0f * d);
-				batching_add_volume_bitmap(thruster_info.primary_glow_bitmap, &p, 0, (w * 0.5f * thruster_info.glow_rad_factor), d, w * 0.325f);
+				batching_add_volume_bitmap(thruster_info.primary_glow_bitmap, &p, 0, (w * 0.5f * thruster_info.glow_rad_factor), d, w * Primary_thruster_glow_depth_factor);
 			}
 
 			// start tertiary thruster glows
 			if (thruster_info.tertiary_glow_bitmap >= 0) {
 				p.screen.xyw.w -= w;
 				p.r = p.g = p.b = p.a = (ubyte)(255.0f * fog_int);
-				batching_add_volume_bitmap_rotated(thruster_info.tertiary_glow_bitmap, &p, magnitude * 4, w * 0.6f * thruster_info.tertiary_glow_rad_factor, fog_int, -w*0.5f);
+				batching_add_volume_bitmap_rotated(thruster_info.tertiary_glow_bitmap, &p, magnitude * 4, w * 0.6f * thruster_info.tertiary_glow_rad_factor, fog_int, w * Tertiary_thruster_glow_depth_factor);
 			}
 
 			// begin secondary glows
@@ -2458,9 +2458,9 @@ void model_render_insignias(const insignia_draw_data *insignia_data)
 			vecs[2].texture_position.u = pm->ins[idx].u[s_idx][2];
 			vecs[2].texture_position.v = pm->ins[idx].v[s_idx][2];
 
-			light_apply_rgb( &vecs[0].r, &vecs[0].g, &vecs[0].b, &pm->ins[idx].vecs[i1], &pm->ins[idx].norm[i1], 1.5f );
-			light_apply_rgb( &vecs[1].r, &vecs[1].g, &vecs[1].b, &pm->ins[idx].vecs[i2], &pm->ins[idx].norm[i2], 1.5f );
-			light_apply_rgb( &vecs[2].r, &vecs[2].g, &vecs[2].b, &pm->ins[idx].vecs[i3], &pm->ins[idx].norm[i3], 1.5f );
+			light_apply_rgb( &vecs[0].r, &vecs[0].g, &vecs[0].b, &pm->ins[idx].vecs[i1], &pm->ins[idx].norm[s_idx], 1.5f );
+			light_apply_rgb( &vecs[1].r, &vecs[1].g, &vecs[1].b, &pm->ins[idx].vecs[i2], &pm->ins[idx].norm[s_idx], 1.5f );
+			light_apply_rgb( &vecs[2].r, &vecs[2].g, &vecs[2].b, &pm->ins[idx].vecs[i3], &pm->ins[idx].norm[s_idx], 1.5f );
 			vecs[0].a = vecs[1].a = vecs[2].a = 255;
 
 			// draw the polygon
