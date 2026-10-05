@@ -8,8 +8,10 @@
 #include <array>
 
 class QCheckBox;
+class QComboBox;
 class QKeySequenceEdit;
 class QLabel;
+class QPushButton;
 class QToolButton;
 
 namespace fso::fred::dialogs {
@@ -87,8 +89,13 @@ private: // NOLINT(readability-redundant-access-specifiers)
 		QToolButton* reset = nullptr;
 	};
 	std::array<SyntaxRow, SyntaxRoleCount> _syntaxRows;
-	QLabel* _syntaxThemeLabel = nullptr;
+	// the text box's background and plain text color (no bold or italic)
+	SyntaxRow _backgroundRow;
+	SyntaxRow _plainTextRow;
+	QComboBox* _syntaxSchemeCombo = nullptr;
+	QLabel* _syntaxThemeLabel = nullptr; // which version (light or dark) the edits apply to
 	QCheckBox* _rainbowParensCheck = nullptr;
+	QPushButton* _syntaxResetAllButton = nullptr;
 	FredView* _fredView = nullptr;
 	EditorViewport* _viewport = nullptr;
 };

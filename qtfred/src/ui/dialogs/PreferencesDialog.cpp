@@ -4,6 +4,7 @@
 
 #include <QCheckBox>
 #include <QColorDialog>
+#include <QComboBox>
 #include <QEvent>
 #include <QFontDatabase>
 #include <QFormLayout>
@@ -147,8 +148,27 @@ void PreferencesDialog::buildSyntaxColorsUi()
 	auto* group = ui->syntaxColorsGroup;
 	auto* layout = ui->syntaxColorsLayout;
 
+	// Scheme on the left; on the right, which version of it the edits below apply to, since the
+	// app's theme decides which version shows and each keeps its own changes.
+	auto* schemeRow = new QHBoxLayout;
+	auto* schemeLabel = new QLabel(tr("Color scheme:"), group);
+	_syntaxSchemeCombo = new QComboBox(group);
+	schemeLabel->setBuddy(_syntaxSchemeCombo);
+	for (int s = 0; s < SyntaxSchemeCount; ++s)
+		_syntaxSchemeCombo->addItem(SyntaxColorScheme::schemeLabel(static_cast<SyntaxScheme>(s)), s);
+	_syntaxSchemeCombo->setToolTip(tr("Each scheme keeps your changes to it; a * marks one you have changed."));
+	connect(_syntaxSchemeCombo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int index) {
+		if (index >= 0)
+			_model->setSyntaxScheme(static_cast<SyntaxScheme>(_syntaxSchemeCombo->itemData(index).toInt()));
+	});
 	_syntaxThemeLabel = new QLabel(group);
-	layout->addWidget(_syntaxThemeLabel);
+	_syntaxThemeLabel->setToolTip(
+		tr("The app's theme picks the light or dark version of the scheme; changes apply to the one showing."));
+	schemeRow->addWidget(schemeLabel);
+	schemeRow->addWidget(_syntaxSchemeCombo);
+	schemeRow->addStretch(1);
+	schemeRow->addWidget(_syntaxThemeLabel);
+	layout->addLayout(schemeRow);
 
 	// Two columns of rows: name, color swatch, bold, italic, reset.
 	auto* roleGrid = new QGridLayout;
@@ -156,7 +176,7 @@ void PreferencesDialog::buildSyntaxColorsUi()
 	constexpr int perColumn = (SyntaxRoleCount + 1) / 2;
 	constexpr int columnWidth = 6; // five widgets plus a gap column
 	// Created after setupUi(): chain them after the Appearance form, in row order
-	QList<QWidget*> syntaxChain{ui->labelFontScaleSpin};
+	QList<QWidget*> syntaxChain{ui->labelFontScaleSpin, _syntaxSchemeCombo};
 	for (int r = 0; r < SyntaxRoleCount; ++r) {
 		const auto role = static_cast<SyntaxRole>(r);
 		const int row = r % perColumn;
@@ -189,7 +209,7 @@ void PreferencesDialog::buildSyntaxColorsUi()
 
 		w.reset = new QToolButton(group);
 		w.reset->setText(tr("Reset"));
-		w.reset->setToolTip(tr("Use the theme's default"));
+		w.reset->setToolTip(tr("Use the scheme's own color"));
 		roleGrid->addWidget(w.reset, row, col + 4);
 
 		// Every edit applies to the theme that's showing right now.
@@ -218,25 +238,56 @@ void PreferencesDialog::buildSyntaxColorsUi()
 			_model->resetSyntaxStyle(role, SyntaxColorScheme::paletteIsDark());
 		});
 	}
+	// Background and plain text: a color and a reset each, on the grid's last row
+	auto addColorRow = [group, roleGrid](SyntaxRow& w, const QString& label, int row, int col) {
+		roleGrid->addWidget(new QLabel(label, group), row, col);
+		w.color = new QToolButton(group);
+		w.color->setToolTip(tr("Choose a color"));
+		roleGrid->addWidget(w.color, row, col + 1);
+		w.reset = new QToolButton(group);
+		w.reset->setText(tr("Reset"));
+		w.reset->setToolTip(tr("Use the scheme's own color"));
+		roleGrid->addWidget(w.reset, row, col + 4);
+	};
+	addColorRow(_backgroundRow, tr("Background"), perColumn, 0);
+	addColorRow(_plainTextRow, tr("Plain text"), perColumn, columnWidth);
+	connect(_backgroundRow.color, &QToolButton::clicked, this, [this]() {
+		const bool dark = SyntaxColorScheme::paletteIsDark();
+		const QColor picked = QColorDialog::getColor(_model->getEditorBackground(dark), this, tr("Background"));
+		if (picked.isValid())
+			_model->setEditorBackground(dark, picked);
+	});
+	connect(_plainTextRow.color, &QToolButton::clicked, this, [this]() {
+		const bool dark = SyntaxColorScheme::paletteIsDark();
+		const QColor picked = QColorDialog::getColor(_model->getEditorText(dark), this, tr("Plain text"));
+		if (picked.isValid())
+			_model->setEditorText(dark, picked);
+	});
+	connect(_backgroundRow.reset, &QToolButton::clicked, this,
+		[this]() { _model->resetEditorBackground(SyntaxColorScheme::paletteIsDark()); });
+	connect(_plainTextRow.reset, &QToolButton::clicked, this,
+		[this]() { _model->resetEditorText(SyntaxColorScheme::paletteIsDark()); });
+
 	roleGrid->setColumnMinimumWidth(columnWidth - 1, 16);
 	roleGrid->setColumnStretch(columnWidth * 2 - 1, 1);
 	for (const auto& row : _syntaxRows)
 		syntaxChain << row.color << row.bold << row.italic << row.reset;
+	syntaxChain << _backgroundRow.color << _backgroundRow.reset << _plainTextRow.color << _plainTextRow.reset;
 	layout->addLayout(roleGrid);
 
 	auto* optionsRow = new QHBoxLayout;
 	_rainbowParensCheck = new QCheckBox(tr("Rainbow parentheses"), group);
 	_rainbowParensCheck->setToolTip(tr("Color each nesting level of parentheses differently."));
 	connect(_rainbowParensCheck, &QCheckBox::toggled, this, [this](bool on) { _model->setRainbowParens(on); });
-	auto* resetAll = new QPushButton(tr("Reset All Colors"), group);
-	resetAll->setToolTip(tr("Return every color for this theme to its default"));
-	connect(resetAll, &QPushButton::clicked, this,
+	_syntaxResetAllButton = new QPushButton(tr("Reset All Colors"), group);
+	_syntaxResetAllButton->setToolTip(tr("Undo every change to this version of the scheme"));
+	connect(_syntaxResetAllButton, &QPushButton::clicked, this,
 		[this]() { _model->resetAllSyntaxStyles(SyntaxColorScheme::paletteIsDark()); });
 	optionsRow->addWidget(_rainbowParensCheck);
 	optionsRow->addStretch(1);
-	optionsRow->addWidget(resetAll);
+	optionsRow->addWidget(_syntaxResetAllButton);
 	layout->addLayout(optionsRow);
-	syntaxChain << _rainbowParensCheck << resetAll << ui->xyPlaneRadio;
+	syntaxChain << _rainbowParensCheck << _syntaxResetAllButton << ui->xyPlaneRadio;
 	util::setTabChain(syntaxChain);
 
 	// Live preview. Preferences apply as they change, so the highlighter here
@@ -260,7 +311,20 @@ void PreferencesDialog::updateSyntaxColorsUi()
 	util::SignalBlockers blockers(this);
 
 	const bool dark = SyntaxColorScheme::paletteIsDark();
-	_syntaxThemeLabel->setText(dark ? tr("Colors for the dark theme:") : tr("Colors for the light theme:"));
+	_syntaxThemeLabel->setText(dark ? tr("Dark version") : tr("Light version"));
+
+	// a * marks a scheme with changes in the version showing
+	const SyntaxScheme current = _model->getSyntaxScheme();
+	for (int i = 0; i < _syntaxSchemeCombo->count(); ++i) {
+		const auto scheme = static_cast<SyntaxScheme>(_syntaxSchemeCombo->itemData(i).toInt());
+		QString text = SyntaxColorScheme::schemeLabel(scheme);
+		if (_model->syntaxSchemeHasChanges(scheme, dark))
+			text += QLatin1Char('*');
+		_syntaxSchemeCombo->setItemText(i, text);
+		if (scheme == current)
+			_syntaxSchemeCombo->setCurrentIndex(i);
+	}
+	_syntaxResetAllButton->setEnabled(_model->syntaxSchemeHasChanges(current, dark));
 	for (int r = 0; r < SyntaxRoleCount; ++r) {
 		const auto role = static_cast<SyntaxRole>(r);
 		const SyntaxStyle style = _model->getSyntaxStyle(role, dark);
@@ -272,6 +336,16 @@ void PreferencesDialog::updateSyntaxColorsUi()
 		w.italic->setChecked(style.italic);
 		w.reset->setEnabled(_model->isSyntaxStyleCustom(role, dark));
 	}
+	auto setSwatch = [](QToolButton* button, const QColor& color) {
+		QPixmap swatch(16, 16);
+		swatch.fill(color);
+		button->setIcon(QIcon(swatch));
+	};
+	setSwatch(_backgroundRow.color, _model->getEditorBackground(dark));
+	setSwatch(_plainTextRow.color, _model->getEditorText(dark));
+	_backgroundRow.reset->setEnabled(_model->isEditorBackgroundCustom(dark));
+	_plainTextRow.reset->setEnabled(_model->isEditorTextCustom(dark));
+
 	_rainbowParensCheck->setChecked(_model->getRainbowParens());
 }
 
