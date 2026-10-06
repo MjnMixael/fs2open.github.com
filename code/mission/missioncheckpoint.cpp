@@ -6100,6 +6100,11 @@ void restore_wing_arrivals(const checkpoint_data& data)
 		}
 
 		while (wingp->current_wave < target_wave) {
+			// Clear the wave in front first, not only the one just created: a wing whose arrival cue
+			// is true at mission start already has its first wave in the fresh load, and creating the
+			// next one on top of it overruns MAX_SHIPS_PER_WING (parse_wing_create_ships() Int3s).
+			remove_gone_ships(data);
+
 			int before = wingp->current_wave;
 			parse_wing_create_ships(wingp, wingp->wave_count, true, true);
 
