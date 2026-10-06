@@ -1251,8 +1251,14 @@ void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes
 
 		swp.primary_bank_capacity[i] = bank.capacity;
 		swp.primary_bank_start_ammo[i] = bank.start_ammo;
-		// Clamp rather than trust the file: the bank may be smaller now.
-		swp.primary_bank_ammo[i] = MIN(bank.ammo, bank.capacity > 0 ? bank.capacity : bank.ammo);
+		// Clamp rather than trust the file: the bank may hold fewer rounds now.  The capacity is in
+		// cargo units, not rounds -- a 40-unit Tempest bank holds 160 -- so the limit is worked out
+		// from it the way the engine does; 0 means the weapon has no ammo to limit.
+		{
+			int max_ammo = (swp.primary_bank_weapons[i] >= 0)
+				? get_max_ammo_count_for_primary_turret_bank(&swp, i, swp.primary_bank_weapons[i]) : 0;
+			swp.primary_bank_ammo[i] = (max_ammo > 0) ? MIN(bank.ammo, max_ammo) : bank.ammo;
+		}
 		swp.primary_next_slot[i] = bank.next_slot;
 		swp.next_primary_fire_stamp[i] = translate_stamp(bank.next_fire_stamp);
 		swp.last_primary_fire_stamp[i] = translate_stamp(bank.last_fire_stamp);
@@ -1274,7 +1280,11 @@ void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes
 
 		swp.secondary_bank_capacity[i] = bank.capacity;
 		swp.secondary_bank_start_ammo[i] = bank.start_ammo;
-		swp.secondary_bank_ammo[i] = MIN(bank.ammo, bank.capacity > 0 ? bank.capacity : bank.ammo);
+		{
+			int max_ammo = (swp.secondary_bank_weapons[i] >= 0)
+				? get_max_ammo_count_for_turret_bank(&swp, i, swp.secondary_bank_weapons[i]) : 0;
+			swp.secondary_bank_ammo[i] = (max_ammo > 0) ? MIN(bank.ammo, max_ammo) : bank.ammo;
+		}
 		swp.secondary_next_slot[i] = bank.next_slot;
 		swp.next_secondary_fire_stamp[i] = translate_stamp(bank.next_fire_stamp);
 		swp.last_secondary_fire_stamp[i] = translate_stamp(bank.last_fire_stamp);
