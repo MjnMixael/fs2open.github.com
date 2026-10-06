@@ -160,19 +160,22 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	static int getFogB();
 	void setFogB(int b);
 
-	// old nebula group
-	static SCP_vector<SCP_string> getOldNebulaPatternOptions();
-	static SCP_vector<SCP_string> getOldNebulaColorOptions();
-	static SCP_string getOldNebulaColorName();
-	void setOldNebulaColorName(const SCP_string& name);
-	static SCP_string getOldNebulaPattern();
-	void setOldNebulaPattern(const SCP_string& name);
-	static int getOldNebulaPitch();
-	void setOldNebulaPitch(int deg);
-	static int getOldNebulaBank();
-	void setOldNebulaBank(int deg);
-	static int getOldNebulaHeading();
-	void setOldNebulaHeading(int deg);
+	// generated nebula group
+	static SCP_vector<SCP_string> getGeneratedNebulaPatternOptions();
+	static SCP_vector<SCP_string> getGeneratedNebulaColorOptions();
+	static SCP_string getGeneratedNebulaColorName();
+	void setGeneratedNebulaColorName(const SCP_string& name);
+	static SCP_string getGeneratedNebulaPattern();
+	void setGeneratedNebulaPattern(const SCP_string& name);
+	static int getGeneratedNebulaPitch();
+	void setGeneratedNebulaPitch(int deg);
+	static int getGeneratedNebulaBank();
+	void setGeneratedNebulaBank(int deg);
+	static int getGeneratedNebulaHeading();
+	void setGeneratedNebulaHeading(int deg);
+	// the mission's +Generated Nebula: nothing is drawn until it's on
+	static bool getGeneratedNebulaEnabled();
+	void setGeneratedNebulaEnabled(bool enabled);
 
 	// ambient light group
 	static int getAmbientR();
@@ -222,6 +225,8 @@ class BackgroundEditorDialogModel : public AbstractDialogModel {
 	void initializeData();
 	void refreshBackgroundPreview();
 	static void refreshPreview(Editor* editor);
+	// regenerate the generated nebula mesh and request a viewport redraw
+	void regenerateGeneratedNebula();
 	static background_t& getActiveBackground();
 	starfield_list_entry* getActiveBitmap() const;
 	starfield_list_entry* getActiveSun() const;

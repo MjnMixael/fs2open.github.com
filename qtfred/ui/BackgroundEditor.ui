@@ -704,82 +704,72 @@
         </widget>
        </item>
        <item>
-        <widget class="QToolButton" name="legacyNebulaToggle">
-         <property name="text">
-          <string>Legacy Nebula (deprecated)</string>
-         </property>
-         <property name="checkable">
-          <bool>true</bool>
-         </property>
-         <property name="autoRaise">
-          <bool>true</bool>
-         </property>
-         <property name="toolButtonStyle">
-          <enum>Qt::ToolButtonTextBesideIcon</enum>
-         </property>
-         <property name="arrowType">
-          <enum>Qt::RightArrow</enum>
-         </property>
-        </widget>
-       </item>
-       <item>
-        <widget class="QGroupBox" name="oldNebulaGroupBox">
+        <widget class="QGroupBox" name="generatedNebulaGroupBox">
          <property name="title">
-          <string/>
+          <string>Generated BG Nebula</string>
          </property>
-         <property name="visible">
-          <bool>false</bool>
-         </property>
+         <layout class="QVBoxLayout" name="generatedNebulaOuterLayout">
+          <item>
+           <widget class="QCheckBox" name="generatedNebulaCheckBox">
+            <property name="text">
+             <string>Generated Nebula</string>
+            </property>
+            <property name="toolTip">
+             <string>Draws the generated nebula in this mission. Saved with the mission; off for missions that never turned it on, so older missions are unchanged.</string>
+            </property>
+           </widget>
+          </item>
+          <item>
          <layout class="QHBoxLayout" name="horizontalLayout_14" stretch="0,0">
           <item>
-           <layout class="QFormLayout" name="oldNebulaLeftForm">
+           <layout class="QFormLayout" name="generatedNebulaLeftForm">
             <item row="0" column="0">
-             <widget class="QLabel" name="oldNebPatternLabel">
+             <widget class="QLabel" name="generatedNebPatternLabel">
               <property name="text">
                <string>Pattern</string>
               </property>
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QComboBox" name="oldNebulaPatternCombo"/>
+             <widget class="QComboBox" name="generatedNebulaPatternCombo"/>
             </item>
             <item row="1" column="0">
-             <widget class="QLabel" name="oldNebColorLabel">
+             <widget class="QLabel" name="generatedNebColorLabel">
               <property name="text">
                <string>Color</string>
               </property>
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QComboBox" name="oldNebulaColorCombo"/>
+             <widget class="QComboBox" name="generatedNebulaColorCombo"/>
             </item>
            </layout>
           </item>
           <item>
-           <layout class="QFormLayout" name="oldNebulaRightForm">
+           <layout class="QFormLayout" name="generatedNebulaRightForm">
             <item row="0" column="0">
-             <widget class="QLabel" name="oldNebPitchLabel">
+             <widget class="QLabel" name="generatedNebPitchLabel">
               <property name="text">
                <string>Pitch</string>
               </property>
              </widget>
             </item>
             <item row="1" column="0">
-             <widget class="QLabel" name="oldNebBankLabel">
+             <widget class="QLabel" name="generatedNebBankLabel">
               <property name="text">
                <string>Bank</string>
               </property>
              </widget>
             </item>
             <item row="2" column="0">
-             <widget class="QLabel" name="oldNebHeadingLabel">
+             <widget class="QLabel" name="generatedNebHeadingLabel">
               <property name="text">
                <string>Heading</string>
               </property>
              </widget>
             </item>
             <item row="0" column="1">
-             <widget class="QSpinBox" name="oldNebulaPitchSpinBox">
+             <widget class="QSpinBox" name="generatedNebulaPitchSpinBox">
               <property name="minimumSize">
                <size>
                 <width>100</width>
@@ -795,7 +785,7 @@
              </widget>
             </item>
             <item row="1" column="1">
-             <widget class="QSpinBox" name="oldNebulaBankSpinBox">
+             <widget class="QSpinBox" name="generatedNebulaBankSpinBox">
               <property name="minimumSize">
                <size>
                 <width>100</width>
@@ -811,7 +801,7 @@
              </widget>
             </item>
             <item row="2" column="1">
-             <widget class="QSpinBox" name="oldNebulaHeadingSpinBox">
+             <widget class="QSpinBox" name="generatedNebulaHeadingSpinBox">
               <property name="minimumSize">
                <size>
                 <width>100</width>
@@ -827,6 +817,8 @@
              </widget>
             </item>
            </layout>
+          </item>
+         </layout>
           </item>
          </layout>
         </widget>
@@ -1199,12 +1191,12 @@
   <tabstop>fogOverrideGreenSpinBox</tabstop>
   <tabstop>fogOverrideBlueSpinBox</tabstop>
   <tabstop>poofsListWidget</tabstop>
-  <tabstop>legacyNebulaToggle</tabstop>
-  <tabstop>oldNebulaPatternCombo</tabstop>
-  <tabstop>oldNebulaColorCombo</tabstop>
-  <tabstop>oldNebulaPitchSpinBox</tabstop>
-  <tabstop>oldNebulaBankSpinBox</tabstop>
-  <tabstop>oldNebulaHeadingSpinBox</tabstop>
+  <tabstop>generatedNebulaCheckBox</tabstop>
+  <tabstop>generatedNebulaPatternCombo</tabstop>
+  <tabstop>generatedNebulaColorCombo</tabstop>
+  <tabstop>generatedNebulaPitchSpinBox</tabstop>
+  <tabstop>generatedNebulaBankSpinBox</tabstop>
+  <tabstop>generatedNebulaHeadingSpinBox</tabstop>
   <tabstop>ambientLightRedSlider</tabstop>
   <tabstop>ambientLightGreenSlider</tabstop>
   <tabstop>ambientLightBlueSlider</tabstop>

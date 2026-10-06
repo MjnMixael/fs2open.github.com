@@ -146,24 +146,17 @@ void BackgroundEditorDialog::initializeUi()
 
 	updateNebulaControls();
 
-	// Old nebula — legacy FS1 system, collapsed by default
-	connect(ui->legacyNebulaToggle, &QToolButton::toggled, this, [this](bool expanded) {
-		ui->legacyNebulaToggle->setArrowType(expanded ? Qt::DownArrow : Qt::RightArrow);
-		ui->oldNebulaGroupBox->setVisible(expanded);
-		adjustSize();
-	});
-
-	const auto& old_nebula_names = _model->getOldNebulaPatternOptions();
-	for (const auto& s : old_nebula_names) {
-		ui->oldNebulaPatternCombo->addItem(QString::fromStdString(s));
+	const auto& generated_nebula_names = _model->getGeneratedNebulaPatternOptions();
+	for (const auto& s : generated_nebula_names) {
+		ui->generatedNebulaPatternCombo->addItem(QString::fromStdString(s));
 	}
 
-	const auto& old_nebula_colors = _model->getOldNebulaColorOptions();
-	for (const auto& s : old_nebula_colors) {
-		ui->oldNebulaColorCombo->addItem(QString::fromStdString(s));
+	const auto& generated_nebula_colors = _model->getGeneratedNebulaColorOptions();
+	for (const auto& s : generated_nebula_colors) {
+		ui->generatedNebulaColorCombo->addItem(QString::fromStdString(s));
 	}
 
-	updateOldNebulaControls();
+	updateGeneratedNebulaControls();
 
 	// Ambient light
 	ui->ambientSwatch->setMinimumSize(28, 28);
@@ -194,7 +187,7 @@ void BackgroundEditorDialog::updateUi()
 	refreshBitmapList();
 	refreshSunList();
 	updateNebulaControls();
-	updateOldNebulaControls();
+	updateGeneratedNebulaControls();
 	updateAmbientLightControls();
 	updateSkyboxControls();
 	updateMiscControls();
@@ -369,7 +362,7 @@ void BackgroundEditorDialog::updateNebulaControls()
 
 	updateFogSwatch();
 
-	updateOldNebulaControls();
+	updateGeneratedNebulaControls();
 }
 
 void BackgroundEditorDialog::updateFogSwatch()
@@ -384,33 +377,28 @@ void BackgroundEditorDialog::updateFogSwatch()
 			.arg(b));
 }
 
-void BackgroundEditorDialog::updateOldNebulaControls()
+void BackgroundEditorDialog::updateGeneratedNebulaControls()
 {
 	util::SignalBlockers blockers(this);
 
 	const bool fullNeb = _model->getFullNebulaEnabled();
-	const bool hasLegacy = !fullNeb && _model->getOldNebulaPattern() != "<None>";
-	const bool patternSet = _model->getOldNebulaPattern() != "<None>";
+	const bool patternSet = _model->getGeneratedNebulaPattern() != "<None>";
+	// like Full Nebula, the rest of the group follows the checkbox
+	const bool on = !fullNeb && _model->getGeneratedNebulaEnabled();
 
-	// Drive toggle button and group box visibility from the model.
-	// SignalBlockers prevents toggled from re-entering; sync arrow type manually.
-	ui->legacyNebulaToggle->setChecked(hasLegacy);
-	ui->legacyNebulaToggle->setArrowType(hasLegacy ? Qt::DownArrow : Qt::RightArrow);
-	ui->oldNebulaGroupBox->setVisible(hasLegacy);
+	ui->generatedNebulaCheckBox->setEnabled(!fullNeb);
+	ui->generatedNebulaCheckBox->setChecked(_model->getGeneratedNebulaEnabled());
+	ui->generatedNebulaPatternCombo->setEnabled(on);
+	ui->generatedNebulaColorCombo->setEnabled(on && patternSet);
+	ui->generatedNebulaPitchSpinBox->setEnabled(on && patternSet);
+	ui->generatedNebulaBankSpinBox->setEnabled(on && patternSet);
+	ui->generatedNebulaHeadingSpinBox->setEnabled(on && patternSet);
 
-	// Always apply enabled states — controls must be correct if the user manually
-	// expanded the section while pattern is still <None>.
-	ui->oldNebulaPatternCombo->setEnabled(!fullNeb);
-	ui->oldNebulaColorCombo->setEnabled(!fullNeb && patternSet);
-	ui->oldNebulaPitchSpinBox->setEnabled(!fullNeb && patternSet);
-	ui->oldNebulaBankSpinBox->setEnabled(!fullNeb && patternSet);
-	ui->oldNebulaHeadingSpinBox->setEnabled(!fullNeb && patternSet);
-
-	ui->oldNebulaPatternCombo->setCurrentIndex(ui->oldNebulaPatternCombo->findText(QString::fromStdString(_model->getOldNebulaPattern())));
-	ui->oldNebulaColorCombo->setCurrentIndex(ui->oldNebulaColorCombo->findText(QString::fromStdString(_model->getOldNebulaColorName())));
-	ui->oldNebulaPitchSpinBox->setValue(_model->getOldNebulaPitch());
-	ui->oldNebulaBankSpinBox->setValue(_model->getOldNebulaBank());
-	ui->oldNebulaHeadingSpinBox->setValue(_model->getOldNebulaHeading());
+	ui->generatedNebulaPatternCombo->setCurrentIndex(ui->generatedNebulaPatternCombo->findText(QString::fromStdString(_model->getGeneratedNebulaPattern())));
+	ui->generatedNebulaColorCombo->setCurrentIndex(ui->generatedNebulaColorCombo->findText(QString::fromStdString(_model->getGeneratedNebulaColorName())));
+	ui->generatedNebulaPitchSpinBox->setValue(_model->getGeneratedNebulaPitch());
+	ui->generatedNebulaBankSpinBox->setValue(_model->getGeneratedNebulaBank());
+	ui->generatedNebulaHeadingSpinBox->setValue(_model->getGeneratedNebulaHeading());
 }
 
 void BackgroundEditorDialog::updateAmbientLightControls()
@@ -915,38 +903,44 @@ void BackgroundEditorDialog::on_fogOverrideBlueSpinBox_valueChanged(int arg1)
 	updateFogSwatch();
 }
 
-// ---- Old Nebula ----
+// ---- Generated Nebula ----
 
-void BackgroundEditorDialog::on_oldNebulaPatternCombo_currentIndexChanged(int index)
+void BackgroundEditorDialog::on_generatedNebulaCheckBox_toggled(bool checked)
+{
+	BG_PUSH(BG_GeneratedNebEnabled, _model->setGeneratedNebulaEnabled(checked), "Toggle Generated Nebula");
+	updateGeneratedNebulaControls();
+}
+
+void BackgroundEditorDialog::on_generatedNebulaPatternCombo_currentIndexChanged(int index)
 {
 	if (index < 0)
 		return;
-	const QString text = ui->oldNebulaPatternCombo->itemText(index);
-	BG_PUSH(BG_OldNebPattern, _model->setOldNebulaPattern(text.toUtf8().constData()), "Change Old Nebula Pattern");
-	updateOldNebulaControls();
+	const QString text = ui->generatedNebulaPatternCombo->itemText(index);
+	BG_PUSH(BG_GeneratedNebPattern, _model->setGeneratedNebulaPattern(text.toUtf8().constData()), "Change Generated Nebula Pattern");
+	updateGeneratedNebulaControls();
 }
 
-void BackgroundEditorDialog::on_oldNebulaColorCombo_currentIndexChanged(int index)
+void BackgroundEditorDialog::on_generatedNebulaColorCombo_currentIndexChanged(int index)
 {
 	if (index < 0)
 		return;
-	const QString text = ui->oldNebulaColorCombo->itemText(index);
-	BG_PUSH(BG_OldNebColor, _model->setOldNebulaColorName(text.toUtf8().constData()), "Change Old Nebula Color");
+	const QString text = ui->generatedNebulaColorCombo->itemText(index);
+	BG_PUSH(BG_GeneratedNebColor, _model->setGeneratedNebulaColorName(text.toUtf8().constData()), "Change Generated Nebula Color");
 }
 
-void BackgroundEditorDialog::on_oldNebulaPitchSpinBox_valueChanged(int arg1)
+void BackgroundEditorDialog::on_generatedNebulaPitchSpinBox_valueChanged(int arg1)
 {
-	BG_PUSH(BG_OldNebPitch, _model->setOldNebulaPitch(arg1), "Change Old Nebula Pitch");
+	BG_PUSH(BG_GeneratedNebPitch, _model->setGeneratedNebulaPitch(arg1), "Change Generated Nebula Pitch");
 }
 
-void BackgroundEditorDialog::on_oldNebulaBankSpinBox_valueChanged(int arg1)
+void BackgroundEditorDialog::on_generatedNebulaBankSpinBox_valueChanged(int arg1)
 {
-	BG_PUSH(BG_OldNebBank, _model->setOldNebulaBank(arg1), "Change Old Nebula Bank");
+	BG_PUSH(BG_GeneratedNebBank, _model->setGeneratedNebulaBank(arg1), "Change Generated Nebula Bank");
 }
 
-void BackgroundEditorDialog::on_oldNebulaHeadingSpinBox_valueChanged(int arg1)
+void BackgroundEditorDialog::on_generatedNebulaHeadingSpinBox_valueChanged(int arg1)
 {
-	BG_PUSH(BG_OldNebHeading, _model->setOldNebulaHeading(arg1), "Change Old Nebula Heading");
+	BG_PUSH(BG_GeneratedNebHeading, _model->setGeneratedNebulaHeading(arg1), "Change Generated Nebula Heading");
 }
 
 // ---- Ambient Light ----
