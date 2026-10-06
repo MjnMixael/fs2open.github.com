@@ -5210,11 +5210,11 @@ bool mission_checkpoint_store(const SCP_string& slot)
 			}
 		}
 
-		for (const auto& entry : shipp->max_guard_ranges) {
-			if (entry.shipnum >= 0 && entry.shipnum < MAX_SHIPS && entry.range > 0.0f) {
+		for (const auto& guard_entry : shipp->max_guard_ranges) {
+			if (guard_entry.shipnum >= 0 && guard_entry.shipnum < MAX_SHIPS && guard_entry.range > 0.0f) {
 				guard_range_state guard;
-				guard.ship = Ships[entry.shipnum].ship_name;
-				guard.range = entry.range;
+				guard.ship = Ships[guard_entry.shipnum].ship_name;
+				guard.range = guard_entry.range;
 				state.guard_ranges.push_back(std::move(guard));
 			}
 		}
