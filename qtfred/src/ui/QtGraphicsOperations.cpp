@@ -149,11 +149,11 @@ void QtViewport::swapBuffers() {
 void QtViewport::setState(os::ViewportState  /*state*/) {
 	// Not used in FRED
 }
+// gr_activate() calls these around every warning and error box, which exists so the game can leave
+// fullscreen. The editor is a normal window, so minimizing it only hid it behind the box.
 void QtViewport::minimize() {
-	_viewportWindow->showMinimized();
 }
 void QtViewport::restore() {
-	_viewportWindow->show();
 }
 QSurface* QtViewport::getRenderSurface() {
 	return _viewportWindow->getRenderSurface();
