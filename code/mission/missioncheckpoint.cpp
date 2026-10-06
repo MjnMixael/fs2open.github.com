@@ -6153,7 +6153,14 @@ void force_loose_arrival(p_object* p_objp)
 void restore_loose_arrivals(const checkpoint_data& data)
 {
 	for (const auto& state : data.ships) {
-		if (state.disposition != ShipDisposition::Present) {
+		// Everything that had arrived by the time of the checkpoint, including what has gone since.
+		// A ship that arrived mid-mission and was destroyed or left before the checkpoint is still
+		// waiting to arrive in the fresh load; brought in here, remove_gone_ships() then takes it out
+		// the way the engine would have, leaving an exited record and an EXITED registry entry --
+		// the same thing restore_wing_arrivals() does for a wing's spent waves.  Left out, it stayed
+		// NOT_YET_PRESENT with only SF_Cannot_arrive holding it back, so the next checkpoint stored
+		// from the restored run recorded it as not arrived yet, and loading that brought it in.
+		if (state.disposition == ShipDisposition::NotYetHere) {
 			continue;
 		}
 
@@ -6611,8 +6618,9 @@ void apply_variables(const checkpoint_data& data)
 			strcpy_s(Sexp_variables[slot].text, state.value.c_str());
 			if (state.type != 0) {
 				Sexp_variables[slot].type = state.type;
+			} else {
+				Sexp_variables[slot].type |= SEXP_VARIABLE_MODIFIED;
 			}
-			Sexp_variables[slot].type |= SEXP_VARIABLE_MODIFIED;
 			continue;
 		}
 
@@ -6636,11 +6644,13 @@ void apply_variables(const checkpoint_data& data)
 
 		strcpy_s(Sexp_variables[index].text, state.value.c_str());
 		// The persistence bits can be changed by a script mid-mission, so the whole type word
-		// comes back when the file has it.
+		// comes back when the file has it -- MODIFIED included, which the saved run set only if a
+		// SEXP had changed the value.
 		if (state.type != 0) {
 			Sexp_variables[index].type = state.type;
+		} else {
+			Sexp_variables[index].type |= SEXP_VARIABLE_MODIFIED;
 		}
-		Sexp_variables[index].type |= SEXP_VARIABLE_MODIFIED;
 	}
 }
 
@@ -7535,9 +7545,12 @@ void apply_mission_logic(const checkpoint_data& data)
 		}
 
 		// rand_sexp() parks its roll on the rand operator node itself, replacing the operator's
-		// text with the number; anywhere else that text would wreck evaluation.
-		if (state.value == SEXP_NUM_EVAL &&
-		    (Sexp_nodes[index].subtype != SEXP_ATOM_OPERATOR || get_operator_const(index) != OP_RAND)) {
+		// text with the number; anywhere else that text would wreck evaluation.  The fresh load
+		// can have rolled it already (an arrival cue is evaluated before the apply runs), in which
+		// case its text is a number too and its value says so.
+		bool is_rand = Sexp_nodes[index].value == SEXP_NUM_EVAL ||
+		               (Sexp_nodes[index].subtype == SEXP_ATOM_OPERATOR && get_operator_const(index) == OP_RAND);
+		if (state.value == SEXP_NUM_EVAL && !is_rand) {
 			continue;
 		}
 
@@ -7546,6 +7559,9 @@ void apply_mission_logic(const checkpoint_data& data)
 
 		if (state.value == SEXP_NUM_EVAL && !state.text.empty()) {
 			strcpy_s(Sexp_nodes[index].text, state.text.c_str());
+			// What clear_cache() does after rand_sexp() rewrites the text: a roll the fresh load
+			// already made may be cached on the node and would otherwise be read instead.
+			Sexp_nodes[index].cache.reset();
 		}
 
 		// The duration clocks are handed out in evaluation order and cleared by the level init,
