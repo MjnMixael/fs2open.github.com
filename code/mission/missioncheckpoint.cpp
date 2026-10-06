@@ -5779,6 +5779,16 @@ void mission_checkpoint_request_load(const SCP_string& slot, LoadFlags flags)
 		return;
 	}
 
+	// Not once the player's ship is dying or dead.  The death roll starts before the state says so:
+	// ship_hit_kill() marks the ship Dying and posts GS_EVENT_DEATH_DIED while the game is still in
+	// GAME_PLAY, and the state change then throws out the restart a load posts -- leaving the load
+	// half done, to be applied by whatever restart came next.  The death popup's Quick Start and
+	// Restart both come back through the resume prompt, which is where a checkpoint is offered.
+	if ((Game_mode & GM_DEAD) || (Player_ship != nullptr && Player_ship->flags[Ship::Ship_Flags::Dying])) {
+		mprintf(("CHECKPOINT => load asked for while the player is dying; ignoring it.\n"));
+		return;
+	}
+
 	// Read the file now, while the old mission is still loaded and before anything later this frame
 	// can write to the slot, so that a missing or unusable checkpoint costs nothing -- we simply
 	// carry on with the mission in progress rather than restarting it and then discovering there
@@ -5835,13 +5845,16 @@ void mission_checkpoint_process_pending_load()
 		return;
 	}
 
-	// Only these two states rebuild the level when the restart comes back round as ENTER_GAME (see
-	// game_enter_state()).  Leaving the death roll's first state, DEATH_DIED, stops the mission
-	// without loading it again, so a load asked for while the player is dying -- the obvious
-	// "is-destroyed Alpha 1 -> load-checkpoint" -- waits, still queued, until the death roll
-	// reaches DEATH_BLEW_UP, which restarts the way the death popup's own Restart does.
-	int state = gameseq_get_state();
-	if (state != GS_STATE_GAME_PLAY && state != GS_STATE_DEATH_BLEW_UP) {
+	// Only from GAME_PLAY, which rebuilds the level when the restart comes back round as ENTER_GAME
+	// (see game_enter_state()).  A pushed state -- pause, the hotkey screen -- keeps the request
+	// queued until the game is back.  A request made just before the player was killed is dropped:
+	// the death roll would throw the restart out (see mission_checkpoint_request_load()).
+	if (gameseq_get_state() != GS_STATE_GAME_PLAY) {
+		return;
+	}
+	if ((Game_mode & GM_DEAD) || (Player_ship != nullptr && Player_ship->flags[Ship::Ship_Flags::Dying])) {
+		mprintf(("CHECKPOINT => The player died before checkpoint '%s' could load; dropping it.\n", Pending_load.slot.c_str()));
+		mission_checkpoint_clear_pending();
 		return;
 	}
 
