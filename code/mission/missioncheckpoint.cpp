@@ -3190,7 +3190,10 @@ void apply_environment(const checkpoint_data& data)
 
 		for (int i = 0; i < MAX_SQUADRON_WINGS; i++) {
 			const char* name = i < static_cast<int>(env.squadron_wings.size()) ? env.squadron_wings[i].c_str() : "";
-			wingnums[i] = (*name == '\0') ? -1 : wing_name_lookup(name);
+			// ignore_count, as the mission parse does: this runs before the ships are reconciled, so a
+			// squadron wing that has not arrived in the fresh load -- or has gone -- has no ships to
+			// be counted, and the plain lookup would clear its slot.
+			wingnums[i] = (*name == '\0') ? -1 : wing_name_lookup(name, 1);
 
 			if (wingnums[i] != Squadron_wings[i]) {
 				changed = true;
