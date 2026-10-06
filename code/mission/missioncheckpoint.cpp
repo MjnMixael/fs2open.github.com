@@ -3451,7 +3451,13 @@ void restore_dynamic_ships(const checkpoint_data& data)
 	int created = 0;
 
 	for (const auto& state : data.ships) {
-		if (!state.no_parse_object || state.disposition != ShipDisposition::Present) {
+		// Gone ones too: a support ship destroyed before the checkpoint is recreated here and taken
+		// out again by remove_gone_ships(), which leaves the exited record and EXITED registry entry
+		// the engine would have -- is-destroyed and the next support ship's "Support N" name both
+		// read them.  Not one that vanished, which leaves no record either way.
+		if (!state.no_parse_object ||
+		    (state.disposition != ShipDisposition::Present && state.disposition != ShipDisposition::Destroyed &&
+		     state.disposition != ShipDisposition::Departed)) {
 			continue;
 		}
 		if (ship_registry_get(state.name) != nullptr) {
@@ -5153,6 +5159,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 		case ShipStatus::EXITED: {
 			state.disposition = ShipDisposition::Vanished;
+			// A support ship (or any ship with no parse object) that has gone; the restore recreates
+			// it only to take it out again, so its exited record comes back.  See
+			// restore_dynamic_ships().
+			state.no_parse_object = (entry.pobj_num < 0);
 			if (entry.exited_index >= 0 && entry.exited_index < static_cast<int>(Ships_exited.size())) {
 				const auto& exited = Ships_exited[entry.exited_index];
 				state.exit_time = exited.time;
