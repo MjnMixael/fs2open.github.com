@@ -1832,8 +1832,8 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_string_list(handler, "orders_allowed_against", ship_data.orders_allowed_against);
 			ship_data.guard_ranges.clear();
 			if (handler->hasField("guard_ranges")) {
-				auto count = handler->startArrayRead("guard_ranges");
-				for (size_t j = 0; j < count; j++, handler->nextArraySection()) {
+				auto guard_count = handler->startArrayRead("guard_ranges");
+				for (size_t j = 0; j < guard_count; j++, handler->nextArraySection()) {
 					checkpoint::guard_range_state guard;
 					guard.ship = handler->readStringOr("ship", "");
 					guard.range = handler->readFloatOr("range", -1.0f);
@@ -1858,8 +1858,8 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			ship_data.sim_hull = handler->readFloatOr("sim_hull", 0.0f);
 			ship_data.damage_credits.clear();
 			if (handler->hasField("damage_credits")) {
-				auto count = handler->startArrayRead("damage_credits");
-				for (size_t j = 0; j < count; j++, handler->nextArraySection()) {
+				auto credit_count = handler->startArrayRead("damage_credits");
+				for (size_t j = 0; j < credit_count; j++, handler->nextArraySection()) {
 					checkpoint::damage_credit_state credit;
 					credit.ship = handler->readStringOr("ship", "");
 					credit.damage = handler->readFloatOr("damage", 0.0f);
