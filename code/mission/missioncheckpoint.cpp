@@ -3263,6 +3263,16 @@ void apply_environment(const checkpoint_data& data)
 					continue;
 				}
 
+				// Untouched since the level init put the table default back, so nothing to do.  Going
+				// through the setter anyway would round a default that is not on the 0-100 scale --
+				// stock brightness is 1.11 with a divisor of 50, which comes back 1.12 -- and the
+				// OpenGL renderer switches an effect's shader on whenever it is off its default.
+				// Anything a SEXP set came from that scale, so it round-trips exactly.
+				bool rgb_same = vmd_zero_vector == state.rgb || vm_vec_same(&state.rgb, &effect.rgb);
+				if (fabs(state.intensity - effect.intensity) < 0.0001f && rgb_same) {
+					break;
+				}
+
 				int value = fl2ir((state.intensity - effect.add) * effect.div);
 				vec3d rgb = state.rgb;
 				gr_post_process_set_effect(state.name.c_str(), value, &rgb);
@@ -3270,9 +3280,13 @@ void apply_environment(const checkpoint_data& data)
 			}
 		}
 
-		// Lightshafts are not in the effect list; the setter special-cases the name.
-		int lightshafts = env.lightshafts_on ? fl2ir(env.lightshafts_intensity * 100.0f) : 0;
-		gr_post_process_set_effect("lightshafts", lightshafts, nullptr);
+		// Lightshafts are not in the effect list; the setter special-cases the name.  The same
+		// rounding applies, so the same check.
+		const auto& current_shafts = graphics::Post_processing_manager->getLightshaftParams();
+		if (current_shafts.on != env.lightshafts_on || fabs(current_shafts.intensity - env.lightshafts_intensity) >= 0.0001f) {
+			int lightshafts = env.lightshafts_on ? fl2ir(env.lightshafts_intensity * 100.0f) : 0;
+			gr_post_process_set_effect("lightshafts", lightshafts, nullptr);
+		}
 	}
 
 	// The sound environment, through the same calls the SEXPs make.  Game_sound_env is what the
@@ -4565,11 +4579,24 @@ void resolve_ship_references(ship* shipp, const ship_state& state)
 		if (slot >= MAX_DAMAGE_SLOTS) {
 			break;
 		}
+		// A ship that has since been destroyed or has left still holds its share: kill credit and
+		// assists are worked out from everyone's share, so dropping it hands the rest a bigger one.
+		// The engine keeps such a ship's signature in its exited-ship record, and remove_gone_ships()
+		// has made one for every ship the checkpoint records as gone.
+		int signature = -1;
 		int objnum = objnum_for_ship_name(credit.ship);
-		if (objnum < 0) {
+		if (objnum >= 0) {
+			signature = Objects[objnum].signature;
+		} else {
+			int exited = ship_find_exited_ship_by_name(credit.ship.c_str());
+			if (exited >= 0) {
+				signature = Ships_exited[exited].obj_signature;
+			}
+		}
+		if (signature <= 0) {
 			continue;
 		}
-		shipp->damage_ship_id[slot] = Objects[objnum].signature;
+		shipp->damage_ship_id[slot] = signature;
 		shipp->damage_ship[slot] = credit.damage;
 		slot++;
 	}
@@ -5194,21 +5221,36 @@ bool mission_checkpoint_store(const SCP_string& slot)
 
 		state.sim_hull = objp->sim_hull_strength;
 
-		// Who has damaged it, by signature at runtime; only a live attacker can be named, and only
-		// a live one could still be credited.
+		// Who has damaged it, by signature at runtime, named so the restore can find each one again.
+		// An attacker that has since been destroyed or has left still holds its share of the credit
+		// (scoring finds it in Ships_exited), so it is named from there.
 		for (int i = 0; i < MAX_DAMAGE_SLOTS; i++) {
 			if (shipp->damage_ship_id[i] <= 0 || shipp->damage_ship[i] <= 0.0f) {
 				continue;
 			}
+
+			SCP_string attacker_name;
 			for (auto so : list_range(&Ship_obj_list)) {
 				const object* attacker = &Objects[so->objnum];
 				if (attacker->signature == shipp->damage_ship_id[i] && attacker->type == OBJ_SHIP) {
-					damage_credit_state credit;
-					credit.ship = Ships[attacker->instance].ship_name;
-					credit.damage = shipp->damage_ship[i];
-					state.damage_credits.push_back(std::move(credit));
+					attacker_name = Ships[attacker->instance].ship_name;
 					break;
 				}
+			}
+			if (attacker_name.empty()) {
+				for (const auto& exited : Ships_exited) {
+					if (exited.obj_signature == shipp->damage_ship_id[i]) {
+						attacker_name = exited.ship_name;
+						break;
+					}
+				}
+			}
+
+			if (!attacker_name.empty()) {
+				damage_credit_state credit;
+				credit.ship = attacker_name;
+				credit.damage = shipp->damage_ship[i];
+				state.damage_credits.push_back(std::move(credit));
 			}
 		}
 
