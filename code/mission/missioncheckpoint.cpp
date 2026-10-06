@@ -59,6 +59,7 @@
 #include "mission/missionmessage.h"
 #include "mission/missiontraining.h"
 #include "mission/missionparse.h"
+#include "missionui/redalert.h"
 #include "mod_table/mod_table.h"
 #include "network/multiutil.h"
 #include "object/object.h"
@@ -5071,6 +5072,14 @@ bool mission_checkpoint_store(const SCP_string& slot)
 	// mission is on rails to its end, with nothing a restore could put back.
 	if (supernova_stage() >= SUPERNOVA_STAGE::HIT) {
 		mprintf(("CHECKPOINT => The supernova has hit; not storing.\n"));
+		return false;
+	}
+
+	// Nor once the red-alert warning is counting down.  The countdown is a static timestamp in
+	// redalert.cpp that the checkpoint does not carry, so a restore would come back with the event
+	// that called red-alert done and nothing left to make the jump: the mission would never end.
+	if (red_alert_in_progress()) {
+		mprintf(("CHECKPOINT => A red alert is in progress; not storing.\n"));
 		return false;
 	}
 
