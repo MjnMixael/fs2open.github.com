@@ -4661,6 +4661,15 @@ void resolve_ai_references(ship* shipp, const ai_state& in)
 
 	aip->last_subsys_target = find_subsys_by_key(in.last_subsys_target_ship, in.last_subsys_target);
 
+	// The player's HUD has not seen this target yet (Player_ai->last_target is fresh), so its first
+	// frame treats it as newly acquired and calls hud_restore_subsystem_target(), which takes the
+	// subsystem from the target ship's own memory of what the player last had targeted on it -- empty
+	// on a freshly loaded ship, so the restored subsystem target was cleared.  Give it that memory.
+	if (shipp == Player_ship && aip->targeted_subsys != nullptr && aip->target_objnum >= 0 &&
+	    aip->targeted_subsys_parent == aip->target_objnum && Objects[aip->target_objnum].type == OBJ_SHIP) {
+		Ships[Objects[aip->target_objnum].instance].last_targeted_subobject[Player_num] = aip->targeted_subsys;
+	}
+
 	for (int i = 0; i < MAX_AI_GOALS; i++) {
 		resolve_ai_goal_dockpoints(shipp, aip->goals[i]);
 	}
