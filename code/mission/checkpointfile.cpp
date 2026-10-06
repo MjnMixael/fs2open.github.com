@@ -1772,6 +1772,7 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			write_string_list(handler, "exit_flags", ship_data.exit_flags);
 			handler->writeInt("time_cargo_revealed", static_cast<std::int32_t>(ship_data.time_cargo_revealed));
 			handler->writeInt("exit_hull_strength", ship_data.exit_hull_strength);
+			handler->writeBool("no_parse_object", ship_data.no_parse_object);
 		}
 
 		handler->endSectionWrite();
@@ -1906,6 +1907,7 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			read_string_list(handler, "exit_flags", ship_data.exit_flags);
 			ship_data.time_cargo_revealed = static_cast<fix>(handler->readIntOr("time_cargo_revealed", 0));
 			ship_data.exit_hull_strength = handler->readIntOr("exit_hull_strength", 0);
+			ship_data.no_parse_object = handler->readBoolOr("no_parse_object", false);
 		}
 
 		data.ships.push_back(std::move(ship_data));
