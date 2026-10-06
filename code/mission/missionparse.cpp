@@ -2969,7 +2969,8 @@ int parse_create_object_sub(p_object *p_objp, bool standalone_ship)
 
 	// If the ship is in a wing, this will be done in mission_set_wing_arrival_location() instead
 	// If the ship is in a wing, but the wing is docked then addition of bool brought_in_docked_wing accounts for that status --wookieejedi
-	if (Game_mode & GM_IN_MISSION && ((shipp->wingnum == -1) || (brought_in_docked_wing))) {
+	// (not while restoring a checkpoint: the ship is being put back, and the script already saw it arrive in the run that was saved)
+	if (Game_mode & GM_IN_MISSION && !Game_restoring && ((shipp->wingnum == -1) || (brought_in_docked_wing))) {
 		object *anchor_objp = (anchor_objnum >= 0) ? &Objects[anchor_objnum] : nullptr;
 
 		if (scripting::hooks::OnShipArrive->isActive()) {
