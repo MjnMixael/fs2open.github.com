@@ -1560,6 +1560,21 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 		out.docker_point = goal.docker.name;
 	}
 
+	// A destroy-subsystem goal from a SEXP keeps the subsystem's name in docker.name, but one the
+	// player gave from the comms menu (ai_add_goal_sub_player()) has only the index into the
+	// target's subsystem list, in ai_submode.  The restore re-finds the subsystem by name, so name
+	// it from the index -- without this the player's order was dropped on load.
+	if (goal.ai_mode == AI_GOAL_DESTROY_SUBSYSTEM && out.docker_point.empty() &&
+	    !goal.flags[AI::Goal_Flags::Subsys_needs_fixup] && goal.target_name != nullptr) {
+		int target_shipnum = ship_name_lookup(goal.target_name);
+		if (target_shipnum >= 0) {
+			ship_subsys* subsys = ship_get_indexed_subsys(&Ships[target_shipnum], goal.ai_submode);
+			if (subsys != nullptr && subsys->system_info != nullptr) {
+				out.docker_point = subsys->system_info->subobj_name;
+			}
+		}
+	}
+
 	if (goal.flags[AI::Goal_Flags::Dockee_index_valid]) {
 		int target_shipnum = (goal.target_name != nullptr) ? ship_name_lookup(goal.target_name) : -1;
 		if (target_shipnum >= 0) {
