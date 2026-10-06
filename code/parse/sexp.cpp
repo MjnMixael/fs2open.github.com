@@ -42544,7 +42544,9 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\t\t\"ignore mission changes\" - load even if the mission file has been edited since the checkpoint was saved\r\n\r\n"
 		"The mission is reloaded from scratch and the saved state is applied before the first frame, so the reload "
 		"happens at the end of the current frame rather than immediately.  If the checkpoint is missing or was saved "
-		"for a different version of this mission, the mission carries on as normal.  Does nothing in multiplayer."
+		"for a different version of this mission, the mission carries on as normal.  Does nothing once the "
+		"player's ship is dying; restarting from the death popup offers the checkpoint instead.  Does nothing in "
+		"multiplayer."
 	},
 
 	{ OP_PROMPT_USER_CHECKPOINT_LOAD, "prompt-user-checkpoint-load\r\n"
