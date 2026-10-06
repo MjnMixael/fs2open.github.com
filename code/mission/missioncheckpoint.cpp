@@ -6424,9 +6424,11 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 	// checkpoint was written against -- a kept loadout, or a mod that re-exported the pof.  The
 	// big-ship AI reads view_positions[current_viewpoint] unchecked.
 	{
+		// -1 is the engine's own "no eye point" (ship_set_eye()), which a model without any carries.
 		polymodel* pm = model_get(Ship_info[shipp->ship_info_index].model_num);
-		if (pm == nullptr || shipp->current_viewpoint < 0 || shipp->current_viewpoint >= pm->n_view_positions) {
-			shipp->current_viewpoint = 0;
+		int num_views = (pm != nullptr) ? pm->n_view_positions : 0;
+		if (shipp->current_viewpoint < -1 || shipp->current_viewpoint >= num_views) {
+			shipp->current_viewpoint = (num_views > 0) ? 0 : -1;
 		}
 	}
 
