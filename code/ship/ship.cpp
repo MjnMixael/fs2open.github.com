@@ -8933,8 +8933,15 @@ void wing_maybe_cleanup( wing *wingp, int team )
 			wingp->flags.set(Ship::Wing_Flags::Gone);
 			wingp->time_gone = Missiontime;
 
+			// (while restoring a checkpoint, the log is being replayed from the saved state, so nothing
+			// new belongs in it -- and the member departures this entry vouches for were not logged
+			// either, which the departed-wing check in mission_log_add_entry() asserts on)
+			if (Game_restoring)
+			{
+				// nothing to log
+			}
 			// if all ships were destroyed, log it as destroyed
-			if (wingp->total_destroyed == wingp->total_arrived_count)
+			else if (wingp->total_destroyed == wingp->total_arrived_count)
 			{
 				// first, be sure to mark a wing destroyed event if all members of wing were destroyed and on
 				// the last wave.  This circumvents a problem where the wing could be marked as departed and
