@@ -1644,7 +1644,7 @@ bool lua_goal_argument_text(const luacpp::LuaValue& value, int arg_type, SCP_str
 		if (index < 0 || index >= prop_info_size()) {
 			return false;
 		}
-		return quoted(Prop_info[index].name);
+		return quoted(Prop_info[index].name.c_str());
 	}
 	case OPF_SHIP_POINT:
 	case OPF_SHIP_WING:
