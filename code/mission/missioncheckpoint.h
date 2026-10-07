@@ -1551,6 +1551,10 @@ bool mission_checkpoint_load_pending();
 bool mission_checkpoint_is_restoring();
 void mission_checkpoint_restore_done();
 
+// The slot this run of the mission was restored from, or empty if it started from the beginning.
+// Set when a restore is applied and cleared when the mission is entered without one.
+const SCP_string& mission_checkpoint_loaded_slot();
+
 // Called once per frame at the end of the gameplay loop.  Writes any stores events queued this
 // frame, then, if a load is queued, posts the mission restart that will eventually land in
 // mission_checkpoint_apply().

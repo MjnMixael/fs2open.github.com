@@ -1051,6 +1051,7 @@ enum : int {
 	OP_PROMPT_USER_CHECKPOINT_LOAD,
 	OP_CHECKPOINT_EXISTS,
 	OP_DELETE_CHECKPOINT,
+	OP_CHECKPOINT_LOADED,
 
 	// the one music track a mission plays from a file
 	OP_PLAY_MUSIC_FROM_FILE,

@@ -623,6 +623,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "load-checkpoint",				OP_LOAD_CHECKPOINT,						0,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "prompt-user-checkpoint-load",	OP_PROMPT_USER_CHECKPOINT_LOAD,			0,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "checkpoint-exists",				OP_CHECKPOINT_EXISTS,					0,	1,			SEXP_BOOLEAN_OPERATOR,	},
+	{ "checkpoint-loaded",				OP_CHECKPOINT_LOADED,					0,	1,			SEXP_BOOLEAN_OPERATOR,	},
 	{ "delete-checkpoint",				OP_DELETE_CHECKPOINT,					0,	1,			SEXP_ACTION_OPERATOR,	},
 
 	//Models and Textures Sub-Category
@@ -19176,6 +19177,19 @@ static int sexp_checkpoint_exists(int node)
 	return mission_checkpoint_exists(sexp_checkpoint_slot(node)) ? SEXP_TRUE : SEXP_FALSE;
 }
 
+// True if this run of the mission came from a checkpoint; with a slot, only from that one.
+static int sexp_checkpoint_loaded(int node)
+{
+	const auto& loaded = mission_checkpoint_loaded_slot();
+	if (loaded.empty()) {
+		return SEXP_FALSE;
+	}
+	if (node < 0) {
+		return SEXP_TRUE;
+	}
+	return lcase_equal(loaded, sexp_checkpoint_slot(node)) ? SEXP_TRUE : SEXP_FALSE;
+}
+
 static void sexp_delete_checkpoint(int node)
 {
 	mission_checkpoint_delete(sexp_checkpoint_slot(node));
@@ -30092,6 +30106,10 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = sexp_checkpoint_exists (node);
 				break;
 
+			case OP_CHECKPOINT_LOADED:
+				sexp_val = sexp_checkpoint_loaded(node);
+				break;
+
 			case OP_DELETE_CHECKPOINT:
 				sexp_delete_checkpoint (node);
 				sexp_val = SEXP_TRUE;
@@ -32263,6 +32281,7 @@ int query_operator_return_type(int op)
 		case OP_PERFORM_ACTIONS_BOOL_LAST:
 		case OP_IS_TRUE_FOR_DURATION:
 		case OP_CHECKPOINT_EXISTS:
+		case OP_CHECKPOINT_LOADED:
 		case OP_IS_DESTROYED:
 		case OP_IS_SUBSYSTEM_DESTROYED:
 		case OP_IS_DISABLED:
@@ -34351,6 +34370,7 @@ int query_operator_argument_type(int op_index, int argnum)
 
 		case OP_STORE_CHECKPOINT:
 		case OP_CHECKPOINT_EXISTS:
+		case OP_CHECKPOINT_LOADED:
 		case OP_DELETE_CHECKPOINT:
 			// The only argument is the optional slot name.
 			return OPF_STRING;
@@ -38190,6 +38210,7 @@ int get_category(int op_id)
 		case OP_DELETE_CHECKPOINT:
 		case OP_PROMPT_USER_CHECKPOINT_LOAD:
 		case OP_CHECKPOINT_EXISTS:
+		case OP_CHECKPOINT_LOADED:
 		case OP_NAV_SELECT:
 		case OP_NAV_UNSELECT:
 		case OP_ALTER_SHIP_FLAG:
@@ -38804,6 +38825,7 @@ int get_subcategory(int op_id)
 		case OP_LOAD_CHECKPOINT:
 		case OP_PROMPT_USER_CHECKPOINT_LOAD:
 		case OP_CHECKPOINT_EXISTS:
+		case OP_CHECKPOINT_LOADED:
 		case OP_DELETE_CHECKPOINT:
 			return CHANGE_SUBCATEGORY_CHECKPOINTS;
 
@@ -42696,6 +42718,16 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\t1: Optional name of the checkpoint slot.  Defaults to \"default\".\r\n\r\n"
 		"A checkpoint saved before the mission file was last edited does not count, because the mission's events "
 		"and variables would no longer line up with it."
+	},
+
+	{ OP_CHECKPOINT_LOADED, "checkpoint-loaded\r\n"
+		"\tReturns true if this run of the mission was restored from a checkpoint, whether by a load or by the player "
+		"accepting the resume prompt, and false if it started from the beginning.  It stays true for the rest of the "
+		"run.  Takes 0 or 1 arguments...\r\n"
+		"\t1: Optional name of a checkpoint slot.  If given, returns true only if the run was restored from that "
+		"slot.\r\n\r\n"
+		"Use it with the event flag \"Run Again After Checkpoint Load\" for an event that should fire only after a "
+		"load: the flag makes the event start over, and this condition keeps it from firing on a fresh start."
 	},
 
 	{ OP_DELETE_CHECKPOINT, "delete-checkpoint\r\n"
