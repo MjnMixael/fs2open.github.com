@@ -155,6 +155,7 @@ enum sexp_opf_t : int {
 	OPF_MISSION_CUSTOM_STRING,      // MjnMixael - The custom strings as defined in FRED
 	OPF_MESSAGE_TYPE,      // naomimyselfandi - A message type (Attack Target et al.)
 	OPF_CHECKPOINT_LOAD_FLAG,       // An option for load-checkpoint; see missioncheckpoint.h
+	OPF_MUSIC_FILE,                 // A file in data/music, or <none>; see missionmusic.h
 
 	//Must always be at the end of the list
 	First_available_opf_id
@@ -1051,6 +1052,11 @@ enum : int {
 	OP_CHECKPOINT_EXISTS,
 	OP_DELETE_CHECKPOINT,
 
+	// the one music track a mission plays from a file
+	OP_PLAY_MUSIC_FROM_FILE,
+	OP_STOP_MUSIC_FROM_FILE,
+	OP_PAUSE_MUSIC_FROM_FILE,
+
 	// this should come after every operator
 	First_available_operator_id
 };
@@ -1337,6 +1343,7 @@ enum sexp_error_check
 	SEXP_CHECK_POTENTIAL_ISSUE,
 	SEXP_CHECK_INVALID_SHIP_WING_PROP,  // invalid ship/wing/prop
 	SEXP_CHECK_INVALID_CHECKPOINT_LOAD_FLAG,
+	SEXP_CHECK_INVALID_MUSIC_FILE,
 };
 
 
