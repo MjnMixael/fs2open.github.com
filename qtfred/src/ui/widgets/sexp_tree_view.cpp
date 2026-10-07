@@ -2542,16 +2542,16 @@ void sexp_tree_view::deleteCurrentItem() {
 void sexp_tree_view::applyVisuals(QTreeWidgetItem* it)
 {
 	const auto note = it->data(0, NoteRole).toString();
-	const auto color = it->data(0, BgColorRole).value<QColor>();
+	const auto background = it->data(0, BgColorRole).value<QColor>();
 	it->setToolTip(0, note);
 
-	if (color.isValid()) {
-		it->setBackground(0, QBrush(color));
+	if (background.isValid()) {
+		it->setBackground(0, QBrush(background));
 		// The theme's text color can vanish on an annotation color (white on yellow in the dark
 		// theme), so shift it until it reads against the background. The color itself is untouched.
 		const QWidget* tree = it->treeWidget();
-		const QColor text = (tree != nullptr ? tree->palette() : QApplication::palette()).color(QPalette::Text);
-		it->setForeground(0, QBrush(readableTextColor(text, color)));
+		const QColor color = (tree != nullptr ? tree->palette() : QApplication::palette()).color(QPalette::Text);
+		it->setForeground(0, QBrush(readableTextColor(color, background)));
 	} else {
 		// no annotation color, or it was removed: back to the theme's own background and text
 		it->setBackground(0, QBrush());
