@@ -253,12 +253,13 @@ ADE_FUNC(playInterfaceSoundByName, l_Audio, "string name",
 	}
 }
 
-ADE_FUNC(playMusic, l_Audio, "string Filename, [number volume = 1.0, boolean looping = true]", "Plays a music file using FS2Open's builtin music system. Volume is currently ignored, uses players music volume setting. Files passed to this function are looped by default.", "number", "Audiohandle of the created audiostream, or -1 on failure")
+ADE_FUNC(playMusic, l_Audio, "string Filename, [number volume = 1.0, boolean looping = true, number startTime = 0]", "Plays a music file using FS2Open's builtin music system. Volume is currently ignored, uses players music volume setting. Files passed to this function are looped by default. startTime is where to start playing, in seconds from the start of the file.", "number", "Audiohandle of the created audiostream, or -1 on failure")
 {
 	const char* s;
 	float volume = 1.0f;
 	bool loop = true;
-	if (!ade_get_args(L, "s|fb", &s, &volume, &loop))
+	float start_time = 0.0f;
+	if (!ade_get_args(L, "s|fbf", &s, &volume, &loop, &start_time))
 		return ade_set_error(L, "i", -1);
 
 	int ah = audiostream_open(s, ASF_MENUMUSIC);
@@ -268,8 +269,49 @@ ADE_FUNC(playMusic, l_Audio, "string Filename, [number volume = 1.0, boolean loo
 	// didn't remove the volume parameter because it'll break the API
 	volume = Master_event_music_volume;
 
+	if (start_time > 0.0f)
+		audiostream_seek(ah, start_time);
+
 	audiostream_play(ah, volume, loop ? 1 : 0);
 	return ade_set_args(L, "i", ah);
+}
+
+ADE_FUNC(seekMusic,
+	l_Audio,
+	"number audiohandle, number seconds",
+	"Moves a music file started with playMusic to the given time, in seconds from the start of the file. Past the end "
+	"wraps around if the music loops, otherwise it stops at the end.",
+	"boolean",
+	"true on success, false otherwise")
+{
+	int ah;
+	float seconds;
+
+	if (!ade_get_args(L, "if", &ah, &seconds))
+		return ADE_RETURN_FALSE;
+
+	if (ah >= MAX_AUDIO_STREAMS || ah < 0)
+		return ADE_RETURN_FALSE;
+
+	return ade_set_args(L, "b", audiostream_seek(ah, seconds));
+}
+
+ADE_FUNC(getMusicPosition,
+	l_Audio,
+	"number audiohandle",
+	"Gets how far a music file started with playMusic is into playback",
+	"number",
+	"the position in float seconds from the start of the file, or -1 if the handle is invalid")
+{
+	int ah;
+
+	if (!ade_get_args(L, "i", &ah))
+		return ade_set_error(L, "f", -1.0f);
+
+	if (ah >= MAX_AUDIO_STREAMS || ah < 0)
+		return ade_set_error(L, "f", -1.0f);
+
+	return ade_set_args(L, "f", (float)audiostream_get_position(ah));
 }
 
 ADE_FUNC(stopMusic,
