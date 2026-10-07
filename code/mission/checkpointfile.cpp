@@ -2087,6 +2087,9 @@ void write_events(pilot::FileHandler* handler, const checkpoint::checkpoint_data
 		write_string_list(handler, "log_argument_buffer", event.log_argument_buffer);
 		write_string_list(handler, "backup_log_buffer", event.backup_log_buffer);
 
+		handler->writeString("directive_text", event.directive_text.c_str());
+		handler->writeString("directive_key_text", event.directive_key_text.c_str());
+
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -2125,6 +2128,12 @@ void read_events(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		read_string_list(handler, "log_container_buffer", event.log_container_buffer);
 		read_string_list(handler, "log_argument_buffer", event.log_argument_buffer);
 		read_string_list(handler, "backup_log_buffer", event.backup_log_buffer);
+
+		if (handler->hasField("directive_text")) {
+			event.directive_present = true;
+			event.directive_text = handler->readStringOr("directive_text", "");
+			event.directive_key_text = handler->readStringOr("directive_key_text", "");
+		}
 
 		if (!event.name.empty()) {
 			data.events.push_back(std::move(event));
