@@ -1310,6 +1310,12 @@ void write_goal_list(pilot::FileHandler* handler,
 		handler->writeInt("int_data", goal.int_data);
 		handler->writeFloat("float_data", goal.float_data);
 
+		if (!goal.lua_operator.empty()) {
+			handler->writeString("lua_operator", goal.lua_operator.c_str());
+			handler->writeString("lua_target", goal.lua_target.c_str());
+			write_string_list(handler, "lua_arguments", goal.lua_arguments);
+		}
+
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -1348,6 +1354,10 @@ void read_goal_list(pilot::FileHandler* handler,
 		goal.submode_ship_class = handler->readStringOr("submode_ship_class", "");
 		goal.int_data = handler->readIntOr("int_data", 0);
 		goal.float_data = handler->readFloatOr("float_data", 0.0f);
+
+		goal.lua_operator = handler->readStringOr("lua_operator", "");
+		goal.lua_target = handler->readStringOr("lua_target", "");
+		read_string_list(handler, "lua_arguments", goal.lua_arguments);
 
 		goals.push_back(std::move(goal));
 		if (slots != nullptr) {
