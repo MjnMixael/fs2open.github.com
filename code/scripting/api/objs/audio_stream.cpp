@@ -162,5 +162,45 @@ ADE_FUNC(getDuration, l_AudioStream, nullptr, "Gets the duration of the stream",
 	return ade_set_args(L, "f", (float)audiostream_get_duration(streamHandle));
 }
 
+ADE_FUNC(seek,
+	l_AudioStream,
+	"number seconds",
+	"Moves playback to the given time from the start of the stream. A stream that hasn't started playing yet will start "
+	"there. Past the end wraps around if the stream loops, otherwise it stops at the end.",
+	"boolean",
+	"true on success, false otherwise")
+{
+	int streamHandle = -1;
+	float seconds = 0.0f;
+	if (!ade_get_args(L, "of", l_AudioStream.Get(&streamHandle), &seconds)) {
+		return ADE_RETURN_FALSE;
+	}
+
+	if (streamHandle < 0) {
+		return ADE_RETURN_FALSE;
+	}
+
+	return ade_set_args(L, "b", audiostream_seek(streamHandle, seconds));
+}
+
+ADE_FUNC(getPosition,
+	l_AudioStream,
+	nullptr,
+	"Gets how far playback is into the stream",
+	"number",
+	"the position in float seconds from the start of the stream, or nil if invalid")
+{
+	int streamHandle = -1;
+	if (!ade_get_args(L, "o", l_AudioStream.Get(&streamHandle))) {
+		return ADE_RETURN_NIL;
+	}
+
+	if (streamHandle < 0) {
+		return ADE_RETURN_NIL;
+	}
+
+	return ade_set_args(L, "f", (float)audiostream_get_position(streamHandle));
+}
+
 } // namespace api
 } // namespace scripting
