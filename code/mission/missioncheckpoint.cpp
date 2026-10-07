@@ -7849,6 +7849,12 @@ void apply_mission_logic(const checkpoint_data& data)
 			continue;
 		}
 
+		// The mission designer asked for this one to start over and run again, typically a setup
+		// event whose effect lives somewhere the checkpoint does not reach (script state).
+		if (it->flags & MEF_RERUN_AFTER_CHECKPOINT) {
+			continue;
+		}
+
 		it->result = state.result;
 		it->previous_result = state.previous_result;
 		it->repeat_count = state.repeat_count;
@@ -7961,6 +7967,12 @@ void apply_mission_logic(const checkpoint_data& data)
 	// and that is the node it parks its roll on, replacing the argument's text with the number.
 	SCP_unordered_set<int> rand_rolls;
 	for (const auto& owner : collect_formula_owners()) {
+		// An event flagged to run again after a load keeps the fresh formula the mission load gave it.
+		if (!strcmp(owner.kind, "event") && std::any_of(Mission_events.begin(), Mission_events.end(),
+			[&owner](const mission_event& ev) { return ev.formula == owner.formula && (ev.flags & MEF_RERUN_AFTER_CHECKPOINT); })) {
+			continue;
+		}
+
 		int ordinal = 0;
 		walk_formula(owner.formula, ordinal, [&](int i, int node_ordinal) {
 			nodes_by_key[node_key(owner.kind, owner.name, owner.occurrence, node_ordinal)] = i;
