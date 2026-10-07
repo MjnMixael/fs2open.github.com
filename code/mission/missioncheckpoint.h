@@ -1089,6 +1089,9 @@ struct environment_state {
 	int supernova_stage = 0;
 	float supernova_total = 0.0f;
 	float supernova_left = 0.0f;
+	// end-campaign during a supernova only sets this flag (Campaign_ending_via_supernova); the
+	// supernova code ends the campaign with it once the player has jumped.  Reset by the level init.
+	bool campaign_ending_via_supernova = false;
 
 	// set-time-compression and lock-time-compression, both reset by the level init.
 	float time_compression = 1.0f;
