@@ -5074,6 +5074,9 @@ void game_process_event( int current_state, int event )
 				scripting::hook_param("Player", 'o', Player_obj, Player_obj != nullptr)
 			));
 
+			// Scripts have now had both start hooks to see whether this was a checkpoint load
+			mission_checkpoint_restore_done();
+
 			Start_time = f2fl(timer_get_approx_seconds());
 			mprintf(("Entering game at time = %7.3f\n", Start_time));
 
