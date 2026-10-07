@@ -14,6 +14,7 @@
 #include "hud/hudartillery.h"
 #include "gamesnd/eventmusic.h"
 #include "mission/missioncheckpoint.h"
+#include "mission/missionmusic.h"
 #include "mission/missionparse.h"
 #include "mission/missionmessage.h"
 #include "missioneditor/common.h"
@@ -1595,6 +1596,21 @@ sexp_list_item *SexpTreeOPF::get_listing_opf_checkpoint_load_flags()
 	return head.next;
 }
 
+sexp_list_item *SexpTreeOPF::get_listing_opf_music_files()
+{
+	sexp_list_item head;
+
+	head.add_data(MISSION_MUSIC_NONE);
+
+	SCP_vector<SCP_string> files;
+	mission_music_get_file_list(files);
+	for (const auto& file : files) {
+		head.add_data(file.c_str());
+	}
+
+	return head.next;
+}
+
 sexp_list_item *SexpTreeOPF::get_listing_opf_mission_custom_strings()
 {
 	sexp_list_item head;
@@ -2550,6 +2566,10 @@ sexp_list_item *SexpTreeOPF::get_listing_opf(int opf, int parent_node, int arg_i
 			list = get_listing_opf_checkpoint_load_flags();
 			break;
 
+		case OPF_MUSIC_FILE:
+			list = get_listing_opf_music_files();
+			break;
+
 		case OPF_CHILD_LUA_ENUM:
 			list = get_listing_opf_lua_enum(parent_node, arg_index);
 			break;
@@ -2707,6 +2727,7 @@ int SexpTreeOPF::query_default_argument_available(int op, int i) const
 		case OPF_CHILD_LUA_ENUM:
 		case OPF_MESSAGE_TYPE:
 		case OPF_CHECKPOINT_LOAD_FLAG:
+		case OPF_MUSIC_FILE:
 			return 1;
 
 		case OPF_SHIP:
@@ -3329,6 +3350,10 @@ int SexpTreeOPF::get_default_value(sexp_list_item* item, int op, int i) const
 
 		case OPF_CHECKPOINT_LOAD_FLAG:
 			str = mission_checkpoint_get_load_flag_names().front().c_str();
+			break;
+
+		case OPF_MUSIC_FILE:
+			str = MISSION_MUSIC_NONE;
 			break;
 
 		case OPF_VARIABLE_NAME:

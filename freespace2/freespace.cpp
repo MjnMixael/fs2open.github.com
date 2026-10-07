@@ -108,6 +108,7 @@
 #include "mission/missionbriefcommon.h"
 #include "mission/missioncampaign.h"
 #include "mission/missioncheckpoint.h"
+#include "mission/missionmusic.h"
 #include "mission/missiongoals.h"
 #include "mission/missionhotkey.h"
 #include "mission/missionload.h"
@@ -962,6 +963,7 @@ void game_level_close()
 		obj_reset_colliders();
 		multi_interpolate_clear_all(); // object related
 		sexp_music_close();	// Goober5000
+		mission_music_close();
 		event_music_level_close();
 		game_stop_looped_sounds();
 		snd_stop_all();
@@ -6506,6 +6508,7 @@ void game_do_state_common(int state,int no_networking)
 	io::mouse::CursorManager::doFrame();		// determine if to draw the mouse this frame
 	snd_do_frame();								// update sound system
 	event_music_do_frame();						// music needs to play across many states
+	mission_music_do_frame();
 
 	multi_log_process();	
 
