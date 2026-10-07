@@ -907,6 +907,8 @@ add_file_folder("Mission"
 	mission/missiongoals.h
 	mission/missiongrid.cpp
 	mission/missiongrid.h
+	mission/missionmusic.cpp
+	mission/missionmusic.h
 	mission/missionhotkey.cpp
 	mission/missionhotkey.h
 	mission/missionload.cpp

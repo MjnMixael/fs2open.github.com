@@ -64,6 +64,7 @@
 #include "mission/missionbriefcommon.h"
 #include "mission/missioncampaign.h"
 #include "mission/missioncheckpoint.h"
+#include "mission/missionmusic.h"
 #include "mission/missiongoals.h"
 #include "mission/missionlog.h"
 #include "mission/missionmessage.h"
@@ -699,6 +700,9 @@ SCP_vector<sexp_oper> Operators = {
 	{ "play-sound-from-file",			OP_PLAY_SOUND_FROM_FILE,				1,	4,			SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "close-sound-from-file",			OP_CLOSE_SOUND_FROM_FILE,				0,	2,			SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "pause-sound-from-file",			OP_PAUSE_SOUND_FROM_FILE,				1,	2,			SEXP_ACTION_OPERATOR,	},	// Goober5000
+	{ "play-music-from-file",			OP_PLAY_MUSIC_FROM_FILE,				1,	4,			SEXP_ACTION_OPERATOR,	},
+	{ "stop-music-from-file",			OP_STOP_MUSIC_FROM_FILE,				0,	1,			SEXP_ACTION_OPERATOR,	},
+	{ "pause-music-from-file",			OP_PAUSE_MUSIC_FROM_FILE,				0,	0,			SEXP_ACTION_OPERATOR,	},
 	{ "set-sound-environment",			OP_SET_SOUND_ENVIRONMENT,				1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Taylor
 	{ "update-sound-environment",		OP_UPDATE_SOUND_ENVIRONMENT,			2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Taylor
 	{ "adjust-audio-volume",			OP_ADJUST_AUDIO_VOLUME,					1,	3,			SEXP_ACTION_OPERATOR,	},
@@ -3579,6 +3583,23 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 
 				break;
 			}
+
+			case OPF_MUSIC_FILE:
+				if (node_subtype != SEXP_ATOM_STRING) {
+					return SEXP_CHECK_TYPE_MISMATCH;
+				}
+
+				if (!stricmp(CTEXT(node), MISSION_MUSIC_NONE))
+					break;
+
+				if (Cmdline_freespace_no_music)
+					break;
+
+				if (!mission_music_file_exists(CTEXT(node))) {
+					return SEXP_CHECK_INVALID_MUSIC_FILE;
+				}
+
+				break;
 
 			case OPF_MISSION_MOOD:
 				if (node_subtype != SEXP_ATOM_STRING) {
@@ -14966,6 +14987,55 @@ void multi_sexp_pause_sound_from_file()
 	Current_sexp_network_packet.get_int(sexp_var);
 
 	sexp_pause_unpause_music(pause, sexp_var);
+}
+
+void sexp_play_music_from_file(int n)
+{
+	bool is_nan, is_nan_forever;
+
+	SCP_string filename = CTEXT(n);
+	n = CDR(n);
+
+	bool fade = true;
+	if (n >= 0) {
+		fade = is_sexp_true(n);
+		n = CDR(n);
+	}
+
+	int volume = 100;
+	if (n >= 0) {
+		volume = eval_num(n, is_nan, is_nan_forever);
+		if (is_nan || is_nan_forever)
+			return;
+		n = CDR(n);
+	}
+
+	int start_ms = 0;
+	if (n >= 0) {
+		start_ms = eval_num(n, is_nan, is_nan_forever);
+		if (is_nan || is_nan_forever)
+			return;
+	}
+
+	mission_music_play(filename.c_str(), fade, volume, start_ms);
+}
+
+void sexp_stop_music_from_file(int n)
+{
+	int fade_ms = 0;
+	if (n >= 0) {
+		bool is_nan, is_nan_forever;
+		fade_ms = eval_num(n, is_nan, is_nan_forever);
+		if (is_nan || is_nan_forever)
+			return;
+	}
+
+	mission_music_stop(fade_ms);
+}
+
+void sexp_pause_music_from_file()
+{
+	mission_music_toggle_pause();
 }
 
 int sexp_sound_environment_option_lookup(const char *text)
@@ -29800,6 +29870,21 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
+			case OP_PLAY_MUSIC_FROM_FILE:
+				sexp_play_music_from_file(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
+			case OP_STOP_MUSIC_FROM_FILE:
+				sexp_stop_music_from_file(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
+			case OP_PAUSE_MUSIC_FROM_FILE:
+				sexp_pause_music_from_file();
+				sexp_val = SEXP_TRUE;
+				break;
+
 			case OP_SET_SOUND_ENVIRONMENT:
 				sexp_set_sound_environment(node);
 				sexp_val = SEXP_TRUE;
@@ -32584,6 +32669,9 @@ int query_operator_return_type(int op)
 		case OP_PLAY_SOUND_FROM_FILE:
 		case OP_CLOSE_SOUND_FROM_FILE:
 		case OP_PAUSE_SOUND_FROM_FILE:
+		case OP_PLAY_MUSIC_FROM_FILE:
+		case OP_STOP_MUSIC_FROM_FILE:
+		case OP_PAUSE_MUSIC_FROM_FILE:
 		case OP_PLAY_SOUND_FROM_TABLE:
 		case OP_SET_SOUND_ENVIRONMENT:
 		case OP_UPDATE_SOUND_ENVIRONMENT:
@@ -34019,6 +34107,17 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_BOOL;
 			else
 				return OPF_VARIABLE_NAME;
+
+		case OP_PLAY_MUSIC_FROM_FILE:
+			if (argnum == 0)
+				return OPF_MUSIC_FILE;
+			else if (argnum == 1)
+				return OPF_BOOL;
+			else
+				return OPF_POSITIVE;
+
+		case OP_STOP_MUSIC_FROM_FILE:
+			return OPF_POSITIVE;
 
 		case OP_SET_FRIENDLY_DAMAGE_CAPS:
 			return OPF_NUMBER;
@@ -36454,6 +36553,9 @@ const char *sexp_error_message(int num)
 		case SEXP_CHECK_INVALID_CHECKPOINT_LOAD_FLAG:
 			return "Invalid checkpoint load option";
 
+		case SEXP_CHECK_INVALID_MUSIC_FILE:
+			return "Invalid music file";
+
 		case SEXP_CHECK_INVALID_SHIP_FLAG:
 			return "Invalid ship flag";
 
@@ -38103,6 +38205,9 @@ int get_category(int op_id)
 		case OP_SCRIPT_EVAL_STRING:
 		case OP_SCRIPT_EVAL_MULTI:
 		case OP_PAUSE_SOUND_FROM_FILE:
+		case OP_PLAY_MUSIC_FROM_FILE:
+		case OP_STOP_MUSIC_FROM_FILE:
+		case OP_PAUSE_MUSIC_FROM_FILE:
 		case OP_SCRIPT_EVAL_BLOCK:
 		case OP_BEAM_FLOATING_FIRE:
 		case OP_TURRET_SET_PRIMARY_AMMO:
@@ -38529,6 +38634,9 @@ int get_subcategory(int op_id)
 		case OP_PLAY_SOUND_FROM_FILE:
 		case OP_CLOSE_SOUND_FROM_FILE:
 		case OP_PAUSE_SOUND_FROM_FILE:
+		case OP_PLAY_MUSIC_FROM_FILE:
+		case OP_STOP_MUSIC_FROM_FILE:
+		case OP_PAUSE_MUSIC_FROM_FILE:
 		case OP_SET_SOUND_ENVIRONMENT:
 		case OP_UPDATE_SOUND_ENVIRONMENT:
 		case OP_ADJUST_AUDIO_VOLUME:
@@ -40494,6 +40602,24 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\tPauses or unpauses the currently playing sound started by play-sound-from-file, if there is any.  Takes 1 or 2 arguments...\r\n"
 		"\t1: Boolean - True to pause, False to unpause\r\n"
 		"\t2: Numeric variable containing a music handle (optional).  If no variable is specified, the 'default' handle is used."
+	},
+
+	{ OP_PLAY_MUSIC_FROM_FILE, "play-music-from-file\r\n"
+		"\tPlays a music file on a loop. Only one track plays at a time, so this replaces any track already started by this sexp. "
+		"The track stops when the mission ends and is restored by a checkpoint.  Takes 1 to 4 arguments...\r\n"
+		"\t1: Music file, or <none> to stop the current track\r\n"
+		"\t2: Fade (optional; default is true). Fades out the track being replaced. With <none>, the track fades out over 5 seconds.\r\n"
+		"\t3: Volume, 0 to 100 percent of the player's music volume (optional; default is 100)\r\n"
+		"\t4: Where to start playing, in milliseconds from the start of the file (optional; default is 0)"
+	},
+
+	{ OP_STOP_MUSIC_FROM_FILE, "stop-music-from-file\r\n"
+		"\tStops the track started by play-music-from-file.  Takes 0 or 1 arguments...\r\n"
+		"\t1: Time in milliseconds to fade the track out over (optional). Without it the track stops at once."
+	},
+
+	{ OP_PAUSE_MUSIC_FROM_FILE, "pause-music-from-file\r\n"
+		"\tPauses the track started by play-music-from-file, or unpauses it if it is paused.  Takes no arguments."
 	},
 
 	// Taylor
