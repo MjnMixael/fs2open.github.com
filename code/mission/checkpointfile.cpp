@@ -645,6 +645,7 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	handler->writeInt("supernova_stage", env.supernova_stage);
 	handler->writeFloat("supernova_total", env.supernova_total);
 	handler->writeFloat("supernova_left", env.supernova_left);
+	handler->writeBool("campaign_ending_via_supernova", env.campaign_ending_via_supernova);
 	handler->writeFloat("time_compression", env.time_compression);
 	handler->writeBool("time_compression_locked", env.time_compression_locked);
 
@@ -946,6 +947,7 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	env.supernova_stage = handler->readIntOr("supernova_stage", 0);
 	env.supernova_total = handler->readFloatOr("supernova_total", 0.0f);
 	env.supernova_left = handler->readFloatOr("supernova_left", 0.0f);
+	env.campaign_ending_via_supernova = handler->readBoolOr("campaign_ending_via_supernova", false);
 	env.time_compression = handler->readFloatOr("time_compression", 1.0f);
 	env.time_compression_locked = handler->readBoolOr("time_compression_locked", false);
 
