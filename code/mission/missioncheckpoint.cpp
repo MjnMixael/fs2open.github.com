@@ -7595,10 +7595,16 @@ void apply_mission_logic(const checkpoint_data& data)
 		SCP_tolower(key);
 		return key;
 	};
+	// rand_sexp() is handed the operator's first argument (eval_sexp() passes CDR of the operator),
+	// and that is the node it parks its roll on, replacing the argument's text with the number.
+	SCP_unordered_set<int> rand_rolls;
 	for (const auto& owner : collect_formula_owners()) {
 		int ordinal = 0;
 		walk_formula(owner.formula, ordinal, [&](int i, int node_ordinal) {
 			nodes_by_key[node_key(owner.kind, owner.name, owner.occurrence, node_ordinal)] = i;
+			if (Sexp_nodes[i].subtype == SEXP_ATOM_OPERATOR && Sexp_nodes[i].rest >= 0 && get_operator_const(i) == OP_RAND) {
+				rand_rolls.insert(Sexp_nodes[i].rest);
+			}
 		});
 	}
 
@@ -7613,12 +7619,10 @@ void apply_mission_logic(const checkpoint_data& data)
 			continue;
 		}
 
-		// rand_sexp() parks its roll on the rand operator node itself, replacing the operator's
-		// text with the number; anywhere else that text would wreck evaluation.  The fresh load
-		// can have rolled it already (an arrival cue is evaluated before the apply runs), in which
-		// case its text is a number too and its value says so.
-		bool is_rand = Sexp_nodes[index].value == SEXP_NUM_EVAL ||
-		               (Sexp_nodes[index].subtype == SEXP_ATOM_OPERATOR && get_operator_const(index) == OP_RAND);
+		// A roll is only put back on the node a rand parks its roll on (see rand_rolls above); its
+		// text anywhere else would wreck evaluation.  The fresh load may have rolled it already (an
+		// arrival cue is evaluated before the apply runs), which the node's value says.
+		bool is_rand = Sexp_nodes[index].value == SEXP_NUM_EVAL || rand_rolls.count(index) > 0;
 		if (state.value == SEXP_NUM_EVAL && !is_rand) {
 			continue;
 		}
