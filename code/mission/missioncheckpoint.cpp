@@ -5535,6 +5535,10 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.log_argument_buffer = event.event_log_argument_buffer;
 		state.backup_log_buffer = event.backup_log_buffer;
 
+		state.directive_present = true;
+		state.directive_text = event.objective_text;
+		state.directive_key_text = event.objective_key_text;
+
 		data.events.push_back(std::move(state));
 	}
 
@@ -7594,6 +7598,11 @@ void apply_mission_logic(const checkpoint_data& data)
 		it->event_log_container_buffer = state.log_container_buffer;
 		it->event_log_argument_buffer = state.log_argument_buffer;
 		it->backup_log_buffer = state.backup_log_buffer;
+
+		if (state.directive_present) {
+			it->objective_text = state.directive_text;
+			it->objective_key_text = state.directive_key_text;
+		}
 	}
 
 	for (size_t i = 0; i < data.goals.size(); i++) {
