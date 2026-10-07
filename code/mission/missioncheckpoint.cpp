@@ -32,6 +32,7 @@
 #include "ai/ai.h"
 #include "asteroid/asteroid.h"
 #include "coordinate_points/coordinate_point.h"
+#include "coordinate_points/coordinate_shapes.h"
 #include "gamesnd/eventmusic.h"
 #include "autopilot/autopilot.h"
 #include "ai/aigoals.h"
@@ -2742,6 +2743,23 @@ void store_environment(environment_state& out)
 		state.escort_priority = cp.escort_priority;
 		state.multi_team = cp.multi_team;
 		state.visible = cp.flags[CoordinatePoint::Flags::Visible_in_mission];
+		state.appearance_present = true;
+		state.display_name = cp.display_name;
+		state.always_render_labels = cp.flags[CoordinatePoint::Flags::Always_render_labels];
+		state.color_r = cp.display_color.red;
+		state.color_g = cp.display_color.green;
+		state.color_b = cp.display_color.blue;
+		state.color_a = cp.display_color.alpha;
+		state.shape_kind = static_cast<int>(cp.shape_kind);
+		state.shape_sides = cp.shape_sides;
+		state.shape_points = cp.shape_points;
+		state.shape_inner_radius = cp.shape_inner_radius;
+		if (cp.shape_kind == CoordinatePointShapeKind::Tabled && cp.shape_table_index >= 0 &&
+		    cp.shape_table_index < static_cast<int>(Coordinate_shapes.size())) {
+			state.shape_name = Coordinate_shapes[cp.shape_table_index].name;
+		}
+		state.shape_angle_deg = cp.shape_angle_deg;
+		state.size_scale = cp.size_scale;
 		out.coordinate_points.push_back(std::move(state));
 	}
 
@@ -2806,6 +2824,11 @@ void store_props(checkpoint_data& data)
 			capture_live(*live, state);
 		} else {
 			state.disposition = parsed.spawned ? ShipDisposition::Vanished : ShipDisposition::NotYetHere;
+			// Positive once the spawn cue has fired: the stamp the delay runs out at.
+			if (!parsed.spawned && parsed.spawn_delay > 0) {
+				state.spawn_timer_running = true;
+				state.spawn_timer = parsed.spawn_delay;
+			}
 		}
 		data.props.push_back(std::move(state));
 	}
@@ -2850,6 +2873,9 @@ void apply_props(const checkpoint_data& data)
 			}
 			if (parsed != nullptr) {
 				parsed->spawned = (state.disposition == ShipDisposition::Vanished);
+				if (state.spawn_timer_running) {
+					parsed->spawn_delay = translate_stamp(state.spawn_timer);
+				}
 			}
 			continue;
 		}
@@ -2904,9 +2930,13 @@ void apply_props(const checkpoint_data& data)
 			live->glow_point_bank_active[i] = state.glow_banks[i];
 		}
 
-		// Instance replacements on top of whatever the class and the parse already put there,
-		// resolved the way the parse's own are.
-		if (!state.texture_old.empty()) {
+		// The saved instance replacements stand in for the ones the parse put there, which the
+		// checkpoint already includes; keeping both would double the list on every load.  The class
+		// ones from the table stay.
+		{
+			auto& textures = live->replacement_textures;
+			textures.erase(std::remove_if(textures.begin(), textures.end(),
+				[](const texture_replace& tr) { return !tr.from_table; }), textures.end());
 			for (size_t i = 0; i < state.texture_old.size() && i < state.texture_new.size(); i++) {
 				texture_replace tr;
 				memset(&tr, 0, sizeof(tr));
@@ -3436,6 +3466,26 @@ void apply_environment(const checkpoint_data& data)
 			cp->multi_team = state.multi_team;
 			cp->flags.set(CoordinatePoint::Flags::Visible_in_mission, state.visible);
 			Objects[cp->objnum].pos = state.pos;
+
+			if (state.appearance_present) {
+				cp->display_name = state.display_name;
+				cp->flags.set(CoordinatePoint::Flags::Always_render_labels, state.always_render_labels);
+				gr_init_alphacolor(&cp->display_color, state.color_r, state.color_g, state.color_b, state.color_a);
+				cp->shape_sides = state.shape_sides;
+				cp->shape_points = state.shape_points;
+				cp->shape_inner_radius = state.shape_inner_radius;
+				cp->shape_angle_deg = state.shape_angle_deg;
+				cp->size_scale = state.size_scale;
+				cp->shape_kind = static_cast<CoordinatePointShapeKind>(state.shape_kind);
+				if (cp->shape_kind == CoordinatePointShapeKind::Tabled) {
+					// A shape the tables no longer have falls back the way the parse does.
+					cp->shape_table_index = find_coordinate_shape_index_by_name(state.shape_name.c_str());
+					if (cp->shape_table_index < 0) {
+						cp->shape_kind = CoordinatePointShapeKind::NGon;
+						cp->shape_sides = 3;
+					}
+				}
+			}
 		}
 	}
 
