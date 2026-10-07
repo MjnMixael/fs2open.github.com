@@ -133,6 +133,24 @@ SwrContext* getSWRContext(const AudioProperties& base, const AudioProperties& ad
 
 	return swr;
 }
+
+int getLayoutChannels(int64_t channel_layout)
+{
+#if LIBAVCODEC_VERSION_INT > AV_VERSION_INT(59, 36, 255)
+	AVChannelLayout ch_layout;
+
+	av_channel_layout_from_mask(&ch_layout, channel_layout);
+
+	return ch_layout.nb_channels;
+#else
+	return av_get_channel_layout_nb_channels(channel_layout);
+#endif
+}
+
+int64_t getStreamStartTime(const AVStream* stream)
+{
+	return (stream->start_time != AV_NOPTS_VALUE) ? stream->start_time : 0;
+}
 } // namespace
 
 namespace sound {
@@ -334,7 +352,75 @@ bool FFmpegWaveFile::Cue()
 		avformat_flush(m_ctx->ctx());
 	}
 
+	m_seekTarget = -1;
+	m_seekCursor = -1;
+
 	return err >= 0;
+}
+
+bool FFmpegWaveFile::Seek(double seconds)
+{
+	if (seconds <= 0.0) {
+		return Cue();
+	}
+
+	const auto sample_rate   = m_audioProps.sample_rate;
+	const auto target_sample = static_cast<int64_t>(seconds * sample_rate);
+	const auto target_ts     = getStreamStartTime(m_audioStream) +
+		av_rescale_q(target_sample, av_make_q(1, sample_rate), m_audioStream->time_base);
+
+	// Land on or before the target, then decode forward and throw away the samples in between
+	int64_t cursor = -1;
+	auto err = av_seek_frame(m_ctx->ctx(), m_audioStreamIndex, target_ts, AVSEEK_FLAG_BACKWARD);
+	if (err >= 0) {
+		avcodec_flush_buffers(m_audioCodecCtx);
+		avformat_flush(m_ctx->ctx());
+	} else {
+		// The container can't seek by time, so decode from the start and count samples instead
+		if (!Cue()) {
+			return false;
+		}
+		cursor = 0;
+	}
+
+	// Drop anything the resampler and the reader still hold from before the seek
+	setAdjustedAudioProperties(m_audioProps);
+	m_frameReader.reset(new FFmpegAudioReader(m_ctx->ctx(), m_audioCodecCtx, m_audioStreamIndex));
+
+	m_seekTarget = target_sample;
+	m_seekCursor = cursor;
+
+	return true;
+}
+
+int FFmpegWaveFile::samplesBeforeSeekTarget(const AVFrame* frame)
+{
+	if (m_seekCursor < 0) {
+		auto ts = frame->best_effort_timestamp;
+		if (ts == AV_NOPTS_VALUE) {
+			ts = frame->pts;
+		}
+		if (ts == AV_NOPTS_VALUE) {
+			// No way to tell where this frame is, so play from here
+			m_seekTarget = -1;
+			return 0;
+		}
+		m_seekCursor = av_rescale_q(ts - getStreamStartTime(m_audioStream), m_audioStream->time_base,
+			av_make_q(1, m_audioProps.sample_rate));
+	}
+
+	const auto frame_start = m_seekCursor;
+	m_seekCursor += frame->nb_samples;
+
+	if (m_seekCursor <= m_seekTarget) {
+		return frame->nb_samples;
+	}
+
+	const auto skip = std::max(static_cast<int64_t>(0), m_seekTarget - frame_start);
+	m_seekTarget = -1;
+	m_seekCursor = -1;
+
+	return static_cast<int>(skip);
 }
 
 void FFmpegWaveFile::setAdjustedAudioProperties(const AudioProperties& props)
@@ -348,13 +434,29 @@ void FFmpegWaveFile::setAdjustedAudioProperties(const AudioProperties& props)
 	Assertion(m_resampleCtx != nullptr, "Resample context creation failed! This should not happen!");
 }
 
-size_t FFmpegWaveFile::handleDecodedFrame(AVFrame* av_frame, uint8_t* out_buffer, size_t buffer_size)
+size_t FFmpegWaveFile::handleDecodedFrame(AVFrame* av_frame, uint8_t* out_buffer, size_t buffer_size, int skip_samples)
 {
 	const auto sample_size = (av_get_bytes_per_sample(m_audioProps.format) * getNumChannels());
 
+	const uint8_t** in_data = (const uint8_t**)av_frame->extended_data;
+	SCP_vector<const uint8_t*> skipped_data;
+	if (skip_samples > 0) {
+		// Start converting partway into the frame
+		const auto in_format = static_cast<AVSampleFormat>(av_frame->format);
+		const auto in_channels = getLayoutChannels(m_baseAudioProps.channel_layout);
+		const auto planar = av_sample_fmt_is_planar(in_format) != 0;
+		const auto offset = static_cast<size_t>(skip_samples) * av_get_bytes_per_sample(in_format) * (planar ? 1 : in_channels);
+
+		skipped_data.resize(planar ? in_channels : 1);
+		for (size_t i = 0; i < skipped_data.size(); ++i) {
+			skipped_data[i] = in_data[i] + offset;
+		}
+		in_data = skipped_data.data();
+	}
+
 	int dest_num_samples = static_cast<int>(buffer_size / sample_size);
-	auto written = swr_convert(m_resampleCtx, &out_buffer, dest_num_samples, (const uint8_t**)av_frame->extended_data,
-							   av_frame->nb_samples);
+	auto written = swr_convert(m_resampleCtx, &out_buffer, dest_num_samples, in_data,
+							   av_frame->nb_samples - skip_samples);
 
 	return (size_t)(written * sample_size);
 }
@@ -388,7 +490,16 @@ int FFmpegWaveFile::Read(uint8_t* pbDest, size_t cbSize)
 
 	while (m_frameReader->readFrame(m_decodeFrame)) {
 		// Got a new frame
-		auto advance = handleDecodedFrame(m_decodeFrame, pbDest + buffer_pos, cbSize - buffer_pos);
+		int skip_samples = 0;
+		if (m_seekTarget >= 0) {
+			skip_samples = samplesBeforeSeekTarget(m_decodeFrame);
+			if (skip_samples >= m_decodeFrame->nb_samples) {
+				// All of it is before where we seeked to
+				continue;
+			}
+		}
+
+		auto advance = handleDecodedFrame(m_decodeFrame, pbDest + buffer_pos, cbSize - buffer_pos, skip_samples);
 
 		buffer_pos += advance;
 		Assertion(buffer_pos <= cbSize,

@@ -62,6 +62,17 @@ class IAudioFile {
 	virtual bool Cue() = 0;
 
 	/**
+	 * @brief Moves the read position to the given time
+	 *
+	 * Future calls to Read return audio starting at that time. A time past the end of the file leaves nothing to
+	 * read.
+	 *
+	 * @param seconds The time from the start of the file
+	 * @return @c true if succesfull, @c false otherwise
+	 */
+	virtual bool Seek(double seconds) = 0;
+
+	/**
 	 * @brief Read audio data into a buffer
 	 *
 	 * Reads up to cbSize bytes of audio data into the buffer. cbSize must be a multiple of the size of one sample
