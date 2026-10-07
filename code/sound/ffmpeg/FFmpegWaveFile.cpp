@@ -390,6 +390,10 @@ bool FFmpegWaveFile::Seek(double seconds)
 	m_seekTarget = target_sample;
 	m_seekCursor = cursor;
 
+	nprintf(("Sound", "SOUND => ffmpeg Seek: %.3f s -> sample %d, ts %d (time_base %d/%d, start %d), av_seek_frame %d%s\n",
+		seconds, (int)target_sample, (int)target_ts, m_audioStream->time_base.num, m_audioStream->time_base.den,
+		(int)getStreamStartTime(m_audioStream), err, (cursor == 0) ? ", decoding from the start" : ""));
+
 	return true;
 }
 
@@ -401,12 +405,15 @@ int FFmpegWaveFile::samplesBeforeSeekTarget(const AVFrame* frame)
 			ts = frame->pts;
 		}
 		if (ts == AV_NOPTS_VALUE) {
+			nprintf(("Sound", "SOUND => ffmpeg first frame after seek has no timestamp; playing from wherever the seek landed\n"));
 			// No way to tell where this frame is, so play from here
 			m_seekTarget = -1;
 			return 0;
 		}
 		m_seekCursor = av_rescale_q(ts - getStreamStartTime(m_audioStream), m_audioStream->time_base,
 			av_make_q(1, m_audioProps.sample_rate));
+		nprintf(("Sound", "SOUND => ffmpeg first frame after seek: pts %d, best effort %d, starts at sample %d, %d samples, target %d\n",
+			(int)frame->pts, (int)frame->best_effort_timestamp, (int)m_seekCursor, frame->nb_samples, (int)m_seekTarget));
 	}
 
 	const auto frame_start = m_seekCursor;
@@ -417,6 +424,7 @@ int FFmpegWaveFile::samplesBeforeSeekTarget(const AVFrame* frame)
 	}
 
 	const auto skip = std::max(static_cast<int64_t>(0), m_seekTarget - frame_start);
+	nprintf(("Sound", "SOUND => ffmpeg reached target in frame starting at sample %d; skipping %d\n", (int)frame_start, (int)skip));
 	m_seekTarget = -1;
 	m_seekCursor = -1;
 
