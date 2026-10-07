@@ -750,6 +750,19 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 		handler->writeInt("escort_priority", point.escort_priority);
 		handler->writeInt("multi_team", point.multi_team);
 		handler->writeBool("visible", point.visible);
+		handler->writeString("display_name", point.display_name.c_str());
+		handler->writeBool("always_render_labels", point.always_render_labels);
+		handler->writeInt("color_r", point.color_r);
+		handler->writeInt("color_g", point.color_g);
+		handler->writeInt("color_b", point.color_b);
+		handler->writeInt("color_a", point.color_a);
+		handler->writeInt("shape_kind", point.shape_kind);
+		handler->writeInt("shape_sides", point.shape_sides);
+		handler->writeInt("shape_points", point.shape_points);
+		handler->writeFloat("shape_inner_radius", point.shape_inner_radius);
+		handler->writeString("shape_name", point.shape_name.c_str());
+		handler->writeFloat("shape_angle", point.shape_angle_deg);
+		handler->writeFloat("size_scale", point.size_scale);
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -806,6 +819,9 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			write_string_list(handler, "texture_new", state.texture_new);
 			handler->writeInt("collision_group_id", state.collision_group_id);
 			handler->writeInt("despawn_delay", state.despawn_delay);
+		}
+		if (state.spawn_timer_running) {
+			handler->writeInt("spawn_timer", state.spawn_timer);
 		}
 		handler->endSectionWrite();
 	}
@@ -1070,6 +1086,22 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			point.escort_priority = handler->readIntOr("escort_priority", 0);
 			point.multi_team = handler->readIntOr("multi_team", -1);
 			point.visible = handler->readBoolOr("visible", false);
+			if (handler->hasField("color_r")) {
+				point.appearance_present = true;
+				point.display_name = handler->readStringOr("display_name", "");
+				point.always_render_labels = handler->readBoolOr("always_render_labels", false);
+				point.color_r = handler->readIntOr("color_r", 255);
+				point.color_g = handler->readIntOr("color_g", 255);
+				point.color_b = handler->readIntOr("color_b", 255);
+				point.color_a = handler->readIntOr("color_a", 255);
+				point.shape_kind = handler->readIntOr("shape_kind", 0);
+				point.shape_sides = handler->readIntOr("shape_sides", 4);
+				point.shape_points = handler->readIntOr("shape_points", 5);
+				point.shape_inner_radius = handler->readFloatOr("shape_inner_radius", 0.0f);
+				point.shape_name = handler->readStringOr("shape_name", "");
+				point.shape_angle_deg = handler->readFloatOr("shape_angle", 0.0f);
+				point.size_scale = handler->readFloatOr("size_scale", 1.0f);
+			}
 			if (!point.name.empty()) {
 				env.coordinate_points.push_back(std::move(point));
 			}
@@ -1138,6 +1170,10 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 				read_string_list(handler, "texture_new", state.texture_new);
 				state.collision_group_id = handler->readIntOr("collision_group_id", 0);
 				state.despawn_delay = handler->readIntOr("despawn_delay", 0);
+			}
+			if (handler->hasField("spawn_timer")) {
+				state.spawn_timer_running = true;
+				state.spawn_timer = handler->readIntOr("spawn_timer", 0);
 			}
 			if (!state.name.empty()) {
 				data.props.push_back(std::move(state));
