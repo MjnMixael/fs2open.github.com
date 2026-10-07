@@ -57,6 +57,7 @@
 #include "mission/missiongoals.h"
 #include "mission/missionlog.h"
 #include "mission/missionmessage.h"
+#include "mission/missionmusic.h"
 #include "mission/missiontraining.h"
 #include "mission/missionparse.h"
 #include "missionui/redalert.h"
@@ -2024,6 +2025,15 @@ void store_mission_extras(mission_extra_state& out)
 		state.variable = entry.variable;
 		out.file_sounds.push_back(std::move(state));
 	}
+
+	mission_music_state music;
+	if (mission_music_get_state(music)) {
+		out.file_music.present = true;
+		out.file_music.filename = music.filename;
+		out.file_music.volume = music.volume;
+		out.file_music.paused = music.paused;
+		out.file_music.position_ms = music.position_ms;
+	}
 }
 
 // The streams play-sound-from-file had going.  After the variables, since a stream started
@@ -2042,6 +2052,17 @@ void apply_file_sounds(const checkpoint_data& data)
 		entry.paused = state.paused;
 		entry.variable = state.variable;
 		sexp_music_restore(entry);
+	}
+
+	// The play-music-from-file track, picked up where it was
+	const auto& music = data.mission.file_music;
+	if (music.present) {
+		mission_music_state state;
+		state.filename = music.filename;
+		state.volume = music.volume;
+		state.paused = music.paused;
+		state.position_ms = music.position_ms;
+		mission_music_restore(state);
 	}
 }
 
@@ -5858,6 +5879,20 @@ bool mission_checkpoint_load_pending()
 	return Pending_load.queued;
 }
 
+// Set once a restore has been applied, so scripts still see it as a restore in the hooks that
+// run after mission_checkpoint_apply() has let go of the pending state.
+static bool Restore_applied = false;
+
+bool mission_checkpoint_is_restoring()
+{
+	return Pending_load.in_progress || Game_restoring || Restore_applied;
+}
+
+void mission_checkpoint_restore_done()
+{
+	Restore_applied = false;
+}
+
 void mission_checkpoint_clear_pending()
 {
 	Pending_load = pending_load_state();
@@ -7955,6 +7990,7 @@ void mission_checkpoint_apply()
 	// further to do here.
 
 	Game_restoring = 0;
+	Restore_applied = true;
 
 	mprintf(("CHECKPOINT => Applied checkpoint at mission time %d.\n", f2i(Missiontime)));
 
