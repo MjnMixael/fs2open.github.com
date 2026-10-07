@@ -36,6 +36,19 @@
 #include "gamesnd/eventmusic.h"
 #include "autopilot/autopilot.h"
 #include "ai/aigoals.h"
+#include "ai/ailua.h"
+#include "parse/sexp/LuaAISEXP.h"
+#include "scripting/lua/LuaException.h"
+#include "scripting/api/objs/message.h"
+#include "scripting/api/objs/oswpt.h"
+#include "scripting/api/objs/prop.h"
+#include "scripting/api/objs/propclass.h"
+#include "scripting/api/objs/ship.h"
+#include "scripting/api/objs/shipclass.h"
+#include "scripting/api/objs/team.h"
+#include "scripting/api/objs/waypoint.h"
+#include "scripting/api/objs/weaponclass.h"
+#include "scripting/api/objs/wing.h"
 #include "object/waypoint.h"
 #include "gamesequence/gamesequence.h"
 #include "globalincs/linklist.h"
@@ -84,6 +97,7 @@
 
 #include <algorithm>
 #include <array>
+#include <cmath>
 
 extern char Game_current_mission_filename[];
 // These live in freespace.cpp with no header of their own; the graphics back ends and sexp.cpp
@@ -1522,6 +1536,178 @@ char* checkpoint_add_dock_name(const SCP_string& name)
 	return ai_add_dock_name(name.c_str());
 }
 
+// The mode name a Lua AI order is stored under; Ai_goal_names has no entry for AI_GOAL_LUA.
+const char* const LUA_GOAL_MODE = "lua order";
+
+// One argument of a Lua AI order, as the SEXP token that would produce it: the reverse of
+// LuaSEXP::sexpToLua() for each argument type it hands a script.  Handles become names, since the
+// objects behind them are made again on load.  False for a type that has no such token.
+bool lua_goal_argument_text(const luacpp::LuaValue& value, int arg_type, SCP_string& out)
+{
+	using namespace scripting::api;
+	auto quoted = [&out](const char* text) {
+		out = "\"";
+		out += text;
+		out += "\"";
+		return true;
+	};
+
+	switch (value.getValueType()) {
+	case luacpp::ValueType::BOOLEAN:
+		out = value.getValue<bool>() ? "( true )" : "( false )";
+		return true;
+
+	case luacpp::ValueType::NUMBER: {
+		float number = value.getValue<float>();
+		if (std::isnan(number)) {
+			return false;
+		}
+		out = std::to_string(fl2i(number));
+		return true;
+	}
+
+	case luacpp::ValueType::STRING:
+		return quoted(value.getValue<SCP_string>().c_str());
+
+	case luacpp::ValueType::USERDATA:
+		break;
+
+	default:
+		return false;
+	}
+
+	switch (arg_type) {
+	case OPF_SHIP: {
+		object_h handle;
+		value.getValue(l_Ship.Get(&handle));
+		return quoted(handle.isValid() ? Ships[handle.objp()->instance].ship_name : "");
+	}
+	case OPF_PROP: {
+		object_h handle;
+		value.getValue(l_Prop.Get(&handle));
+		const prop* propp = handle.isValid() ? prop_id_lookup(handle.objp()->instance) : nullptr;
+		return quoted(propp != nullptr ? propp->prop_name : "");
+	}
+	case OPF_WING: {
+		int wingnum = -1;
+		value.getValue(l_Wing.Get(&wingnum));
+		return quoted((wingnum >= 0 && wingnum < MAX_WINGS) ? Wings[wingnum].name : "");
+	}
+	case OPF_IFF: {
+		int team = -1;
+		value.getValue(l_Team.Get(&team));
+		if (team < 0 || team >= static_cast<int>(Iff_info.size())) {
+			return false;
+		}
+		return quoted(Iff_info[team].iff_name);
+	}
+	case OPF_WAYPOINT_PATH: {
+		waypointlist_h handle;
+		value.getValue(l_WaypointList.Get(&handle));
+		return quoted(handle.isValid() ? handle.getList()->get_name() : "");
+	}
+	case OPF_POINT: {
+		object_h handle;
+		value.getValue(l_Waypoint.Get(&handle));
+		const waypoint* wpt = handle.isValid() ? find_waypoint_with_objnum(handle.objnum) : nullptr;
+		if (wpt == nullptr) {
+			return false;
+		}
+		SCP_string name;
+		waypoint_stuff_name(name, *wpt);
+		return quoted(name.c_str());
+	}
+	case OPF_MESSAGE: {
+		int index = -1;
+		value.getValue(l_Message.Get(&index));
+		if (index < 0 || index >= static_cast<int>(Messages.size())) {
+			return false;
+		}
+		return quoted(Messages[index].name);
+	}
+	case OPF_SHIP_CLASS_NAME: {
+		int index = -1;
+		value.getValue(l_Shipclass.Get(&index));
+		return quoted(ship_class_name(index).c_str());
+	}
+	case OPF_WEAPON_NAME: {
+		int index = -1;
+		value.getValue(l_Weaponclass.Get(&index));
+		if (index < 0 || index >= weapon_info_size()) {
+			return false;
+		}
+		return quoted(Weapon_info[index].name);
+	}
+	case OPF_PROP_CLASS_NAME: {
+		int index = -1;
+		value.getValue(l_Propclass.Get(&index));
+		if (index < 0 || index >= prop_info_size()) {
+			return false;
+		}
+		return quoted(Prop_info[index].name);
+	}
+	case OPF_SHIP_POINT:
+	case OPF_SHIP_WING:
+	case OPF_SHIP_WING_WHOLETEAM:
+	case OPF_SHIP_WING_SHIPONTEAM_POINT:
+	case OPF_SHIP_WING_POINT:
+	case OPF_SHIP_WING_POINT_OR_NONE: {
+		object_ship_wing_point_team oswpt;
+		value.getValue(l_OSWPT.Get(&oswpt));
+		return quoted(oswpt.object_name);
+	}
+	default:
+		return false;
+	}
+}
+
+// A Lua AI order's operator, target and arguments as SEXP text.  False when an argument has a type
+// that cannot be written back, in which case the order is left out as before.
+bool store_lua_goal(const ai_goal& goal, ai_goal_state& out)
+{
+	const ai_mode_lua* lua_ai = ai_lua_find_mode(goal.ai_submode);
+	if (lua_ai == nullptr) {
+		return false;
+	}
+
+	out.lua_operator = lua_ai->sexp.getName();
+	if (lua_ai->needsTarget) {
+		out.lua_target = goal.lua_ai_target.target.object_name;
+	}
+
+	// The argument types count from the first argument after the priority; a varargs part arrives
+	// as one table per repeat of the pattern (LuaSEXP::getSEXPArgumentList()).
+	int argnum = 0;
+	try {
+		for (const auto& value : goal.lua_ai_target.arguments) {
+			if (value.getValueType() == luacpp::ValueType::TABLE) {
+				luacpp::LuaTable chunk;
+				value.getValue(chunk);
+				for (size_t i = 1; i <= chunk.getLength(); i++) {
+					luacpp::LuaValue item;
+					chunk.getValue(i, item);
+					SCP_string text;
+					if (!lua_goal_argument_text(item, lua_ai->sexp.getArgumentType(argnum++), text)) {
+						return false;
+					}
+					out.lua_arguments.push_back(std::move(text));
+				}
+				continue;
+			}
+
+			SCP_string text;
+			if (!lua_goal_argument_text(value, lua_ai->sexp.getArgumentType(argnum++), text)) {
+				return false;
+			}
+			out.lua_arguments.push_back(std::move(text));
+		}
+	} catch (const luacpp::LuaException&) {
+		return false;
+	}
+
+	return true;
+}
+
 void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 {
 	out.mode = ai_goal_mode_name(goal.ai_mode);
@@ -1537,6 +1723,15 @@ void store_ai_goal(const ship* shipp, const ai_goal& goal, ai_goal_state& out)
 
 	if (goal.target_name != nullptr) {
 		out.target_name = goal.target_name;
+	}
+
+	if (goal.ai_mode == AI_GOAL_LUA) {
+		if (store_lua_goal(goal, out)) {
+			out.mode = LUA_GOAL_MODE;
+		} else {
+			mprintf(("CHECKPOINT => A Lua AI order has an argument that cannot be stored; leaving it out.\n"));
+			out.mode.clear();
+		}
 	}
 
 	out.waypoint_list = waypoint_list_name(goal.wp_list_index);
@@ -4432,16 +4627,89 @@ void store_ai(const ship* shipp, ai_state& out)
 // can be mistaken for it.  The apply pushes the counter past this once every goal is back.
 int Max_restored_goal_signature = -1;
 
+// Lua AI orders loaded this apply, finished by finish_lua_goals() once every ship and wing exists:
+// their target and arguments are evaluated the way add-goal evaluates them, which looks the names up.
+SCP_vector<std::pair<ai_goal*, const ai_goal_state*>> Pending_lua_goals;
+
+// Rebuild a Lua AI order from its SEXP text, through the same evaluation ai_add_goal_sub_sexp() does.
+bool rebuild_lua_goal(const ai_goal_state& in, ai_goal& goal)
+{
+	int op = get_operator_const(in.lua_operator.c_str());
+	const ai_mode_lua* lua_ai = ai_lua_find_mode(op);
+	if (lua_ai == nullptr) {
+		return false;
+	}
+
+	SCP_string text = "( " + in.lua_operator;
+	if (lua_ai->needsTarget) {
+		text += " \"" + in.lua_target + "\"";
+	}
+	text += " " + std::to_string(in.priority);
+	for (const auto& argument : in.lua_arguments) {
+		text += " " + argument;
+	}
+	text += " )";
+
+	SCP_vector<char> buffer(text.begin(), text.end());
+	buffer.push_back('\0');
+
+	char* old_mp = Mp;
+	Mp = buffer.data();
+	int node = get_sexp_main();
+	Mp = old_mp;
+	if (node < 0) {
+		return false;
+	}
+
+	int localnode = CDR(node);
+	object_ship_wing_point_team target;
+	if (lua_ai->needsTarget) {
+		eval_object_ship_wing_point_team(&target, localnode);
+		localnode = CDR(localnode);
+	}
+
+	goal.ai_submode = op;
+	goal.lua_ai_target = { std::move(target), lua_ai->sexp.getSEXPArgumentList(CDR(localnode)) };
+
+	free_sexp2(node);
+	return true;
+}
+
+void finish_lua_goals()
+{
+	for (auto& pending : Pending_lua_goals) {
+		if (!rebuild_lua_goal(*pending.second, *pending.first)) {
+			mprintf(("CHECKPOINT => Lua AI order '%s' cannot be restored; dropping it.\n", pending.second->lua_operator.c_str()));
+			ai_goal_reset(pending.first);
+		}
+	}
+	Pending_lua_goals.clear();
+}
+
 void load_ai_goal(const ai_goal_state& in, ai_goal& goal)
 {
 	ai_goal_reset(&goal);
 
-	// Lua AI orders are not captured: Ai_goal_names has no entry for AI_GOAL_LUA, so they are
-	// written with an empty mode and land here, which is what we want.  Their target and
-	// arguments are live Lua values (lua_ai_target) and their submode is a dynamic SEXP operator
-	// id that need not mean the same thing in this run.  See the AIM_LUA note in load_ai().
+	// A Lua AI order gets its plain fields here and its operator, target and arguments in
+	// finish_lua_goals().  One stored before these could be written has an empty mode and is
+	// dropped like any other unknown mode.
 	ai_goal_mode mode;
 	if (in.mode.empty()) {
+		return;
+	}
+	if (in.mode == LUA_GOAL_MODE) {
+		goal.ai_mode = AI_GOAL_LUA;
+		goal.type = ai_goal_type_value(in.type);
+		apply_flags(in.flags, Ai_goal_flag_table, goal.flags);
+		goal.signature = in.signature;
+		goal.priority = in.priority;
+		goal.time = in.time;
+		goal.int_data = in.int_data;
+		goal.float_data = in.float_data;
+		if (in.signature > Max_restored_goal_signature) {
+			Max_restored_goal_signature = in.signature;
+		}
+		Pending_lua_goals.emplace_back(&goal, &in);
 		return;
 	}
 	if (!ai_goal_mode_value(in.mode, mode)) {
@@ -4644,15 +4912,15 @@ void load_ai(ship* shipp, const ai_state& in)
 		}
 	}
 
-	// A Lua AI mode keeps its target and arguments in lua_ai_target, which holds live Lua values
-	// and is not captured, and its submode is the id of a dynamic SEXP operator, which is handed
-	// out at script registration and so need not name the same mode (or any) in this run.  Its
-	// goal is dropped for the same reasons (load_ai_goal()), so idle the ship: ai_lua() would
-	// otherwise run the action every frame with nothing to act on, or throw on an unknown id.
+	// A Lua AI mode keeps its target and arguments in lua_ai_target as live Lua values, and its
+	// submode is the id of a dynamic SEXP operator, so the running mode cannot be carried over as
+	// it stands.  Its goal is restored (load_ai_goal()), so idle the ship and clear the active goal:
+	// the goal processing then hands it the order again on its first frame, through the script's
+	// ActionEnter, which is where the script sets the order up.
 	if (aip->mode == AIM_LUA) {
-		mprintf(("CHECKPOINT => '%s' was running a Lua AI order, which is not restored; idling it.\n", shipp->ship_name));
 		aip->mode = AIM_NONE;
 		aip->submode = 0;
+		aip->active_goal = -1;
 	}
 }
 
@@ -8012,6 +8280,9 @@ void mission_checkpoint_apply()
 	apply_asteroids(data);
 	apply_props(data);
 	apply_wings(data);
+
+	// Every ship and wing exists now, so the Lua AI orders' targets and arguments can be looked up.
+	finish_lua_goals();
 
 	// Every restored goal, ship and wing alike, is back now; keep new goals from reusing a
 	// signature one of them holds.  See Max_restored_goal_signature.
