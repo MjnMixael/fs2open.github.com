@@ -48,6 +48,9 @@ void forget_track()
 void close_track(bool fade)
 {
 	if (Track_handle >= 0)
+		nprintf(("Sound", "MUSIC => close handle %d ('%s') fade %d, playing %d, paused %d\n", Track_handle, Track_filename.c_str(),
+			(int)fade, audiostream_is_playing(Track_handle), audiostream_is_paused(Track_handle)));
+	if (Track_handle >= 0)
 		audiostream_close_file(Track_handle, fade);
 
 	forget_track();
@@ -56,6 +59,7 @@ void close_track(bool fade)
 void start_track(const char* filename, int volume, int start_ms)
 {
 	Track_handle = audiostream_open(filename, ASF_MENUMUSIC);
+	nprintf(("Sound", "MUSIC => start '%s' volume %d start %d ms -> handle %d\n", filename, volume, start_ms, Track_handle));
 	if (Track_handle < 0) {
 		mprintf(("Unable to play music file %s\n", filename));
 		forget_track();
@@ -103,6 +107,7 @@ void mission_music_stop(int fade_ms)
 		return;
 	}
 
+	nprintf(("Sound", "MUSIC => timed stop of handle %d over %d ms\n", Track_handle, fade_ms));
 	Track_stopping = true;
 	Stop_started = Missiontime;
 	Stop_duration_ms = fade_ms;
@@ -119,6 +124,7 @@ void mission_music_toggle_pause()
 		audiostream_pause(Track_handle, true);
 
 	Track_paused = !Track_paused;
+	nprintf(("Sound", "MUSIC => handle %d %s\n", Track_handle, Track_paused ? "paused" : "unpaused"));
 }
 
 void mission_music_do_frame()
@@ -187,6 +193,7 @@ bool mission_music_get_state(mission_music_state& state)
 	state.volume = Track_volume;
 	state.paused = Track_paused;
 	state.position_ms = fl2i(audiostream_get_position(Track_handle) * 1000.0);
+	nprintf(("Sound", "MUSIC => stored '%s' at %d ms, paused %d\n", state.filename.c_str(), state.position_ms, (int)state.paused));
 
 	return true;
 }
@@ -196,6 +203,7 @@ void mission_music_restore(const mission_music_state& state)
 	if (Cmdline_freespace_no_music)
 		return;
 
+	nprintf(("Sound", "MUSIC => restoring '%s' at %d ms, paused %d\n", state.filename.c_str(), state.position_ms, (int)state.paused));
 	close_track(false);
 	start_track(state.filename.c_str(), state.volume, state.position_ms);
 
