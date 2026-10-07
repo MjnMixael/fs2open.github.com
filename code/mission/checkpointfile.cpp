@@ -2639,6 +2639,13 @@ void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpo
 	}
 	handler->endArrayWrite();
 
+	if (state.file_music.present) {
+		handler->writeString("music_file", state.file_music.filename.c_str());
+		handler->writeInt("music_volume", state.file_music.volume);
+		handler->writeBool("music_paused", state.file_music.paused);
+		handler->writeInt("music_position_ms", state.file_music.position_ms);
+	}
+
 	handler->endSectionWrite();
 }
 
@@ -2848,6 +2855,15 @@ void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_dat
 			}
 		}
 		handler->endArrayRead();
+	}
+
+	state.file_music = checkpoint::file_music_state();
+	if (handler->hasField("music_file")) {
+		state.file_music.filename = handler->readStringOr("music_file", "");
+		state.file_music.volume = handler->readIntOr("music_volume", 100);
+		state.file_music.paused = handler->readBoolOr("music_paused", false);
+		state.file_music.position_ms = handler->readIntOr("music_position_ms", 0);
+		state.file_music.present = !state.file_music.filename.empty();
 	}
 }
 
