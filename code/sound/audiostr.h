@@ -69,6 +69,13 @@ int audiostream_is_paused(int i);
 // get duration of a stream in seconds
 double audiostream_get_duration(int i);
 
+// get the playback position of a stream in seconds from the start of the file
+double audiostream_get_position(int i);
+
+// move a stream's playback to the given time in seconds; a stream that hasn't started playing yet will start there.
+// Past the end wraps around if the stream loops, otherwise it stops at the end.
+bool audiostream_seek(int i, double seconds);
+
 // set the number of samples that the sound should cutoff after
 void audiostream_set_sample_cutoff(int i, unsigned int cutoff);
 
