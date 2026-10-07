@@ -373,8 +373,9 @@ bool FFmpegWaveFile::Seek(double seconds)
 	int64_t cursor = -1;
 	auto err = av_seek_frame(m_ctx->ctx(), m_audioStreamIndex, target_ts, AVSEEK_FLAG_BACKWARD);
 	if (err >= 0) {
+		// av_seek_frame() has already flushed the demuxer and set the stream's timestamp to where it landed;
+		// avformat_flush() here would reset that, and the frames that follow would claim to start at zero.
 		avcodec_flush_buffers(m_audioCodecCtx);
-		avformat_flush(m_ctx->ctx());
 	} else {
 		// The container can't seek by time, so decode from the start and count samples instead
 		if (!Cue()) {
