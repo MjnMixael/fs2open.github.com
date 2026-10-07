@@ -310,6 +310,23 @@ struct coordinate_point_state {
 	int escort_priority = 0;
 	int multi_team = -1;
 	bool visible = false;
+
+	// Everything else a point carries, so one a script renamed or created comes back looking the
+	// same.  Absent from files written before these were added.
+	bool appearance_present = false;
+	SCP_string display_name;
+	bool always_render_labels = false;
+	int color_r = 255;
+	int color_g = 255;
+	int color_b = 255;
+	int color_a = 255;
+	int shape_kind = 0;              // CoordinatePointShapeKind
+	int shape_sides = 4;
+	int shape_points = 5;
+	float shape_inner_radius = 0.0f;
+	SCP_string shape_name;           // Tabled shapes, by name; the index is into a table
+	float shape_angle_deg = 0.0f;
+	float size_scale = 1.0f;
 };
 
 // One live sun or background bitmap.  These are instances rather than the definition of the
@@ -632,6 +649,11 @@ struct prop_state {
 	SCP_vector<SCP_string> texture_new;
 	int collision_group_id = 0;
 	int despawn_delay = 0;       // dual-encoded like a ship's departure delay; translated
+
+	// A prop that is not here yet but whose spawn cue has fired is counting down its spawn delay;
+	// this is the stamp it spawns at, translated.
+	bool spawn_timer_running = false;
+	int spawn_timer = 0;
 };
 
 // A waypoint list, whole.  checkpointfields.h once said these "come only from the mission
