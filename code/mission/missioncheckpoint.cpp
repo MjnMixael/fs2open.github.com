@@ -6215,6 +6215,14 @@ void mission_checkpoint_restore_done()
 	Restore_applied = false;
 }
 
+// See mission_checkpoint_loaded_slot().
+static SCP_string Loaded_slot;
+
+const SCP_string& mission_checkpoint_loaded_slot()
+{
+	return Loaded_slot;
+}
+
 void mission_checkpoint_clear_pending()
 {
 	Pending_load = pending_load_state();
@@ -8164,6 +8172,10 @@ void mission_checkpoint_mission_complete()
 
 void mission_checkpoint_apply()
 {
+	// Every entry into a mission comes through here, so this is where a run that did not come
+	// from a checkpoint stops claiming that it did.
+	Loaded_slot.clear();
+
 	if (!Pending_load.in_progress) {
 		return;
 	}
@@ -8333,6 +8345,7 @@ void mission_checkpoint_apply()
 
 	Game_restoring = 0;
 	Restore_applied = true;
+	Loaded_slot = data.slot;
 
 	mprintf(("CHECKPOINT => Applied checkpoint at mission time %d.\n", f2i(Missiontime)));
 
