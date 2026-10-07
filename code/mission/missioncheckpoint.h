@@ -699,7 +699,7 @@ struct goal_state {
 // frame anyway, so storing it would just bloat the file.
 //
 // SEXP_NUM_EVAL is sticky too, and less obviously so: `rand` rolls once and then parks both the
-// marker and the rolled number on the node (rand_sexp(), sexp.cpp), so it never rolls again.  That
+// marker and the rolled number on its first argument (rand_sexp(), sexp.cpp), so it never rolls again.  That
 // is why the text comes along -- for those nodes the text *is* the value, and without it a
 // restored mission re-rolls every random delay the mission had already settled.
 //
