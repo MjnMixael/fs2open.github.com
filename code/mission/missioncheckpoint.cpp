@@ -2525,6 +2525,7 @@ void store_environment(environment_state& out)
 	out.supernova_stage = static_cast<int>(supernova_stage());
 	out.supernova_total = supernova_time_total();
 	out.supernova_left = supernova_seconds_left();
+	out.campaign_ending_via_supernova = (Campaign_ending_via_supernova != 0);
 
 	out.time_compression = f2fl(Game_time_compression);
 	out.time_compression_locked = Time_compression_locked;
@@ -3156,6 +3157,11 @@ void apply_environment(const checkpoint_data& data)
 		                  env.supernova_left,
 		                  TIMESTAMP(translate_stamp(data.saved_timestamp_ms + left_ms)));
 	}
+
+	// The event that called end-campaign is restored as done and will not call it again, so the
+	// flag it set has to come back with the countdown, or surviving the supernova would not end
+	// the campaign.
+	Campaign_ending_via_supernova = env.campaign_ending_via_supernova ? 1 : 0;
 
 	// Through the same two calls the SEXPs make, so the ramp and the lock behave as they did.
 	set_time_compression(env.time_compression);
