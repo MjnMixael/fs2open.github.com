@@ -1289,6 +1289,16 @@ struct file_sound_state {
 	SCP_string variable;
 };
 
+// The track play-music-from-file has going; see missionmusic.h.  Not stored while it is being
+// stopped on a timer.
+struct file_music_state {
+	bool present = false;
+	SCP_string filename;
+	int volume = 100;
+	bool paused = false;
+	int position_ms = 0;
+};
+
 struct mission_extra_state {
 	// As with the environment, an absent section has to mean "says nothing" rather than "all
 	// zeroes" -- zero built-in messages used is a real value.
@@ -1361,6 +1371,7 @@ struct mission_extra_state {
 	SCP_vector<ignored_key_state> ignored_keys;
 	SCP_vector<scrollback_line_state> scrollback;
 	SCP_vector<file_sound_state> file_sounds;
+	file_music_state file_music;
 };
 
 // A mission log entry, reproduced whole.  The timestamp here is mission time, not an engine
@@ -1495,6 +1506,13 @@ void mission_checkpoint_request_load(const SCP_string& slot, checkpoint::LoadFla
 
 // Is a load queued?
 bool mission_checkpoint_load_pending();
+
+// Is the mission coming up from a checkpoint?  True from the reload that a load triggers (so in
+// On Mission Start) until mission_checkpoint_restore_done(), which the game calls after On Gameplay
+// Start.  A checkpoint the player picks at the resume prompt is only chosen after On Mission Start,
+// so in that case this turns true at On Gameplay Start.
+bool mission_checkpoint_is_restoring();
+void mission_checkpoint_restore_done();
 
 // Called once per frame at the end of the gameplay loop.  Writes any stores events queued this
 // frame, then, if a load is queued, posts the mission restart that will eventually land in
