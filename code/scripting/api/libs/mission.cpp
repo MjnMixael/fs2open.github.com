@@ -2141,10 +2141,10 @@ ADE_FUNC(isRestoringCheckpoint,
 	l_Mission,
 	nullptr,
 	"Whether the mission is starting up from a checkpoint rather than from the beginning.  True during "
-	"On Mission Start and On Gameplay Start when a checkpoint is being loaded, so a script can leave "
-	"its start-of-mission setup to its On Checkpoint Restore hook.  A checkpoint the player accepts at "
-	"the resume prompt is chosen after On Mission Start has run, so in that case only On Gameplay "
-	"Start sees true.",
+	"On Mission Start, On Gameplay Start and On Checkpoint Restore when a checkpoint is being loaded.  "
+	"Both start hooks run before the restore, so a script can reset its state in them as usual and put "
+	"its saved state back in On Checkpoint Restore.  A checkpoint the player accepts at the resume "
+	"prompt is chosen after On Mission Start has run, so in that case On Mission Start sees false.",
 	"boolean",
 	"true while a checkpoint is being restored")
 {
