@@ -44,7 +44,14 @@ class FFmpegWaveFile : public IAudioFile {
 
 	std::unique_ptr<FFmpegAudioReader> m_frameReader;
 
+	// After a seek, decoded audio before this sample is thrown away. -1 when no seek is pending.
+	int64_t m_seekTarget = -1;
+	// The sample the next decoded frame starts at. -1 until the first frame after a seek tells us.
+	int64_t m_seekCursor = -1;
+
 	size_t getBufferedData(uint8_t* buffer, size_t buffer_size);
+
+	int samplesBeforeSeekTarget(const AVFrame* frame);
 
   public:
 	FFmpegWaveFile();
@@ -84,6 +91,8 @@ class FFmpegWaveFile : public IAudioFile {
 	 */
 	bool Cue() override;
 
+	bool Seek(double seconds) override;
+
 	/**
 	 * @brief Read audio data into a buffer
 	 *
@@ -103,7 +112,7 @@ class FFmpegWaveFile : public IAudioFile {
   private:
     const AVCodec* prepareOpened();
 
-	size_t handleDecodedFrame(AVFrame* av_frame, uint8_t* out_buffer, size_t buffer_size);
+	size_t handleDecodedFrame(AVFrame* av_frame, uint8_t* out_buffer, size_t buffer_size, int skip_samples = 0);
 
 	int getTotalSamples() const;
 
