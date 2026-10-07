@@ -1530,9 +1530,10 @@ void mission_checkpoint_request_load(const SCP_string& slot, checkpoint::LoadFla
 bool mission_checkpoint_load_pending();
 
 // Is the mission coming up from a checkpoint?  True from the reload that a load triggers (so in
-// On Mission Start) until mission_checkpoint_restore_done(), which the game calls after On Gameplay
-// Start.  A checkpoint the player picks at the resume prompt is only chosen after On Mission Start,
-// so in that case this turns true at On Gameplay Start.
+// On Mission Start) until mission_checkpoint_restore_done(), which the game calls once the restore
+// and On Checkpoint Restore are done.  On Gameplay Start runs before the restore.  A checkpoint the
+// player picks at the resume prompt is only chosen after On Mission Start, so in that case this turns
+// true at On Gameplay Start.
 bool mission_checkpoint_is_restoring();
 void mission_checkpoint_restore_done();
 
