@@ -5060,7 +5060,18 @@ void game_process_event( int current_state, int event )
 			// route into gameplay funnels through this event, and the first game_do_frame() has
 			// not run yet, so this is the one place that is after all the loadout bashing and
 			// still before the mission starts.
+			//
+			// On Gameplay Start runs first, exactly as it would for a fresh start, so a script can
+			// reset its state there without wiping anything: the restore then puts the engine's state
+			// back over whatever the hook did, and On Checkpoint Restore is where a script puts its own
+			// back.
 			mission_checkpoint_maybe_offer_resume();
+
+			// Make hv.Player available in "On Gameplay Start" hook -zookeeper
+			scripting::hooks::OnGameplayStart->run(scripting::hook_param_list(
+				scripting::hook_param("Player", 'o', Player_obj, Player_obj != nullptr)
+			));
+
 			mission_checkpoint_apply();
 
 			// A checkpoint load reloads the level inside one frame.  Debug builds treat a frame over
@@ -5069,12 +5080,7 @@ void game_process_event( int current_state, int event )
 			// set.  The load is not a debugger stop, so start frame timing over from here.
 			Last_frame_ui_timestamp = ui_timestamp();
 
-			// Make hv.Player available in "On Gameplay Start" hook -zookeeper
-			scripting::hooks::OnGameplayStart->run(scripting::hook_param_list(
-				scripting::hook_param("Player", 'o', Player_obj, Player_obj != nullptr)
-			));
-
-			// Scripts have now had both start hooks to see whether this was a checkpoint load
+			// Scripts have now seen every start hook and On Checkpoint Restore
 			mission_checkpoint_restore_done();
 
 			Start_time = f2fl(timer_get_approx_seconds());
