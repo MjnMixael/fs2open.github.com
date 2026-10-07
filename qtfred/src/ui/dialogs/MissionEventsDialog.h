@@ -75,6 +75,7 @@ private slots:
 	void on_chainedCheckBox_toggled(bool checked);
 	void on_chainDelayBox_valueChanged(int value);
 	void on_useMsecsCheckBox_toggled(bool checked);
+	void on_rerunAfterCheckpointCheckBox_toggled(bool checked);
 	void on_scoreBox_valueChanged(int value);
 	void on_teamCombo_currentIndexChanged(int index);
 

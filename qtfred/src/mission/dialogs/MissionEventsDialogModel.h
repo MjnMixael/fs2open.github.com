@@ -95,6 +95,8 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setChainDelay(int delay);
 	bool getUseMsecs() const;
 	void setUseMsecs(bool useMsecs);
+	bool getRerunAfterCheckpoint() const;
+	void setRerunAfterCheckpoint(bool rerun);
 	int getEventScore() const;
 	void setEventScore(int score);
 	int getEventTeam() const;
@@ -114,6 +116,7 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setChainDelayAt(int index, int delay);
 	void setChainDelayRawAt(int index, int delay); // no clamping; -1 = unchained
 	void setUseMsecsAt(int index, bool useMsecs);
+	void setRerunAfterCheckpointAt(int index, bool rerun);
 	void setEventTeamAt(int index, int team);
 	void setEventDirectiveTextAt(int index, const SCP_string& text);
 	void setEventDirectiveKeyTextAt(int index, const SCP_string& text);

@@ -1419,6 +1419,8 @@ void MissionEventsDialog::updateEventUi() {
 		ui->scoreBox->setEnabled(false);
 		ui->useMsecsCheckBox->setChecked(false);
 		ui->useMsecsCheckBox->setEnabled(false);
+		ui->rerunAfterCheckpointCheckBox->setChecked(false);
+		ui->rerunAfterCheckpointCheckBox->setEnabled(false);
 		ui->teamCombo->setEnabled(false);
 		ui->editDirectiveText->setEnabled(false);
 		ui->editDirectiveKeypressText->setEnabled(false);
@@ -1443,6 +1445,7 @@ void MissionEventsDialog::updateEventUi() {
 		ui->chainDelayBox->setEnabled(false);
 	}
 	ui->useMsecsCheckBox->setChecked(_model->getUseMsecs());
+	ui->rerunAfterCheckpointCheckBox->setChecked(_model->getRerunAfterCheckpoint());
 
 	ui->editDirectiveText->setText(QString::fromStdString(_model->getEventDirectiveText()));
 	ui->editDirectiveKeypressText->setText(QString::fromStdString(_model->getEventDirectiveKeyText()));
@@ -1461,6 +1464,7 @@ void MissionEventsDialog::updateEventUi() {
 	ui->scoreBox->setEnabled(true);
 	ui->chainedCheckBox->setEnabled(true);
 	ui->useMsecsCheckBox->setEnabled(true);
+	ui->rerunAfterCheckpointCheckBox->setEnabled(true);
 	ui->editDirectiveText->setEnabled(true);
 	ui->editDirectiveKeypressText->setEnabled(true);
 	ui->teamCombo->setEnabled(_model->getMissionIsMultiTeam());
@@ -2136,6 +2140,25 @@ void MissionEventsDialog::on_useMsecsCheckBox_toggled(bool checked)
 	    FieldId::Event_UseMsecs + index * FieldId::Event_FieldStride,
 	    nullptr, tr("Toggle Interval In Milliseconds"), true);
 	cmd->addEntry(before, checked, [this, index](const bool& v) { _model->setUseMsecsAt(index, v); refreshEventAfterFieldUndo(index); });
+	_dialogStack->push(cmd);
+}
+
+void MissionEventsDialog::on_rerunAfterCheckpointCheckBox_toggled(bool checked)
+{
+	if (!_model->eventIsValid())
+		return;
+
+	const int index   = _model->getCurrentlySelectedEvent();
+	const bool before = _model->getRerunAfterCheckpoint();
+	if (before == checked)
+		return;
+
+	_model->setRerunAfterCheckpoint(checked);
+
+	auto* cmd = new FieldEditCommand<bool>(
+	    FieldId::Event_RerunAfterCheckpoint + index * FieldId::Event_FieldStride,
+	    nullptr, tr("Toggle Run Again After Checkpoint Load"), true);
+	cmd->addEntry(before, checked, [this, index](const bool& v) { _model->setRerunAfterCheckpointAt(index, v); refreshEventAfterFieldUndo(index); });
 	_dialogStack->push(cmd);
 }
 

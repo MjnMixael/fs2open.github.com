@@ -687,6 +687,7 @@ const char* get_coordinate_point_flag_description(CoordinatePoint::Flags flag)
 // These are only the flags that are saved to the mission file.  See the MEF_ #defines.
 flag_def_list Mission_event_flags[] = {
 	{ "interval & delay use msecs", MEF_USE_MSECS, 0 },
+	{ "run again after checkpoint load", MEF_RERUN_AFTER_CHECKPOINT, 0 },
 };
 int Num_mission_event_flags = sizeof(Mission_event_flags) / sizeof(flag_def_list);
 
@@ -10548,6 +10549,9 @@ bool check_for_26_1_data()
 		return true;
 
 	// The checkpoint system, and with it the mission settings that configure it.
+	if (std::any_of(Mission_events.begin(), Mission_events.end(),
+		[](const mission_event& ev) { return (ev.flags & MEF_RERUN_AFTER_CHECKPOINT) != 0; }))
+		return true;
 	if (The_mission.flags[Mission::Mission_Flags::No_checkpoint_resume_prompt] ||
 		The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_player_loadout] ||
 		The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_wing_loadout] ||

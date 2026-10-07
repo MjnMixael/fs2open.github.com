@@ -627,6 +627,17 @@ in Milliseconds</string>
              </widget>
             </item>
             <item>
+             <widget class="QCheckBox" name="rerunAfterCheckpointCheckBox">
+              <property name="toolTip">
+               <string>When a checkpoint is loaded, this event is not restored: it starts over as the mission file sets it up and runs again. Meant for setup events whose effect the checkpoint does not keep, such as script state. Anything else the event does (messages, ships, sounds) happens again too.</string>
+              </property>
+              <property name="text">
+               <string>Run Again After
+Checkpoint Load</string>
+              </property>
+             </widget>
+            </item>
+            <item>
              <widget class="QLabel" name="scoreLabel">
               <property name="text">
                <string>Score</string>
@@ -1138,6 +1149,7 @@ in Milliseconds</string>
   <tabstop>chainedCheckBox</tabstop>
   <tabstop>chainDelayBox</tabstop>
   <tabstop>useMsecsCheckBox</tabstop>
+  <tabstop>rerunAfterCheckpointCheckBox</tabstop>
   <tabstop>scoreBox</tabstop>
   <tabstop>teamCombo</tabstop>
   <tabstop>editDirectiveText</tabstop>

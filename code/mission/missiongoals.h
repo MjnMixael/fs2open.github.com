@@ -82,6 +82,7 @@ enum class EventStatus : int
 #define MEF_USE_MSECS				(1 << 4)		// Goober5000 - interval and chain delay are in milliseconds, not seconds
 #define MEF_TIMESTAMP_HAS_INTERVAL	(1 << 5)		// Goober5000 - flag to simulate Volition's gloriously buggy hack
 #define MEF_EVENT_IS_DONE			(1 << 6)		// Goober5000 - originally indicated by setting formula to -1
+#define MEF_RERUN_AFTER_CHECKPOINT	(1 << 7)		// a checkpoint load leaves this event as the mission file sets it up, so it runs again
 
 #define MAX_MISSION_EVENT_LOG_FLAGS		9			// this must be changed if a mission log flag is added below
 

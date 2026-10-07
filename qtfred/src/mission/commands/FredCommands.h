@@ -854,6 +854,7 @@ namespace FieldId {
     constexpr int Event_LogLastRepeat   = 300016;
     constexpr int Event_LogFirstTrigger = 300017;
     constexpr int Event_LogLastTrigger  = 300018;
+    constexpr int Event_RerunAfterCheckpoint = 300019;
     constexpr int Msg_FieldStride       = 32;
     constexpr int Msg_Name              = 400000; // + messageIndex * Msg_FieldStride
     constexpr int Msg_Text              = 400001;
