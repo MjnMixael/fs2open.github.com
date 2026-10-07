@@ -857,6 +857,33 @@ void MissionEventsDialogModel::setUseMsecsAt(int index, bool useMsecs)
 	set_modified();
 }
 
+bool MissionEventsDialogModel::getRerunAfterCheckpoint() const
+{
+	if (!SCP_vector_inbounds(m_events, m_cur_event)) {
+		return false;
+	}
+	return (m_events[m_cur_event].flags & MEF_RERUN_AFTER_CHECKPOINT) != 0;
+}
+
+void MissionEventsDialogModel::setRerunAfterCheckpoint(bool rerun)
+{
+	setRerunAfterCheckpointAt(m_cur_event, rerun);
+}
+
+void MissionEventsDialogModel::setRerunAfterCheckpointAt(int index, bool rerun)
+{
+	if (!SCP_vector_inbounds(m_events, index)) {
+		return;
+	}
+	auto& event = m_events[index];
+	if (rerun) {
+		event.flags |= MEF_RERUN_AFTER_CHECKPOINT;
+	} else {
+		event.flags &= ~MEF_RERUN_AFTER_CHECKPOINT;
+	}
+	set_modified();
+}
+
 int MissionEventsDialogModel::getEventScore() const
 {
 	if (!SCP_vector_inbounds(m_events, m_cur_event)) {
