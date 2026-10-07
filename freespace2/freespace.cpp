@@ -5061,6 +5061,12 @@ void game_process_event( int current_state, int event )
 			mission_checkpoint_maybe_offer_resume();
 			mission_checkpoint_apply();
 
+			// A checkpoint load reloads the level inside one frame.  Debug builds treat a frame over
+			// five seconds as time spent stopped in a debugger and wind the timestamps back by it
+			// (game_do_state_common()), which would undo that much of the clock the restore has just
+			// set.  The load is not a debugger stop, so start frame timing over from here.
+			Last_frame_ui_timestamp = ui_timestamp();
+
 			// Make hv.Player available in "On Gameplay Start" hook -zookeeper
 			scripting::hooks::OnGameplayStart->run(scripting::hook_param_list(
 				scripting::hook_param("Player", 'o', Player_obj, Player_obj != nullptr)
