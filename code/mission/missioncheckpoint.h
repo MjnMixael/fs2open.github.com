@@ -408,6 +408,14 @@ struct ai_goal_state {
 
 	int int_data = 0;
 	float float_data = 0.0f;
+
+	// A Lua AI order (mode "lua order").  Its operator id is handed out at script registration and
+	// its target and arguments are live Lua values, so all three are kept as the SEXP text they
+	// would have in an add-goal: the operator by name, the target's name, and each argument as a
+	// SEXP token.  The restore parses them back through the same path add-goal uses.
+	SCP_string lua_operator;
+	SCP_string lua_target;
+	SCP_vector<SCP_string> lua_arguments;
 };
 
 struct ai_state {
