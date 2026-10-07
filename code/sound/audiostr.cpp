@@ -694,10 +694,14 @@ void AudioStream::Cue (void)
 		// Start partway in if asked to
 		if (m_start_position > 0.0) {
 			const auto start = Fit_Position(m_start_position);
-			if (m_pwavefile->Seek(start))
+			const bool seeked = m_pwavefile->Seek(start);
+			if (seeked)
 				m_read_cursor = static_cast<size_t>(start * m_fileProps.sample_rate);
 			else
 				m_pwavefile->Cue();
+			nprintf(("Sound", "SOUND => stream %p Cue: start %.3f asked, %.3f fitted, seek %s, cursor %d, duration %.3f, rate %d, chans %d, bps %d, looping %d\n",
+				this, m_start_position, start, seeked ? "ok" : "FAILED", (int)m_read_cursor, m_fileProps.duration,
+				m_fileProps.sample_rate, m_fileProps.num_channels, m_fileProps.bytes_per_sample, (int)m_bLooping));
 			m_start_position = 0.0;
 		}
 
@@ -877,6 +881,8 @@ bool AudioStream::Seek(double seconds)
 		m_pwavefile->Cue();
 		m_read_cursor = 0;
 	}
+	nprintf(("Sound", "SOUND => stream %p live Seek: %.3f asked, %.3f fitted, seek %s, playing %d, paused %d\n",
+		this, seconds, target, fRtn ? "ok" : "FAILED", (int)m_fPlaying, (int)m_bIsPaused));
 	m_bReadingDone = false;
 
 	uint num_bytes_written;
