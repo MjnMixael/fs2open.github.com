@@ -700,6 +700,12 @@ struct event_state {
 	SCP_vector<SCP_string> log_container_buffer;
 	SCP_vector<SCP_string> log_argument_buffer;
 	SCP_vector<SCP_string> backup_log_buffer;
+
+	// The directive text and its keypress text, which a script can change mid-mission
+	// (Event.DirectiveText / DirectiveKeypressText).  Absent from files written before these were added.
+	bool directive_present = false;
+	SCP_string directive_text;
+	SCP_string directive_key_text;
 };
 
 // Goals have two pieces of runtime state: whether they were met, and whether they still count.
