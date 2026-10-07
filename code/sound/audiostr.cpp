@@ -118,6 +118,8 @@ public:
 	void	Set_Default_Volume(float vol) { m_lDefaultVolume = vol; }
 	float	Get_Default_Volume() { return m_lDefaultVolume; }
 	uint	Get_Samples_Committed();
+	double	Get_Position();
+	bool	Seek(double seconds);
 	int	Is_looping() { return m_bLooping; }
 	int	status;
 	int	type;
@@ -131,6 +133,8 @@ protected:
 	bool ServiceBuffer ();
 	static bool TimerCallback (ptr_u dwUser);
 	bool PlaybackDone();
+	void NoteQueued(int num_bytes);
+	double Fit_Position(double seconds);
 
 	ALuint m_source_id;	// name of openAL source
 	ALuint m_buffer_ids[MAX_STREAM_BUFFERS];	// names of buffers
@@ -159,6 +163,15 @@ protected:
 
 	size_t m_total_uncompressed_bytes_read;
 	size_t m_max_uncompressed_bytes_to_read;
+
+	// The file sample each queued OpenAL buffer starts at, and its length in samples, oldest first
+	struct QueuedChunk {
+		size_t start;
+		size_t length;
+	};
+	SCP_deque<QueuedChunk> m_queued_chunks;
+	size_t m_read_cursor;			// file sample the next read starts at
+	double m_start_position;		// seconds; where the next Cue() starts the file
 
 	SDL_Mutex* write_lock;
 
@@ -238,7 +251,7 @@ uint Timer::TimeProc(void *dwUser, SDL_TimerID /* timerID */, Uint32 interval)
 const ushort DefBufferServiceInterval = 250;  // default buffer service interval in msec
 
 // Constructor
-AudioStream::AudioStream (void) : m_total_uncompressed_bytes_read(0), m_max_uncompressed_bytes_to_read(0)
+AudioStream::AudioStream (void) : m_total_uncompressed_bytes_read(0), m_max_uncompressed_bytes_to_read(0), m_read_cursor(0), m_start_position(0.0)
 {
 	write_lock = SDL_CreateMutex();
 }
@@ -275,6 +288,10 @@ void AudioStream::Init_Data ()
 
 	m_total_uncompressed_bytes_read = 0;
 	m_max_uncompressed_bytes_to_read = std::numeric_limits<size_t>::max();
+
+	m_queued_chunks.clear();
+	m_read_cursor = 0;
+	m_start_position = 0.0;
 }
 
 
@@ -385,6 +402,8 @@ bool AudioStream::Destroy (void)
 	while (buffers_processed) {
 		ALuint buffer_id = 0;
 		OpenAL_ErrorPrint( alSourceUnqueueBuffers(m_source_id, 1, &buffer_id) );
+		if (!m_queued_chunks.empty())
+			m_queued_chunks.pop_front();
 		buffers_processed--;
 	}
 
@@ -396,6 +415,7 @@ bool AudioStream::Destroy (void)
 
 	// Delete WaveFile object
 	m_pwavefile = nullptr;
+	m_queued_chunks.clear();
 
 	status = ASF_FREE;
 
@@ -445,6 +465,7 @@ bool AudioStream::WriteWaveData (uint size, uint *num_bytes_written, int service
 			if ( (num_bytes_read < 0) && m_bLooping) {
 				m_pwavefile->Cue();
 				m_total_uncompressed_bytes_read = 0;
+				m_read_cursor = 0;
 				num_bytes_read = m_pwavefile->Read(uncompressed_wave_data, m_cbBufSize);
 			}
 
@@ -454,6 +475,7 @@ bool AudioStream::WriteWaveData (uint size, uint *num_bytes_written, int service
 			} else if (num_bytes_read > 0) {
 				OpenAL_ErrorCheck( alBufferData(buffer_id, alFormat, uncompressed_wave_data, num_bytes_read, m_fileProps.sample_rate), { fRtn = false; goto ErrorExit; } );
 				OpenAL_ErrorCheck( alSourceQueueBuffers(m_source_id, 1, &buffer_id), { fRtn = false; goto ErrorExit; } );
+				NoteQueued(num_bytes_read);
 
 				*num_bytes_written += num_bytes_read;
 			}
@@ -465,6 +487,8 @@ bool AudioStream::WriteWaveData (uint size, uint *num_bytes_written, int service
 		while (buffers_processed) {
 			ALuint buffer_id = 0;
 			OpenAL_ErrorPrint( alSourceUnqueueBuffers(m_source_id, 1, &buffer_id) );
+			if (!m_queued_chunks.empty())
+				m_queued_chunks.pop_front();
 
 			num_bytes_read = m_pwavefile->Read(uncompressed_wave_data, m_cbBufSize);
 
@@ -472,6 +496,7 @@ bool AudioStream::WriteWaveData (uint size, uint *num_bytes_written, int service
 			if ( (num_bytes_read < 0) && m_bLooping) {
 				m_pwavefile->Cue();
 				m_total_uncompressed_bytes_read = 0;
+				m_read_cursor = 0;
 				num_bytes_read = m_pwavefile->Read(uncompressed_wave_data, m_cbBufSize);
 			}
 
@@ -480,6 +505,7 @@ bool AudioStream::WriteWaveData (uint size, uint *num_bytes_written, int service
 			} else if (num_bytes_read > 0) {
 				OpenAL_ErrorPrint( alBufferData(buffer_id, alFormat, uncompressed_wave_data, num_bytes_read, m_fileProps.sample_rate) );
 				OpenAL_ErrorPrint( alSourceQueueBuffers(m_source_id, 1, &buffer_id) );
+				NoteQueued(num_bytes_read);
 
 				*num_bytes_written += num_bytes_read;
 			}
@@ -663,6 +689,17 @@ void AudioStream::Cue (void)
 
 		// Reset file ptr, etc
 		m_pwavefile->Cue ();
+		m_read_cursor = 0;
+
+		// Start partway in if asked to
+		if (m_start_position > 0.0) {
+			const auto start = Fit_Position(m_start_position);
+			if (m_pwavefile->Seek(start))
+				m_read_cursor = static_cast<size_t>(start * m_fileProps.sample_rate);
+			else
+				m_pwavefile->Cue();
+			m_start_position = 0.0;
+		}
 
 		// Unqueue all buffers
 		ALint buffers_processed = 0;
@@ -671,6 +708,8 @@ void AudioStream::Cue (void)
 		while (buffers_processed) {
 			ALuint buffer_id = 0;
 			OpenAL_ErrorPrint( alSourceUnqueueBuffers(m_source_id, 1, &buffer_id) );
+			if (!m_queued_chunks.empty())
+				m_queued_chunks.pop_front();
 			buffers_processed--;
 		}
 
@@ -746,6 +785,112 @@ uint AudioStream::Get_Samples_Committed(void)
 	return (uint) (m_total_uncompressed_bytes_read / m_fileProps.bytes_per_sample);
 }
 
+void AudioStream::NoteQueued(int num_bytes)
+{
+	const auto length = static_cast<size_t>(num_bytes) / (m_fileProps.bytes_per_sample * m_fileProps.num_channels);
+
+	m_queued_chunks.push_back({m_read_cursor, length});
+	m_read_cursor += length;
+}
+
+// Past the end wraps around when looping and stops at the end otherwise
+double AudioStream::Fit_Position(double seconds)
+{
+	if (seconds < 0.0)
+		return 0.0;
+
+	const auto duration = m_fileProps.duration;
+	if (duration > 0.0 && seconds >= duration)
+		return m_bLooping ? fmod(seconds, duration) : duration;
+
+	return seconds;
+}
+
+// What is being heard right now, in seconds from the start of the file
+double AudioStream::Get_Position()
+{
+	if ( m_pwavefile == NULL || m_fileProps.sample_rate <= 0 )
+		return 0.0;
+
+	SDL_LockMutex(write_lock);
+
+	double position;
+	if (!m_fCued) {
+		// Nothing queued yet, so we're wherever the next Cue() will start
+		position = Fit_Position(m_start_position);
+	} else {
+		// The offset counts from the oldest buffer still queued, including ones already played
+		ALint offset = 0;
+		OpenAL_ErrorPrint( alGetSourcei(m_source_id, AL_SAMPLE_OFFSET, &offset) );
+
+		auto sample = m_read_cursor;
+		auto remaining = static_cast<size_t>(std::max(offset, 0));
+		for (const auto &chunk : m_queued_chunks) {
+			if (remaining < chunk.length) {
+				sample = chunk.start + remaining;
+				break;
+			}
+			remaining -= chunk.length;
+		}
+
+		position = static_cast<double>(sample) / m_fileProps.sample_rate;
+	}
+
+	SDL_UnlockMutex(write_lock);
+
+	return position;
+}
+
+// Move playback to the given time. A stream that hasn't started yet will start there.
+bool AudioStream::Seek(double seconds)
+{
+	if ( m_pwavefile == NULL )
+		return false;
+
+	SDL_LockMutex(write_lock);
+
+	if (!m_fCued) {
+		m_start_position = seconds;
+		SDL_UnlockMutex(write_lock);
+		return true;
+	}
+
+	const auto target = Fit_Position(seconds);
+
+	// Throw away everything queued, refill from the new spot, then carry on as before
+	OpenAL_ErrorPrint( alSourceStop(m_source_id) );
+
+	ALint buffers_processed = 0;
+	OpenAL_ErrorPrint( alGetSourcei(m_source_id, AL_BUFFERS_PROCESSED, &buffers_processed) );
+
+	while (buffers_processed) {
+		ALuint buffer_id = 0;
+		OpenAL_ErrorPrint( alSourceUnqueueBuffers(m_source_id, 1, &buffer_id) );
+		buffers_processed--;
+	}
+	m_queued_chunks.clear();
+
+	bool fRtn = m_pwavefile->Seek(target);
+	if (fRtn) {
+		m_read_cursor = static_cast<size_t>(target * m_fileProps.sample_rate);
+	} else {
+		m_pwavefile->Cue();
+		m_read_cursor = 0;
+	}
+	m_bReadingDone = false;
+
+	uint num_bytes_written;
+	WriteWaveData(m_cbBufSize, &num_bytes_written, 0);
+
+	// A paused stream stays stopped with the new buffers queued; unpausing plays from the head of the queue
+	if (m_fPlaying)
+		OpenAL_ErrorPrint( alSourcePlay(m_source_id) );
+
+	SDL_UnlockMutex(write_lock);
+
+	return fRtn;
+}
+
 
 /** Have stream fade out and be destroyed when inaudabile.
 If stream is already done or never started just destroy it now.
@@ -810,6 +955,8 @@ void AudioStream::Stop_and_Rewind (void)
 	while (buffers_processed) {
 		ALuint buffer_id = 0;
 		OpenAL_ErrorPrint( alSourceUnqueueBuffers(m_source_id, 1, &buffer_id) );
+		if (!m_queued_chunks.empty())
+			m_queued_chunks.pop_front();
 		buffers_processed--;
 	}
 
@@ -1198,6 +1345,32 @@ double audiostream_get_duration(int i)
 		return -1;
 	
 	return Audio_streams[i].Get_Duration();
+}
+
+double audiostream_get_position(int i)
+{
+	if (i == -1)
+		return 0;
+
+	Assert(i >= 0 && i < MAX_AUDIO_STREAMS);
+
+	if (Audio_streams[i].status == ASF_FREE)
+		return 0;
+
+	return Audio_streams[i].Get_Position();
+}
+
+bool audiostream_seek(int i, double seconds)
+{
+	if (i == -1)
+		return false;
+
+	Assert(i >= 0 && i < MAX_AUDIO_STREAMS);
+
+	if (Audio_streams[i].status == ASF_FREE)
+		return false;
+
+	return Audio_streams[i].Seek(seconds);
 }
 
 void audiostream_set_sample_cutoff(int i, uint cutoff)
