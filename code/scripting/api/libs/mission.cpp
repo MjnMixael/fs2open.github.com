@@ -2137,6 +2137,20 @@ ADE_FUNC(getCheckpointSlots,
 	return ade_set_args(L, "t", &table);
 }
 
+ADE_FUNC(isRestoringCheckpoint,
+	l_Mission,
+	nullptr,
+	"Whether the mission is starting up from a checkpoint rather than from the beginning.  True during "
+	"On Mission Start and On Gameplay Start when a checkpoint is being loaded, so a script can leave "
+	"its start-of-mission setup to its On Checkpoint Restore hook.  A checkpoint the player accepts at "
+	"the resume prompt is chosen after On Mission Start has run, so in that case only On Gameplay "
+	"Start sees true.",
+	"boolean",
+	"true while a checkpoint is being restored")
+{
+	return ade_set_args(L, "b", mission_checkpoint_is_restoring());
+}
+
 ADE_FUNC(deleteAllCheckpoints,
 	l_Mission,
 	"[string missionName]",
