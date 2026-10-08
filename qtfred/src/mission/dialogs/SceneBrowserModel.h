@@ -60,6 +60,8 @@ public:
 	void multiSelectFromBrowser(const QVector<int>& objNums);
 	void selectWingFromBrowser(int wingIndex);
 	static QVector<int> getWingMemberObjects(int wingIndex);
+	// The ship or prop class of an object, for searching by class; empty for objects without one
+	static QString getObjectClassName(int objNum);
 
 	// Environment entities (volumetric nebula, asteroid field later). These
 	// live outside the object tree; the panel renders a top-level "Environment"

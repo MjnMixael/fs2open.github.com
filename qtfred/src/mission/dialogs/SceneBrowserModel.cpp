@@ -361,6 +361,23 @@ void SceneBrowserModel::selectWingFromBrowser(int wingIndex)
 		multiSelectFromBrowser(objNums);
 }
 
+QString SceneBrowserModel::getObjectClassName(int objNum)
+{
+	if (!query_valid_object(objNum))
+		return {};
+	const object& obj = Objects[objNum];
+	if (obj.type == OBJ_SHIP || obj.type == OBJ_START) {
+		const int cls = Ships[obj.instance].ship_info_index;
+		if (cls >= 0 && cls < ship_info_size())
+			return QString::fromUtf8(Ship_info[cls].name);
+	} else if (obj.type == OBJ_PROP) {
+		const auto* p = prop_id_lookup(obj.instance);
+		if (p != nullptr && p->prop_info_index >= 0 && p->prop_info_index < prop_info_size())
+			return QString::fromStdString(Prop_info[p->prop_info_index].name);
+	}
+	return {};
+}
+
 QVector<int> SceneBrowserModel::getWingMemberObjects(int wingIndex)
 {
 	QVector<int> objNums;

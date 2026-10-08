@@ -4,14 +4,65 @@
 #include "ui_SceneBrowserPanel.h"
 
 #include <mission/dialogs/SceneBrowserModel.h>
+#include <mission/object.h>
 #include <ui/FredView.h>
 
+#include <QApplication>
 #include <QInputDialog>
 #include <QLayout>
 #include <QMenu>
 #include <QMessageBox>
+#include <QPainter>
+#include <QStyledItemDelegate>
 
 namespace fso::fred {
+
+namespace {
+
+// Draws a row normally, then, for a row the search matched by class rather than name, the class in
+// a dimmed color after the name. The item's text stays the plain name.
+class ClassSuffixDelegate final : public QStyledItemDelegate {
+  public:
+	ClassSuffixDelegate(QObject* parent, int role) : QStyledItemDelegate(parent), _role(role) {}
+
+	void paint(QPainter* p, const QStyleOptionViewItem& option, const QModelIndex& index) const override
+	{
+		QStyledItemDelegate::paint(p, option, index);
+
+		const QString suffix = index.data(_role).toString();
+		if (suffix.isEmpty())
+			return;
+
+		QStyleOptionViewItem opt(option);
+		initStyleOption(&opt, index);
+		const QWidget* w = opt.widget;
+		const QStyle* style = w != nullptr ? w->style() : QApplication::style();
+		const QRect textRect = style->subElementRect(QStyle::SE_ItemViewItemText, &opt, w);
+
+		const QFontMetrics fm(opt.font);
+		const int nameWidth = fm.horizontalAdvance(fm.elidedText(opt.text, opt.textElideMode, textRect.width()));
+		const int gap = fm.horizontalAdvance(QStringLiteral("   "));
+		QRect suffixRect = textRect;
+		suffixRect.setLeft(textRect.left() + nameWidth + gap);
+		if (suffixRect.width() <= 0)
+			return;
+
+		const bool selected = (opt.state & QStyle::State_Selected) != 0;
+		QColor color = opt.palette.color(selected ? QPalette::HighlightedText : QPalette::Text);
+		color.setAlphaF(0.6f);
+
+		p->save();
+		p->setFont(opt.font);
+		p->setPen(color);
+		p->drawText(suffixRect, Qt::AlignLeft | Qt::AlignVCenter, fm.elidedText(suffix, Qt::ElideRight, suffixRect.width()));
+		p->restore();
+	}
+
+  private:
+	int _role;
+};
+
+} // namespace
 
 SceneBrowserPanel::SceneBrowserPanel(FredView* fredView, EditorViewport* viewport)
 	: QDockWidget(tr("Scene Browser"), fredView)
@@ -34,6 +85,7 @@ SceneBrowserPanel::SceneBrowserPanel(FredView* fredView, EditorViewport* viewpor
 
 	_searchBar = ui->searchBar;
 	_tree = ui->browserTree;
+	_tree->setItemDelegate(new ClassSuffixDelegate(_tree, MatchedClassRole));
 	_iffFilterWidget = ui->iffFilterWidget;
 	_selectAllButton = ui->selectAllButton;
 	_clearButton = ui->clearButton;
@@ -46,6 +98,7 @@ SceneBrowserPanel::SceneBrowserPanel(FredView* fredView, EditorViewport* viewpor
 	connect(_invertButton, &QPushButton::clicked, _model, &dialogs::SceneBrowserModel::invertSelection);
 	connect(_tree, &QTreeWidget::itemChanged, this, &SceneBrowserPanel::onItemChanged);
 	connect(_tree, &QTreeWidget::itemSelectionChanged, this, &SceneBrowserPanel::onItemSelectionChanged);
+	connect(_tree, &QTreeWidget::itemDoubleClicked, this, &SceneBrowserPanel::onItemDoubleClicked);
 	connect(_tree, &QTreeWidget::customContextMenuRequested,
 	        this, &SceneBrowserPanel::onCustomContextMenuRequested);
 	connect(this, &QDockWidget::topLevelChanged, this, &SceneBrowserPanel::updateFloatingMargins);
@@ -310,18 +363,29 @@ void SceneBrowserPanel::applyFilter(const QString& filter)
 {
 	if (filter.isEmpty()) {
 		showAllItems(_tree->invisibleRootItem());
+		// no search, so no class suffixes
+		QTreeWidgetItemIterator it(_tree, QTreeWidgetItemIterator::NoChildren);
+		for (; *it; ++it) {
+			if (!(*it)->data(0, MatchedClassRole).isNull())
+				(*it)->setData(0, MatchedClassRole, QVariant());
+		}
 		return;
 	}
 
 	// First show all, then hide non-matching leaves
 	showAllItems(_tree->invisibleRootItem());
 
+	// An object matches by name or by its ship or prop class. A row matched only by class shows
+	// the class after its name, so it's clear why it's listed.
 	QTreeWidgetItemIterator it(_tree, QTreeWidgetItemIterator::NoChildren);
 	while (*it) {
 		auto varObjNum = (*it)->data(0, ObjNumRole);
 		if (!varObjNum.isNull()) {
-			bool matches = (*it)->text(0).contains(filter, Qt::CaseInsensitive);
-			(*it)->setHidden(!matches);
+			const bool nameMatches = (*it)->text(0).contains(filter, Qt::CaseInsensitive);
+			const QString cls = nameMatches ? QString() : dialogs::SceneBrowserModel::getObjectClassName(varObjNum.toInt());
+			const bool classMatches = !cls.isEmpty() && cls.contains(filter, Qt::CaseInsensitive);
+			(*it)->setHidden(!nameMatches && !classMatches);
+			(*it)->setData(0, MatchedClassRole, classMatches ? QVariant(cls) : QVariant());
 		}
 		++it;
 	}
@@ -478,6 +542,35 @@ void SceneBrowserPanel::onItemSelectionChanged()
 	} else {
 		_model->multiSelectFromBrowser({});
 	}
+}
+
+// Double-clicking an object opens its editor, as in the viewport, and an environment row opens its
+// editor. Layer, category, wing and path rows keep the tree's usual expand/collapse.
+void SceneBrowserPanel::onItemDoubleClicked(QTreeWidgetItem* item, int /*column*/)
+{
+	if (item == nullptr)
+		return;
+
+	auto varEnv = item->data(0, EnvKindRole);
+	if (!varEnv.isNull()) {
+		const auto kind = static_cast<EnvironmentObject>(varEnv.toInt());
+		_model->selectEnvironmentFromBrowser(kind);
+		syncSelection();
+		if (kind == EnvironmentObject::VolumetricNebula) {
+			_fredView->editVolumetricNebula();
+		} else if (kind == EnvironmentObject::AsteroidField) {
+			_fredView->editAsteroidField();
+		}
+		return;
+	}
+
+	auto varObjNum = item->data(0, ObjNumRole);
+	if (varObjNum.isNull())
+		return;
+	const int objNum = varObjNum.toInt();
+	// the double-click's first click already selected the object
+	if (query_valid_object(objNum))
+		_fredView->handleObjectEditor(objNum);
 }
 
 void SceneBrowserPanel::onCustomContextMenuRequested(const QPoint& pos)
