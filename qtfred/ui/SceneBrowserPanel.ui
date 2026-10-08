@@ -29,7 +29,7 @@
    <item>
     <widget class="QLineEdit" name="searchBar">
      <property name="placeholderText">
-      <string>Search...</string>
+      <string>Search name or class...</string>
      </property>
      <property name="clearButtonEnabled">
       <bool>true</bool>

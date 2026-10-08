@@ -428,9 +428,11 @@ class FredView: public QMainWindow, public IDialogProvider {
 	void editObjectTriggered();
 	void orientEditorTriggered();
 
+ public:
+	// Opens the editor for an object (the Ship Editor for several marked objects), as
+	// double-clicking it in the viewport does; the Scene Browser's double-click uses it too
 	void handleObjectEditor(int objNum);
 
- public:
 	DialogButton showButtonDialog(DialogType type,
 								  const SCP_string& title,
 								  const SCP_string& message,

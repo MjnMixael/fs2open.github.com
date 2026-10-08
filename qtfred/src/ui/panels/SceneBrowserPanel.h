@@ -44,6 +44,7 @@ private slots:
 	void onTreeStructureChanged();
 	void onItemChanged(QTreeWidgetItem* item, int column);
 	void onItemSelectionChanged();
+	void onItemDoubleClicked(QTreeWidgetItem* item, int column);
 	void onCustomContextMenuRequested(const QPoint& pos);
 	void onSearchTextChanged(const QString& text);
 
@@ -81,6 +82,9 @@ private: // NOLINT(readability-redundant-access-specifiers)
 		// (an EnvironmentObject value stored as int).
 		IsEnvironmentRootRole = Qt::UserRole + 5,
 		EnvKindRole = Qt::UserRole + 6,
+		// While searching: the object's class (QString) when it matched the search by class but
+		// not by name, drawn after the name so it's clear why the row is listed
+		MatchedClassRole = Qt::UserRole + 7,
 	};
 };
 
