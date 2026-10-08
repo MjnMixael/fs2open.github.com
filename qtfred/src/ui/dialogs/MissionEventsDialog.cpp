@@ -267,8 +267,8 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 			const QString q = QString::fromStdString(note);
 			it->setData(0, sexp_tree_view::NoteRole, q);
 			it->setToolTip(0, q);
-			it->setData(0, sexp_tree_view::BgColorRole, QColor(r, g, b));
-			it->setBackground(0, has_color ? QBrush(QColor(r, g, b)) : QBrush());
+			// white means "no color" in the annotation data, so store no color rather than paint white
+			it->setData(0, sexp_tree_view::BgColorRole, has_color ? QColor(r, g, b) : QColor());
 			sexp_tree_view::applyVisuals(it);
 		});
 

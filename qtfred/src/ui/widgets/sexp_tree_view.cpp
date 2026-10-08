@@ -2536,17 +2536,26 @@ void sexp_tree_view::deleteCurrentItem() {
 }
 
 // Reads NoteRole and BgColorRole from a QTreeWidgetItem and applies visual styling:
-// NoteRole text -> tooltip, BgColorRole -> background brush. Called after annotation edits
-// and during branch move/copy to preserve visual state. Pure UI operation.
+// NoteRole text -> tooltip, BgColorRole -> background brush plus a text color that reads on it.
+// Called after annotation edits and during branch move/copy to preserve visual state. Pure UI
+// operation.
 void sexp_tree_view::applyVisuals(QTreeWidgetItem* it)
 {
 	const auto note = it->data(0, NoteRole).toString();
-	const auto color = it->data(0, BgColorRole).value<QColor>();
+	const auto background = it->data(0, BgColorRole).value<QColor>();
 	it->setToolTip(0, note);
 
-	// Background color for the entire row
-	if (color.isValid()) {
-		it->setBackground(0, QBrush(color));
+	if (background.isValid()) {
+		it->setBackground(0, QBrush(background));
+		// The theme's text color can vanish on an annotation color (white on yellow in the dark
+		// theme), so shift it until it reads against the background. The color itself is untouched.
+		const QWidget* tree = it->treeWidget();
+		const QColor color = (tree != nullptr ? tree->palette() : QApplication::palette()).color(QPalette::Text);
+		it->setForeground(0, QBrush(readableTextColor(color, background)));
+	} else {
+		// no annotation color, or it was removed: back to the theme's own background and text
+		it->setBackground(0, QBrush());
+		it->setForeground(0, QBrush());
 	}
 }
 
