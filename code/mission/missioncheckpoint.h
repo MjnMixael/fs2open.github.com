@@ -305,7 +305,7 @@ struct damage_type_override_state {
 // scripts can create and delete these mid-mission, so the set is restored, not just the fields.
 struct coordinate_point_state {
 	SCP_string name;
-	SCP_string group;
+	SCP_string category;
 	vec3d pos = vmd_zero_vector;   // a point has no orientation (Dont_change_orientation)
 	int escort_priority = 0;
 	int multi_team = -1;
