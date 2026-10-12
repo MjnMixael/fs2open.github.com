@@ -745,7 +745,7 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	for (const auto& point : env.coordinate_points) {
 		handler->startSectionWrite(Section::Unnamed);
 		handler->writeString("name", point.name.c_str());
-		handler->writeString("group", point.group.c_str());
+		handler->writeString("category", point.category.c_str());
 		write_vector(handler, "pos_x", "pos_y", "pos_z", point.pos);
 		handler->writeInt("escort_priority", point.escort_priority);
 		handler->writeInt("multi_team", point.multi_team);
@@ -1081,7 +1081,7 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
 			checkpoint::coordinate_point_state point;
 			point.name = handler->readStringOr("name", "");
-			point.group = handler->readStringOr("group", "");
+			point.category = handler->readStringOr("category", handler->readStringOr("group", ""));
 			read_vector(handler, "pos_x", "pos_y", "pos_z", point.pos);
 			point.escort_priority = handler->readIntOr("escort_priority", 0);
 			point.multi_team = handler->readIntOr("multi_team", -1);
