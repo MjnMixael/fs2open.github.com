@@ -1682,10 +1682,9 @@ bool store_lua_goal(const ai_goal& goal, ai_goal_state& out)
 		for (const auto& value : goal.lua_ai_target.arguments) {
 			if (value.getValueType() == luacpp::ValueType::TABLE) {
 				luacpp::LuaTable chunk;
-				value.getValue(chunk);
+				chunk.setReference(value.getReference());
 				for (size_t i = 1; i <= chunk.getLength(); i++) {
-					luacpp::LuaValue item;
-					chunk.getValue(i, item);
+					auto item = chunk.getValue<luacpp::LuaValue>(static_cast<int>(i));
 					SCP_string text;
 					if (!lua_goal_argument_text(item, lua_ai->sexp.getArgumentType(argnum++), text)) {
 						return false;
