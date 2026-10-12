@@ -5,6 +5,7 @@
 #include "ui/util/SignalBlockers.h"
 #include "mission/commands/FredCommands.h"
 #include "mission/util.h"
+#include "parse/sexp.h"
 #include "ui_MissionGoalsDialog.h"
 #include <ui/util/DialogUndo.h>
 #include <QSignalBlocker>
@@ -88,6 +89,33 @@ void MissionGoalsDialog::reject()
 		_fredView->undoGroup()->setActiveStack(_fredView->mainUndoStack());
 		QDialog::reject();
 	}
+}
+
+// Goal names come from the working goals, not from Mission_goals. Otherwise a goal added or
+// renamed in this editor wasn't a valid choice: the lists didn't offer it, and editing another
+// argument of the same operator re-validated the arguments and replaced its name with the
+// first saved goal. Same fix as MissionEventsDialog::getMissionEvents.
+SCP_vector<SCP_string> MissionGoalsDialog::getMissionGoals(const SCP_string& reference_name)
+{
+	if (!_model)
+		return SexpTreeEditorInterface::getMissionGoals(reference_name);
+
+	SCP_vector<SCP_string> out;
+	const auto& goals = _model->getGoals();
+	out.reserve(goals.size());
+	for (const auto& goal : goals) {
+		out.emplace_back(goal.name, 0, NAME_LENGTH - 1);
+	}
+	return out;
+}
+
+bool MissionGoalsDialog::hasDefaultGoal(int operator_value)
+{
+	if (!_model)
+		return SexpTreeEditorInterface::hasDefaultGoal(operator_value);
+
+	return (operator_value == OP_PREVIOUS_GOAL_TRUE) || (operator_value == OP_PREVIOUS_GOAL_FALSE)
+		|| (operator_value == OP_PREVIOUS_GOAL_INCOMPLETE) || !_model->getGoals().empty();
 }
 
 void MissionGoalsDialog::closeEvent(QCloseEvent* e)
