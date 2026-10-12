@@ -65,6 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/scp-fs2open/sftp_upload:sha-ab87451
     strategy:
+      fail-fast: false  # Package the other builds even if one fails
       matrix:
         arch: [x86_64, arm64]
     steps:
@@ -92,18 +93,17 @@ jobs:
         shell: bash
         run: chmod 755 *.AppImage
       - name: Create Distribution package
+        id: generate_package
         working-directory: ./builds
         env:
           ARCH: ${{ matrix.arch }}
         run: $GITHUB_WORKSPACE/ci/linux/create_dist_pack.sh Linux
       - name: Upload result package
-        working-directory: ./builds
-        env:
-          INDIEGAMES_USER: ${{ secrets.INDIEGAMES_USER }}
-          INDIEGAMES_SSHPASS: ${{ secrets.INDIEGAMES_PASSWORD }}
-          DATACORDER_USER: ${{ secrets.DATACORDER_USER }}
-          DATACORDER_SSHPASS: ${{ secrets.DATACORDER_PASSWORD }}
-        run: $GITHUB_WORKSPACE/ci/linux/upload_dist_package.sh test
+        # Attached to the run rather than sent to SCP's file servers, which OFP has no access to
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.generate_package.outputs.package_name }}
+          path: ${{ steps.generate_package.outputs.package_path }}
 
   build_windows:
     strategy:
@@ -189,6 +189,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/scp-fs2open/sftp_upload:sha-ab87451
     strategy:
+      fail-fast: false  # Package the other builds even if one fails
       matrix:
         arch: [Win32, x64, ARM64]
         simd: [SSE2, ""]
@@ -230,20 +231,23 @@ jobs:
           name: windows-FastDebug-${{ env.artifact_id }}
           path: builds
       - name: Create Distribution package
+        id: generate_package
         working-directory: ./builds
         shell: bash
         env:
           ID: ${{ env.artifact_id }}
         run: $GITHUB_WORKSPACE/ci/linux/create_dist_pack.sh Windows
       - name: Upload result package
-        working-directory: ./builds
-        shell: bash
-        env:
-          INDIEGAMES_USER: ${{ secrets.INDIEGAMES_USER }}
-          INDIEGAMES_SSHPASS: ${{ secrets.INDIEGAMES_PASSWORD }}
-          DATACORDER_USER: ${{ secrets.DATACORDER_USER }}
-          DATACORDER_SSHPASS: ${{ secrets.DATACORDER_PASSWORD }}
-        run: $GITHUB_WORKSPACE/ci/linux/upload_dist_package.sh test
+        # Attached to the run rather than sent to SCP's file servers, which OFP has no access to
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.generate_package.outputs.package_name }}
+          path: ${{ steps.generate_package.outputs.package_path }}
+      - name: Upload debug package
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.generate_package.outputs.debug_name }}
+          path: ${{ steps.generate_package.outputs.debug_path }}
 
   build_mac:
     strategy:
@@ -312,6 +316,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/scp-fs2open/sftp_upload:sha-ab87451
     strategy:
+      fail-fast: false  # Package the other builds even if one fails
       matrix:
         arch: [x86_64, arm64]
     steps:
@@ -340,15 +345,14 @@ jobs:
           tar -xvzf macos-build-Release-${{ matrix.arch }}.tgz
           tar -xvzf macos-build-FastDebug-${{ matrix.arch }}.tgz
       - name: Create Distribution package
+        id: generate_package
         working-directory: ./builds
         env:
           ARCH: ${{ matrix.arch }}
         run: $GITHUB_WORKSPACE/ci/linux/create_dist_pack.sh Mac
       - name: Upload result package
-        working-directory: ./builds
-        env:
-          INDIEGAMES_USER: ${{ secrets.INDIEGAMES_USER }}
-          INDIEGAMES_SSHPASS: ${{ secrets.INDIEGAMES_PASSWORD }}
-          DATACORDER_USER: ${{ secrets.DATACORDER_USER }}
-          DATACORDER_SSHPASS: ${{ secrets.DATACORDER_PASSWORD }}
-        run: $GITHUB_WORKSPACE/ci/linux/upload_dist_package.sh test
+        # Attached to the run rather than sent to SCP's file servers, which OFP has no access to
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ steps.generate_package.outputs.package_name }}
+          path: ${{ steps.generate_package.outputs.package_path }}
