@@ -65,6 +65,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/scp-fs2open/sftp_upload:sha-ab87451
     strategy:
+      fail-fast: false  # Package the other builds even if one fails
       matrix:
         arch: [x86_64, arm64]
     steps:
@@ -188,6 +189,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/scp-fs2open/sftp_upload:sha-ab87451
     strategy:
+      fail-fast: false  # Package the other builds even if one fails
       matrix:
         arch: [Win32, x64, ARM64]
         simd: [SSE2, ""]
@@ -314,6 +316,7 @@ jobs:
     runs-on: ubuntu-latest
     container: ghcr.io/scp-fs2open/sftp_upload:sha-ab87451
     strategy:
+      fail-fast: false  # Package the other builds even if one fails
       matrix:
         arch: [x86_64, arm64]
     steps:
