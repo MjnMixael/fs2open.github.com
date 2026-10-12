@@ -2933,7 +2933,7 @@ void store_environment(environment_state& out)
 
 		coordinate_point_state state;
 		state.name = cp.name;
-		state.group = cp.group;
+		state.category = cp.category;
 		state.pos = Objects[cp.objnum].pos;
 		state.escort_priority = cp.escort_priority;
 		state.multi_team = cp.multi_team;
@@ -3656,7 +3656,7 @@ void apply_environment(const checkpoint_data& data)
 				}
 			}
 
-			cp->group = state.group;
+			cp->category = state.category;
 			cp->escort_priority = state.escort_priority;
 			cp->multi_team = state.multi_team;
 			cp->flags.set(CoordinatePoint::Flags::Visible_in_mission, state.visible);
