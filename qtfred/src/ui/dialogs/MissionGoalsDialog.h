@@ -29,6 +29,9 @@ public:
 	// Mission_goals index and name that goal's name; see the definition for a changed list.
 	void focusGoal(const SCP_string& name, int index);
 
+	SCP_vector<SCP_string> getMissionGoals(const SCP_string& reference_name) override;
+	bool hasDefaultGoal(int operator_value) override;
+
  protected:
 	void closeEvent(QCloseEvent* event) override;
 
