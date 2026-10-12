@@ -356,3 +356,38 @@ jobs:
         with:
           name: ${{ steps.generate_package.outputs.package_name }}
           path: ${{ steps.generate_package.outputs.package_path }}
+
+  publish_release:
+    # Workflow artifacts need a GitHub login to download, so the packages also go up as a pre-release
+    # that anyone can reach: one per test branch, replaced on every push. Its tag does not start with
+    # release_, so nothing in the release pipeline picks it up.
+    name: Publish test build
+    needs: [linux_zip, windows_zip, mac_zip]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # required to create the release and its tag
+    concurrency:
+      group: test-release-${{ github.ref }}
+    steps:
+      - name: Download packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: test_*
+          path: dist
+          merge-multiple: true
+      - name: Replace the test release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+          BRANCH: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          name="${BRANCH#test/}"
+          name="${name//\//-}"
+          tag="test-${name}"
+          gh release delete "$tag" --cleanup-tag --yes || true
+          gh release create "$tag" dist/* \
+            --prerelease --latest=false \
+            --target "$GITHUB_SHA" \
+            --title "Test build: ${name}" \
+            --notes "Test build of branch ${BRANCH} at ${GITHUB_SHA}. Not a release. Built by ${RUN_URL}"
