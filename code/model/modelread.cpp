@@ -83,9 +83,7 @@ bool Model_load_clear_CPU_buffers = true;
 static int model_initted = 0;
 
 #ifndef NDEBUG
-CFILE *ss_fp = NULL;			// file pointer used to dump subsystem information
-char  model_filename[_MAX_PATH];		// temp used to store filename
-char	debug_name[_MAX_PATH];
+static CFILE *ss_fp = nullptr;			// file pointer used to dump subsystem information
 static bool ss_warning_shown_null = false;		// have we shown the warning dialog concerning the subsystems?
 static bool ss_warning_shown_mismatch = false;	// ditto but for a different warning
 #endif
@@ -1068,10 +1066,20 @@ void do_new_subsystem( int n_subsystems, model_subsystem *slist, int subobj_num,
 	mprintf(("Subsystem %s in model %s was not found in ships.tbl!\n", subobj_name, model_get(model_num)->filename));
 
 #ifndef NDEBUG
-	if ( ss_fp )	{
+	// open the dump file on the first unmatched subsystem; read_and_process_model_file closes it
+	if ( ss_fp == nullptr )	{
+		const char *model_filename = model_get(model_num)->filename;
 		char bname[FILESPEC_LENGTH];
-		_splitpath(model_filename, NULL, NULL, bname, NULL);
-		mprintf(("A subsystem was found in model %s that does not have a record in ships.tbl.\nA list of subsystems for this ship will be dumped to:\n\ndata%stables%s%s.subsystems for inclusion\ninto ships.tbl.\n", model_filename, DIR_SEPARATOR_STR, DIR_SEPARATOR_STR, bname));
+		char dump_name[_MAX_PATH];
+		_splitpath(model_filename, nullptr, nullptr, bname, nullptr);
+		sprintf(dump_name, "%s.subsystems", bname);
+		ss_fp = cfopen(dump_name, "wb", CF_TYPE_TABLES);
+		if ( ss_fp == nullptr )
+			mprintf(("Can't open debug file for writing subsystems for %s\n", model_filename));
+		else
+			mprintf(("A subsystem was found in model %s that does not have a record in ships.tbl.\nA list of subsystems for this ship will be dumped to:\n\ndata%stables%s%s for inclusion\ninto ships.tbl.\n", model_filename, DIR_SEPARATOR_STR, DIR_SEPARATOR_STR, dump_name));
+	}
+	if ( ss_fp )	{
 		char tmp_buffer[128];
 		sprintf(tmp_buffer, "$Subsystem:\t\t\t%s,1,0.0\n", subobj_name);
 		cfputs(tmp_buffer, ss_fp);
@@ -1583,26 +1591,6 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 
 	cfseek(fp, 0, SEEK_SET);
 
-	// code to get a filename to write out subsystem information for each model that
-	// is read.  This info is essentially debug stuff that is used to help get models
-	// into the game quicker
-#ifndef NDEBUG
-	{
-		char bname[FILESPEC_LENGTH];
-
-		_splitpath(filename, NULL, NULL, bname, NULL);
-		sprintf(debug_name, "%s.subsystems", bname);
-		ss_fp = cfopen(debug_name, "wb", CF_TYPE_TABLES );
-		if ( !ss_fp )	{
-			mprintf(( "Can't open debug file for writing subsystems for %s\n", filename));
-		} else {
-			strcpy_s(model_filename, filename);
-			ss_warning_shown_null = false;
-			ss_warning_shown_mismatch = false;
-		}
-	}
-#endif
-
 	id = cfread_int(fp);
 
 	if (id != POF_HEADER_ID)
@@ -1617,6 +1605,7 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 	
 	if (version < PM_COMPATIBLE_VERSION || (version/100) > PM_OBJFILE_MAJOR_VERSION)	{
 		Warning(LOCATION,"Bad version (%d) in model file <%s>",version,filename);
+		cfclose(fp);
 		return modelread_status::FAIL;
 	}
 	if (version > PM_LATEST_LEGACY_VERSION && version < PM_FIRST_ALIGNED_VERSION) {
@@ -1648,6 +1637,9 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 	// keep track of any submodels we might notice
 	SCP_vector<SCP_string> look_at_submodel_names;
 	SCP_vector<SCP_string> dock_parent_submodel_names;
+
+	// the texture count is clamped while parsing, so remember the real one in order to reject the model afterward
+	int n_textures_in_file = 0;
 
 	while (!cfeof(fp)) {
 
@@ -1780,7 +1772,8 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 				// read in cross section info
 				pm->xc = nullptr;
 				if ( pm->version >= 2014 ) {
-					pm->num_xc = pof_read_count(fp, filename, "cross sections");
+					// retail models use -1 to mean there are no cross sections
+					pm->num_xc = std::max(cfread_int(fp), 0);
 					if (pm->num_xc > 0) {
 						pm->xc = make_shared<cross_section[]>(pm->num_xc);
 						for (i=0; i<pm->num_xc; i++) {
@@ -2694,10 +2687,10 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 				//mprintf(0,"Got chunk TXTR, len=%d\n",len);
 
 
-				// Don't overwrite memory!!  (the model will misrender if we have to drop any textures,
-				// since texture indices are baked into the BSP data, but that beats writing past maps[])
-				int n_textures_in_file = 0;
-				n = pof_read_count(fp, filename, "textures", MAX_MODEL_TEXTURES, &n_textures_in_file);
+				// Don't overwrite memory!!  (texture indices are baked into the BSP data, so a model with
+				// too many textures is rejected once parsing is finished)
+				pof_read_count(fp, filename, "textures", INT_MAX, &n_textures_in_file);
+				n = std::min(n_textures_in_file, MAX_MODEL_TEXTURES);
 				pm->n_textures = n;
 				//mprintf(0,"  num textures = %d\n",n);
 				// (read past any we had to clamp, so that the rest of the chunk stays aligned)
@@ -2979,9 +2972,15 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 		next_chunk = cftell(fp) + len;
 	}
 
+	cfclose(fp);
+
 	// Now that we've processed all the chunks, resolve the submodel indexes if we have any...
 
 	// first do some sanity checking to detect model errors
+	if (n_textures_in_file > MAX_MODEL_TEXTURES) {
+		Warning(LOCATION, "Model %s has %d textures, but only %d are supported!", filename, n_textures_in_file, MAX_MODEL_TEXTURES);
+		return modelread_status::FAIL;
+	}
 	for (i = 0; i < pm->n_detail_levels; i++) {
 		if (pm->detail[i] < 0 || pm->detail[i] >= pm->n_models) {
 			Warning(LOCATION, "Model %s detail %d is %d which is not a valid submodel!", pm->filename, i, pm->detail[i]);
@@ -3107,41 +3106,18 @@ modelread_status read_model_file_no_subsys(polymodel * pm, const char* filename,
 		}
 	}
 
-#ifndef NDEBUG
-	if ( ss_fp) {
-		int size;
-		
-		cfclose(ss_fp);
-		ss_fp = cfopen(debug_name, "rb", CF_TYPE_TABLES);
-		if ( ss_fp )	{
-			size = cfilelength(ss_fp);
-			cfclose(ss_fp);
-			if ( size <= 0 )	{
-				cf_delete(debug_name, CF_TYPE_TABLES);
-			}
-		}
-	}
-#endif
-
-	cfclose(fp);
-
 	// mprintf(("Done processing chunks\n"));
 	return modelread_status::SUCCESS_REAL;
 }
 
 modelread_status read_model_file(polymodel* pm, const char* filename, ErrorType error_type, model_read_deferred_tasks& deferredTasks, model_parse_depth depth = {})
 {
-	modelread_status status;
-
 	//See if this is a modular, virtual pof, and if so, parse it from there
-	if (read_virtual_model_file(pm, filename, std::move(depth), error_type, deferredTasks)) {
-		status = modelread_status::SUCCESS_VIRTUAL;
-	}
-	else {
-		status = read_model_file_no_subsys(pm, filename, error_type, deferredTasks);
-	}
+	auto virtual_status = read_virtual_model_file(pm, filename, std::move(depth), error_type, deferredTasks);
+	if (virtual_status)
+		return *virtual_status;
 
-	return status;
+	return read_model_file_no_subsys(pm, filename, error_type, deferredTasks);
 }
 
 //reads a binary file containing a 3d model
@@ -3159,12 +3135,24 @@ modelread_status read_and_process_model_file(polymodel* pm, const char* filename
 		virtual_pof_purge_cache();
 	}
 
+#ifndef NDEBUG
+	ss_warning_shown_null = false;
+	ss_warning_shown_mismatch = false;
+#endif
+
 	for (const auto& subsystem : deferredTasks.model_subsystems) {
 		auto propBuffer = make_unique<char[]>(subsystem.second.props.size() + 1);
 		strncpy(propBuffer.get(), subsystem.second.props.c_str(), subsystem.second.props.size() + 1);
 
 		do_new_subsystem(n_subsystems, subsystems, subsystem.second.subobj_nr, subsystem.second.rad, &subsystem.second.pnt, propBuffer.get(), subsystem.first.c_str(), pm->id);		
 	}
+
+#ifndef NDEBUG
+	if (ss_fp != nullptr) {
+		cfclose(ss_fp);
+		ss_fp = nullptr;
+	}
+#endif
 
 	for (const auto& subsystem : deferredTasks.engine_subsystems) {
 		// start off assuming the subsys is invalid
@@ -3471,10 +3459,12 @@ int model_load(const  char* filename, ship_info* sip, ErrorType error_type, bool
 	model_read_deferred_tasks deferredTasks;
 
 	if (read_and_process_model_file(pm, filename, n_subsystems, subsystems, error_type, deferredTasks) == modelread_status::FAIL)	{
-		if (pm != NULL) {
-			delete pm;
+		if (pm != nullptr) {
+			// the load can fail after textures have been loaded and memory allocated
+			model_page_out_textures(pm, true);
+			model_free(pm);
 		}
-		Polygon_models[num] = NULL;
+		Polygon_models[num] = nullptr;
 
 		unpause_parse();
 		return -1;
