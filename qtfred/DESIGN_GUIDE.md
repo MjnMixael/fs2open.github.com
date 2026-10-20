@@ -158,7 +158,7 @@ Avoid long constructor blocks that manually connect every static button, checkbo
 
 ## Undo integration
 
-Every control that mutates mission data or a dialog's working state must have an undo path — a control without one silently desynchronizes the undo history from the mission. Each dialog interaction type maps to a specific pattern: Modal edit dialogs push granular commands to their own undo stack and collapse into one apply command on accept, Direct Edit dialogs push to the main stack per edit, and Bulk actions snapshot before/after around the operation.
+Every control that mutates mission data or a dialog's working state must have an undo path - a control without one silently desynchronizes the undo history from the mission. Each dialog interaction type maps to a specific pattern: Modal edit dialogs push granular commands to their own undo stack and collapse into one apply command on accept, Direct Edit dialogs push to the main stack per edit, and Bulk actions snapshot before/after around the operation.
 
 See `UNDO_GUIDE.md` for the architecture, the command classes, the invariants (identity, merging, capture parity), and step-by-step instructions for wiring new controls and new dialogs.
 

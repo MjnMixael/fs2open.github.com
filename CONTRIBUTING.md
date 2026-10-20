@@ -19,7 +19,7 @@ Feature requests live in [GitHub Discussions](../../discussions). The Community 
 ### How a request enters the Queue
 
 1. Open a Discussion using the Feature Request template (problem statement, proposed solution, mod/player impact).
-2. The community engages — upvotes, comments, refinements.
+2. The community engages - upvotes, comments, refinements.
 3. A Reviewer or Maintainer marks it **Queue-Accepted** when it meets the bar: clearly defined, technically feasible, and demonstrably wanted by currently active community members.
 4. It enters the Queue ordered by the date it was accepted.
 
