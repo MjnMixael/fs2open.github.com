@@ -15,6 +15,25 @@
 #include <QCloseEvent>
 
 namespace fso::fred::dialogs {
+
+namespace {
+
+// Editing several ships, a value they don't share shows blank: -1, one below the range, is shown as
+// nothing and stands for "keep each ship's own value". The value boxes read it back as BLANKFIELD.
+void showSpinValue(QSpinBox* sb, int value, bool multiEdit)
+{
+	sb->setMinimum(multiEdit ? -1 : 0);
+	sb->setSpecialValueText(multiEdit ? QStringLiteral(" ") : QString());
+	sb->setValue(value == BLANKFIELD ? sb->minimum() : value);
+}
+
+int readSpinValue(int value)
+{
+	return value < 0 ? BLANKFIELD : value;
+}
+
+} // namespace
+
 ShipInitialStatusDialog::ShipInitialStatusDialog(QDialog* parent, EditorViewport* viewport, bool editMultiple)
 	: QDialog(parent), ui(new Ui::ShipInitialStatusDialog()),
 	  _model(new ShipInitialStatusDialogModel(this, viewport, editMultiple)), _viewport(viewport)
@@ -80,7 +99,7 @@ void ShipInitialStatusDialog::closeEvent(QCloseEvent* e)
 }
 void ShipInitialStatusDialog::on_velocitySpinBox_valueChanged(int value)
 {
-	_model->setVelocity(value);
+	_model->setVelocity(readSpinValue(value));
 }
 void ShipInitialStatusDialog::on_dockpointList_currentItemChanged(QListWidgetItem* current)
 {
@@ -108,7 +127,7 @@ void ShipInitialStatusDialog::on_dockeePointComboBox_currentIndexChanged(int ind
 }
 void ShipInitialStatusDialog::on_hullSpinBox_valueChanged(int value)
 {
-	_model->setHull(value);
+	_model->setHull(readSpinValue(value));
 }
 void ShipInitialStatusDialog::on_hasShieldCheckBox_stateChanged(int state)
 {
@@ -116,7 +135,7 @@ void ShipInitialStatusDialog::on_hasShieldCheckBox_stateChanged(int state)
 }
 void ShipInitialStatusDialog::on_shieldHullSpinBox_valueChanged(int value)
 {
-	_model->setShieldHull(value);
+	_model->setShieldHull(readSpinValue(value));
 }
 void ShipInitialStatusDialog::on_forceShieldsCheckBox_stateChanged(int state)
 {
@@ -178,7 +197,7 @@ void ShipInitialStatusDialog::on_cancelPushButton_clicked() {
 }
 void ShipInitialStatusDialog::on_guardianSpinBox_valueChanged(int value)
 {
-	_model->setGuardian(value);
+	_model->setGuardian(readSpinValue(value));
 }
 void ShipInitialStatusDialog::on_moveShipsCheckBox_toggled(bool value)
 {
@@ -187,32 +206,18 @@ void ShipInitialStatusDialog::on_moveShipsCheckBox_toggled(bool value)
 void ShipInitialStatusDialog::updateUi()
 {
 	util::SignalBlockers blockers(this);
-	auto value = _model->getVelocity();
-	if (value != BLANKFIELD) {
-		ui->velocitySpinBox->setValue(value);
-	} else {
-		ui->velocitySpinBox->setSpecialValueText("-");
-	}
-	value = _model->getHull();
-	if (value != BLANKFIELD) {
-		ui->hullSpinBox->setValue(value);
-	} else {
-		ui->hullSpinBox->setSpecialValueText("-");
-	}
-	value = _model->getHasShield();
+	const bool multiEdit = _model->getIfMultipleShips();
+	showSpinValue(ui->velocitySpinBox, _model->getVelocity(), multiEdit);
+	showSpinValue(ui->hullSpinBox, _model->getHull(), multiEdit);
+	auto value = _model->getHasShield();
 	ui->hasShieldCheckBox->setCheckState(Qt::CheckState(value));
 	if (_model->getHasShield()) {
 		ui->shieldHullSpinBox->setEnabled(true);
 	} else {
 		ui->shieldHullSpinBox->setEnabled(false);
 	}
-	value = _model->getShieldHull();
-	if (value != BLANKFIELD) {
-		ui->shieldHullSpinBox->setValue(value);
-	} else {
-		ui->shieldHullSpinBox->setSpecialValueText("-");
-	}
-	ui->guardianSpinBox->setValue(_model->getGuardian());
+	showSpinValue(ui->shieldHullSpinBox, _model->getShieldHull(), multiEdit);
+	showSpinValue(ui->guardianSpinBox, _model->getGuardian(), multiEdit);
 	updateFlags();
 	updateDocks();
 	updateDockee();
@@ -228,8 +233,10 @@ void ShipInitialStatusDialog::updateUi()
 			ui->colourComboBox->addItem(Team_Name.c_str(), i);
 			i++;
 		}
+		// ships with different colors show none selected until one is picked
 		auto currentText = _model->getColor();
-		ui->colourComboBox->setCurrentIndex(ui->colourComboBox->findText(currentText.c_str()));
+		ui->colourComboBox->setCurrentIndex(
+			_model->isColorMixed() ? -1 : ui->colourComboBox->findText(currentText.c_str()));
 	}
 }
 void ShipInitialStatusDialog::updateFlags()

@@ -13,15 +13,15 @@ Contributors implementing features should draw from this list, working from the 
 | 1 | [Title](#) | YYYY-MM-DD | Open |
 
 **Status values:**
-- **Open** — Available for any contributor to pick up
-- **In Progress** — Being actively worked; link to PR in the Discussion thread
-- **Merged** — Done. Will be removed from the active queue and noted in the relevant release milestone.
+- **Open** - Available for any contributor to pick up
+- **In Progress** - Being actively worked; link to PR in the Discussion thread
+- **Merged** - Done. Will be removed from the active queue and noted in the relevant release milestone.
 
 ---
 
 ## When skipping ahead is fine
 
-Working top-down is the default, not a rule. Picking from anywhere in the queue is welcome when you have a good reason — just note it briefly in your PR description. Common acceptable reasons:
+Working top-down is the default, not a rule. Picking from anywhere in the queue is welcome when you have a good reason - just note it briefly in your PR description. Common acceptable reasons:
 
 - **Scale matches your availability.** You have a focused window (e.g. a few free days this week) and a lower-priority item is the right size to finish in that window, where a higher-priority item is not. Better to land a smaller item cleanly than to start a multi-day effort you can't see through.
 - **Mismatched skillset.** You're a graphics person and the top item is a netcode rewrite. Doing what you're good at lands faster and at higher quality than grinding through unfamiliar code.

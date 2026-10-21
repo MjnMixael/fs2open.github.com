@@ -110,7 +110,7 @@ ShipInitialStatusDialogModel::ShipInitialStatusDialogModel(QObject* parent, Edit
 void ShipInitialStatusDialogModel::initializeData(bool multi)
 {
 	_multiEdit = multi;
-	int vflag, sflag, hflag;
+	int vflag, sflag, hflag, gflag;
 	object* objp = nullptr;
 	_ship = _editor->cur_ship;
 	if (_ship == -1) {
@@ -138,7 +138,8 @@ void ShipInitialStatusDialogModel::initializeData(bool multi)
 			}
 		}
 	}
-	vflag = sflag = hflag = 0;
+	vflag = sflag = hflag = gflag = 0;
+	_teamColorMixed = false;
 	_velocity = static_cast<int>(Objects[_editor->currentObject].phys_info.speed);
 	_shields = static_cast<int>(Objects[_editor->currentObject].shield_quadrant[0]);
 	_hull = static_cast<int>(Objects[_editor->currentObject].hull_strength);
@@ -193,12 +194,17 @@ void ShipInitialStatusDialogModel::initializeData(bool multi)
 		while (objp != END_OF_LIST(&obj_used_list)) {
 			if (((objp->type == OBJ_SHIP) || (objp->type == OBJ_START)) &&
 				(objp->flags[Object::Object_Flags::Marked])) {
-				if (objp->phys_info.speed != _velocity)
+				if (static_cast<int>(objp->phys_info.speed) != _velocity)
 					vflag = 1;
 				if (static_cast<int>(objp->shield_quadrant[0]) != _shields)
 					sflag = 1;
 				if (static_cast<int>(objp->hull_strength) != _hull)
 					hflag = 1;
+				const ship& other = Ships[get_ship_from_obj(objp)];
+				if (other.ship_guardian_threshold != Ships[_ship].ship_guardian_threshold)
+					gflag = 1;
+				if (Ship_info[other.ship_info_index].uses_team_colors && other.team_name != Ships[_ship].team_name)
+					_teamColorMixed = true;
 				if (objp->flags[Object::Object_Flags::No_shields]) {
 					if (_hasShields)
 						_hasShields = Qt::PartiallyChecked;
@@ -280,14 +286,18 @@ void ShipInitialStatusDialogModel::initializeData(bool multi)
 	}
 	changeSubsys(0);
 
+	// values the marked ships don't share
 	if (vflag) {
 		_velocity = BLANKFIELD;
 	}
-	if (vflag) {
-		_velocity = BLANKFIELD;
+	if (sflag) {
+		_shields = BLANKFIELD;
 	}
-	if (vflag) {
-		_velocity = BLANKFIELD;
+	if (hflag) {
+		_hull = BLANKFIELD;
+	}
+	if (gflag) {
+		_guardianThreshold = BLANKFIELD;
 	}
 	_modified = false;
 	modelChanged();
@@ -612,11 +622,15 @@ bool ShipInitialStatusDialogModel::apply()
 		while (objp != END_OF_LIST(&obj_used_list)) {
 			if (((objp->type == OBJ_SHIP) || (objp->type == OBJ_START)) &&
 				(objp->flags[Object::Object_Flags::Marked])) {
-				modify(objp->phys_info.speed, (float)_velocity);
+				// a value left blank (the ships differ) keeps each ship's own
+				if (_velocity != BLANKFIELD)
+					modify(objp->phys_info.speed, (float)_velocity);
 
-				modify(objp->shield_quadrant[0], (float)_shields);
+				if (_shields != BLANKFIELD)
+					modify(objp->shield_quadrant[0], (float)_shields);
 
-				modify(objp->hull_strength, (float)_hull);
+				if (_hull != BLANKFIELD)
+					modify(objp->hull_strength, (float)_hull);
 
 				if (_hasShields == Qt::Checked) {
 					objp->flags.remove(Object::Object_Flags::No_shields);
@@ -624,7 +638,8 @@ bool ShipInitialStatusDialogModel::apply()
 					objp->flags.set(Object::Object_Flags::No_shields);
 				}
 				auto shipp = &Ships[get_ship_from_obj(objp)];
-				shipp->ship_guardian_threshold = _guardianThreshold;
+				if (_guardianThreshold != BLANKFIELD)
+					shipp->ship_guardian_threshold = _guardianThreshold;
 				// We need to ensure that we handle the inconsistent "boolean" value correctly
 				handle_inconsistent_flag(shipp->flags, Ship::Ship_Flags::Force_shields_on, _forceShields);
 				handle_inconsistent_flag(shipp->flags, Ship::Ship_Flags::Ship_locked, _shipLocked);
@@ -633,7 +648,9 @@ bool ShipInitialStatusDialogModel::apply()
 				handle_inconsistent_flag(shipp->flags, Ship::Ship_Flags::Secondaries_locked, _secondariesLocked);
 				handle_inconsistent_flag(shipp->flags, Ship::Ship_Flags::Lock_all_turrets_initially, _turretsLocked);
 				handle_inconsistent_flag(shipp->flags, Ship::Ship_Flags::Afterburner_locked, _afterburnerLocked);
-				shipp->team_name = _teamColorSetting;
+				// only ships that use team colors, and only once a color is picked for them all
+				if (_useTeams && !_teamColorMixed && Ship_info[shipp->ship_info_index].uses_team_colors)
+					shipp->team_name = _teamColorSetting;
 			}
 
 			objp = GET_NEXT(objp);
@@ -819,8 +836,14 @@ SCP_string ShipInitialStatusDialogModel::getColor() const
 	return _teamColorSetting;
 }
 
+bool ShipInitialStatusDialogModel::isColorMixed() const
+{
+	return _teamColorMixed;
+}
+
 void ShipInitialStatusDialogModel::setColor(const SCP_string& color)
 {
+	_teamColorMixed = false;
 	modify(_teamColorSetting, color);
 }
 
