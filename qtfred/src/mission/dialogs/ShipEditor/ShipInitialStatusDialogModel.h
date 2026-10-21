@@ -70,6 +70,8 @@ class ShipInitialStatusDialogModel : public AbstractDialogModel {
 	void setCargoTitle(const SCP_string& cargoTitle);
 
 	SCP_string getColor() const;
+	// Editing several ships that use team colors but not the same one; picking a color clears it
+	bool isColorMixed() const;
 	void setColor(const SCP_string& color);
 
 	void changeSubsys(int subsysIndex);
@@ -126,8 +128,9 @@ class ShipInitialStatusDialogModel : public AbstractDialogModel {
 	int _turretsLocked;
 	int _afterburnerLocked;
 	SCP_string _teamColorSetting;
+	bool _teamColorMixed = false;
 	bool _shipHasScannableSubsystems = false;
-	int _numDockPoints;
+	int _numDockPoints = 0; // stays 0 when editing several ships, which don't show docking
 	std::unique_ptr<dockpoint_information[]> _dockpointArray;
 	bool _multiEdit;
 	bool _useTeams = false;
