@@ -348,9 +348,11 @@ class EditorViewport {
 	void registerObjectInLayer(int objectIndex);
 
 	bool isObjectVisibleInLayer(const object* objp) const;
-	// Whether the user could select ptr in the viewport: not hidden or locked from editing, on a
-	// shown layer, and of a type (and for ships an IFF) the Layer Manager's filters show. Box select and
-	// Select > Select All / Invert Selection use it.
+	// Whether ptr is drawn: not hidden, on a shown layer, and of a type (and for ships an IFF) the
+	// Layer Manager's filters show. Zoom Extents frames only these.
+	bool isObjectShown(const object* ptr) const;
+	// Whether the user could select ptr in the viewport: shown and not locked from editing. Box
+	// select and Select > Select All / Invert Selection use it.
 	bool isObjectSelectable(const object* ptr) const;
 
 

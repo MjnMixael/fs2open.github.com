@@ -307,7 +307,11 @@ bool EditorViewport::incMissionTime() {
 	return true;
 }
 bool EditorViewport::isObjectSelectable(const object* ptr) const {
-	if (ptr->flags.any_of(Object::Object_Flags::Hidden, Object::Object_Flags::Locked_from_editing))
+	return !ptr->flags[Object::Object_Flags::Locked_from_editing] && isObjectShown(ptr);
+}
+
+bool EditorViewport::isObjectShown(const object* ptr) const {
+	if (ptr->flags[Object::Object_Flags::Hidden])
 		return false;
 	if (!isObjectVisibleInLayer(ptr))
 		return false;
@@ -1910,6 +1914,8 @@ void EditorViewport::cancel_drag() {
 	Dup_drag = 0;
 	needsUpdate();
 }
+// Frames the marked objects (Zoom to Selected) or every object that's drawn (Zoom Extents), so
+// hidden layers and objects the Layer Manager filters out don't pull the camera back.
 void EditorViewport::view_universe(bool just_marked) {
 	int max = 0;
 	float dist, largest = 20.0f;
@@ -1917,10 +1923,16 @@ void EditorViewport::view_universe(bool just_marked) {
 	vertex v;
 	object *ptr;
 
-	if (just_marked)
-		ptr = &Objects[editor->currentObject];
-	else
-		ptr = GET_FIRST(&obj_used_list);
+	auto frames = [this, just_marked](const object* objp) {
+		return just_marked ? objp->flags[Object::Object_Flags::Marked] : isObjectShown(objp);
+	};
+
+	// start the bounds at an object being framed; with nothing to frame, leave the camera alone
+	ptr = GET_FIRST(&obj_used_list);
+	while (ptr != END_OF_LIST(&obj_used_list) && !frames(ptr))
+		ptr = GET_NEXT(ptr);
+	if (ptr == END_OF_LIST(&obj_used_list))
+		return;
 
 	p1.xyz.x = p2.xyz.x = ptr->pos.xyz.x;
 	p1.xyz.y = p2.xyz.y = ptr->pos.xyz.y;
@@ -1928,7 +1940,7 @@ void EditorViewport::view_universe(bool just_marked) {
 
 	ptr = GET_FIRST(&obj_used_list);
 	while (ptr != END_OF_LIST(&obj_used_list)) {
-		if (!just_marked || (ptr->flags[Object::Object_Flags::Marked])) {
+		if (frames(ptr)) {
 			center = ptr->pos;
 			if (center.xyz.x < p1.xyz.x)
 				p1.xyz.x = center.xyz.x;
@@ -1950,7 +1962,7 @@ void EditorViewport::view_universe(bool just_marked) {
 	vm_vec_avg(&center, &p1, &p2);
 	ptr = GET_FIRST(&obj_used_list);
 	while (ptr != END_OF_LIST(&obj_used_list)) {
-		if (!just_marked || (ptr->flags[Object::Object_Flags::Marked])) {
+		if (frames(ptr)) {
 			dist = vm_vec_dist_squared(&center, &ptr->pos);
 			if (dist > largest)
 				largest = dist;
@@ -1968,7 +1980,7 @@ void EditorViewport::view_universe(bool just_marked) {
 
 	ptr = GET_FIRST(&obj_used_list);
 	while (ptr != END_OF_LIST(&obj_used_list)) {
-		if (!just_marked || (ptr->flags[Object::Object_Flags::Marked])) {
+		if (frames(ptr)) {
 			g3_rotate_vertex(&v, &ptr->pos);
 			Assert(!(v.codes & CC_BEHIND));
 			if (g3_project_vertex(&v) & PF_OVERFLOW)
