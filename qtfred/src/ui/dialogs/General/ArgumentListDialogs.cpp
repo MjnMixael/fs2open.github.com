@@ -293,8 +293,8 @@ void ChooseArgumentsDialog::moveSelected(int step)
 void ChooseArgumentsDialog::setCheckedInTabs(const QString& key, bool checked)
 {
 	const int state = checked ? Qt::Checked : Qt::Unchecked;
-	for (int t = 0; t < static_cast<int>(_lists.size()); ++t) {
-		auto flags = _lists[t]->getFlags();
+	for (auto* list : _lists) {
+		auto flags = list->getFlags();
 		bool changed = false;
 		for (auto& flag : flags) {
 			if (flag.first == key && flag.second != state) {
@@ -304,7 +304,7 @@ void ChooseArgumentsDialog::setCheckedInTabs(const QString& key, bool checked)
 		}
 		// setFlags() rebuilds the list without flagToggled, so this doesn't feed back
 		if (changed)
-			_lists[t]->setFlags(flags);
+			list->setFlags(flags);
 	}
 }
 
