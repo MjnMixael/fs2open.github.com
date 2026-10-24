@@ -332,12 +332,12 @@ void PreferencesDialogModel::resetControlDefaults() {
 }
 
 PlacementModifier PreferencesDialogModel::getPlacementModifier(int kind) const {
-	Assertion(kind >= 0 && kind < NumPlacementKinds, "Unknown placement kind!");
+	Assertion(static_cast<size_t>(kind) < _placement.size(), "Unknown placement kind!");
 	return _placement[kind];
 }
 
 void PreferencesDialogModel::setPlacementModifier(int kind, PlacementModifier modifier) {
-	Assertion(kind >= 0 && kind < NumPlacementKinds, "Unknown placement kind!");
+	Assertion(static_cast<size_t>(kind) < _placement.size(), "Unknown placement kind!");
 	auto placement = _placement;
 	// the kind that had this combination takes over the one being replaced
 	for (auto& m : placement) {

@@ -2,6 +2,9 @@
 
 #include <QSettings>
 
+#include <algorithm>
+#include <iterator>
+
 namespace fso::fred {
 namespace {
 constexpr auto SETTINGS_GROUP = "ControlBindings";
@@ -23,13 +26,12 @@ QString placementId(PlacementModifier modifier)
 
 bool placementFromId(const QString& id, PlacementModifier* modifier)
 {
-	for (const auto m : {PlacementModifier::Ctrl, PlacementModifier::CtrlShift, PlacementModifier::CtrlAlt}) {
-		if (id == placementId(m)) {
-			*modifier = m;
-			return true;
-		}
-	}
-	return false;
+	constexpr PlacementModifier all[] = {PlacementModifier::Ctrl, PlacementModifier::CtrlShift, PlacementModifier::CtrlAlt};
+	const auto* found = std::find_if(std::begin(all), std::end(all), [&id](PlacementModifier m) { return id == placementId(m); });
+	if (found == std::end(all))
+		return false;
+	*modifier = *found;
+	return true;
 }
 
 // every combination used exactly once
