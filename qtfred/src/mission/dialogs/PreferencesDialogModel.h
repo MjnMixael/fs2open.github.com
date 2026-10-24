@@ -104,6 +104,10 @@ public:
 	QKeySequence getControlKey(ControlAction action) const;
 	void setControlKey(ControlAction action, const QKeySequence& sequence);
 	void resetControlDefaults();
+	// Which Ctrl+click combination places each kind of object (indexed like CreateKind). Giving a
+	// kind another kind's combination swaps the two, so the three always differ.
+	PlacementModifier getPlacementModifier(int kind) const;
+	void setPlacementModifier(int kind, PlacementModifier modifier);
 
 	bool getInvertOrbitX() const;
 	void setInvertOrbitX(bool value);
@@ -148,6 +152,7 @@ private:
 
 	// Controls
 	std::map<ControlAction, QKeySequence> _controlKeys;
+	PlacementModifiers _placement = ControlBindings::defaultPlacementModifiers();
 	bool _invertOrbitX;
 	bool _invertOrbitY;
 

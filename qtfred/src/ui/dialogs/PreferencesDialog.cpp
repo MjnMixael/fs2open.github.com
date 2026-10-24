@@ -104,6 +104,7 @@ void PreferencesDialog::applyChanges() {
 	_model->apply();
 	_fredView->setIconSize(QSize(_model->getToolbarIconSize(), _model->getToolbarIconSize()));
 	_fredView->restartAutosaveTimer();
+	_fredView->updatePlacementTooltips();
 	_viewport->needsUpdate();
 }
 
@@ -122,6 +123,20 @@ void PreferencesDialog::initializeUi() {
 		connect(edit, &QKeySequenceEdit::keySequenceChanged, this, [this, action = def.action](const QKeySequence& seq) {
 			_model->setControlKey(action, seq);
 		});
+	}
+
+	// Ctrl+click combinations that place each kind of object; picking a taken one swaps the two
+	_placementCombos = {ui->shipPlacementCombo, ui->propPlacementCombo, ui->otherPlacementCombo};
+	for (int kind = 0; kind < NumPlacementKinds; ++kind) {
+		auto* combo = _placementCombos[kind];
+		for (const auto m : {PlacementModifier::Ctrl, PlacementModifier::CtrlShift, PlacementModifier::CtrlAlt}) {
+			combo->addItem(ControlBindings::placementText(m), static_cast<int>(m));
+		}
+		connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this, kind, combo](int index) {
+			if (index >= 0)
+				_model->setPlacementModifier(kind, static_cast<PlacementModifier>(combo->itemData(index).toInt()));
+		});
+		controlsChain << combo;
 	}
 
 	controlsChain << ui->resetDefaultsButton;
@@ -406,6 +421,10 @@ void PreferencesDialog::updateUi() {
 	ui->invertOrbitY->setChecked(_model->getInvertOrbitY());
 	for (const auto& entry : _controlEditors) {
 		entry.second->setKeySequence(_model->getControlKey(entry.first));
+	}
+	for (int kind = 0; kind < NumPlacementKinds; ++kind) {
+		auto* combo = _placementCombos[kind];
+		combo->setCurrentIndex(combo->findData(static_cast<int>(_model->getPlacementModifier(kind))));
 	}
 }
 

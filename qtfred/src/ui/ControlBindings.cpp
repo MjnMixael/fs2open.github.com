@@ -5,6 +5,44 @@
 namespace fso::fred {
 namespace {
 constexpr auto SETTINGS_GROUP = "ControlBindings";
+
+// settings keys and values for the placement combinations
+constexpr const char* PlacementKeys[NumPlacementKinds] = {"place_ship", "place_prop", "place_other"};
+
+QString placementId(PlacementModifier modifier)
+{
+	switch (modifier) {
+	case PlacementModifier::CtrlShift:
+		return QStringLiteral("ctrl_shift");
+	case PlacementModifier::CtrlAlt:
+		return QStringLiteral("ctrl_alt");
+	default:
+		return QStringLiteral("ctrl");
+	}
+}
+
+bool placementFromId(const QString& id, PlacementModifier* modifier)
+{
+	for (const auto m : {PlacementModifier::Ctrl, PlacementModifier::CtrlShift, PlacementModifier::CtrlAlt}) {
+		if (id == placementId(m)) {
+			*modifier = m;
+			return true;
+		}
+	}
+	return false;
+}
+
+// every combination used exactly once
+bool isPermutation(const PlacementModifiers& placement)
+{
+	for (int i = 0; i < NumPlacementKinds; ++i) {
+		for (int j = i + 1; j < NumPlacementKinds; ++j) {
+			if (placement[i] == placement[j])
+				return false;
+		}
+	}
+	return true;
+}
 }
 
 ControlBindings& ControlBindings::instance() {
@@ -49,6 +87,7 @@ void ControlBindings::resetToDefaults() {
 	for (const auto& def : _definitions) {
 		_bindings.emplace(def.action, def.defaultKey);
 	}
+	_placement = defaultPlacementModifiers();
 	rebuildReverseMap();
 }
 
@@ -59,6 +98,14 @@ void ControlBindings::load() {
 		auto value = settings.value(def.id, def.defaultKey.toString(QKeySequence::PortableText)).toString();
 		_bindings[def.action] = QKeySequence::fromString(value, QKeySequence::PortableText);
 	}
+	auto placement = defaultPlacementModifiers();
+	for (int kind = 0; kind < NumPlacementKinds; ++kind) {
+		PlacementModifier modifier = PlacementModifier::Ctrl;
+		if (placementFromId(settings.value(PlacementKeys[kind]).toString(), &modifier))
+			placement[kind] = modifier;
+	}
+	// a partial or repeated setting falls back to the defaults
+	setPlacementModifiers(placement);
 	settings.endGroup();
 	rebuildReverseMap();
 }
@@ -71,6 +118,9 @@ void ControlBindings::save() const {
 		if (key != _bindings.end()) {
 			settings.setValue(def.id, key->second.toString(QKeySequence::PortableText));
 		}
+	}
+	for (int kind = 0; kind < NumPlacementKinds; ++kind) {
+		settings.setValue(PlacementKeys[kind], placementId(_placement[kind]));
 	}
 	settings.endGroup();
 }
@@ -142,6 +192,41 @@ int ControlBindings::normalizedCode(const QKeyEvent* event) {
 	const auto key = static_cast<int>(event->key());
 	const auto mods = static_cast<int>(event->modifiers() & (Qt::ShiftModifier | Qt::ControlModifier | Qt::AltModifier | Qt::MetaModifier | Qt::KeypadModifier));
 	return key | mods;
+}
+
+PlacementModifiers ControlBindings::defaultPlacementModifiers() {
+	return {PlacementModifier::Ctrl, PlacementModifier::CtrlShift, PlacementModifier::CtrlAlt};
+}
+
+void ControlBindings::setPlacementModifiers(const PlacementModifiers& placement) {
+	_placement = isPermutation(placement) ? placement : defaultPlacementModifiers();
+}
+
+int ControlBindings::placementKind(Qt::KeyboardModifiers modifiers) const {
+	const bool shift = modifiers.testFlag(Qt::ShiftModifier);
+	const bool alt = modifiers.testFlag(Qt::AltModifier);
+	auto combination = PlacementModifier::Ctrl;
+	if (shift && !alt) {
+		combination = PlacementModifier::CtrlShift;
+	} else if (alt && !shift) {
+		combination = PlacementModifier::CtrlAlt;
+	}
+	for (int kind = 0; kind < NumPlacementKinds; ++kind) {
+		if (_placement[kind] == combination)
+			return kind;
+	}
+	return 0;
+}
+
+QString ControlBindings::placementText(PlacementModifier modifier) {
+	switch (modifier) {
+	case PlacementModifier::CtrlShift:
+		return QStringLiteral("Ctrl+Shift+click");
+	case PlacementModifier::CtrlAlt:
+		return QStringLiteral("Ctrl+Alt+click");
+	default:
+		return QStringLiteral("Ctrl+click");
+	}
 }
 
 void ControlBindings::rebuildReverseMap() {

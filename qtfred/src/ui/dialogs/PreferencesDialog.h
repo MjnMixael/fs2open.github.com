@@ -80,6 +80,8 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	std::unique_ptr<Ui::PreferencesDialog> ui;
 	std::unique_ptr<PreferencesDialogModel> _model;
 	std::map<ControlAction, QKeySequenceEdit*> _controlEditors;
+	// ship, prop and other placement combos, indexed like CreateKind
+	std::array<QComboBox*, NumPlacementKinds> _placementCombos{};
 
 	// Syntax Colors group, built in code from the role list.
 	struct SyntaxRow {

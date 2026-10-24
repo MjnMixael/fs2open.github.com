@@ -409,14 +409,9 @@ void RenderWidget::mousePressEvent(QMouseEvent* event) {
 	if (event->modifiers().testFlag(Qt::ControlModifier)) {  // add a new object
 		if (_viewport->on_object == -1) {
 			_viewport->Selection_lock = false;  // force off selection lock
-			const bool shift = event->modifiers().testFlag(Qt::ShiftModifier);
-			const bool alt   = event->modifiers().testFlag(Qt::AltModifier);
-			auto kind = CreateKind::Ship;
-			if (alt && !shift) {
-				kind = CreateKind::Other;
-			} else if (shift && !alt) {
-				kind = CreateKind::Prop;
-			}
+			// which kind each Ctrl+click combination places is set in Preferences > Controls
+			static_assert(static_cast<int>(CreateKind::Other) == NumPlacementKinds - 1, "placement kinds follow CreateKind");
+			const auto kind = static_cast<CreateKind>(ControlBindings::instance().placementKind(event->modifiers()));
 			_viewport->on_object = _viewport->create_object_on_grid(event->position().x() * _window->devicePixelRatio(), event->position().y() * _window->devicePixelRatio(), waypoint_instance, kind);
 			if (_viewport->on_object >= 0) {
 				auto* cmd = new fso::fred::CreateObjectCommand(

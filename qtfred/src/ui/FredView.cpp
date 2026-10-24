@@ -326,7 +326,6 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	ui->toolBar->addWidget(shipsLabel);
 	_shipClassBox = new ObjectComboBox(ui->toolBar);
 	_shipClassBox->setFixedWidth(150);
-	_shipClassBox->setToolTip(tr("Ctrl+click in the viewport to place"));
 	_shipClassBox->initForShips();
 	ui->toolBar->addWidget(_shipClassBox);
 	connect(_shipClassBox, &ObjectComboBox::classSelected, this, &FredView::onShipClassSelected);
@@ -336,7 +335,6 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	ui->toolBar->addWidget(propsLabel);
 	_propClassBox = new ObjectComboBox(ui->toolBar);
 	_propClassBox->setFixedWidth(150);
-	_propClassBox->setToolTip(tr("Ctrl+Shift+click in the viewport to place"));
 	_propClassBox->initForProps();
 	ui->toolBar->addWidget(_propClassBox);
 	connect(_propClassBox, &ObjectComboBox::classSelected, this, &FredView::onPropClassSelected);
@@ -346,10 +344,10 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	ui->toolBar->addWidget(otherLabel);
 	_otherClassBox = new ObjectComboBox(ui->toolBar);
 	_otherClassBox->setFixedWidth(150);
-	_otherClassBox->setToolTip(tr("Ctrl+Alt+click in the viewport to place"));
 	_otherClassBox->initForOther();
 	ui->toolBar->addWidget(_otherClassBox);
 	connect(_otherClassBox, &ObjectComboBox::classSelected, this, &FredView::onOtherKindSelected);
+	updatePlacementTooltips();
 
 	initializeContextToolbar();
 	initializeTransformBar();
@@ -747,6 +745,14 @@ void FredView::setCurrentFile(const QString& filepath) {
 	restartAutosaveTimer();
 }
 
+void FredView::updatePlacementTooltips() {
+	const auto& placement = ControlBindings::instance().placementModifiers();
+	ObjectComboBox* const boxes[] = {_shipClassBox, _propClassBox, _otherClassBox};
+	for (int kind = 0; kind < NumPlacementKinds; ++kind) {
+		if (boxes[kind] != nullptr)
+			boxes[kind]->setToolTip(tr("%1 in the viewport to place").arg(ControlBindings::placementText(placement[kind])));
+	}
+}
 void FredView::restartAutosaveTimer() {
 	if (!fred || !_viewport)
 		return;
