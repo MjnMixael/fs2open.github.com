@@ -40,6 +40,7 @@ PreferencesDialogModel::PreferencesDialogModel(QObject* parent, EditorViewport* 
 	for (const auto& def : bindings.definitions()) {
 		_controlKeys.emplace(def.action, bindings.keyFor(def.action));
 	}
+	_placement = bindings.placementModifiers();
 
 	// Detect current grid plane from the normal vector (uvec)
 	const auto& uvec = viewport->The_grid->gmatrix.vec.uvec;
@@ -90,6 +91,7 @@ bool PreferencesDialogModel::apply() {
 	for (const auto& entry : _controlKeys) {
 		bindings.setKey(entry.first, entry.second);
 	}
+	bindings.setPlacementModifiers(_placement);
 	bindings.save();
 
 	// Only rebuild the grid when its settings actually changed. apply() runs on every
@@ -326,6 +328,24 @@ void PreferencesDialogModel::resetControlDefaults() {
 	for (const auto& def : bindings.definitions()) {
 		modify(_controlKeys[def.action], def.defaultKey);
 	}
+	modify(_placement, ControlBindings::defaultPlacementModifiers());
+}
+
+PlacementModifier PreferencesDialogModel::getPlacementModifier(int kind) const {
+	Assertion(static_cast<size_t>(kind) < _placement.size(), "Unknown placement kind!");
+	return _placement[kind];
+}
+
+void PreferencesDialogModel::setPlacementModifier(int kind, PlacementModifier modifier) {
+	Assertion(static_cast<size_t>(kind) < _placement.size(), "Unknown placement kind!");
+	auto placement = _placement;
+	// the kind that had this combination takes over the one being replaced
+	for (auto& m : placement) {
+		if (m == modifier)
+			m = _placement[kind];
+	}
+	placement[kind] = modifier;
+	modify(_placement, placement);
 }
 
 int PreferencesDialogModel::getGridCenterX() const { return _gridCenterX; }

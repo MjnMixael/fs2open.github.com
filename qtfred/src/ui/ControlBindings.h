@@ -4,6 +4,7 @@
 #include <QKeySequence>
 #include <QString>
 
+#include <array>
 #include <map>
 #include <set>
 #include <unordered_map>
@@ -24,6 +25,18 @@ enum class ControlAction {
 	PitchDown,
 	ToggleSelectionLock,
 };
+
+// The Ctrl+click combinations that place a new object in the viewport
+enum class PlacementModifier {
+	Ctrl,
+	CtrlShift,
+	CtrlAlt,
+};
+
+// Which combination places each kind of object, indexed like CreateKind (ship, prop, other).
+// The three always differ, so every kind can be placed.
+constexpr int NumPlacementKinds = 3;
+using PlacementModifiers = std::array<PlacementModifier, NumPlacementKinds>;
 
 struct ControlBindingDefinition {
 	ControlAction action;
@@ -50,6 +63,15 @@ class ControlBindings {
 	bool isPressed(ControlAction action) const;
 	bool takeTriggered(ControlAction action);
 
+	static PlacementModifiers defaultPlacementModifiers();
+	const PlacementModifiers& placementModifiers() const { return _placement; }
+	void setPlacementModifiers(const PlacementModifiers& placement);
+	// The kind (a CreateKind value) a Ctrl+click with these modifiers places. Ctrl+Alt+Shift counts
+	// as plain Ctrl.
+	int placementKind(Qt::KeyboardModifiers modifiers) const;
+	// "Ctrl+click", "Ctrl+Shift+click" or "Ctrl+Alt+click"
+	static QString placementText(PlacementModifier modifier);
+
  private:
 	ControlBindings();
 
@@ -62,6 +84,7 @@ class ControlBindings {
 	std::unordered_map<int, std::vector<ControlAction>> _actionByCode;
 	std::set<ControlAction> _pressedActions;
 	std::set<ControlAction> _triggeredActions;
+	PlacementModifiers _placement = defaultPlacementModifiers();
 };
 
 } // namespace fso::fred

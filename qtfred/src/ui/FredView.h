@@ -77,6 +77,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 	void editAsteroidField();
 
 	void restartAutosaveTimer();
+	// Ship / Prop / Other toolbar boxes say which Ctrl+click places them (Preferences > Controls)
+	void updatePlacementTooltips();
 
  public slots:
 	void openLoadMissionDialog();

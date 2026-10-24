@@ -634,9 +634,69 @@
         <widget class="QWidget" name="controlsFormWidget" native="true"/>
        </item>
        <item>
+        <widget class="QGroupBox" name="placementGroup">
+         <property name="title">
+          <string>Placing Objects</string>
+         </property>
+         <layout class="QFormLayout" name="placementLayout">
+          <item row="0" column="0">
+           <widget class="QLabel" name="shipPlacementLabel">
+            <property name="text">
+             <string>Ship:</string>
+            </property>
+            <property name="buddy">
+             <cstring>shipPlacementCombo</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="0" column="1">
+           <widget class="QComboBox" name="shipPlacementCombo">
+            <property name="toolTip">
+             <string>The click that places a ship of the class chosen in the toolbar's Ships box. Picking one another kind uses swaps the two.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="0">
+           <widget class="QLabel" name="propPlacementLabel">
+            <property name="text">
+             <string>Prop:</string>
+            </property>
+            <property name="buddy">
+             <cstring>propPlacementCombo</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="1" column="1">
+           <widget class="QComboBox" name="propPlacementCombo">
+            <property name="toolTip">
+             <string>The click that places a prop of the class chosen in the toolbar's Props box. Picking one another kind uses swaps the two.</string>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="0">
+           <widget class="QLabel" name="otherPlacementLabel">
+            <property name="text">
+             <string>Other:</string>
+            </property>
+            <property name="buddy">
+             <cstring>otherPlacementCombo</cstring>
+            </property>
+           </widget>
+          </item>
+          <item row="2" column="1">
+           <widget class="QComboBox" name="otherPlacementCombo">
+            <property name="toolTip">
+             <string>The click that places what the toolbar's Other box is set to: a waypoint, jump node or coordinate point. Picking one another kind uses swaps the two.</string>
+            </property>
+           </widget>
+          </item>
+         </layout>
+        </widget>
+       </item>
+       <item>
         <widget class="QPushButton" name="resetDefaultsButton">
          <property name="toolTip">
-          <string>Reset all control key bindings back to their defaults.</string>
+          <string>Reset all control key bindings and the object placement clicks back to their defaults.</string>
          </property>
          <property name="text">
           <string>Reset to Defaults</string>
