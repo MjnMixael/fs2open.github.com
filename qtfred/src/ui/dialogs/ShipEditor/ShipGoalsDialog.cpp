@@ -229,6 +229,16 @@ void ShipGoalsDialog::updateUi()
 				priority[i]->setValue(_model->getPriority(i));
 
 				break;
+			case AI_GOAL_CHASE_SHIP_TYPE:
+				for (int t = 0; t < static_cast<int>(Ship_types.size()); t++) {
+					objects[i]->addItem(Ship_types[t].name, QVariant(int(t | TYPE_SHIP_TYPE)));
+					if (_model->getObject(i) == (t | TYPE_SHIP_TYPE))
+						objects[i]->setCurrentIndex(t);
+				}
+				priority[i]->setEnabled(true);
+				priority[i]->setValue(_model->getPriority(i));
+
+				break;
 			default:
 				break;
 			} // for goals that deal with individual ships
