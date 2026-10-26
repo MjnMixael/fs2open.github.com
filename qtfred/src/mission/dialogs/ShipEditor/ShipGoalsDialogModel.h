@@ -15,6 +15,7 @@ constexpr auto TYPE_PLAYER = 0x3000;
 constexpr auto TYPE_WING = 0x4000;
 constexpr auto TYPE_WAYPOINT = 0x5000;
 constexpr auto TYPE_SHIP_CLASS = 0x6000;
+constexpr auto TYPE_SHIP_TYPE = 0x7000;
 constexpr auto TYPE_MASK = 0xf000;
 constexpr auto DATA_MASK = 0x0fff;
 constexpr auto MAX_VALID = 99;

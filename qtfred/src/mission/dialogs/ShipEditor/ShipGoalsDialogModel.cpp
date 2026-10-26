@@ -171,6 +171,7 @@ void ShipGoalsDialogModel::updateItem(int item)
 	case AI_GOAL_FORM_ON_WING:
 	case AI_GOAL_STAY_STILL:
 	case AI_GOAL_CHASE_SHIP_CLASS:
+	case AI_GOAL_CHASE_SHIP_TYPE:
 		break;
 
 	case AI_GOAL_DESTROY_SUBSYSTEM: {
@@ -335,6 +336,10 @@ void ShipGoalsDialogModel::updateItem(int item)
 		_goalp[item].target_name = ai_get_goal_target_name(Ship_info[_object[item] & DATA_MASK].name, &not_used);
 		break;
 
+	case TYPE_SHIP_TYPE:
+		_goalp[item].target_name = ai_get_goal_target_name(Ship_types[_object[item] & DATA_MASK].name, &not_used);
+		break;
+
 	case 0:
 	case (-1 & TYPE_MASK):
 		if (_multiEdit)
@@ -474,6 +479,7 @@ void ShipGoalsDialogModel::initialize(ai_goal* goals)
 	// 4 = waypoint paths
 	// 8 = individual waypoints
 	// 16 = ship classes
+	// 32 = ship types
 
 	_goalp = goals;
 	for (item = 0; item < ED_MAX_GOALS; item++) {
@@ -514,6 +520,10 @@ void ShipGoalsDialogModel::initialize(ai_goal* goals)
 
 		case AI_GOAL_CHASE_SHIP_CLASS:
 			flag = 16; // target is a ship class
+			break;
+
+		case AI_GOAL_CHASE_SHIP_TYPE:
+			flag = 32; // target is a ship type
 			break;
 
 		case AI_GOAL_STAY_STILL:
@@ -615,6 +625,15 @@ void ShipGoalsDialogModel::initialize(ai_goal* goals)
 			for (i = 0; i < ship_info_size(); i++) {
 				if (!stricmp(_goalp[item].target_name, Ship_info[i].name)) {
 					_object[item] = i | TYPE_SHIP_CLASS;
+					break;
+				}
+			}
+		}
+
+		if (flag & 0x20) { // data is a ship type
+			for (i = 0; i < static_cast<int>(Ship_types.size()); i++) {
+				if (!stricmp(_goalp[item].target_name, Ship_types[i].name)) {
+					_object[item] = i | TYPE_SHIP_TYPE;
 					break;
 				}
 			}

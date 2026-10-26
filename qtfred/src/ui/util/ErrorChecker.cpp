@@ -1375,6 +1375,7 @@ int ErrorChecker::checkInitialOrders(ai_goal* goals, int ship, int wing) {
 		case AI_GOAL_NONE:
 		case AI_GOAL_CHASE_ANY:
 		case AI_GOAL_CHASE_SHIP_CLASS:
+		case AI_GOAL_CHASE_SHIP_TYPE:
 		case AI_GOAL_UNDOCK:
 		case AI_GOAL_KEEP_SAFE_DISTANCE:
 		case AI_GOAL_PLAY_DEAD:
