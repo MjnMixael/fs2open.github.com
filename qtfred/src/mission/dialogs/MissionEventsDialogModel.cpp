@@ -2,6 +2,10 @@
 #include "state/DialogStateHelpers.h"
 
 #include <sound/audiostr.h>
+#ifdef WITH_FFMPEG
+#include <sound/ffmpeg/FFmpegWaveFile.h>
+#endif
+#include <cfile/cfile.h>
 #include <localization/localize.h>
 #include <missioneditor/missionsave.h>
 #include <parse/parselo.h>
@@ -1397,6 +1401,29 @@ SCP_string MissionEventsDialogModel::getMessageWave() const
 	}
 	auto& msg = m_messages[m_cur_msg];
 	return msg.wave_info.name ? SCP_string(msg.wave_info.name) : SCP_string("<None>");
+}
+
+MissionEventsDialogModel::WaveFileInfo MissionEventsDialogModel::getMessageWaveInfo() const
+{
+	WaveFileInfo info;
+	if (!SCP_vector_inbounds(m_messages, m_cur_msg) || !m_messages[m_cur_msg].wave_info.name)
+		return info;
+
+	// message voices are opened with ASF_VOICE, which takes the first known audio extension found
+	auto res = cf_find_file_location_ext(m_messages[m_cur_msg].wave_info.name, NUM_AUDIO_EXT, audio_ext_list, CF_TYPE_ANY);
+	if (!res.found)
+		return info;
+
+	info.found = true;
+	info.size = res.size;
+
+#ifdef WITH_FFMPEG
+	sound::ffmpeg::FFmpegWaveFile wave;
+	if (wave.Open(res.name_ext.c_str(), true))
+		info.props = wave.getFileProperties();
+#endif
+
+	return info;
 }
 
 void MissionEventsDialogModel::setMessageWave(const SCP_string& wave)

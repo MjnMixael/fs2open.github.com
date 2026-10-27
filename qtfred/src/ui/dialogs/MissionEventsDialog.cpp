@@ -1,7 +1,10 @@
 #include "MissionEventsDialog.h"
 #include "ui_MissionEventsDialog.h"
 
+#include <QLocale>
 #include <QShortcut>
+#include <QStringList>
+#include <cmath>
 #include <functional>
 #include "ui/Theme.h"
 #include "ui/widgets/EventGraphView.h"
@@ -153,6 +156,9 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	fso::fred::bindStandardIcon(ui->msgDownBtn,       QStyle::SP_ArrowDown);
 	fso::fred::bindCustomIcon(ui->msgMoveBottomBtn,   CustomIcon::MoveToBottom);
 	fso::fred::bindStandardIcon(ui->btnWavePlay,      QStyle::SP_MediaPlay);
+	ui->waveInfoLabel->setForegroundRole(QPalette::PlaceholderText); // secondary gray that follows the theme
+	// keep the line's height when it's empty, so the form doesn't jump as messages change
+	ui->waveInfoLabel->setMinimumHeight(ui->waveInfoLabel->fontMetrics().height());
 
 	ui->editDirectiveText->setMaxLength(NAME_LENGTH - 1);
 	ui->editDirectiveKeypressText->setMaxLength(NAME_LENGTH - 1);
@@ -1669,7 +1675,48 @@ void MissionEventsDialog::updateMessageUi()
 	ui->messageTeamCombo->setEnabled(enable && _model->getMissionIsMultiTeam());
 	ui->btnMsgNote->setEnabled(enable);
 
+	updateWaveInfo();
+
 	updateMessageMoveButtons();
+}
+
+// One line under the wave file: its length and format, or why the game can't play it
+void MissionEventsDialog::updateWaveInfo()
+{
+	const auto wave = _model->messageIsValid() ? _model->getMessageWave() : SCP_string();
+	if (wave.empty() || wave == "<None>") {
+		ui->waveInfoLabel->clear();
+		return;
+	}
+
+	const auto info = _model->getMessageWaveInfo();
+	if (!info.found) {
+		// the same red as the message name conflict border
+		ui->waveInfoLabel->setStyleSheet(QStringLiteral("QLabel { color: #d9534f; }"));
+		ui->waveInfoLabel->setText(tr("File not found"));
+		return;
+	}
+	ui->waveInfoLabel->setStyleSheet(QString());
+
+	QStringList parts;
+	const double seconds = info.props.duration;
+	if (seconds > 0.0 && std::isfinite(seconds)) {
+		const int tenths = static_cast<int>(std::lround(seconds * 10.0));
+		parts << QString("%1:%2.%3").arg(tenths / 600).arg((tenths / 10) % 60, 2, 10, QChar('0')).arg(tenths % 10);
+	} else {
+		parts << tr("Unknown length");
+	}
+	if (info.props.sample_rate > 0)
+		parts << tr("%1 kHz").arg(info.props.sample_rate / 1000.0, 0, 'g', 3);
+	if (info.props.num_channels == 1)
+		parts << tr("mono");
+	else if (info.props.num_channels == 2)
+		parts << tr("stereo");
+	else if (info.props.num_channels > 2)
+		parts << tr("%1 channels").arg(info.props.num_channels);
+	parts << QLocale().formattedDataSize(static_cast<qint64>(info.size), 1, QLocale::DataSizeTraditionalFormat);
+
+	ui->waveInfoLabel->setText(parts.join(QStringLiteral(", ")));
 }
 
 void MissionEventsDialog::updateMessageMoveButtons()
