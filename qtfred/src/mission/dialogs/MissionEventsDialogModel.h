@@ -8,6 +8,7 @@
 #include <mission/missiongoals.h>
 #include <mission/missionmessage.h>
 #include <mission/missionparse.h>
+#include <sound/IAudioFile.h>
 
 // Defined in missioneditor/missionsave.h; only the name is needed here.
 enum class MissionFormat;
@@ -179,6 +180,15 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	void setMessageAni(const SCP_string& ani);
 	SCP_string getMessageWave() const;
 	void setMessageWave(const SCP_string& wave);
+	// The file the game plays for the current message's wave, found the way the game finds
+	// it (any known audio extension), and its length and format
+	struct WaveFileInfo {
+		bool found = false;
+		SCP_string file;
+		size_t size = 0;
+		sound::AudioFileProperties props;
+	};
+	WaveFileInfo getMessageWaveInfo() const;
 	int getMessagePersona() const;
 	void setMessagePersona(int persona);
 	int getMessageTeam() const;

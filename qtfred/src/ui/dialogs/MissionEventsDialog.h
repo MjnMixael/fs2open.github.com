@@ -220,6 +220,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void updateEventCreateButtons(); // per-view/-mode New/Insert/Delete enablement
 	void setEventLogEnabled(bool enable);
 	void updateMessageUi();
+	void updateWaveInfo();
 	void updateMessageMoveButtons();
 
 	void initMessageList();
