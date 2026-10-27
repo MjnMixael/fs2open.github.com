@@ -10694,19 +10694,46 @@ int sexp_percent_ships_delay(int n, int what)
 
 	// when each counted ship was destroyed, departed or arrived
 	SCP_vector<fix> times;
-	auto add_time = [&times, base_op](const char* name) {
-		fix time = 0;
+	auto ship_time = [base_op](const char* name, fix* time) {
 		if (base_op == OP_PERCENT_SHIPS_DESTROYED) {
-			fix self_destruct_time = 0;
-			const bool destroyed = mission_log_get_time(LOG_SHIP_DESTROYED, name, nullptr, &time) != 0;
+			fix destroyed_time = 0, self_destruct_time = 0;
+			const bool destroyed = mission_log_get_time(LOG_SHIP_DESTROYED, name, nullptr, &destroyed_time) != 0;
 			const bool self_destructed = mission_log_get_time(LOG_SELF_DESTRUCTED, name, nullptr, &self_destruct_time) != 0;
-			if (self_destructed && (!destroyed || self_destruct_time < time))
-				time = self_destruct_time;
-			if (destroyed || self_destructed)
-				times.push_back(time);
-		} else if (mission_log_get_time(base_op == OP_PERCENT_SHIPS_DEPARTED ? LOG_SHIP_DEPARTED : LOG_SHIP_ARRIVED, name, nullptr, &time)) {
-			times.push_back(time);
+			if (!destroyed && !self_destructed)
+				return false;
+			*time = (self_destructed && (!destroyed || self_destruct_time < destroyed_time)) ? self_destruct_time : destroyed_time;
+			return true;
 		}
+		return mission_log_get_time(base_op == OP_PERCENT_SHIPS_DEPARTED ? LOG_SHIP_DEPARTED : LOG_SHIP_ARRIVED, name, nullptr, time) != 0;
+	};
+
+	// A wing that couldn't launch because its carrier was gone has its remaining ships counted as
+	// arrived, and as destroyed or departed the way the carrier left (see mission_maybe_make_wing_arrive),
+	// with no log entries of their own. They take the time the carrier left.
+	auto carrier_time = [base_op](const wing* wingp, fix* time) {
+		if (wingp->arrival_location != ArrivalLocation::FROM_DOCK_BAY || !wingp->flags[Ship::Wing_Flags::Gone] || !wingp->arrival_anchor.isValid())
+			return false;
+		auto anchor_entry = ship_registry_get(wingp->arrival_anchor);
+		if (!anchor_entry || anchor_entry->has_shipp())
+			return false;
+
+		fix destroyed_time = 0, self_destruct_time = 0, departed_time = 0;
+		const bool destroyed = mission_log_get_time(LOG_SHIP_DESTROYED, anchor_entry->name, nullptr, &destroyed_time) != 0;
+		const bool self_destructed = mission_log_get_time(LOG_SELF_DESTRUCTED, anchor_entry->name, nullptr, &self_destruct_time) != 0;
+		if (destroyed || self_destructed) {
+			if (base_op == OP_PERCENT_SHIPS_DEPARTED)
+				return false;
+			*time = (self_destructed && (!destroyed || self_destruct_time < destroyed_time)) ? self_destruct_time : destroyed_time;
+			return true;
+		}
+		if (mission_log_get_time(LOG_SHIP_DEPARTED, anchor_entry->name, nullptr, &departed_time)) {
+			if (base_op == OP_PERCENT_SHIPS_DESTROYED)
+				return false;
+			*time = departed_time;
+			return true;
+		}
+		// vanished: no time to use
+		return false;
 	};
 
 	int total = 0;
@@ -10714,28 +10741,56 @@ int sexp_percent_ships_delay(int n, int what)
 		auto wingp = eval_wing(node);
 		if (wingp) {
 			total += wingp->wave_count * wingp->num_waves;
-			if (wingp->num_waves > 1) {
-				// later waves keep numbering on from earlier ones (Alpha 5, Alpha 6...), and red-alert
-				// carry-overs can skip numbers
-				const int last = wingp->wave_count * wingp->num_waves + wingp->red_alert_skipped_ships;
-				for (int ordinal = 1; ordinal <= last; ++ordinal) {
-					SCP_string name;
-					wing_bash_ship_name(name, wingp->name, ordinal);
-					add_time(name.c_str());
+
+			// what percent-ships-* counts for this wing, and how many of those have a time so far
+			int counted = 0;
+			int found = 0;
+			fix time = 0;
+			if (base_op == OP_PERCENT_SHIPS_ARRIVED) {
+				counted = wingp->total_arrived_count;
+				// each wave's arrival is logged once (the first wave's too, at mission start) and stands for
+				// the wave's ships, as total_arrived_count counts them
+				for (int wave = 1; wave <= wingp->current_wave && found < counted; ++wave) {
+					if (!mission_log_get_time_indexed(LOG_WING_ARRIVED, wingp->name, nullptr, wave, &time))
+						break;
+					for (int i = 0; i < wingp->wave_count && found < counted; ++i, ++found)
+						times.push_back(time);
 				}
 			} else {
-				// a single wave keeps its ships' own names
-				const int wingnum = WING_INDEX(wingp);
-				for (const auto& p_obj : Parse_objects) {
-					if (p_obj.wingnum == wingnum)
-						add_time(p_obj.name);
+				counted = (base_op == OP_PERCENT_SHIPS_DESTROYED) ? wingp->total_destroyed : wingp->total_departed;
+				if (wingp->num_waves > 1) {
+					// later waves keep numbering on from earlier ones (Alpha 5, Alpha 6...), and red-alert
+					// carry-overs can skip numbers; names are built (and truncated) as the game builds them
+					const int last = wingp->wave_count * wingp->num_waves + wingp->red_alert_skipped_ships;
+					for (int ordinal = 1; ordinal <= last; ++ordinal) {
+						char name[NAME_LENGTH];
+						wing_bash_ship_name(name, wingp->name, ordinal);
+						if (ship_time(name, &time)) {
+							times.push_back(time);
+							++found;
+						}
+					}
+				} else {
+					// a single wave keeps its ships' own names
+					const int wingnum = WING_INDEX(wingp);
+					for (const auto& p_obj : Parse_objects) {
+						if (p_obj.wingnum == wingnum && ship_time(p_obj.name, &time)) {
+							times.push_back(time);
+							++found;
+						}
+					}
 				}
 			}
+
+			// counted ships without an entry of their own: those a lost carrier accounts for
+			if (found < counted && carrier_time(wingp, &time))
+				times.insert(times.end(), static_cast<size_t>(counted - found), time);
 		} else {
 			total++;
 			auto ship_entry = eval_ship(node);
-			if (ship_entry)
-				add_time(ship_entry->name);
+			fix time = 0;
+			if (ship_entry && ship_time(ship_entry->name, &time))
+				times.push_back(time);
 		}
 	}
 	if (total <= 0)
