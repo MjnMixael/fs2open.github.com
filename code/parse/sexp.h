@@ -1042,6 +1042,10 @@ enum : int {
 	OP_SHIP_CUSTOM_DATA_GET_BOOL,	// MjnMixael
 	OP_SHIP_CUSTOM_DATA_SET_BOOL,	// MjnMixael
 
+	OP_PERCENT_SHIPS_DESTROYED_DELAY,	// MjnMixael
+	OP_PERCENT_SHIPS_DEPARTED_DELAY,	// MjnMixael
+	OP_PERCENT_SHIPS_ARRIVED_DELAY,	// MjnMixael
+
 	// this should come after every operator
 	First_available_operator_id
 };

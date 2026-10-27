@@ -244,6 +244,9 @@ SCP_vector<sexp_oper> Operators = {
 	{ "percent-ships-departed",			OP_PERCENT_SHIPS_DEPARTED,				2,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},
 	{ "percent-ships-arrived",			OP_PERCENT_SHIPS_ARRIVED,				2,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},
 	{ "percent-ships-scanned",			OP_PERCENT_SHIPS_SCANNED,				2,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// Goober5000
+	{ "percent-ships-destroyed-delay",	OP_PERCENT_SHIPS_DESTROYED_DELAY,		3,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
+	{ "percent-ships-departed-delay",	OP_PERCENT_SHIPS_DEPARTED_DELAY,		3,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
+	{ "percent-ships-arrived-delay",	OP_PERCENT_SHIPS_ARRIVED_DELAY,			3,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	// MjnMixael
 	{ "depart-node-delay",				OP_DEPART_NODE_DELAY,					3,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},
 	{ "destroyed-or-departed-delay",	OP_DESTROYED_DEPARTED_DELAY,			2,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},	
 
@@ -4295,6 +4298,9 @@ int check_sexp_potential_issues(int node, int *bad_node, SCP_string &issue_msg)
 		switch (op_num)
 		{
 			// examine all sexps that check for wing destruction
+			case OP_PERCENT_SHIPS_DESTROYED_DELAY:
+				first_arg_node = CDR(first_arg_node);
+				FALLTHROUGH;
 			case OP_IS_DESTROYED_DELAY:
 			case OP_PERCENT_SHIPS_DESTROYED:
 				first_arg_node = CDR(first_arg_node);
@@ -10559,24 +10565,29 @@ int sexp_get_damage_caused(int node)
  * "what" determines if we should check destroyed or departed status
  * Goober5000 - added disarm, disable, and scan
  */
+static int sexp_percent_ships_status(int percent, int list_node, int what);
+
 int sexp_percent_ships_arrive_depart_destroy_disarm_disable_scan(int n, int what)
 {
-	int percent;
-	int total, count, impossible_count;
 	bool is_nan, is_nan_forever;
 
-	percent = eval_num(n, is_nan, is_nan_forever);
+	const int percent = eval_num(n, is_nan, is_nan_forever);
 	if (is_nan)
 		return SEXP_FALSE;
 	if (is_nan_forever)
 		return SEXP_KNOWN_FALSE;
 
-	total = 0;
-	count = 0;
-	impossible_count = 0;
-	// iterate through the rest of the ships/wings in the list and tally the departures and the
-	// total
-	for ( n = CDR(n); n != -1; n = CDR(n) ) {
+	return sexp_percent_ships_status(percent, CDR(n), what);
+}
+
+// percent-ships-* on its own: the percentage and the list of ships and wings already read
+static int sexp_percent_ships_status(int percent, int list_node, int what)
+{
+	int total = 0;
+	int count = 0;
+	int impossible_count = 0;
+	// iterate through the ships/wings in the list and tally the departures and the total
+	for (int n = list_node; n != -1; n = CDR(n) ) {
 		// this might be a wing
 		auto wingp = eval_wing(n);
 		if (wingp) {
@@ -10646,6 +10657,102 @@ int sexp_percent_ships_arrive_depart_destroy_disarm_disable_scan(int n, int what
 		return SEXP_KNOWN_FALSE;
 	else
 		return SEXP_FALSE;
+}
+
+/**
+ * percent-ships-destroyed-delay, -departed-delay and -arrived-delay: like percent-ships-*, but true
+ * only <delay> seconds after the percentage was first reached. That moment is the time of the event
+ * that brought the count up to the percentage, found in the mission log, so it needs no state of its
+ * own.
+ */
+int sexp_percent_ships_delay(int n, int what)
+{
+	bool is_nan, is_nan_forever;
+
+	const int percent = eval_num(n, is_nan, is_nan_forever);
+	if (is_nan)
+		return SEXP_FALSE;
+	if (is_nan_forever)
+		return SEXP_KNOWN_FALSE;
+
+	const fix delay = i2f(eval_num(CDR(n), is_nan, is_nan_forever));
+	if (is_nan)
+		return SEXP_FALSE;
+	if (is_nan_forever)
+		return SEXP_KNOWN_FALSE;
+
+	const int list_node = CDDR(n);
+	int base_op = OP_PERCENT_SHIPS_ARRIVED;
+	if (what == OP_PERCENT_SHIPS_DESTROYED_DELAY)
+		base_op = OP_PERCENT_SHIPS_DESTROYED;
+	else if (what == OP_PERCENT_SHIPS_DEPARTED_DELAY)
+		base_op = OP_PERCENT_SHIPS_DEPARTED;
+
+	const int val = sexp_percent_ships_status(percent, list_node, base_op);
+	if (val != SEXP_TRUE && val != SEXP_KNOWN_TRUE)
+		return val;
+
+	// when each counted ship was destroyed, departed or arrived
+	SCP_vector<fix> times;
+	auto add_time = [&times, base_op](const char* name) {
+		fix time = 0;
+		if (base_op == OP_PERCENT_SHIPS_DESTROYED) {
+			fix self_destruct_time = 0;
+			const bool destroyed = mission_log_get_time(LOG_SHIP_DESTROYED, name, nullptr, &time) != 0;
+			const bool self_destructed = mission_log_get_time(LOG_SELF_DESTRUCTED, name, nullptr, &self_destruct_time) != 0;
+			if (self_destructed && (!destroyed || self_destruct_time < time))
+				time = self_destruct_time;
+			if (destroyed || self_destructed)
+				times.push_back(time);
+		} else if (mission_log_get_time(base_op == OP_PERCENT_SHIPS_DEPARTED ? LOG_SHIP_DEPARTED : LOG_SHIP_ARRIVED, name, nullptr, &time)) {
+			times.push_back(time);
+		}
+	};
+
+	int total = 0;
+	for (int node = list_node; node != -1; node = CDR(node)) {
+		auto wingp = eval_wing(node);
+		if (wingp) {
+			total += wingp->wave_count * wingp->num_waves;
+			if (wingp->num_waves > 1) {
+				// later waves keep numbering on from earlier ones (Alpha 5, Alpha 6...), and red-alert
+				// carry-overs can skip numbers
+				const int last = wingp->wave_count * wingp->num_waves + wingp->red_alert_skipped_ships;
+				for (int ordinal = 1; ordinal <= last; ++ordinal) {
+					SCP_string name;
+					wing_bash_ship_name(name, wingp->name, ordinal);
+					add_time(name.c_str());
+				}
+			} else {
+				// a single wave keeps its ships' own names
+				const int wingnum = WING_INDEX(wingp);
+				for (const auto& p_obj : Parse_objects) {
+					if (p_obj.wingnum == wingnum)
+						add_time(p_obj.name);
+				}
+			}
+		} else {
+			total++;
+			auto ship_entry = eval_ship(node);
+			if (ship_entry)
+				add_time(ship_entry->name);
+		}
+	}
+	if (total <= 0)
+		return SEXP_FALSE;
+
+	// the fewest ships that make the percentage, as percent-ships-* counts it
+	int needed = 0;
+	while (needed < total && ((needed * 100) / total) < percent)
+		++needed;
+
+	fix reached = 0;
+	if (needed > 0 && !times.empty()) {
+		std::sort(times.begin(), times.end());
+		reached = times[std::min(static_cast<size_t>(needed), times.size()) - 1];
+	}
+
+	return ((Missiontime - reached) >= delay) ? val : SEXP_FALSE;
 }
 
 /**
@@ -29175,6 +29282,12 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = sexp_percent_ships_arrive_depart_destroy_disarm_disable_scan(node, op_num);
 				break;
 
+			case OP_PERCENT_SHIPS_DESTROYED_DELAY:
+			case OP_PERCENT_SHIPS_DEPARTED_DELAY:
+			case OP_PERCENT_SHIPS_ARRIVED_DELAY:
+				sexp_val = sexp_percent_ships_delay(node, op_num);
+				break;
+
 			case OP_DEPART_NODE_DELAY:
 				sexp_val = sexp_depart_node_delay(node);
 				break;
@@ -31994,6 +32107,9 @@ int query_operator_return_type(int op)
 		case OP_PERCENT_SHIPS_DISABLED:
 		case OP_PERCENT_SHIPS_ARRIVED:
 		case OP_PERCENT_SHIPS_SCANNED:
+		case OP_PERCENT_SHIPS_DESTROYED_DELAY:
+		case OP_PERCENT_SHIPS_DEPARTED_DELAY:
+		case OP_PERCENT_SHIPS_ARRIVED_DELAY:
 		case OP_DEPART_NODE_DELAY:
 		case OP_DESTROYED_DEPARTED_DELAY:
 		case OP_SPECIAL_CHECK:
@@ -34308,6 +34424,14 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_SHIP_WING;
 			}
 			break;
+
+		case OP_PERCENT_SHIPS_DESTROYED_DELAY:
+		case OP_PERCENT_SHIPS_DEPARTED_DELAY:
+		case OP_PERCENT_SHIPS_ARRIVED_DELAY:
+			if (argnum <= 1)
+				return OPF_POSITIVE; // percentage, then delay
+			else
+				return OPF_SHIP_WING;
 
 		case OP_PERCENT_SHIPS_DISARMED:
 		case OP_PERCENT_SHIPS_DISABLED:
@@ -37332,6 +37456,9 @@ int get_category(int op_id)
 		case OP_PERCENT_SHIPS_DISABLED:
 		case OP_PERCENT_SHIPS_ARRIVED:
 		case OP_PERCENT_SHIPS_SCANNED:
+		case OP_PERCENT_SHIPS_DESTROYED_DELAY:
+		case OP_PERCENT_SHIPS_DEPARTED_DELAY:
+		case OP_PERCENT_SHIPS_ARRIVED_DELAY:
 		case OP_NAV_IS_VISITED:
 		case OP_WAS_DESTROYED_BY_DELAY:
 			return OP_CATEGORY_OBJECTIVE;
@@ -41423,6 +41550,30 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"Takes 2 or more arguments...\r\n"
 		"\t1:\tPercentage of destroyed ships at which this function will return true.\r\n"
 		"\t2+:\tList of ships/wings whose destroyed status should be determined." },
+
+	{ OP_PERCENT_SHIPS_DESTROYED_DELAY, "percent-ships-destroyed-delay\r\n"
+		"\tBoolean function which becomes true <delay> seconds after the percentage of ships in the listed ships and wings "
+		"which have been destroyed first reaches the given percentage, counted as percent-ships-destroyed counts it.\r\n\r\n"
+		"Takes 3 or more arguments...\r\n"
+		"\t1:\tPercentage of destroyed ships (see above).\r\n"
+		"\t2:\tTime delay in seconds (see above).\r\n"
+		"\t3+:\tList of ships/wings whose destroyed status should be determined." },
+
+	{ OP_PERCENT_SHIPS_DEPARTED_DELAY, "percent-ships-departed-delay\r\n"
+		"\tBoolean function which becomes true <delay> seconds after the percentage of ships in the listed ships and wings "
+		"which have departed first reaches the given percentage, counted as percent-ships-departed counts it.\r\n\r\n"
+		"Takes 3 or more arguments...\r\n"
+		"\t1:\tPercentage of departed ships (see above).\r\n"
+		"\t2:\tTime delay in seconds (see above).\r\n"
+		"\t3+:\tList of ships/wings whose departure status should be determined." },
+
+	{ OP_PERCENT_SHIPS_ARRIVED_DELAY, "percent-ships-arrived-delay\r\n"
+		"\tBoolean function which becomes true <delay> seconds after the percentage of ships in the listed ships and wings "
+		"which have arrived first reaches the given percentage, counted as percent-ships-arrived counts it.\r\n\r\n"
+		"Takes 3 or more arguments...\r\n"
+		"\t1:\tPercentage of arrived ships (see above).\r\n"
+		"\t2:\tTime delay in seconds (see above).\r\n"
+		"\t3+:\tList of ships/wings whose arrival status should be determined." },
 
 	// Goober5000
 	{ OP_PERCENT_SHIPS_DISARMED, "percent-ships-disarmed\r\n"
