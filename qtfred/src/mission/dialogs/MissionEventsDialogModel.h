@@ -181,10 +181,9 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	SCP_string getMessageWave() const;
 	void setMessageWave(const SCP_string& wave);
 	// The file the game plays for the current message's wave, found the way the game finds
-	// it (any known audio extension), and its length and format
+	// it (any known audio extension): whether it exists, and its size, length and format
 	struct WaveFileInfo {
 		bool found = false;
-		SCP_string file;
 		size_t size = 0;
 		sound::AudioFileProperties props;
 	};

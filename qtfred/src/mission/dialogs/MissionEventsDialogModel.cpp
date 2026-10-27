@@ -1415,7 +1415,6 @@ MissionEventsDialogModel::WaveFileInfo MissionEventsDialogModel::getMessageWaveI
 		return info;
 
 	info.found = true;
-	info.file = res.name_ext;
 	info.size = res.size;
 
 #ifdef WITH_FFMPEG

@@ -157,6 +157,8 @@ MissionEventsDialog::MissionEventsDialog(FredView* parent, EditorViewport* viewp
 	fso::fred::bindCustomIcon(ui->msgMoveBottomBtn,   CustomIcon::MoveToBottom);
 	fso::fred::bindStandardIcon(ui->btnWavePlay,      QStyle::SP_MediaPlay);
 	ui->waveInfoLabel->setForegroundRole(QPalette::PlaceholderText); // secondary gray that follows the theme
+	// keep the line's height when it's empty, so the form doesn't jump as messages change
+	ui->waveInfoLabel->setMinimumHeight(ui->waveInfoLabel->fontMetrics().height());
 
 	ui->editDirectiveText->setMaxLength(NAME_LENGTH - 1);
 	ui->editDirectiveKeypressText->setMaxLength(NAME_LENGTH - 1);
@@ -1684,10 +1686,8 @@ void MissionEventsDialog::updateWaveInfo()
 	const auto wave = _model->messageIsValid() ? _model->getMessageWave() : SCP_string();
 	if (wave.empty() || wave == "<None>") {
 		ui->waveInfoLabel->clear();
-		ui->waveInfoLabel->setVisible(false);
 		return;
 	}
-	ui->waveInfoLabel->setVisible(true);
 
 	const auto info = _model->getMessageWaveInfo();
 	if (!info.found) {
@@ -1715,7 +1715,6 @@ void MissionEventsDialog::updateWaveInfo()
 	else if (info.props.num_channels > 2)
 		parts << tr("%1 channels").arg(info.props.num_channels);
 	parts << QLocale().formattedDataSize(static_cast<qint64>(info.size), 1, QLocale::DataSizeTraditionalFormat);
-	parts << QString::fromStdString(info.file);
 
 	ui->waveInfoLabel->setText(parts.join(QStringLiteral(", ")));
 }
