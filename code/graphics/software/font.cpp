@@ -329,6 +329,7 @@ namespace
 			if (user_defined_default_special_char_index < 0 || user_defined_default_special_char_index >= MAX_SPECIAL_CHAR_IDX) {
 				Warning(LOCATION, "Default special character index (%d) for font (%s), must be 0 - %u.  Defaulting to 0.", user_defined_default_special_char_index,
 					  fontName.c_str(), MAX_SPECIAL_CHAR_IDX);
+				user_defined_default_special_char_index = (int)DEFAULT_SPECIAL_CHAR_INDEX;
 			}
 
 		}

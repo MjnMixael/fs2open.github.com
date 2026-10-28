@@ -450,16 +450,18 @@ void brief_parse_icon_tbl(const char* filename)
 						Warning(LOCATION, "Icon Type %s is invalid, in icons.tbl.", name);
 					}
 
+					// an unknown species or icon type: read past the icons and ignore them
+					if (icon_type < 0 || spinfo_index < 0) {
+						parse_briefing_icons();
+						continue;
+					}
+
 					int &existing_bii_index = Species_info[spinfo_index].bii_indices[icon_type];
 
 					if (existing_bii_index >= 0) { // overwriting
-						briefing_icon_info bii = parse_briefing_icons();
-						if (icon_type >= 0 && spinfo_index >= 0)
-							Briefing_icon_info[existing_bii_index] = bii;
+						Briefing_icon_info[existing_bii_index] = parse_briefing_icons();
 					} else { // adding a new one
-						int new_bii_index = add_briefing_icons();
-						if (icon_type >= 0 && spinfo_index >= 0)
-							existing_bii_index = new_bii_index;
+						existing_bii_index = add_briefing_icons();
 					}
 
 				}

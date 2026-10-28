@@ -689,28 +689,29 @@ void message_frequency_parse()
 	required_string("$Name:");
 	stuff_string(name, F_NAME, NAME_LENGTH);
 	int builtin_type = get_builtin_message_type(name);
-	if (builtin_type == MESSAGE_NONE) {
+	// an unknown type still has its values read, so the parse can continue, but they are not used
+	bool valid = (builtin_type != MESSAGE_NONE);
+	if (!valid) {
 		Warning(LOCATION, "Unknown Builtin Message Type Detected. Type : %s not supported", name);
-		return;
 	}
 
 	if (optional_string("+Occurrence Chance:")) {
 		stuff_int(&occurrence_chance); 
-		if ((occurrence_chance >= 0) && (occurrence_chance <= 100)) {
+		if (valid && (occurrence_chance >= 0) && (occurrence_chance <= 100)) {
 			Builtin_messages[builtin_type].occurrence_chance = occurrence_chance;
 		}
 	}
 
 	if (optional_string("+Maximum Count:")) {
 		stuff_int(&max_count); 
-		if (max_count > -2) {
+		if (valid && max_count > -2) {
 			Builtin_messages[builtin_type].max_count = max_count;
 		}
 	}
 
 	if (optional_string("+Minimum Delay:")) {
 		stuff_int(&min_delay); 
-		if (min_delay > -1) {
+		if (valid && min_delay > -1) {
 			Builtin_messages[builtin_type].min_delay = min_delay;
 		}
 	}	
@@ -854,7 +855,7 @@ void parse_msgtbl(const char* filename)
 		}
 
 		if (optional_string("#Message Frequencies")) {
-			while (!required_string_one_of(3, "$Name:", "#Personas", "#Moods" )) {
+			while (required_string_one_of(5, "$Name:", "#Moods", "#Personas", "#Messages", "#End") == 0) {
 				message_frequency_parse();
 			}
 		}
@@ -865,7 +866,7 @@ void parse_msgtbl(const char* filename)
 		}
 
 		if (optional_string("#Personas")) {
-			while (required_string_one_of(3, "#Messages", "$Persona:", "#End")) {
+			while (required_string_one_of(3, "$Persona:", "#Messages", "#End") == 0) {
 				persona_parse();
 			}
 		}

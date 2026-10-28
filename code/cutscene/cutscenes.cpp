@@ -91,7 +91,6 @@ void parse_cutscene_table(const char* filename)
 	cutscene_info_init(&csnt);
 
 	cutscene_info *csnp;
-	bool create_if_not_found = true;
 
 	try
 	{
@@ -107,6 +106,7 @@ void parse_cutscene_table(const char* filename)
 		while (required_string_either("#End", "$Filename:"))
 		{
 			bool csn_new = false;
+			bool create_if_not_found = true;
 			
 			required_string("$Filename:");
 			stuff_string(csnt.filename, F_PATHNAME, MAX_FILENAME_LEN);
@@ -167,12 +167,6 @@ void parse_cutscene_table(const char* filename)
 
 			if (csn_new) {
 				csnp->flags.reset();
-			}
-
-			if (Cutscenes.empty())
-			{
-				// The original code assumes the first movie is the intro, so make it viewable
-				csnp->flags.set(Cutscene::Cutscene_Flags::Viewable);
 			}
 
 			if (optional_string("$Always Viewable:"))

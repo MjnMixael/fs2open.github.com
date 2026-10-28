@@ -824,8 +824,9 @@ void parse_gamesnd_soundset(game_snd* gs, bool no_create) {
 
 		stuff_int(&gs->max);
 	}
-	else
+	else if (!no_create)
 	{
+		// a new sound without 3D settings; an edit (+nocreate) keeps the sound's existing ones
 		gs->min = 0;
 		gs->max = 0;
 	}
@@ -939,8 +940,9 @@ void parse_gamesnd_new(game_snd* gs, bool no_create)
 
 		stuff_int(&gs->max);
 	}
-	else
+	else if (!no_create)
 	{
+		// a new sound without 3D settings; an edit (+nocreate) keeps the sound's existing ones
 		gs->min = 0;
 		gs->max = 0;
 	}

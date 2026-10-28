@@ -1210,7 +1210,7 @@ void send_autopilot_msg(const char *msg, const char *snd)
 		change_message("autopilot builtin message", msg, -1, 0);
 
 	// load sound
-	if ((snd != NULL) && (snd[0] != '\0' && !strcmp(snd, "none")))
+	if ((snd != NULL) && (snd[0] != '\0' && strcmp(snd, "none") != 0))
 	{
 		audio_handle = audiostream_open(snd, ASF_MENUMUSIC );
 	}

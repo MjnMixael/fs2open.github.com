@@ -5524,8 +5524,8 @@ static void parse_ship_values(ship_info* sip, const bool is_template, const bool
 					size_t j;
 					for(j = 0; j < num_groups; j++) {
 						if ( !stricmp(Ai_tp_list[j].name, tgt_priorities[i].c_str()))  {
-							sp->target_priority[i] = (int)j;
-							sp->num_target_priorities++;
+							// next free slot, so an unknown group doesn't leave a gap
+							sp->target_priority[sp->num_target_priorities++] = (int)j;
 							break;
 						}
 					}
@@ -21542,8 +21542,8 @@ void parse_weapon_targeting_priorities()
 					size_t j;
 					for(j = 0; j < num_groups; j++) {
 						if ( !stricmp(Ai_tp_list[j].name, tgt_priorities[i].c_str()))  {
-							wip->targeting_priorities[i] = (int)j;
-							wip->num_targeting_priorities++;
+							// next free slot, so an unknown group doesn't leave a gap
+							wip->targeting_priorities[wip->num_targeting_priorities++] = (int)j;
 							break;
 						}
 					}

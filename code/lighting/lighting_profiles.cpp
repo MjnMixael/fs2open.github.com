@@ -367,7 +367,11 @@ void profile::parse(const char* filename, const SCP_string& profile_name, const 
 		if (optional_string("$Tonemapper:")) {
 			stuff_string(buffer, F_NAME);
 			TonemapperAlgorithm tn = name_to_tonemapper(buffer);
-			tonemapper = tn;
+			if (tn == TonemapperAlgorithm::Invalid) {
+				Warning(LOCATION, "Unknown tonemapper '%s' in lighting profile '%s'; keeping '%s'.", buffer.c_str(), profile_name.c_str(), tonemapper_to_name(tonemapper).c_str());
+			} else {
+				tonemapper = tn;
+			}
 			parsed = true;
 		}
 		if (optional_string("$Non-mission lighting profile:")) {

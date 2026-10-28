@@ -232,9 +232,9 @@ static bool global_condition_valid(const script_condition& condition)
 		size_t len = strlen(Campaign.filename);
 		if (!len)
 			return false;
-		if (len > 4 && !stricmp(&Mission_filename[len - 4], ".fc2"))
+		if (len > 4 && !stricmp(&Campaign.filename[len - 4], ".fc2"))
 			len -= 4;
-		if (strnicmp(condition.condition_string.c_str(), Mission_filename, len) != 0)
+		if (strnicmp(condition.condition_string.c_str(), Campaign.filename, len) != 0)
 			return false;
 		break;
 	}
@@ -312,7 +312,10 @@ int cache_condition(ConditionalType type, const SCP_string& value){
 		return gameseq_get_state_idx(value.c_str());
 	case CHC_VERSION:
 	{
-		return gameversion::parse_version_inline() == gameversion::get_executable_version() ? 1 : 0;
+		// the value has already been read into 'value'; match major.minor.build exactly
+		const gameversion::version wanted(value, 0);
+		const auto exe = gameversion::get_executable_version();
+		return (wanted.major == exe.major && wanted.minor == exe.minor && wanted.build == exe.build) ? 1 : 0;
 	}
 	case CHC_APPLICATION:
 	{

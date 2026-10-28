@@ -240,19 +240,30 @@ void Curve::ParseData()
 			}
 		}
 
-		if (valid_keyframe && keyframes.size() > 0 && kframe.pos.x < keyframes.back().pos.x) {
-			Warning(LOCATION, "The keyframe (%f,%f) of Curve '%s' has a smaller x value than the previous keyframe. They must increase in order. Skipping this keyframe...", 
-				kframe.pos.x, kframe.pos.y, name.c_str());
-		} else {
-			keyframes.push_back(kframe);
+		// an invalid keyframe was already warned about above, and is skipped
+		if (valid_keyframe) {
+			if (keyframes.size() > 0 && kframe.pos.x < keyframes.back().pos.x) {
+				Warning(LOCATION, "The keyframe (%f,%f) of Curve '%s' has a smaller x value than the previous keyframe. They must increase in order. Skipping this keyframe...", 
+					kframe.pos.x, kframe.pos.y, name.c_str());
+			} else {
+				keyframes.push_back(kframe);
+			}
 		}
 
+		// the last curve in the table ends here; it still gets the checks below
 		if (optional_string("#End"))
-			return;
+			break;
 
 	} while (!check_for_string("$Name:"));
 
-	if (keyframes.back().pos.x < 1.0f) {
+	if (keyframes.empty()) {
+		Warning(LOCATION, "Curve '%s' has no valid keyframes. A (1, 1) point has been added.", name.c_str());
+		curve_keyframe kframe;
+		kframe.interp_func = CurveInterpFunction::Constant;
+		kframe.pos.x = 1.0f;
+		kframe.pos.y = 1.0f;
+		keyframes.push_back(kframe);
+	} else if (keyframes.back().pos.x < 1.0f) {
 		Warning(LOCATION, "The last keyframe of Curve '%s' has an x value less then 1. A (1, 1) point has been added.", name.c_str());
 		curve_keyframe kframe;
 		kframe.interp_func = CurveInterpFunction::Constant;

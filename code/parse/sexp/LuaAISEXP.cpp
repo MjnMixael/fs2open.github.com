@@ -171,13 +171,34 @@ void LuaAISEXP::parseTable() {
 		}
 
 		if (optional_string("+Target Restrictions:")) {
-			int result = optional_string_one_of(9, "Allies", "All", "Own Team", "Hostiles", "Same Wing", "Player Wing", "Capitals", "Allied Capitals", "Enemy Capitals", "Not Self");
-			if (result == -1) {
-				error_display(0, "Unknown target restriction for player order %s. Assuming \"All\".", order.displayText.c_str());
-				order.targetRestrictions = player_order_lua::target_restrictions::TARGET_ALL;
+			using restrictions = player_order_lua::target_restrictions;
+			// optional_string() matches the start of the text, so a name has to come before any shorter name it starts with
+			// (e.g. "Allied Capitals" before "All")
+			static const std::pair<const char*, restrictions> target_restriction_names[] = {
+				{"Allied Capitals", restrictions::TARGET_ALLIED_CAPS},
+				{"Allies", restrictions::TARGET_ALLIES},
+				{"All", restrictions::TARGET_ALL},
+				{"Own Team", restrictions::TARGET_OWN},
+				{"Hostiles", restrictions::TARGET_ENEMIES},
+				{"Same Wing", restrictions::TARGET_SAME_WING},
+				{"Player Wing", restrictions::TARGET_PLAYER_WING},
+				{"Capitals", restrictions::TARGET_ALL_CAPS},
+				{"Enemy Capitals", restrictions::TARGET_ENEMY_CAPS},
+				{"Not Self", restrictions::TARGET_NOT_SELF},
+			};
+
+			bool found = false;
+			for (const auto& restriction : target_restriction_names) {
+				if (optional_string(restriction.first)) {
+					order.targetRestrictions = restriction.second;
+					found = true;
+					break;
+				}
 			}
-			else {
-				order.targetRestrictions = static_cast<player_order_lua::target_restrictions>(result);
+			if (!found) {
+				error_display(0, "Unknown target restriction for player order %s. Assuming \"All\".", order.displayText.c_str());
+				order.targetRestrictions = restrictions::TARGET_ALL;
+				advance_to_eoln(nullptr);
 			}
 		}
 

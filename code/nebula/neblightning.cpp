@@ -374,7 +374,9 @@ void parse_lightning_table(const char* filename)
 					stuff_string(storm_p->bolt_types_n[storm_p->num_bolt_types], F_NAME, NAME_LENGTH);
 					storm_p->num_bolt_types++;
 				} else {
-					error_display(0, "Storm %s already has %i bolts. Ignoring bolt %s!", storm_p->name, MAX_BOLT_TYPES_PER_STORM, name);
+					char extra_bolt[NAME_LENGTH];
+					stuff_string(extra_bolt, F_NAME, NAME_LENGTH);
+					error_display(0, "Storm %s already has %i bolts. Ignoring bolt %s!", storm_p->name, MAX_BOLT_TYPES_PER_STORM, extra_bolt);
 				}
 			}
 
