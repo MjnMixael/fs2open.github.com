@@ -228,7 +228,7 @@ public:
 	SCP_string	recommendation_text;
 
 	debrief_stage( ) 
-		: formula( -1 ), text( ), note( ),
+		: formula( -1 ), text( ),
 		  recommendation_text( )
 	{ 
 		voice[ 0 ] = 0;
