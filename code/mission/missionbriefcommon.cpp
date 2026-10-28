@@ -1671,6 +1671,16 @@ void brief_cancel_pending_highlight_anims()
 	Play_highlight_flag = 0;
 }
 
+// The editors only draw a preview of briefing text. A mod's own UI (SCPUI, for one) may give $ sequences a
+// meaning the color tags don't have, so in the editors an unknown tag goes to the log instead of a warning popup.
+static void brief_warn_invalid_color_tag(const char* tag)
+{
+	if (Fred_running) {
+		mprintf(("Invalid text color tag '$%s' used in mission: '%s'.\n", tag, Mission_filename));
+	} else {
+		Warning(LOCATION, "Invalid text color tag '$%s' used in mission: '%s'.\n", tag, Mission_filename);
+	}
+}
 
 bool brief_verify_color_tag(unicode::codepoint_t color_tag)
 {
@@ -1680,13 +1690,14 @@ bool brief_verify_color_tag(unicode::codepoint_t color_tag)
 		SCP_string tag_str;
 		unicode::encode(color_tag, std::back_inserter(tag_str));
 
-		Warning(LOCATION, "Invalid text color tag '$%s' used in mission: '%s'.\n", tag_str.c_str(), Mission_filename);
+		brief_warn_invalid_color_tag(tag_str.c_str());
 		return false;
 	}
 	char char_tag = (char)color_tag;
 
 	if ( Tagged_Colors.find(char_tag) == Tagged_Colors.end() ) {
-		Warning(LOCATION, "Invalid text color tag '$%c' used in mission: '%s'.\n", char_tag, Mission_filename);
+		const char tag_str[2] = { char_tag, '\0' };
+		brief_warn_invalid_color_tag(tag_str);
 		return false;
 	}
 	return true;
@@ -1706,17 +1717,6 @@ bool is_a_word_separator(unicode::codepoint_t character)
 {
 	return character <= 32; // all control characters including space, newline, and tab
 }
-
-// The localization escapes that lcl_replace_stuff() turns back into characters
-static const struct {
-	const char* token;
-	char replacement;
-} Brief_text_escapes[] = {
-	{ "$backslash", '\\' },
-	{ "$semicolon", ';' },
-	{ "$quote", '"' },
-	{ "$slash", '/' },
-};
 
 /**
  * Builds a vector of colored characters from a string containing color markups
@@ -1746,28 +1746,9 @@ int brief_text_colorize(char *src, int instance, char default_color_stack[], int
 	auto end_iter = std::end(range);
 	for (auto iter = std::begin(range); iter != end_iter; ++iter)
 	{
-		unicode::codepoint_t letter = *iter;
-
-		// The localization escapes ($slash and the rest; see lcl_replace_stuff()) are the character they stand
-		// for, not a color tag followed by text. Briefing text is never run through lcl_replace_stuff(), so
-		// without this "$slash" would be read as the color tag 's'.
-		bool escaped = false;
-		if (*iter == BRIEF_META_CHAR) {
-			for (const auto& escape : Brief_text_escapes) {
-				const size_t len = strlen(escape.token);
-				if (!strncmp(iter.pos(), escape.token, len)) {
-					for (size_t k = 1; k < len; ++k)
-						++iter; // stop on the token's last character; the for loop moves past it
-					letter = static_cast<unicode::codepoint_t>(escape.replacement);
-					escaped = true;
-					break;
-				}
-			}
-		}
-
 		// Is the character a color markup?
 		// text markup consists of a '$' plus a character plus an optional space
-		if (!escaped && iter + 1 != end_iter  && *iter == BRIEF_META_CHAR)
+		if (iter + 1 != end_iter  && *iter == BRIEF_META_CHAR)
 		{
 			++iter;   // Consume the $ character
 
@@ -1819,12 +1800,12 @@ int brief_text_colorize(char *src, int instance, char default_color_stack[], int
  		}
 
 		// When the word is terminated, reset color to default
-		if ( (is_white_space(letter) ) || ( is_a_word_separator(letter) ))
+		if ( (is_white_space(*iter) ) || ( is_a_word_separator(*iter) ))
 			active_color_index = default_color_stack[color_stack_index];
 
 		// Append the character to the result structure
 		colored_char dest;
-		dest.letter = letter;
+		dest.letter = *iter;
 		dest.color = active_color_index;
 		dest_line.push_back(dest);
 	} 
