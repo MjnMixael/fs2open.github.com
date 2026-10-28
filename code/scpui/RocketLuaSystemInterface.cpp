@@ -58,18 +58,24 @@ void RocketLuaSystemInterface::PrepareFunction(lua_State* L, int funcIdx, Rocket
 		return;
 	}
 
+	auto document = context->GetOwnerDocument();
+	if (document == nullptr) {
+		// A context's root element has no document (e.g. a listener added with context:AddEventListener and no
+		// element), so there is no document environment; the function keeps its own environment
+		return;
+	}
+
 	// To ensure consistent stack indices even for relative funcIdx values
 	auto top = lua_gettop(L);
 	lua_pushvalue(L, funcIdx);
 
-	auto envTable =
-		static_cast<LuaTableReference*>(context->GetOwnerDocument()->GetUserValue(LuaEnvironmentIdentifier));
+	auto envTable = static_cast<LuaTableReference*>(document->GetUserValue(LuaEnvironmentIdentifier));
 
 	if (envTable == nullptr) {
 		auto reference = std::make_unique<LuaTableReference>(createEnvironment(L));
 		envTable = reference.get();
 
-		context->GetOwnerDocument()->PutUserValue(LuaEnvironmentIdentifier, std::move(reference));
+		document->PutUserValue(LuaEnvironmentIdentifier, std::move(reference));
 	}
 
 	// Set the table as the environment of the function

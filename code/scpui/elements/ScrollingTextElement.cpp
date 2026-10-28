@@ -37,7 +37,7 @@ void ScrollingTextElement::OnAttributeChange(const AttributeNameList& changed_at
 {
 	Element::OnAttributeChange(changed_attributes);
 
-	if (changed_attributes.find("duration") == changed_attributes.end()) {
+	if (changed_attributes.find("duration") != changed_attributes.end()) {
 		_duration = GetAttribute<float>("duration", _duration);
 	}
 }

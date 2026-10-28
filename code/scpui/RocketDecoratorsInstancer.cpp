@@ -33,9 +33,10 @@ Rocket::Core::Decorator* UnderlineDecoratorInstancer::InstanceDecorator(const Ro
 		style = static_cast<LineStyle>(style_idx);
 	}
 
-	auto thickness = prop_dict.GetProperty("thickness")->Get<float>();
-	auto length = prop_dict.GetProperty("length")->Get<float>();
-	auto space = prop_dict.GetProperty("space")->Get<float>();
+	// Lengths are passed with their units so the decorator can resolve them per element
+	const auto& thickness = *prop_dict.GetProperty("thickness");
+	const auto& length = *prop_dict.GetProperty("length");
+	const auto& space = *prop_dict.GetProperty("space");
 	Rocket::Core::Colourb color = prop_dict.GetProperty("color")->Get<Rocket::Core::Colourb>();
 	bool use_element_color = prop_dict.GetProperty("color-setting")->Get<int>();
 
@@ -58,8 +59,10 @@ BorderDecoratorInstancer::BorderDecoratorInstancer()
 	// Register border properties
 	RegisterProperty("thickness", "1.0").AddParser("number");
 	RegisterProperty("length", "10.0").AddParser("number");
-	RegisterProperty("length-h", "10.0").AddParser("number");
-	RegisterProperty("length-v", "10.0").AddParser("number");
+	// libRocket fills in every registered property's default before instancing, so the -1 default marks
+	// "not specified" and the decorator falls back to "length"
+	RegisterProperty("length-h", "-1").AddParser("number");
+	RegisterProperty("length-v", "-1").AddParser("number");
 	RegisterProperty("color", "white").AddParser("color");
 
 	RegisterShorthand("shorthand", "thickness, length-h, length-v");
@@ -68,15 +71,16 @@ BorderDecoratorInstancer::BorderDecoratorInstancer()
 Rocket::Core::Decorator* BorderDecoratorInstancer::InstanceDecorator(const Rocket::Core::String& /*name*/,
 	const Rocket::Core::PropertyDictionary& prop_dict)
 {
-	auto thickness = prop_dict.GetProperty("thickness")->Get<float>();
+	// Lengths are passed with their units so the decorator can resolve them per element
+	const auto& thickness = *prop_dict.GetProperty("thickness");
+	const auto& length = *prop_dict.GetProperty("length");
 
-	// Check if horizontal or vertical lengths are defined, and fallback to "length" if needed
-	float length_h = prop_dict.GetProperty("length-h")
-								? prop_dict.GetProperty("length-h")->Get<float>()
-								: prop_dict.GetProperty("length")->Get<float>();
-	float length_v = prop_dict.GetProperty("length-v")
-								? prop_dict.GetProperty("length-v")->Get<float>()
-								: prop_dict.GetProperty("length")->Get<float>();
+	// Use horizontal or vertical lengths if they were specified, and fall back to "length" otherwise
+	auto specified = [](const Rocket::Core::Property& prop) { return prop.Get<float>() >= 0.0f; };
+	const auto& length_h_prop = *prop_dict.GetProperty("length-h");
+	const auto& length_v_prop = *prop_dict.GetProperty("length-v");
+	const auto& length_h = specified(length_h_prop) ? length_h_prop : length;
+	const auto& length_v = specified(length_v_prop) ? length_v_prop : length;
 
 	// Fetch the border color, defaults to white if not set
 	Rocket::Core::Colourb color = prop_dict.GetProperty("color")->Get<Rocket::Core::Colourb>();

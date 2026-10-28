@@ -14,6 +14,7 @@
 #include <Rocket/Core/Element.h>
 #include <Rocket/Core/Geometry.h>
 #include <Rocket/Core/GeometryUtilities.h>
+#include <Rocket/Core/Property.h>
 
 #ifdef __GNUC__
 #pragma GCC diagnostic pop
@@ -34,7 +35,8 @@ enum class LineStyle {
 class DecoratorUnderline : public Rocket::Core::Decorator {
   public:
 	// Constructor to accept properties
-	DecoratorUnderline(float line_thickness, LineStyle line_style, float line_length, float line_space, Rocket::Core::Colourb line_color, bool use_element_color);
+	// Lengths keep their units and are resolved against each decorated element's content width when rendering
+	DecoratorUnderline(const Rocket::Core::Property& line_thickness, LineStyle line_style, const Rocket::Core::Property& line_length, const Rocket::Core::Property& line_space, Rocket::Core::Colourb line_color, bool use_element_color);
 	~DecoratorUnderline() override;
 
 	// Called to generate per-element data for newly decorated elements.
@@ -47,10 +49,10 @@ class DecoratorUnderline : public Rocket::Core::Decorator {
 	void RenderElement(Rocket::Core::Element* element, Rocket::Core::DecoratorDataHandle element_data) override;
 
   private:
-	float line_thickness;
+	Rocket::Core::Property line_thickness;
 	LineStyle line_style;
-	float line_length;
-	float line_space;
+	Rocket::Core::Property line_length;
+	Rocket::Core::Property line_space;
 	Rocket::Core::Colourb line_color;
 	bool use_element_color;
 };
@@ -58,7 +60,9 @@ class DecoratorUnderline : public Rocket::Core::Decorator {
 class DecoratorCornerBorders : public Rocket::Core::Decorator {
   public:
 	// Constructor to accept properties
-	DecoratorCornerBorders(float border_thickness, float border_length_h, float border_length_v, Rocket::Core::Colourb border_color);
+	// Lengths keep their units and are resolved against each decorated element's content box when rendering:
+	// thickness and the horizontal length against its width, the vertical length against its height
+	DecoratorCornerBorders(const Rocket::Core::Property& border_thickness, const Rocket::Core::Property& border_length_h, const Rocket::Core::Property& border_length_v, Rocket::Core::Colourb border_color);
 	~DecoratorCornerBorders() override;
 
 	// Called to generate per-element data for newly decorated elements.
@@ -71,9 +75,9 @@ class DecoratorCornerBorders : public Rocket::Core::Decorator {
 	void RenderElement(Rocket::Core::Element* element, Rocket::Core::DecoratorDataHandle element_data) override;
 
   private:
-	float border_thickness;
-	float border_length_h;
-	float border_length_v;
+	Rocket::Core::Property border_thickness;
+	Rocket::Core::Property border_length_h;
+	Rocket::Core::Property border_length_v;
 	Rocket::Core::Colourb border_color;
 };
 

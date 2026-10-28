@@ -58,9 +58,15 @@ SoundDefinition parse_sound_value(const String& value)
 			if (saw_default) {
 				throw std::runtime_error("Multiple default sounds specified!");
 			}
+			saw_default = true;
+
+			// "none" (or the property's registered default of -1) means no default sound, so a rule can turn off a
+			// sound set by a broader one
+			if (part == "none" || part == "-1") {
+				continue;
+			}
 
 			def.default_id = gamesnd_get_by_iface_name(part.c_str());
-			saw_default    = true;
 
 			if (!def.default_id.isValid()) {
 				throw std::runtime_error("Default sound has an invalid name!");
@@ -117,6 +123,11 @@ bool SoundPlugin::PlayElementSound(Element* element, const String& event, const 
 	auto property_name = event + "-sound";
 
 	const Property* sound_prop = element->GetProperty(property_name);
+
+	// Not one of the registered sound events (Lua can pass any event name)
+	if (sound_prop == nullptr) {
+		return false;
+	}
 
 	if (!(sound_prop->unit & Property::STRING)) {
 		// sounds are stored as their original string values which are then parsed whenever necessary
