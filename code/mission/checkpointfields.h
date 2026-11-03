@@ -83,7 +83,8 @@
 	F(tag_left)                                                                                \
 	F(level2_tag_total)                                                                        \
 	F(level2_tag_left)                                                                         \
-	F(alpha_mult)
+	F(alpha_mult)                                                                              \
+	F(max_guard_radius)
 
 // current_cmeasure (a weapon class index), persona_index (an index into Personas, built from
 // messages.tbl), subsys_cargo_name / cargo1 (indices into Cargo_names, which set-cargo extends
@@ -141,6 +142,9 @@
 	F(next_corkscrew_fire)                                                                     \
 	F(arrival_delay)                                                                           \
 	F(departure_delay)
+
+// afterburner_last_end_time is a stamp too, but a TIMESTAMP rather than an int, which the macros
+// cannot cast; store_ship_scalars() and load_ship_scalars() handle it by hand under the same name.
 
 // ------------------------------------------------------------------
 // ship_subsys -- see code/ship/ship.h

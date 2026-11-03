@@ -855,7 +855,12 @@ int lookup_damage_type(const SCP_string& name)
 // the instance only holds bitmap ids, but the model still knows each slot's original texture and
 // bmpman knows every loaded bitmap's filename.  "invisible" is the engine's own spelling for a
 // texture switched off, and is what the replace-texture SEXP accepts back.
-void capture_instance_textures(int model_instance_num, SCP_vector<SCP_string>& out_old, SCP_vector<SCP_string>& out_new)
+//
+// skip_bitmap is a ship's nameplate.  A generated one is a render target whose "filename" is only
+// its size, so loading it back by name picks up whichever nameplate of that size comes first; the
+// mission load applies the right one anyway, and nothing changes a nameplate during play.
+void capture_instance_textures(int model_instance_num, SCP_vector<SCP_string>& out_old, SCP_vector<SCP_string>& out_new,
+                               int skip_bitmap = -1)
 {
 	polymodel_instance* pmi = (model_instance_num >= 0) ? model_get_instance(model_instance_num) : nullptr;
 	if (pmi == nullptr || pmi->texture_replace == nullptr) {
@@ -869,7 +874,7 @@ void capture_instance_textures(int model_instance_num, SCP_vector<SCP_string>& o
 	for (int j = 0; j < pm->n_textures; j++) {
 		for (int t = 0; t < TM_NUM_TYPES; t++) {
 			int replacement = (*pmi->texture_replace)[j * TM_NUM_TYPES + t];
-			if (replacement == -1) {
+			if (replacement == -1 || (skip_bitmap >= 0 && replacement == skip_bitmap)) {
 				continue;
 			}
 			int original = pm->maps[j].textures[t].GetOriginalTexture();
@@ -1095,6 +1100,7 @@ void store_ship_scalars(const ship& obj, SCP_map<SCP_string, float>& out_floats,
 		CKPT_SHIP_INTS(CKPT_STORE_INT)
 		CKPT_SHIP_STAMPS(CKPT_STORE_INT)
 		CKPT_SHIP_MISSION_TIMES(CKPT_STORE_INT)
+		out["afterburner_last_end_time"] = obj.afterburner_last_end_time.value();
 	}
 }
 
@@ -1109,6 +1115,11 @@ void load_ship_scalars(ship& obj, const SCP_map<SCP_string, float>& in_floats, c
 		CKPT_SHIP_INTS(CKPT_LOAD_INT)
 		CKPT_SHIP_STAMPS(CKPT_LOAD_STAMP)
 		CKPT_SHIP_MISSION_TIMES(CKPT_LOAD_INT)
+
+		auto it = in.find("afterburner_last_end_time");
+		if (it != in.end()) {
+			obj.afterburner_last_end_time = TIMESTAMP(translate_stamp(it->second));
+		}
 	}
 }
 
@@ -1201,6 +1212,7 @@ void store_weapons(const ship_weapon& swp, weapon_state& out)
 		bank.rearm_time = swp.primary_bank_rearm_time[i];
 		bank.burst_counter = swp.burst_counter[i];
 		bank.burst_seed = swp.burst_seed[i];
+		bank.substitution_index = static_cast<int>(swp.primary_bank_substitution_pattern_index[i]);
 		out.primary_banks.push_back(std::move(bank));
 	}
 
@@ -1217,6 +1229,7 @@ void store_weapons(const ship_weapon& swp, weapon_state& out)
 		bank.rearm_time = swp.secondary_bank_rearm_time[i];
 		bank.burst_counter = swp.burst_counter[MAX_SHIP_PRIMARY_BANKS + i];
 		bank.burst_seed = swp.burst_seed[MAX_SHIP_PRIMARY_BANKS + i];
+		bank.substitution_index = static_cast<int>(swp.secondary_bank_substitution_pattern_index[i]);
 		out.secondary_banks.push_back(std::move(bank));
 	}
 
@@ -1282,6 +1295,7 @@ void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes
 		swp.primary_bank_rearm_time[i] = translate_stamp(bank.rearm_time);
 		swp.burst_counter[i] = bank.burst_counter;
 		swp.burst_seed[i] = bank.burst_seed;
+		swp.primary_bank_substitution_pattern_index[i] = static_cast<size_t>(MAX(bank.substitution_index, 0));
 	}
 
 	int num_secondaries = MIN(swp.num_secondary_banks, static_cast<int>(in.secondary_banks.size()));
@@ -1308,6 +1322,7 @@ void load_weapons(ship_weapon& swp, const weapon_state& in, bool restore_classes
 		swp.secondary_bank_rearm_time[i] = translate_stamp(bank.rearm_time);
 		swp.burst_counter[MAX_SHIP_PRIMARY_BANKS + i] = bank.burst_counter;
 		swp.burst_seed[MAX_SHIP_PRIMARY_BANKS + i] = bank.burst_seed;
+		swp.secondary_bank_substitution_pattern_index[i] = static_cast<size_t>(MAX(bank.substitution_index, 0));
 	}
 
 	apply_flags(in.flags, Weapon_flag_table, swp.flags);
@@ -5145,6 +5160,9 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in, bool ke
 
 		apply_flags(state.flags, Subsys_flag_table, subsys->flags);
 		float fresh_max_hits = subsys->max_hits;
+		// The mission load blows off a subsystem the file starts destroyed, so one repaired since
+		// has to be put back below.
+		bool was_destroyed = subsys->current_hits <= 0.0f;
 		load_subsys_scalars(*subsys, state.floats, state.ints);
 		if (keep_class_maxima) {
 			subsys->current_hits = (subsys->max_hits > 0.0f) ? subsys->current_hits / subsys->max_hits * fresh_max_hits : fresh_max_hits;
@@ -5222,6 +5240,8 @@ void load_subsystems(ship* shipp, const SCP_vector<subsystem_state>& in, bool ke
 				subsys->submodel_instance_2->blown_off = true;
 			}
 			check_subsystem_submodel_link(shipp, subsys, true);
+		} else if (was_destroyed && subsys->current_hits > 0.0f) {
+			restore_subsystem_submodels(shipp, subsys);
 		}
 
 		if (state.has_weapons) {
@@ -5599,7 +5619,9 @@ bool mission_checkpoint_store(const SCP_string& slot)
 		state.special_warpout_ship = ship_name_for_objnum(shipp->special_warpout_objnum);
 
 		state.glow_banks.assign(shipp->glow_point_bank_active.begin(), shipp->glow_point_bank_active.end());
-		capture_instance_textures(shipp->model_instance_num, state.texture_old, state.texture_new);
+		capture_instance_textures(shipp->model_instance_num, state.texture_old, state.texture_new, shipp->nameplate_bm_handle);
+		state.custom_data_present = true;
+		state.custom_data = shipp->custom_data;
 		state.collision_group_id = objp->collision_group_id;
 
 		state.team_color = shipp->team_name;
@@ -5948,6 +5970,8 @@ bool mission_checkpoint_store(const SCP_string& slot)
 			state.texture_old.emplace_back(tr.old_texture);
 			state.texture_new.emplace_back(tr.new_texture);
 		}
+		state.custom_data_present = true;
+		state.custom_data = p_objp->custom_data;
 		store_iff_colors(p_objp->alt_iff_color, state.iff_colors);
 
 		collect_def_flags(p_objp->flags, Parse_object_flags, Num_parse_object_flags, state.flags);
@@ -6741,6 +6765,9 @@ void apply_ship(const ship_state& state, bool skip_loadout)
 	for (size_t i = 0; i < state.texture_old.size() && i < state.texture_new.size(); i++) {
 		ship_replace_active_texture(entry->shipnum, state.texture_old[i].c_str(), state.texture_new[i].c_str());
 	}
+	if (state.custom_data_present) {
+		shipp->custom_data = state.custom_data;
+	}
 	objp->collision_group_id = state.collision_group_id;
 
 	shipp->team_name = state.team_color;
@@ -7207,6 +7234,9 @@ void apply_parse_objects(const checkpoint_data& data)
 			p_objp->replacement_textures.push_back(tr);
 		}
 		load_iff_colors(state.iff_colors, p_objp->alt_iff_color);
+		if (state.custom_data_present) {
+			p_objp->custom_data = state.custom_data;
+		}
 		if (!state.cargo.empty()) {
 			int cargo = lookup_cargo(state.cargo);
 			if (state.cargo_no_deplete) {
