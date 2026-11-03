@@ -132,6 +132,8 @@ struct weapon_bank {
 	int rearm_time = 0;
 	int burst_counter = 0;
 	int burst_seed = 0;
+	// Where the bank is in its weapon substitution pattern; the firing code wraps it, so any value is safe.
+	int substitution_index = 0;
 };
 
 struct weapon_state {
@@ -552,6 +554,11 @@ struct ship_state {
 	SCP_vector<SCP_string> orders_allowed_against;
 
 	SCP_vector<guard_range_state> guard_ranges;
+
+	// Instance custom data, which ship-custom-data-set and the Lua setters change.  Only replaced
+	// when custom_data_present: a checkpoint written before it was saved keeps the mission's values.
+	bool custom_data_present = false;
+	SCP_map<SCP_string, SCP_string> custom_data;
 	SCP_string special_warpout_ship;    // set-special-warpout-name: the Knossos, by name
 
 	SCP_vector<bool> glow_banks;
@@ -838,6 +845,8 @@ struct parse_object_state {
 	SCP_vector<SCP_string> texture_old;
 	SCP_vector<SCP_string> texture_new;
 	SCP_vector<iff_color_state> iff_colors;
+	bool custom_data_present = false;
+	SCP_map<SCP_string, SCP_string> custom_data;
 };
 
 // A piece of debris.

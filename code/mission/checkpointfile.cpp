@@ -339,6 +339,7 @@ void write_weapon_banks(pilot::FileHandler* handler, const char* name, const SCP
 		handler->writeInt("rearm_time", bank.rearm_time);
 		handler->writeInt("burst_counter", bank.burst_counter);
 		handler->writeInt("burst_seed", bank.burst_seed);
+		handler->writeInt("substitution_index", bank.substitution_index);
 		handler->endSectionWrite();
 	}
 	handler->endArrayWrite();
@@ -365,6 +366,7 @@ void read_weapon_banks(pilot::FileHandler* handler, const char* name, SCP_vector
 		bank.rearm_time = handler->readIntOr("rearm_time", 0);
 		bank.burst_counter = handler->readIntOr("burst_counter", 0);
 		bank.burst_seed = handler->readIntOr("burst_seed", 0);
+		bank.substitution_index = handler->readIntOr("substitution_index", 0);
 		banks.push_back(std::move(bank));
 	}
 	handler->endArrayRead();
@@ -1593,6 +1595,7 @@ void write_parse_objects(pilot::FileHandler* handler, const checkpoint::checkpoi
 		handler->writeString("team_color", p_obj.team_color.c_str());
 		write_string_list(handler, "texture_old", p_obj.texture_old);
 		write_string_list(handler, "texture_new", p_obj.texture_new);
+		write_string_map(handler, "custom_data", p_obj.custom_data);
 		write_iff_colors(handler, "iff_colors", p_obj.iff_colors);
 
 		write_string_list(handler, "flags", p_obj.flags);
@@ -1641,6 +1644,8 @@ void read_parse_objects(pilot::FileHandler* handler, checkpoint::checkpoint_data
 		p_obj.team_color = handler->readStringOr("team_color", "");
 		read_string_list(handler, "texture_old", p_obj.texture_old);
 		read_string_list(handler, "texture_new", p_obj.texture_new);
+		p_obj.custom_data_present = handler->hasField("custom_data");
+		read_string_map(handler, "custom_data", p_obj.custom_data);
 		read_iff_colors(handler, "iff_colors", p_obj.iff_colors);
 
 		read_string_list(handler, "flags", p_obj.flags);
@@ -1766,6 +1771,7 @@ void write_ships(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 			}
 			write_string_list(handler, "texture_old", ship_data.texture_old);
 			write_string_list(handler, "texture_new", ship_data.texture_new);
+			write_string_map(handler, "custom_data", ship_data.custom_data);
 			handler->writeInt("collision_group_id", ship_data.collision_group_id);
 			handler->writeString("team_color", ship_data.team_color.c_str());
 			handler->writeString("secondary_team_color", ship_data.secondary_team_color.c_str());
@@ -1899,6 +1905,8 @@ void read_ships(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 			}
 			read_string_list(handler, "texture_old", ship_data.texture_old);
 			read_string_list(handler, "texture_new", ship_data.texture_new);
+			ship_data.custom_data_present = handler->hasField("custom_data");
+			read_string_map(handler, "custom_data", ship_data.custom_data);
 			ship_data.collision_group_id = handler->readIntOr("collision_group_id", 0);
 			ship_data.team_color = handler->readStringOr("team_color", "");
 			ship_data.secondary_team_color = handler->readStringOr("secondary_team_color", "");
