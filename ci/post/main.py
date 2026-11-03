@@ -236,8 +236,10 @@ def main():
 			sys.exit(1)
 
 		if "Mac" not in groups.keys():
-			print("ERROR: No Mac builds were detected!")
-			sys.exit(1)
+			# Not fatal: GitHub regularly refuses macOS runners, and a release carrying the Linux
+			# and Windows builds is still worth posting. Mac packages can be added to the same
+			# Nebula release later with a metadata update.
+			print("WARNING: No Mac builds were detected! Posting release without them.")
 		
 		# z64: What dose this do???
 		# print(installer.render_installer_config(version, groups, config))

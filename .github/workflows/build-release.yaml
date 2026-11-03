@@ -481,6 +481,11 @@ jobs:
   post_build:
     name: Post builds to Nebula and Forum
     needs: [linux_zip, windows_zip, mac_zip]
+    # Post whatever got built. Mac jobs are regularly cancelled without ever starting
+    # when GitHub has no macOS runner to give; without this the Mac result would skip
+    # this job and the Linux and Windows packages would never reach Nebula either.
+    # !cancelled() still honors a manually cancelled run.
+    if: ${{ !cancelled() && needs.linux_zip.result == 'success' && needs.windows_zip.result == 'success' }}
     uses: ./.github/workflows/post-build-release.yaml
     with:
       linux_result: ${{ needs.linux_zip.result }}

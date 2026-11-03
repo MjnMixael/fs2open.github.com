@@ -408,6 +408,10 @@ jobs:
     # release_, so nothing in the release pipeline picks it up.
     name: Publish test build
     needs: [linux_zip, windows_zip, mac_zip]
+    # Publish whatever got built. Mac jobs are regularly cancelled without ever starting when
+    # GitHub has no macOS runner to give, which would otherwise skip this job and lose the
+    # Linux and Windows packages too. !cancelled() still honors a manually cancelled run.
+    if: ${{ !cancelled() && needs.linux_zip.result == 'success' && needs.windows_zip.result == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: write   # required to create the release and its tag
