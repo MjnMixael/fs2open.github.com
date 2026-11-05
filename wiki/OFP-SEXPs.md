@@ -12,6 +12,7 @@ A mission that uses anything on this page needs an OFP build. Stock FreeSpace Op
    1. [point-targeted](#point-targeted)
    2. [alter-point-flag](#alter-point-flag)
    3. [Ship custom data operators](#ship-custom-data-operators)
+   4. [fail-event](#fail-event)
 2. [Coordinate points in existing operators](#coordinate-points-in-existing-operators)
 3. [Props in existing operators](#props-in-existing-operators)
    1. [replace-texture](#replace-texture)
@@ -22,7 +23,7 @@ A mission that uses anything on this page needs an OFP build. Stock FreeSpace Op
 
 ## New operators
 
-`point-targeted` and `alter-point-flag` work on coordinate points: named locations in a mission that can be drawn in-game as a shape and targeted by the player. See [coordinate_points.tbl](coordinate_points.tbl) for their shapes and mission-file fields. The [ship custom data operators](#ship-custom-data-operators) read and change named values stored on ships.
+`point-targeted` and `alter-point-flag` work on coordinate points: named locations in a mission that can be drawn in-game as a shape and targeted by the player. See [coordinate_points.tbl](coordinate_points.tbl) for their shapes and mission-file fields. The [ship custom data operators](#ship-custom-data-operators) read and change named values stored on ships. [fail-event](#fail-event) forces events, usually directives, into a failed state.
 
 Category and subcategory are where each operator appears in the editor's operator menus.
 
@@ -38,6 +39,7 @@ Category and subcategory are where each operator appears in the editor's operato
 | [ship-custom-data-set-int](#ship-custom-data-set-int) | Action | Change | Ship Status |
 | [ship-custom-data-set-bool](#ship-custom-data-set-bool) | Action | Change | Ship Status |
 | [ship-custom-data-clear](#ship-custom-data-clear) | Action | Change | Ship Status |
+| [fail-event](#fail-event) | Action | Event/Goals | *(none; Event/Goals has no subcategories)* |
 
 ### point-targeted
 
@@ -192,6 +194,28 @@ Sets the key to exactly `true` or `false`, matching what qtFRED writes.
 ```
 
 Removes the key from each listed ship. Ships without the key are unaffected. To remove every key from a ship, use Lua's `ship:clearCustomData()`.
+
+### fail-event
+
+![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+
+**Category:** Event/Goals (no subcategory)
+
+```
+( fail-event <event> [<event> ...] )
+```
+
+Fails one or more events, as if their formulas had become known false. The usual use is failing a directive, which turns it red on the HUD, without the old trick of tying the directive to a hidden ship that departs or self-destructs.
+
+| # | Argument | Description |
+|---|---|---|
+| All | Events | One or more event names. At least one is **required.** |
+
+- A failed event is done: it is never evaluated again, `is-event-false` becomes true, and events chained after it never fire. It gives no score.
+- An event that is already done, or currently true, is left alone.
+- A directive the player hasn't reached yet (for example a chained directive whose earlier event isn't true) fails without appearing on the HUD.
+- An event can't fail itself, since its actions only run once it is true. The game skips that name with a warning, and qtFRED's error checker reports it.
+- In multiplayer, the change is sent to all clients.
 
 ---
 

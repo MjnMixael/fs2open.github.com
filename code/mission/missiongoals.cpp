@@ -866,6 +866,34 @@ void mission_event_unset_directive_special(int event)
 	Mission_directive_special_timestamp = TIMESTAMP::invalid();
 }
 
+bool mission_event_force_fail(int event)
+{
+	auto& ev = Mission_events[event];
+
+	// a satisfied event stays satisfied; a done one can't change
+	if ((ev.flags & MEF_EVENT_IS_DONE) || ev.result) {
+		return false;
+	}
+
+	// mission_get_event_status checks the wing-wave special state before failure
+	if (ev.flags & MEF_DIRECTIVE_SPECIAL) {
+		mission_event_unset_directive_special(event);
+	}
+
+	// the same state the known-false path in mission_process_event leaves.  MEF_CURRENT is
+	// left alone, so a directive the player hasn't reached yet fails without appearing.
+	ev.timestamp = _timestamp();
+	ev.flags &= ~MEF_TIMESTAMP_HAS_INTERVAL;
+	ev.satisfied_time = _timestamp();
+	ev.repeat_count = 0;
+	ev.flags |= MEF_EVENT_IS_DONE;
+
+	if (MULTIPLAYER_MASTER) {
+		send_event_update_packet(event);
+	}
+	return true;
+}
+
 void mission_event_set_completion_sound_timestamp()
 {
 	Mission_directive_sound_timestamp = _timestamp(DIRECTIVE_SOUND_DELAY);
