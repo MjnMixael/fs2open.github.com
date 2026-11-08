@@ -2211,7 +2211,7 @@ void MissionEventsDialog::on_btnEventFlags_clicked()
 		qtFlags.append({QString::fromUtf8(f.first.c_str()), f.second ? Qt::Checked : Qt::Unchecked});
 
 	QVector<std::pair<QString, QString>> qtDescs;
-	for (const auto& d : _model->getEventFlagDescriptions())
+	for (const auto& d : MissionEventsDialogModel::getEventFlagDescriptions())
 		qtDescs.append({QString::fromUtf8(d.first.c_str()), QString::fromUtf8(d.second.c_str())});
 
 	CheckBoxListDialog dlg(this);
@@ -2227,7 +2227,7 @@ void MissionEventsDialog::on_btnEventFlags_clicked()
 
 	const int index  = _model->getCurrentlySelectedEvent();
 	const int before = _model->getEventFlagBits();
-	const int after  = _model->eventFlagBitsFrom(result);
+	const int after  = MissionEventsDialogModel::eventFlagBitsFrom(result);
 	if (before == after)
 		return;
 
