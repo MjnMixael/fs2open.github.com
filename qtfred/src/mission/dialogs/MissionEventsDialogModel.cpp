@@ -890,7 +890,7 @@ SCP_vector<std::pair<SCP_string, bool>> MissionEventsDialogModel::getEventFlags(
 	return flags;
 }
 
-SCP_vector<std::pair<SCP_string, SCP_string>> MissionEventsDialogModel::getEventFlagDescriptions() const
+SCP_vector<std::pair<SCP_string, SCP_string>> MissionEventsDialogModel::getEventFlagDescriptions()
 {
 	SCP_vector<std::pair<SCP_string, SCP_string>> descriptions;
 	for (int i = 0; i < Num_mission_event_flags; ++i) {
@@ -911,7 +911,7 @@ int MissionEventsDialogModel::getEventFlagBits() const
 	return m_events[m_cur_event].flags & dialogEventFlagMask();
 }
 
-int MissionEventsDialogModel::eventFlagBitsFrom(const SCP_vector<std::pair<SCP_string, bool>>& flags) const
+int MissionEventsDialogModel::eventFlagBitsFrom(const SCP_vector<std::pair<SCP_string, bool>>& flags)
 {
 	int bits = 0;
 	for (const auto& flag : flags) {

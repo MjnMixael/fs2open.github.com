@@ -99,9 +99,9 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	// The saved event flags edited in the Event Flags dialog: every flag in
 	// Mission_event_flags except msecs, which has its own checkbox.
 	SCP_vector<std::pair<SCP_string, bool>> getEventFlags() const;
-	SCP_vector<std::pair<SCP_string, SCP_string>> getEventFlagDescriptions() const;
+	static SCP_vector<std::pair<SCP_string, SCP_string>> getEventFlagDescriptions();
 	int getEventFlagBits() const;
-	int eventFlagBitsFrom(const SCP_vector<std::pair<SCP_string, bool>>& flags) const;
+	static int eventFlagBitsFrom(const SCP_vector<std::pair<SCP_string, bool>>& flags);
 	int getEventScore() const;
 	void setEventScore(int score);
 	int getEventTeam() const;
