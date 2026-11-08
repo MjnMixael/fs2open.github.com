@@ -19519,7 +19519,7 @@ void sexp_fail_event(int node)
 			continue;
 		}
 
-		// an event's actions only run once its formula is true, so failing itself makes no sense
+		// an event's result is decided after its actions run, so that would overwrite the failure
 		if (event_num == Event_index)
 		{
 			Warning(LOCATION, "Event '%s' can't fail itself", name);
@@ -39248,7 +39248,7 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"Fails one or more events, as if their formulas had become known false.  The usual use is failing a directive, which turns it red on the HUD.  "
 		"A failed event is done: it is never evaluated again, is-event-false becomes true, and events chained after it never fire.  "
 		"An event that is already done or satisfied is left alone, and a directive the player hasn't reached yet fails without appearing.  "
-		"An event can't fail itself.  "
+		"An event can't fail itself, because its result is decided after its actions run; use a separate event instead.  "
 		"Takes 1 or more arguments...\r\n"
 		"\tAll:\tName of the event"
 	},

@@ -875,10 +875,9 @@ bool mission_event_force_fail(int event)
 		return false;
 	}
 
-	// mission_get_event_status checks the wing-wave special state before failure
-	if (ev.flags & MEF_DIRECTIVE_SPECIAL) {
-		mission_event_unset_directive_special(event);
-	}
+	// mission_get_event_status checks the wing-wave special state before failure.  Clear only this
+	// event's flags, since other special directives may be waiting on the shared timestamp.
+	ev.flags &= ~(MEF_DIRECTIVE_SPECIAL | MEF_DIRECTIVE_TEMP_TRUE);
 
 	// the same state the known-false path in mission_process_event leaves.  MEF_CURRENT is
 	// left alone, so a directive the player hasn't reached yet fails without appearing.

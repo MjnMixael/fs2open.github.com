@@ -1137,8 +1137,8 @@ int ErrorChecker::checkMissionEvents() {
 		}
 
 		if (sexpFailsEvent(event.formula, event.name.c_str())) {
-			error("Mission event \"%s\" uses fail-event on itself. An event's actions only run once it is true, so it "
-				  "can't fail itself; the game skips it.",
+			error("Mission event \"%s\" uses fail-event on itself. An event's result is decided after its actions run, "
+				  "so it can't fail itself; the game skips it. Use a separate event instead.",
 				  event.name.c_str());
 		}
 

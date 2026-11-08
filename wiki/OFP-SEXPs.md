@@ -214,7 +214,7 @@ Fails one or more events, as if their formulas had become known false. The usual
 - A failed event is done: it is never evaluated again, `is-event-false` becomes true, and events chained after it never fire. It gives no score.
 - An event that is already done, or currently true, is left alone.
 - A directive the player hasn't reached yet (for example a chained directive whose earlier event isn't true) fails without appearing on the HUD.
-- An event can't fail itself, since its actions only run once it is true. The game skips that name with a warning, and qtFRED's error checker reports it.
+- An event can't fail itself, because its result is decided after its actions run. Use a separate event instead. The game skips that name with a warning, and qtFRED's error checker reports it.
 - In multiplayer, the change is sent to all clients.
 
 ---
