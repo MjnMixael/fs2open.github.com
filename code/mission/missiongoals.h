@@ -163,6 +163,10 @@ void mission_goal_validation_change( int goal_num, bool valid );
 void mission_event_set_directive_special(int event);
 void mission_event_unset_directive_special(int event);
 
+// Fails an event that isn't done or satisfied yet, as if its formula had become known false.
+// Returns whether it was failed.
+bool mission_event_force_fail(int event);
+
 // Cyborg - set the directive completion sound timestamp
 void mission_event_set_completion_sound_timestamp();
 

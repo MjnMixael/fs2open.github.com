@@ -78,7 +78,7 @@ Badges show the version a field or behavior was added in. Fields without a badge
 
 ### $Tech Model:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - The model file to show for this intel entry, as a spinning 3D model the way ship and weapon entries do.
 - If the model loads, it is shown **instead of** the entry's `$Anim:`. If it fails to load, the tech room falls back to the animation.
@@ -86,7 +86,7 @@ Badges show the version a field or behavior was added in. Fields without a badge
 
 #### +Closeup_pos:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - The camera position used to view the model, the same as `$Closeup_pos:` in [ships.tbl](ships.tbl).
 - Only read directly after `$Tech Model:`.
@@ -95,7 +95,7 @@ Badges show the version a field or behavior was added in. Fields without a badge
 
 #### +Closeup_zoom:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - The camera zoom used to view the model, the same as `$Closeup_zoom:` in [ships.tbl](ships.tbl).
 - Only read directly after `$Tech Model:` (and `+Closeup_pos:` if present).

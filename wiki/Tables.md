@@ -21,7 +21,7 @@ Table pages mark when a field or behavior was added with a version badge. Fields
 
 **OFP:**
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 ---
 

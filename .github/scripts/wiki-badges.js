@@ -36,7 +36,7 @@ const BADGES = {
 
 // OFP badges get a triple border so they stand out from the FSO ones
 const OFP_BADGES = {
-	'ofp-26.1.0': ['OFP 26.1.0', '#0f2f4f', '#4fc3f7', '#e1f5fe'],
+	'ofp-26.3.0': ['OFP 26.3.0', '#0f2f4f', '#4fc3f7', '#e1f5fe'],
 };
 
 const CHAR_WIDTH = 7;   // Verdana bold at 11px, averaged; textLength makes the text fit exactly

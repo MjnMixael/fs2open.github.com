@@ -2,7 +2,7 @@
 > OFP Revision: [#43](https://github.com/ofp-fs2open/fs2open.github.com/pull/43)
 > *Set the revision to your PR when your PR changes what this page documents. Leave it alone for edits that only fix or improve the documentation.*
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg) This table exists only in OFP.
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg) This table exists only in OFP.
 
 The **editor.tbl** configures the mission editors for a mod: editor **settings**, and the **custom data** fields the mod expects its missions, campaigns and ships to use (each field's name, type, default value and description).
 
@@ -76,7 +76,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### $Disable Hard Coded Message Head Ani Files:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Removes the built-in head animations from the head ani list in the Events editor's message properties, leaving only the mod's own heads.
 - **Syntax:** *Boolean*
@@ -84,7 +84,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### $Add Message Head Ani Files:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Adds head animations to that list, one `+Head:` line each. The file extension is optional.
 - **Syntax:**
@@ -93,7 +93,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### $Enable scripting in FRED:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Runs the mod's scripts in the editors, for example so Lua SEXPs appear in the SEXP menus and On Game Init hooks can register custom data with `mn.addDefaultCustomData()`.
 - Off by default because many mods' scripts aren't written to run in the editor.
@@ -102,7 +102,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### $Ignore Music Files In Music Player:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Hides music files from the editor's Music Player, one `+File:` line each. The file extension is optional.
 - **Syntax:**
@@ -111,7 +111,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### $FRED spacemouse nonlinearities:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Response curve of a 3D mouse (spacemouse) for the viewport camera, per axis: the input is raised to the exponent, then multiplied by the scale.
 - Axes, in this order: `Sideways`, `Forwards`, `Upwards`, `Pitch`, `Bank`, `Heading`. Each axis has an exponent and a scale field; any field can be left out, and only the fields given change.
@@ -132,7 +132,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### $Key:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - The field's name. Scripts and SEXPs refer to the value by it.
 - Keys can't contain spaces or tabs.
@@ -142,7 +142,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### +Type:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - `string`, `int` or `bool`. Controls how the editor lets you enter the value: plain text, whole numbers only, or a true/false dropdown.
 - An unknown type gives a warning and is treated as `string`.
@@ -151,7 +151,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### +Default:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - The value a new mission, campaign or ship starts with, and the value the dialog's **Reset to Default** button restores.
 - If omitted: empty for `string`, `0` for `int`, `false` for `bool`.
@@ -161,7 +161,7 @@ Editor settings. These are the same entries as the `#FRED SETTINGS` section of `
 
 ### +Description:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Help text shown in the Custom Data dialog when the key is selected.
 - One line. `XSTR` is supported.

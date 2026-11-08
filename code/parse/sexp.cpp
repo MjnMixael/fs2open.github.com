@@ -215,6 +215,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "is-previous-event-incomplete",	OP_PREVIOUS_EVENT_INCOMPLETE,			2,	3,			SEXP_BOOLEAN_OPERATOR,	},
 	{ "reset-event",					OP_RESET_EVENT,							1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "reset-goal",						OP_RESET_GOAL,							1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
+	{ "fail-event",						OP_FAIL_EVENT,							1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// MjnMixael
 
 	//Objectives Category
 	{ "is-destroyed",					OP_IS_DESTROYED,						1,	INT_MAX,	SEXP_BOOLEAN_OPERATOR,	},
@@ -19504,6 +19505,32 @@ void sexp_reset_event(int node)
 }
 
 /**
+ * Fails events that aren't done or satisfied yet, as if their formulas had become known false.
+ */
+void sexp_fail_event(int node)
+{
+	for (int n = node; n >= 0; n = CDR(n))
+	{
+		auto name = CTEXT(n);
+		int event_num = mission_event_lookup(name);
+		if (event_num < 0)
+		{
+			Warning(LOCATION, "Could not find event '%s'", name);
+			continue;
+		}
+
+		// an event's result is decided after its actions run, so that would overwrite the failure
+		if (event_num == Event_index)
+		{
+			Warning(LOCATION, "Event '%s' can't fail itself", name);
+			continue;
+		}
+
+		mission_event_force_fail(event_num);
+	}
+}
+
+/**
  * Resets a goal, its status, and its nodes so that it is as if the goal had never been evaluated.
  */
 void sexp_reset_goal(int node)
@@ -28870,6 +28897,11 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
+			case OP_FAIL_EVENT:
+				sexp_fail_event(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
 			// destroy type sexpressions
 			case OP_IS_DESTROYED:
 				sexp_val = sexp_is_destroyed(node, nullptr);
@@ -32558,6 +32590,7 @@ int query_operator_return_type(int op)
 		case OP_ABORT_REARM:
 		case OP_RESET_EVENT:
 		case OP_RESET_GOAL:
+		case OP_FAIL_EVENT:
 		case OP_SHIP_CUSTOM_DATA_SET:
 		case OP_SHIP_CUSTOM_DATA_SET_INT:
 		case OP_SHIP_CUSTOM_DATA_SET_BOOL:
@@ -34129,6 +34162,7 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_POSITIVE;
 
 		case OP_RESET_EVENT:
+		case OP_FAIL_EVENT:
 			return OPF_EVENT_NAME;
 
 		case OP_RESET_GOAL:
@@ -37312,6 +37346,7 @@ int get_category(int op_id)
 		case OP_EVENT_FALSE_MSECS_DELAY:
 		case OP_RESET_EVENT:
 		case OP_RESET_GOAL:
+		case OP_FAIL_EVENT:
 			return OP_CATEGORY_GOAL_EVENT;
 
 		case OP_IS_DESTROYED_DELAY:
@@ -39205,6 +39240,15 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 
 	{ OP_RESET_EVENT, "Reset-Event (Action operator)\r\n"
 		"Clears all information associated with an event, resetting SEXP nodes and status flags so that it is as if the event had never been evaluated.  "
+		"Takes 1 or more arguments...\r\n"
+		"\tAll:\tName of the event"
+	},
+
+	{ OP_FAIL_EVENT, "Fail-Event (Action operator)\r\n"
+		"Fails one or more events, as if their formulas had become known false.  The usual use is failing a directive, which turns it red on the HUD.  "
+		"A failed event is done: it is never evaluated again, is-event-false becomes true, and events chained after it never fire.  "
+		"An event that is already done or satisfied is left alone, and a directive the player hasn't reached yet fails without appearing.  "
+		"An event can't fail itself, because its result is decided after its actions run; use a separate event instead.  "
 		"Takes 1 or more arguments...\r\n"
 		"\tAll:\tName of the event"
 	},

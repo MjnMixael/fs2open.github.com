@@ -48,6 +48,19 @@ ErrorTarget namedTarget(ErrorTarget::Kind kind, int index, SCP_string name) {
 	return t;
 }
 
+// True if the tree under node has a fail-event naming eventName.
+bool sexpFailsEvent(int node, const char* eventName) {
+	if (node < 0)
+		return false;
+	if (Sexp_nodes[node].subtype == SEXP_ATOM_OPERATOR && get_operator_const(node) == OP_FAIL_EVENT) {
+		for (int arg = CDR(node); arg >= 0; arg = CDR(arg)) {
+			if (!stricmp(Sexp_nodes[arg].text, eventName))
+				return true;
+		}
+	}
+	return sexpFailsEvent(CAR(node), eventName) || sexpFailsEvent(CDR(node), eventName);
+}
+
 } // namespace
 
 bool ErrorChecker::runFullCheck() {
@@ -1121,6 +1134,12 @@ int ErrorChecker::checkMissionEvents() {
 
 		if (fred_check_sexp(event.formula, OPR_NULL, "mission event \"%s\"", event.name.c_str())) {
 			return -1;
+		}
+
+		if (sexpFailsEvent(event.formula, event.name.c_str())) {
+			error("Mission event \"%s\" uses fail-event on itself. An event's result is decided after its actions run, "
+				  "so it can't fail itself; the game skips it. Use a separate event instead.",
+				  event.name.c_str());
 		}
 
 		// The cutscene camera preview's starts-after event (editor only) must still exist
