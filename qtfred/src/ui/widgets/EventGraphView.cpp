@@ -2042,6 +2042,15 @@ int EventGraphView::selectedEventIndex() const
 	return -1;
 }
 
+int EventGraphView::selectedEventCount() const
+{
+	QSet<int> events;
+	for (QGraphicsItem* it : m_scene->selectedItems())
+		if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(it))
+			events.insert(ev->eventIndex());
+	return static_cast<int>(events.size());
+}
+
 bool EventGraphView::nodeExpandable(int key) const
 {
 	if (key == -1)
@@ -2135,8 +2144,33 @@ void EventGraphView::refreshChainLines()
 	}
 }
 
+namespace {
+
+// A rebuild restores at most one selected card and doesn't report it, so the dialog
+// would keep the event controls locked after a multi-select is lost this way. Runs
+// on every exit from a rebuild, including the early "nothing to show" ones.
+class RebuildMultiSelectCheck {
+  public:
+	explicit RebuildMultiSelectCheck(EventGraphView* view) : m_view(view), m_before(view->selectedEventCount()) {}
+	~RebuildMultiSelectCheck()
+	{
+		if (m_before > 1 && m_view->selectedEventCount() <= 1)
+			Q_EMIT m_view->graphSelectionChanged();
+	}
+	RebuildMultiSelectCheck(const RebuildMultiSelectCheck&) = delete;
+	RebuildMultiSelectCheck& operator=(const RebuildMultiSelectCheck&) = delete;
+
+  private:
+	EventGraphView* m_view;
+	int m_before;
+};
+
+} // namespace
+
 void EventGraphView::rebuildRadial()
 {
+	const RebuildMultiSelectCheck multiSelectCheck(this);
+
 	// Capture the current viewport and selection so a rebuild (after an edit,
 	// or on return from another view) can resume where we left off instead of
 	// re-fitting the whole graph.
@@ -2301,6 +2335,8 @@ void EventGraphView::rebuildRadial()
 
 void EventGraphView::rebuildSwimlanes()
 {
+	const RebuildMultiSelectCheck multiSelectCheck(this);
+
 	// Viewport + selection continuity (same pattern as radial).
 	const QTransform savedTransform = transform();
 	const QPointF savedCenter = mapToScene(viewport()->rect().center());
@@ -2579,6 +2615,8 @@ void EventGraphView::setBasicLayoutToCustom()
 
 void EventGraphView::rebuildBasic()
 {
+	const RebuildMultiSelectCheck multiSelectCheck(this);
+
 	// Viewport continuity (same pattern as the other modes).
 	const QTransform savedTransform = transform();
 	const QPointF savedCenter = mapToScene(viewport()->rect().center());

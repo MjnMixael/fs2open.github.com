@@ -964,7 +964,8 @@ void event_editor::save_event(int e)
 	}
 
 	// handle event flags
-	m_events[e].flags = 0;
+	// the directive count flags have no control in this dialog, so keep what the mission has
+	m_events[e].flags &= (MEF_HIDE_DIRECTIVE_COUNT | MEF_SHOW_DIRECTIVE_COUNT);
 	if (m_use_msecs)
 		m_events[e].flags |= MEF_USE_MSECS;
 
