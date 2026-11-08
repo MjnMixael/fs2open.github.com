@@ -189,7 +189,7 @@ Check the scripting documentation of Prop Class to find the CustomStrings Lua Ta
 
 ### $Texture Replace:
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 - Replaces textures on the prop's model for every prop of this class. It works the same as `$Texture Replace:` in ships.tbl.
 - Goes at the end of the prop entry, after `$Custom Strings` if the entry has that block.

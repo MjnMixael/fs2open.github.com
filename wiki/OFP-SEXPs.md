@@ -43,7 +43,7 @@ Category and subcategory are where each operator appears in the editor's operato
 
 ### point-targeted
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Training (no subcategory)
 
@@ -63,7 +63,7 @@ True while the player has the coordinate point targeted. This is the coordinate-
 
 ### alter-point-flag
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Change → Special Effects
 
@@ -101,7 +101,7 @@ Common rules:
 
 #### ship-custom-data-is
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Status → Ship Status
 
@@ -113,7 +113,7 @@ True if the ship has the key and its stored text exactly matches the value (case
 
 #### ship-custom-data-has-key
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Status → Ship Status
 
@@ -125,7 +125,7 @@ True if the ship has the key, whatever its value.
 
 #### ship-custom-data-get-int
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Status → Ship Status
 
@@ -137,7 +137,7 @@ The key's value as a number. Returns `0` if the key is missing or its value isn'
 
 #### ship-custom-data-get-bool
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Status → Ship Status
 
@@ -149,7 +149,7 @@ True if the key's value is `true`, in any capitalization. False for any other va
 
 #### ship-custom-data-set
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Change → Ship Status
 
@@ -161,7 +161,7 @@ Sets the key to the given text, overwriting any existing value.
 
 #### ship-custom-data-set-int
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Change → Ship Status
 
@@ -173,7 +173,7 @@ Sets the key to a number.
 
 #### ship-custom-data-set-bool
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Change → Ship Status
 
@@ -185,7 +185,7 @@ Sets the key to exactly `true` or `false`, matching what qtFRED writes.
 
 #### ship-custom-data-clear
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Change → Ship Status
 
@@ -197,7 +197,7 @@ Removes the key from each listed ship. Ships without the key are unaffected. To 
 
 ### fail-event
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 **Category:** Event/Goals (no subcategory)
 
@@ -221,7 +221,7 @@ Fails one or more events, as if their formulas had become known false. The usual
 
 ## Coordinate points in existing operators
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 Operators whose arguments take a ship, wing or waypoint also accept a coordinate point's name. The point is used as a position, just as a waypoint is.
 
@@ -249,7 +249,7 @@ Operators whose arguments take a ship, wing or waypoint also accept a coordinate
 
 ### replace-texture
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 The objects the texture is replaced on (the third argument onward) can include props as well as ships and wings.
 
@@ -259,13 +259,13 @@ The objects the texture is replaced on (the third argument onward) can include p
 
 ### activate-glow-maps / deactivate-glow-maps
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 These accept props as well as ships. The prop must be in the mission. A prop that hasn't spawned yet is skipped.
 
 ### Props that haven't spawned yet
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg)
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
 
 A prop with a spawn cue exists in the mission file before it is actually in the mission. In-game, any operator argument that takes a prop now accepts the name of a prop that hasn't spawned yet, instead of rejecting it as invalid. What the operator does with such a prop is up to the operator (see above).
 

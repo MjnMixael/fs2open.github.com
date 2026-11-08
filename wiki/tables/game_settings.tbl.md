@@ -1197,7 +1197,7 @@ This group contains sound-related settings
 
 ## #FRED SETTINGS
 
-![OFP 26.1.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.1.0.svg) In OFP these can also be set in [editor.tbl](editor.tbl#settings), the editor's own table. Settings here still work.
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg) In OFP these can also be set in [editor.tbl](editor.tbl#settings), the editor's own table. Settings here still work.
 
 This group contains settings for FRED.
 
