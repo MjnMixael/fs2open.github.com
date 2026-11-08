@@ -45,6 +45,9 @@ viewport, where it can be dragged, looked through, or set from the view. See
 </table>
 <p><kbd>Ctrl</kbd>+<kbd>=</kbd> and the keypad <kbd>+</kbd> key work too. After <strong>New</strong> or <strong>Insert</strong>, the new event is selected
 and the list has focus, so <kbd>Space</kbd> starts editing its name.</p>
+<p>Markers after an event's name show its settings at a glance, in the list and on graph
+cards: a red flag when any <a href="#log-flags">log flag</a> is on, and a blue flag when any
+event flag is on.</p>
 <p>Events are evaluated in list order each frame. Order matters: events earlier in the
 list are processed first, which can affect timing when events interact.</p>
 
@@ -109,7 +112,7 @@ they are disabled while several event cards are selected in the graph view.</p>
         automatically translated to the player's current control bindings.</td></tr>
 </table>
 
-<h2>Log flags</h2>
+<h2 id="log-flags">Log flags</h2>
 <p>These checkboxes control when the selected event writes an entry to the engine's
 debug event log (<code>event.log</code>). They are useful for tracing event behavior
 during mission testing.</p>

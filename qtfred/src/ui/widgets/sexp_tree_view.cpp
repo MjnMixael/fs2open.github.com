@@ -113,6 +113,8 @@ QPixmap renderSexpPixmap(NodeImage image, int number) {
 	const QColor green(70, 180, 75);
 	const QColor chainInk = dark ? QColor(165, 165, 165) : themeInk;
 	const QColor variableRed(255, 120, 120); // Multiply -> reddish page, clearly distinct from plain data
+	const QColor flagRed(165, 30, 30);
+	const QColor flagBlue(30, 70, 190);
 
 	QPixmap out;
 	qreal scale = 1.0;
@@ -137,6 +139,8 @@ QPixmap renderSexpPixmap(NodeImage image, int number) {
 		case NodeImage::GREEN_DOT:       out = tintMultiply(loadSexpMaster("dot"), green); scale = 0.65; break;
 		case NodeImage::CHAIN:           out = tintMultiply(loadSexpMaster("chain"), chainInk); break;
 		case NodeImage::CHAIN_DIRECTIVE: out = tintMultiply(loadSexpMaster("chain"), red); break;
+		case NodeImage::FLAG_RED:        out = tintMultiply(loadSexpMaster("flag"), flagRed); break;
+		case NodeImage::FLAG_BLUE:       out = tintMultiply(loadSexpMaster("flag"), flagBlue); break;
 		default:                         out = loadSexpMaster("operator"); break;
 		}
 	}
@@ -159,9 +163,9 @@ QIcon sexp_tree_view::convertNodeImageToIcon(NodeImage image, int number) {
 }
 
 /**
- * Custom delegate that paints a small comment badge icon after the node text
- * whenever a NoteRole annotation is present on the item. This provides a visual
- * indicator that a node has a user comment without altering the tree structure.
+ * Custom delegate that paints small badge icons after the node text: event marker
+ * flags (EventMarkersRole), then a comment badge when a NoteRole annotation is present.
+ * These mark an item without altering the tree structure.
  */
 class NoteBadgeDelegate final : public QStyledItemDelegate {
   public:
@@ -177,9 +181,17 @@ class NoteBadgeDelegate final : public QStyledItemDelegate {
 		const QStyle* s = w ? w->style() : QApplication::style();
 		s->drawControl(QStyle::CE_ItemViewItem, &opt, p, w);
 
-		// if there's a note, paint the badge directly after the text
-		const QString note = index.data(sexp_tree_view::NoteRole).toString();
-		if (!note.isEmpty()) {
+		SCP_vector<NodeImage> badges;
+		const int markers = index.data(sexp_tree_view::EventMarkersRole).toInt();
+		if (markers & sexp_tree_view::EventMarkerLogging)
+			badges.push_back(NodeImage::FLAG_RED);
+		if (markers & sexp_tree_view::EventMarkerFlags)
+			badges.push_back(NodeImage::FLAG_BLUE);
+		if (!index.data(sexp_tree_view::NoteRole).toString().isEmpty())
+			badges.push_back(NodeImage::COMMENT);
+
+		// paint any badges directly after the text
+		if (!badges.empty()) {
 			// where Qt drew the text
 			QRect textRect = s->subElementRect(QStyle::SE_ItemViewItemText, &opt, w);
 
@@ -188,27 +200,31 @@ class NoteBadgeDelegate final : public QStyledItemDelegate {
 			const QString shown = fm.elidedText(opt.text, opt.textElideMode, textRect.width());
 			const int textWidth = fm.horizontalAdvance(shown);
 
-			// pick an icon; use your existing mapping
-			const QIcon icon = sexp_tree_view::convertNodeImageToIcon(NodeImage::COMMENT);
 			const int dpi = p->device() ? p->device()->logicalDpiX() : 96;
 			const int sz = opt.decorationSize.isValid() ? opt.decorationSize.height() : int(16 * dpi / 96);
-			const QPixmap pm = icon.pixmap(sz, sz);
 
-			// place badge just after the text, with a small pad
+			// place badges just after the text, with a small pad
 			const int pad = 10;
+			const int gap = 2;
+			const int count = static_cast<int>(badges.size());
+			const int totalWidth = count * sz + (count - 1) * gap;
 			int x = textRect.left() + textWidth + pad;
-			int y = textRect.center().y() - pm.height() / 2;
 
 			// keep inside cell if the row is very tight
 			const int rightBound = option.rect.right() - 2;
-			if (x + pm.width() > rightBound)
-				x = rightBound - pm.width();
+			if (x + totalWidth > rightBound)
+				x = rightBound - totalWidth;
 
 			p->save();
 			// ensure good contrast on selected rows
 			if (opt.state & QStyle::State_Selected)
 				p->setCompositionMode(QPainter::CompositionMode_SourceOver);
-			p->drawPixmap(x, y, pm);
+			for (const NodeImage badge : badges) {
+				const QPixmap pm = sexp_tree_view::convertNodeImageToIcon(badge).pixmap(sz, sz);
+				// sz, not pm.height(): that's in device pixels, which puts the badge too high on a scaled display
+				p->drawPixmap(x, textRect.center().y() - sz / 2, pm);
+				x += sz + gap;
+			}
 			p->restore();
 		}
 	}
@@ -218,7 +234,7 @@ class NoteBadgeDelegate final : public QStyledItemDelegate {
 // Creates the SexpTreeActions layer with references to _model and *this (as ISexpTreeUI).
 // Connects Qt signals: customContextMenuRequested -> customMenuHandler, itemChanged -> handleItemChange,
 // itemSelectionChanged -> handleNewItemSelected, itemDoubleClicked -> openNodeEditor.
-// Installs the NoteBadgeDelegate for column 0 to paint comment badges.
+// Installs the NoteBadgeDelegate for column 0 to paint comment and event marker badges.
 sexp_tree_view::sexp_tree_view(QWidget* parent) : QTreeWidget(parent), _actions(_model, *this) {
 	setSelectionMode(QTreeWidget::SingleSelection);
 	setSelectionBehavior(QTreeWidget::SelectItems);

@@ -92,6 +92,7 @@ struct GraphEventMeta {
 	bool directive = false; // objective_text non-empty
 	bool repeats = false;   // repeat_count != 1 or using a trigger count
 	bool logging = false;   // any mission_log_flags set
+	bool flagged = false;   // any event flag set, other than the msecs one
 	int  annotationKey = -1; // rootKey(formula) for this event's annotation
 };
 

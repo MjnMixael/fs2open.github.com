@@ -160,6 +160,7 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void changeMessageWave(const SCP_string& name);
 	void syncEventRootLabel(int eventIndex);
 	void updateEventBitmapAt(int eventIndex);
+	void updateEventMarkers(); // the log and event flag badges on the tree's event rows
 
 	void initViewToggle();
 	void requestViewChange(int index);
