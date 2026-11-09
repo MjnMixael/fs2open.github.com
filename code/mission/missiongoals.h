@@ -84,6 +84,7 @@ enum class EventStatus : int
 #define MEF_EVENT_IS_DONE			(1 << 6)		// Goober5000 - originally indicated by setting formula to -1
 #define MEF_HIDE_DIRECTIVE_COUNT	(1 << 7)		// never show this directive's count on the HUD
 #define MEF_SHOW_DIRECTIVE_COUNT	(1 << 8)		// show this directive's count even when it starts at 1
+#define MEF_RERUN_AFTER_CHECKPOINT	(1 << 9)		// a checkpoint load leaves this event as the mission file sets it up, so it runs again
 
 #define MAX_MISSION_EVENT_LOG_FLAGS		9			// this must be changed if a mission log flag is added below
 
