@@ -101,6 +101,11 @@ they are disabled while several event cards are selected in the graph view.</p>
             <li><strong>show directive count</strong> - show the count even when it
                 starts at 1, as the <code>$Always Show Directive Value Count:</code>
                 game setting does for every directive.</li>
+            <li><strong>run again after checkpoint load</strong> - when a checkpoint is
+                loaded, the event is not restored: it starts over as the mission file sets
+                it up and runs again. Meant for setup events whose effect the checkpoint
+                does not keep, such as script state. Anything else the event does
+                (messages, ships, sounds) happens again too.</li>
         </ul></td></tr>
     <tr><td>Directive text</td><td>Text shown in the player's objective display on the
         HUD when this event is active. Writing text here makes the event a directive.
