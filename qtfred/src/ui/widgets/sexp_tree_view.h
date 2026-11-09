@@ -65,14 +65,21 @@ class sexp_tree_view: public QTreeWidget, public ISexpTreeUI {
 	  * SexpNodeIdRole: the tree_nodes[] index for a given item
 	  * NoteRole: user-editable comment string (displayed as tooltip + badge icon)
 	  * BgColorRole: user-chosen background highlight color
+	  * EventMarkersRole: EventMarker bits, drawn as flag badges on an event's root item
 	  */
 	 enum {
 		 FormulaDataRole = Qt::UserRole + 1,
 		 SexpNodeIdRole = Qt::UserRole + 2,
 		 NoteRole = Qt::UserRole + 100,
 		 BgColorRole = Qt::UserRole + 101,
+		 EventMarkersRole = Qt::UserRole + 103,
 		 NodeImageRole = Qt::UserRole + 102  //!< Base NodeImage stored on each item so numbered-data badges can renumber without a model lookup
 	 };
+
+	enum EventMarker {
+		EventMarkerLogging = 1 << 0,
+		EventMarkerFlags = 1 << 1,
+	};
 
 	//! Builds the QIcon for a NodeImage by colorizing the shared master art and applying a
 	//! uniform drop shadow. For a numbered data node, pass the 1-based argument position in

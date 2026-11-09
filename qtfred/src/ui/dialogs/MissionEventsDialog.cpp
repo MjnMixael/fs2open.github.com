@@ -1,7 +1,9 @@
 #include "MissionEventsDialog.h"
 #include "ui_MissionEventsDialog.h"
 
+#include <QHash>
 #include <QLocale>
+#include <QSignalBlocker>
 #include <QShortcut>
 #include <QStringList>
 #include <cmath>
@@ -1400,6 +1402,7 @@ void MissionEventsDialog::updateEventUi() {
 
 	updateEventMoveButtons();
 	updateEventCreateButtons();
+	updateEventMarkers();
 
 	// The per-event fields act on the selected event. In the tree, selecting any
 	// node selects its event; in the graph, only an event card counts (selecting an
@@ -1530,6 +1533,7 @@ GraphEventMeta MissionEventsDialog::buildEventMeta(int eventIndex) const
 	m.directive = !e.objective_text.empty();
 	m.repeats = (e.repeat_count != 1) || (e.flags & MEF_USING_TRIGGER_COUNT);
 	m.logging = (e.mission_log_flags != 0);
+	m.flagged = _model->hasEventFlagsAt(eventIndex);
 	m.annotationKey = SexpAnnotationModel::rootKey(e.formula);
 	return m;
 }
@@ -1919,6 +1923,29 @@ void MissionEventsDialog::updateEventBitmapAt(int eventIndex) {
 			item->setIcon(0, sexp_tree_view::convertNodeImageToIcon(bitmap));
 			return;
 		}
+	}
+}
+
+void MissionEventsDialog::updateEventMarkers()
+{
+	const auto& events = _model->getEventList();
+	QHash<int, int> markersByFormula;
+	for (int i = 0; i < static_cast<int>(events.size()); ++i) {
+		int markers = 0;
+		if (events[i].mission_log_flags != 0)
+			markers |= sexp_tree_view::EventMarkerLogging;
+		if (_model->hasEventFlagsAt(i))
+			markers |= sexp_tree_view::EventMarkerFlags;
+		markersByFormula.insert(events[i].formula, markers);
+	}
+
+	// A data change on an item emits itemChanged, which the tree reads as a finished rename
+	// while one is in progress. The view still repaints, since that comes from the model.
+	const QSignalBlocker blocker(ui->eventTree);
+	for (int i = 0; i < ui->eventTree->topLevelItemCount(); ++i) {
+		auto* item = ui->eventTree->topLevelItem(i);
+		const int formula = item->data(0, sexp_tree_view::FormulaDataRole).toInt();
+		item->setData(0, sexp_tree_view::EventMarkersRole, markersByFormula.value(formula, 0));
 	}
 }
 

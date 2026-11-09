@@ -539,6 +539,7 @@ add_file_folder("Resources/Images/Sexp"
     resources/images/sexp_icons/dot.png
     resources/images/sexp_icons/chain.png
     resources/images/sexp_icons/comment.png
+    resources/images/sexp_icons/flag.png
     resources/images/sexp_icons/container_name.png
     resources/images/sexp_icons/container_data.png
 )

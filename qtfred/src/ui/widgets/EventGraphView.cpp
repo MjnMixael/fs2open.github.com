@@ -161,34 +161,28 @@ inline void drawEventMainIcon(QPainter* p, bool chained, bool directive, const Q
 	p->drawPixmap(box.toRect(), icon.pixmap(box.size().toSize()));
 }
 
-// Small hand-drawn glyphs for the "extra" event flags (no tree asset for these).
-enum class StatusGlyph { Repeat, Log };
-inline void drawStatusGlyph(QPainter* p, StatusGlyph g, const QRectF& box, const QColor& col)
+// The same log and event flag markers the tree draws on its event rows.
+inline void drawMarkerFlag(QPainter* p, NodeImage flag, const QRectF& box)
 {
-	if (g == StatusGlyph::Repeat) { // circular arrow
-		const QRectF ar = box.adjusted(2.0, 2.0, -2.0, -2.0);
-		p->setPen(QPen(col, 1.3));
-		p->setBrush(Qt::NoBrush);
-		p->drawArc(ar, 30 * 16, 280 * 16);
-		const QPointF c = ar.center();
-		const double a0 = 30.0 * M_PI / 180.0;
-		const QPointF tip(c.x() + (ar.width() / 2.0) * std::cos(a0), c.y() - (ar.height() / 2.0) * std::sin(a0));
-		QPolygonF head;
-		head << tip << (tip + QPointF(-3.0, -1.5)) << (tip + QPointF(0.5, 3.0));
-		p->setPen(Qt::NoPen);
-		p->setBrush(col);
-		p->drawPolygon(head);
-	} else { // logging: a lined document
-		const QRectF doc = box.adjusted(2.0, 1.0, -2.0, -1.0);
-		p->setPen(QPen(col, 1.1));
-		p->setBrush(Qt::NoBrush);
-		p->drawRoundedRect(doc, 1.5, 1.5);
-		p->setPen(QPen(col, 0.8));
-		for (int i = 1; i <= 3; ++i) {
-			const qreal ly = doc.top() + doc.height() * i / 4.0;
-			p->drawLine(QPointF(doc.left() + 2.0, ly), QPointF(doc.right() - 2.0, ly));
-		}
-	}
+	const QIcon icon = sexp_tree_view::convertNodeImageToIcon(flag);
+	p->drawPixmap(box.toRect(), icon.pixmap(box.size().toSize()));
+}
+
+// A small hand-drawn circular arrow for repeating events (no tree asset for this).
+inline void drawRepeatGlyph(QPainter* p, const QRectF& box, const QColor& col)
+{
+	const QRectF ar = box.adjusted(2.0, 2.0, -2.0, -2.0);
+	p->setPen(QPen(col, 1.3));
+	p->setBrush(Qt::NoBrush);
+	p->drawArc(ar, 30 * 16, 280 * 16);
+	const QPointF c = ar.center();
+	const double a0 = 30.0 * M_PI / 180.0;
+	const QPointF tip(c.x() + (ar.width() / 2.0) * std::cos(a0), c.y() - (ar.height() / 2.0) * std::sin(a0));
+	QPolygonF head;
+	head << tip << (tip + QPointF(-3.0, -1.5)) << (tip + QPointF(0.5, 3.0));
+	p->setPen(Qt::NoPen);
+	p->setBrush(col);
+	p->drawPolygon(head);
 }
 
 // A card: a role/kind chip (top-left), an optional event-name badge (top-right),
@@ -559,12 +553,13 @@ class EventNodeItem final : public CardItem {
 	int type() const override { return Type; }
 	int eventIndex() const { return m_eventIndex; }
 
-	void setStatusIcons(bool chained, bool directive, bool repeats, bool logging)
+	void setStatusIcons(bool chained, bool directive, bool repeats, bool logging, bool flagged)
 	{
 		m_chained = chained;
 		m_directive = directive;
 		m_repeats = repeats;
 		m_logging = logging;
+		m_flagged = flagged;
 		update();
 	}
 
@@ -597,14 +592,14 @@ class EventNodeItem final : public CardItem {
 	}
 
   private:
-	// Main tree icon (event / directive / chain, tinted) plus small repeat/log
-	// glyphs, right-aligned in the chip row.
+	// Main tree icon (event / directive / chain, tinted) plus a small repeat glyph
+	// and the log and event flag markers, right-aligned in the chip row.
 	void drawStatusIcons(QPainter* p) const
 	{
 		const QRectF r = boundingRect();
 		const qreal sz = 13.0, gap = 3.0;
 		const qreal top = r.top() + 4.0;
-		const int count = 1 + (m_repeats ? 1 : 0) + (m_logging ? 1 : 0); // main icon is always shown
+		const int count = 1 + (m_repeats ? 1 : 0) + (m_logging ? 1 : 0) + (m_flagged ? 1 : 0); // main icon is always shown
 		const qreal totalW = count * sz + (count - 1) * gap;
 		qreal x = r.right() - 8.0 - totalW;
 
@@ -615,11 +610,15 @@ class EventNodeItem final : public CardItem {
 		x += sz + gap;
 		const QColor col = m_style.nodeSubText;
 		if (m_repeats) {
-			drawStatusGlyph(p, StatusGlyph::Repeat, QRectF(x, top, sz, sz), col);
+			drawRepeatGlyph(p, QRectF(x, top, sz, sz), col);
 			x += sz + gap;
 		}
-		if (m_logging)
-			drawStatusGlyph(p, StatusGlyph::Log, QRectF(x, top, sz, sz), col);
+		if (m_logging) {
+			drawMarkerFlag(p, NodeImage::FLAG_RED, QRectF(x, top, sz, sz));
+			x += sz + gap;
+		}
+		if (m_flagged)
+			drawMarkerFlag(p, NodeImage::FLAG_BLUE, QRectF(x, top, sz, sz));
 		p->restore();
 	}
 
@@ -646,6 +645,7 @@ class EventNodeItem final : public CardItem {
 	bool m_directive = false;
 	bool m_repeats = false;
 	bool m_logging = false;
+	bool m_flagged = false;
 	bool m_showCollapse = false;
 	bool m_collapsed = false;
 	QRectF m_collapseRect;
@@ -1009,7 +1009,7 @@ class LegendWidget final : public QWidget {
 	}
 
   private:
-	static int iconRows() { return 5; }
+	static int iconRows() { return 6; }
 
 	static QString iconLabel(int i)
 	{
@@ -1018,7 +1018,8 @@ class LegendWidget final : public QWidget {
 		case 1: return tr("directive");
 		case 2: return tr("chained");
 		case 3: return tr("repeats");
-		default: return tr("logged");
+		case 4: return tr("logged");
+		default: return tr("event flags");
 		}
 	}
 
@@ -1028,8 +1029,9 @@ class LegendWidget final : public QWidget {
 		case 0: drawEventMainIcon(p, false, false, box); break; // event (blue dot)
 		case 1: drawEventMainIcon(p, false, true, box); break;  // directive (red dot)
 		case 2: drawEventMainIcon(p, true, false, box); break;  // chained (chain)
-		case 3: drawStatusGlyph(p, StatusGlyph::Repeat, box, m_style->nodeSubText); break;
-		default: drawStatusGlyph(p, StatusGlyph::Log, box, m_style->nodeSubText); break;
+		case 3: drawRepeatGlyph(p, box, m_style->nodeSubText); break;
+		case 4: drawMarkerFlag(p, NodeImage::FLAG_RED, box); break;
+		default: drawMarkerFlag(p, NodeImage::FLAG_BLUE, box); break;
 		}
 	}
 
@@ -2020,7 +2022,7 @@ void EventGraphView::applyEventStatus(graphdetail::EventNodeItem* card, int even
 	if (!card || eventIndex < 0 || eventIndex >= m_eventMeta.size())
 		return;
 	const GraphEventMeta& m = m_eventMeta[eventIndex];
-	card->setStatusIcons(m.chained, m.directive, m.repeats, m.logging);
+	card->setStatusIcons(m.chained, m.directive, m.repeats, m.logging, m.flagged);
 	applyAnnotation(card, m.annotationKey);
 	card->setOrder(eventIndex + 1); // events are top-level siblings; show their order
 }
@@ -2100,13 +2102,13 @@ void EventGraphView::updateEventCard(int eventIndex, GraphEventMeta meta)
 		// Nothing to redraw unless the event's status actually changed.
 		const GraphEventMeta& old = m_eventMeta[eventIndex];
 		if (old.chained == meta.chained && old.directive == meta.directive && old.repeats == meta.repeats &&
-			old.logging == meta.logging && old.annotationKey == meta.annotationKey)
+			old.logging == meta.logging && old.flagged == meta.flagged && old.annotationKey == meta.annotationKey)
 			return;
 		m_eventMeta[eventIndex] = meta;
 	}
 	const auto it = m_eventCards.constFind(eventIndex);
 	if (it != m_eventCards.constEnd())
-		it.value()->setStatusIcons(meta.chained, meta.directive, meta.repeats, meta.logging);
+		it.value()->setStatusIcons(meta.chained, meta.directive, meta.repeats, meta.logging, meta.flagged);
 	refreshChainLines();
 	if (m_minimap)
 		m_minimap->regenerate(); // icons/chain changed -- refresh the overview

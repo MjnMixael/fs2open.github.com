@@ -101,6 +101,7 @@ class MissionEventsDialogModel : public AbstractDialogModel {
 	SCP_vector<std::pair<SCP_string, bool>> getEventFlags() const;
 	static SCP_vector<std::pair<SCP_string, SCP_string>> getEventFlagDescriptions();
 	int getEventFlagBits() const;
+	bool hasEventFlagsAt(int index) const;
 	static int eventFlagBitsFrom(const SCP_vector<std::pair<SCP_string, bool>>& flags);
 	int getEventScore() const;
 	void setEventScore(int score);

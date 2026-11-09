@@ -85,6 +85,8 @@ enum class NodeImage : int {
 	COMMENT = 29,
 	CONTAINER_NAME = 30,
 	CONTAINER_DATA = 31,
+	FLAG_RED = 32,
+	FLAG_BLUE = 33,
 };
 
 // -----------------------------------------------------------------------

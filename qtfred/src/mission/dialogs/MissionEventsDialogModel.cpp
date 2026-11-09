@@ -911,6 +911,11 @@ int MissionEventsDialogModel::getEventFlagBits() const
 	return m_events[m_cur_event].flags & dialogEventFlagMask();
 }
 
+bool MissionEventsDialogModel::hasEventFlagsAt(int index) const
+{
+	return SCP_vector_inbounds(m_events, index) && (m_events[index].flags & dialogEventFlagMask()) != 0;
+}
+
 int MissionEventsDialogModel::eventFlagBitsFrom(const SCP_vector<std::pair<SCP_string, bool>>& flags)
 {
 	int bits = 0;
