@@ -689,6 +689,7 @@ flag_def_list Mission_event_flags[] = {
 	{ "interval & delay use msecs", MEF_USE_MSECS, 0 },
 	{ "hide directive count", MEF_HIDE_DIRECTIVE_COUNT, 0 },
 	{ "show directive count", MEF_SHOW_DIRECTIVE_COUNT, 0 },
+	{ "run again after checkpoint load", MEF_RERUN_AFTER_CHECKPOINT, 0 },
 };
 int Num_mission_event_flags = sizeof(Mission_event_flags) / sizeof(flag_def_list);
 
@@ -697,6 +698,7 @@ static const std::pair<int, const char*> Mission_event_flag_descriptions[] = {
 	{ MEF_USE_MSECS, "The event's interval and chain delay are in milliseconds instead of seconds." },
 	{ MEF_HIDE_DIRECTIVE_COUNT, "Never show this directive's count on the HUD. Takes priority over \"show directive count\" and the $Always Show Directive Value Count: game setting." },
 	{ MEF_SHOW_DIRECTIVE_COUNT, "Show this directive's count on the HUD even when it starts at 1, as the $Always Show Directive Value Count: game setting does for every directive." },
+	{ MEF_RERUN_AFTER_CHECKPOINT, "When a checkpoint is loaded, this event is not restored: it starts over as the mission file sets it up and runs again. Meant for setup events whose effect the checkpoint does not keep, such as script state. Anything else the event does (messages, ships, sounds) happens again too." },
 };
 
 const char* get_mission_event_flag_description(int flag)
@@ -10632,6 +10634,9 @@ bool check_for_26_1_data()
 		return true;
 
 	// The checkpoint system, and with it the mission settings that configure it.
+	if (std::any_of(Mission_events.begin(), Mission_events.end(),
+		[](const mission_event& ev) { return (ev.flags & MEF_RERUN_AFTER_CHECKPOINT) != 0; }))
+		return true;
 	if (The_mission.flags[Mission::Mission_Flags::No_checkpoint_resume_prompt] ||
 		The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_player_loadout] ||
 		The_mission.flags[Mission::Mission_Flags::Checkpoint_keep_wing_loadout] ||
