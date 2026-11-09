@@ -174,6 +174,8 @@ void EditorViewport::loadSettings() {
 		}
 	}
 
+	Classic_menu_layout                = settings.value("classic_menu_layout",                Classic_menu_layout).toBool();
+
 	view.Universal_heading                 = settings.value("view_universal_heading",                 view.Universal_heading).toBool();
 	view.Show_stars                        = settings.value("view_show_stars",                        view.Show_stars).toBool();
 	view.Show_horizon                      = settings.value("view_show_horizon",                      view.Show_horizon).toBool();
@@ -202,6 +204,7 @@ void EditorViewport::loadSettings() {
 	view.Label_font_scale                  = settings.value("view_label_font_scale",                  view.Label_font_scale).toFloat();
 	camera.setInvertOrbitX(settings.value("camera_invert_orbit_x", camera.getInvertOrbitX()).toBool());
 	camera.setInvertOrbitY(settings.value("camera_invert_orbit_y", camera.getInvertOrbitY()).toBool());
+	camera.setOrbitSelectionMidpoint(settings.value("camera_orbit_selection_midpoint", camera.getOrbitSelectionMidpoint()).toBool());
 	settings.endGroup();
 }
 
@@ -226,6 +229,7 @@ void EditorViewport::saveSettings() const {
 	settings.setValue("show_sexp_help_prop_editor",          Show_sexp_help_prop_editor);
 	writeThemeModeSetting(Theme_mode);
 	settings.setValue("data_menu_style",                     static_cast<int>(Data_menu_style));
+	settings.setValue("classic_menu_layout",                 Classic_menu_layout);
 
 	settings.setValue("view_universal_heading",                 view.Universal_heading);
 	settings.setValue("view_show_stars",                        view.Show_stars);
@@ -255,6 +259,7 @@ void EditorViewport::saveSettings() const {
 	settings.setValue("view_label_font_scale",                  view.Label_font_scale);
 	settings.setValue("camera_invert_orbit_x",                  camera.getInvertOrbitX());
 	settings.setValue("camera_invert_orbit_y",                  camera.getInvertOrbitY());
+	settings.setValue("camera_orbit_selection_midpoint",        camera.getOrbitSelectionMidpoint());
 	settings.endGroup();
 }
 void EditorViewport::needsUpdate() {
@@ -561,10 +566,9 @@ void EditorViewport::game_do_frame(const int cur_object_index) {
 	}
 
 	if (camera.getLookatMode() && query_valid_object(cur_object_index)) {
-		float dist;
-
-		dist = vm_vec_dist(&camera.view_pos, &Objects[cur_object_index].pos);
-		vm_vec_scale_add(&camera.view_pos, &Objects[cur_object_index].pos, &camera.view_orient.vec.fvec, -dist);
+		vec3d center = selectionMidpoint(cur_object_index);
+		float dist = vm_vec_dist(&camera.view_pos, &center);
+		vm_vec_scale_add(&camera.view_pos, &center, &camera.view_orient.vec.fvec, -dist);
 	}
 
 	switch (camera.getViewpoint()) {
@@ -748,13 +752,25 @@ void EditorViewport::level_object(matrix* orient) {
 	vm_fix_matrix(orient);
 }
 
+vec3d EditorViewport::selectionMidpoint(int cur_object_index) const
+{
+	vec3d center;
+	float radius;
+
+	if (camera.getOrbitSelectionMidpoint() && editor->getNumMarked() > 1 && get_object_bounds(true, &center, &radius)) {
+		return center;
+	}
+
+	return Objects[cur_object_index].pos;
+}
+
 vec3d EditorViewport::orbitCameraGetPivot()
 {
 	vec3d pivot;
 
 	if (query_valid_object(editor->currentObject)) {
-		// Pivot on current object
-		pivot = Objects[editor->currentObject].pos;
+		// Pivot on the selection
+		pivot = selectionMidpoint(editor->currentObject);
 	} else if (!The_grid) {
 		// Pivot on the origin, if no grid
 		pivot = ZERO_VECTOR;
@@ -1917,9 +1933,8 @@ void EditorViewport::cancel_drag() {
 // Frames the marked objects (Zoom to Selected) or every object that's drawn (Zoom Extents), so
 // hidden layers and objects the Layer Manager filters out don't pull the camera back.
 void EditorViewport::view_universe(bool just_marked) {
-	int max = 0;
-	float dist, largest = 20.0f;
-	vec3d center, p1, p2;
+	float dist, radius;
+	vec3d center;
 	vertex v;
 	object *ptr;
 
@@ -1927,54 +1942,12 @@ void EditorViewport::view_universe(bool just_marked) {
 		return just_marked ? objp->flags[Object::Object_Flags::Marked] : isObjectShown(objp);
 	};
 
-	// start the bounds at an object being framed; with nothing to frame, leave the camera alone
-	ptr = GET_FIRST(&obj_used_list);
-	while (ptr != END_OF_LIST(&obj_used_list) && !frames(ptr))
-		ptr = GET_NEXT(ptr);
-	if (ptr == END_OF_LIST(&obj_used_list))
+	// Upstream bounds every object or every marked one; Zoom Extents has to skip what
+	// the Layer Manager is hiding, so it passes its own test instead.
+	if (!get_object_bounds(frames, &center, &radius))
 		return;
 
-	p1.xyz.x = p2.xyz.x = ptr->pos.xyz.x;
-	p1.xyz.y = p2.xyz.y = ptr->pos.xyz.y;
-	p1.xyz.z = p2.xyz.z = ptr->pos.xyz.z;
-
-	ptr = GET_FIRST(&obj_used_list);
-	while (ptr != END_OF_LIST(&obj_used_list)) {
-		if (frames(ptr)) {
-			center = ptr->pos;
-			if (center.xyz.x < p1.xyz.x)
-				p1.xyz.x = center.xyz.x;
-			if (center.xyz.x > p2.xyz.x)
-				p2.xyz.x = center.xyz.x;
-			if (center.xyz.y < p1.xyz.y)
-				p1.xyz.y = center.xyz.y;
-			if (center.xyz.y > p2.xyz.y)
-				p2.xyz.y = center.xyz.y;
-			if (center.xyz.z < p1.xyz.z)
-				p1.xyz.z = center.xyz.z;
-			if (center.xyz.z > p2.xyz.z)
-				p2.xyz.z = center.xyz.z;
-		}
-
-		ptr = GET_NEXT(ptr);
-	}
-
-	vm_vec_avg(&center, &p1, &p2);
-	ptr = GET_FIRST(&obj_used_list);
-	while (ptr != END_OF_LIST(&obj_used_list)) {
-		if (frames(ptr)) {
-			dist = vm_vec_dist_squared(&center, &ptr->pos);
-			if (dist > largest)
-				largest = dist;
-
-			if (OBJ_INDEX(ptr) > max)
-				max = OBJ_INDEX(ptr);
-		}
-
-		ptr = GET_NEXT(ptr);
-	}
-
-	dist = fl_sqrt(largest) + 1.0f;
+	dist = std::max(radius, fl_sqrt(20.0f)) + 1.0f;
 	vm_vec_scale_add(&camera.view_pos, &center, &camera.view_orient.vec.fvec, -dist);
 	g3_set_view_matrix(&camera.view_pos, &camera.view_orient, viewFov());
 

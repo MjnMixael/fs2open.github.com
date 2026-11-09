@@ -81,6 +81,9 @@ class FredView: public QMainWindow, public IDialogProvider {
 	// Ship / Prop / Other toolbar boxes say which Ctrl+click places them (Preferences > Controls)
 	void updatePlacementTooltips();
 
+	// Switches between the grouped menus and FRED2's classic Editors and Misc menus.
+	void applyMenuLayout(bool classic);
+
  public slots:
 	void openLoadMissionDialog();
 

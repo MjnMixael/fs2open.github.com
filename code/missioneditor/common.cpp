@@ -825,3 +825,50 @@ void rotate_coordinate_points(int from_pos, int to_pos)
 	// the Scene Browser reflects the new order too.
 	resort_coordinate_points_in_obj_used_list();
 }
+
+bool get_object_bounds(bool marked_only, vec3d* center, float* radius)
+{
+	return get_object_bounds(
+		[marked_only](const object* objp) {
+			return !marked_only || objp->flags[Object::Object_Flags::Marked];
+		},
+		center, radius);
+}
+
+bool get_object_bounds(const std::function<bool(const object*)>& include, vec3d* center, float* radius)
+{
+	vec3d mins = ZERO_VECTOR, maxs = ZERO_VECTOR;
+	bool found = false;
+
+	for (auto* objp : list_range(&obj_used_list)) {
+		if (!include(objp)) {
+			continue;
+		}
+		if (!found) {
+			mins = maxs = objp->pos;
+			found = true;
+			continue;
+		}
+		mins.xyz.x = std::min(mins.xyz.x, objp->pos.xyz.x);
+		mins.xyz.y = std::min(mins.xyz.y, objp->pos.xyz.y);
+		mins.xyz.z = std::min(mins.xyz.z, objp->pos.xyz.z);
+		maxs.xyz.x = std::max(maxs.xyz.x, objp->pos.xyz.x);
+		maxs.xyz.y = std::max(maxs.xyz.y, objp->pos.xyz.y);
+		maxs.xyz.z = std::max(maxs.xyz.z, objp->pos.xyz.z);
+	}
+
+	if (!found) {
+		return false;
+	}
+
+	vm_vec_avg(center, &mins, &maxs);
+	*radius = 0.0f;
+	for (auto* objp : list_range(&obj_used_list)) {
+		if (!include(objp)) {
+			continue;
+		}
+		*radius = std::max(*radius, vm_vec_dist(center, &objp->pos));
+	}
+
+	return true;
+}

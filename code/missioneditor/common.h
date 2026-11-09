@@ -3,6 +3,9 @@
 #include "mission/missionmessage.h"
 #include "ship/anchor_t.h"
 
+#include <functional>
+
+class object;
 class ship;
 
 // Default AWACS range applied when the nebula intensity is unset or invalid
@@ -88,6 +91,14 @@ bool ship_scans_subsystems(const ship& shipp);
 // Free the engine data that the editors keep for their whole session.  Call at shutdown, while the graphics
 // system is still up, since models own GPU buffers and cursors own bitmaps.
 void editor_free_engine_data();
+
+// Bounding-box midpoint of all (or only marked) objects and the farthest distance from it; false if there are none.
+bool get_object_bounds(bool marked_only, vec3d* center, float* radius);
+
+// Same, over whatever subset `include` accepts.  qtFRED's Zoom Extents frames only the
+// objects it actually draws, which is neither "all" nor "marked": the Layer Manager can
+// hide any of them.
+bool get_object_bounds(const std::function<bool(const object*)>& include, vec3d* center, float* radius);
 
 // Resolve a mission filename to its index in Campaign.missions[], lazy-loading the mission's goal/event name lists from disk if the
 // FRED_LOAD_PENDING flag is still set.  Returns -1 if the mission isn't in the campaign.
