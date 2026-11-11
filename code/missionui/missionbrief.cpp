@@ -1301,7 +1301,7 @@ int brief_setup_closeup(brief_icon *bi, bool api_access)
 	} else {
 		switch(Closeup_icon->type) {
 		case ICON_PLANET:
-			Closeup_icon = NULL;
+			Closeup_icon = nullptr;
 			return -1;
 			/*
 			strcpy_s(pof_filename, NOX("planet.pof"));
