@@ -1,5 +1,5 @@
 > **Revision information**
-> OFP Revision: [#36](https://github.com/ofp-fs2open/fs2open.github.com/pull/36)
+> OFP Revision: [#171](https://github.com/ofp-fs2open/fs2open.github.com/pull/171)
 > *Set the revision to your PR when your PR changes what this page documents. Leave it alone for edits that only fix or improve the documentation.*
 
 This page covers the Lua scripting API that OFP adds on top of stock FreeSpace Open. The full, always-current reference is the scripting documentation the engine writes itself (run with `-output_scripting`). This page adds context and examples for the OFP-specific parts. Everything else works as described on the [FreeSpace Wiki scripting pages](https://wiki.hard-light.net/index.php/Scripting.tbl).
