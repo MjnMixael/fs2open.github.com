@@ -181,14 +181,15 @@ string, number, vector, string, number, enumeration ui.Briefing.checkStageIcons(
 - `BRIEF_CLOSEUP_SHIP`: a ship class. Draw it with `tb.ShipClasses[name]:renderTechModel(...)`.
 - `BRIEF_CLOSEUP_PROP`: a prop class. Draw it with `tb.PropClasses[name]:renderTechModel(...)`.
 - `BRIEF_CLOSEUP_POF`: a model file, for asteroid, jump node and unknown icons. Draw it with `ui.Briefing.renderBriefingModel(...)`, passing the returned closeup zoom and position.
+- On stock FSO and on OFP builds before this change, the sixth value and the `BRIEF_CLOSEUP_*` constants are all `nil`. Lua treats `nil == nil` as true, so check that the value isn't `nil` before comparing, as the sample does, or every icon will look like a prop.
 - The first five values are unchanged, so scripts that ignore the sixth keep working for ships and model files. A script that looks the name up in `tb.ShipClasses` and otherwise treats it as a model file won't draw prop closeups, since a prop class name isn't a file: `renderBriefingModel` draws nothing and returns `false`. In OFP, any model file name `renderBriefingModel` can't find does the same, with a warning in debug builds (once per name), where stock FSO stops the game with an error.
 
 ```lua
 local name, zoom, pos, label, id, kind = ui.Briefing.checkStageIcons(mx, my)
 if name then
-    if kind == BRIEF_CLOSEUP_PROP then
+    if kind ~= nil and kind == BRIEF_CLOSEUP_PROP then
         tb.PropClasses[name]:renderTechModel(x1, y1, x2, y2)
-    elseif kind == BRIEF_CLOSEUP_SHIP then
+    elseif kind ~= nil and kind == BRIEF_CLOSEUP_SHIP then
         tb.ShipClasses[name]:renderTechModel(x1, y1, x2, y2)
     else
         ui.Briefing.renderBriefingModel(name, zoom, pos, x1, y1, x2, y2)
