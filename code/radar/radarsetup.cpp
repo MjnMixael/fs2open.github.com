@@ -15,6 +15,8 @@
 #include "gamesnd/gamesnd.h"
 #include "globalincs/linklist.h"
 #include "graphics/font.h"
+#include "graphics/matrix.h"
+#include "hud/hud.h"
 #include "iff_defs/iff_defs.h"
 #include "io/timer.h"
 #include "jumpnode/jumpnode.h"
@@ -401,6 +403,65 @@ void radar_plot_object( object *objp )
 	N_blips++;
 }
 
+namespace {
+struct radar_pulse {
+	int objnum;
+	int objsig;
+	color clr;
+	int duration;	// milliseconds per ring
+	int count;		// rings, back to back
+	TIMESTAMP start;
+};
+
+SCP_vector<radar_pulse> Radar_pulses;
+
+// Ring sizes are in HUD pixels, so the ring scales with the gauge like everything else on the HUD
+constexpr float RADAR_PULSE_START_DIAMETER = 4.0f;
+constexpr float RADAR_PULSE_END_DIAMETER = 32.0f;
+constexpr float RADAR_PULSE_LINE_WIDTH = 2.0f;
+
+bool radar_pulse_finished(const radar_pulse& pulse)
+{
+	const object& obj = Objects[pulse.objnum];
+	if (obj.type == OBJ_NONE || obj.signature != pulse.objsig)
+		return true;
+
+	return timestamp_since(pulse.start) >= pulse.duration * pulse.count;
+}
+}
+
+void radar_pulse_start(const object* objp, const color* clr, int duration, int count)
+{
+	if (objp == nullptr || objp->type == OBJ_NONE)
+		return;
+
+	radar_pulse pulse;
+	pulse.objnum = OBJ_INDEX(objp);
+	pulse.objsig = objp->signature;
+	if (clr != nullptr)
+		pulse.clr = *clr;
+	else
+		gr_init_alphacolor(&pulse.clr, 255, 255, 255, 255);
+	pulse.duration = (duration > 0) ? duration : RADAR_PULSE_DEFAULT_DURATION;
+	pulse.count = std::max(count, 1);
+	// keep the total time in range of an int
+	pulse.count = std::min(pulse.count, INT_MAX / pulse.duration);
+	pulse.start = _timestamp();
+
+	for (auto& existing : Radar_pulses) {
+		if (existing.objnum == pulse.objnum) {
+			existing = pulse;
+			return;
+		}
+	}
+	Radar_pulses.push_back(pulse);
+}
+
+void radar_pulse_clear()
+{
+	Radar_pulses.clear();
+}
+
 void radar_mission_init()
 {
 	Blip_last_update.clear();
@@ -433,6 +494,8 @@ void radar_null_nblips()
 void radar_frame_init()
 {
 	radar_null_nblips();
+
+	Radar_pulses.erase(std::remove_if(Radar_pulses.begin(), Radar_pulses.end(), radar_pulse_finished), Radar_pulses.end());
 }
 
 HudGaugeRadar::HudGaugeRadar():
@@ -511,6 +574,87 @@ void HudGaugeRadar::initialize()
 	}
 
 	HudGauge::initialize();
+}
+
+void HudGaugeRadar::queuePulse(const blip* b, float x, float y)
+{
+	// a flickering blip is somewhere it isn't, so a ring there would point at the real position
+	if (Radar_pulses.empty() || (b->flags & BLIP_DRAW_DISTORTED))
+		return;
+
+	// a blinking target blip is hidden every other half cycle; its ring hides with it
+	if ((b->flags & BLIP_CURRENT_TARGET) && (radar_target_id_flags & RTIF_BLINK) && (Missiontime & 8192))
+		return;
+
+	for (const auto& pulse : Radar_pulses) {
+		if (pulse.objnum != b->objnum)
+			continue;
+		if (radar_pulse_finished(pulse))
+			return;
+
+		int elapsed = std::max(timestamp_since(pulse.start), 0);
+		float progress = i2fl(elapsed % pulse.duration) / i2fl(pulse.duration);
+		PulseRing ring;
+		ring.x = x;
+		ring.y = y;
+		ring.progress = progress;
+		ring.clr = pulse.clr;
+		Pulse_rings.push_back(ring);
+		return;
+	}
+}
+
+void HudGaugeRadar::queuePulse3D(const blip* b, const vec3d* pnt)
+{
+	if (Radar_pulses.empty() || Pulse_view_area[2] <= 0 || Pulse_view_area[3] <= 0)
+		return;
+
+	// project with the same matrices the blip was just drawn with
+	vec4 local = vm_vec4_new(pnt->xyz.x, pnt->xyz.y, pnt->xyz.z, 1.0f);
+	vec4 view, clip;
+	vm_vec_transform(&view, &local, &gr_model_view_matrix);
+	vm_vec_transform(&clip, &view, &gr_projection_matrix);
+	if (clip.xyzw.w <= 0.0f)
+		return;
+
+	float ndc_x = clip.xyzw.x / clip.xyzw.w;
+	float ndc_y = clip.xyzw.y / clip.xyzw.w;
+	// rendering to a texture flips the projection's Y (see gr_set_proj_matrix)
+	if (gr_screen.rendering_to_texture != -1)
+		ndc_y = -ndc_y;
+
+	float x = i2fl(Pulse_view_area[0]) + ((ndc_x + 1.0f) * 0.5f * i2fl(Pulse_view_area[2]));
+	float y = i2fl(Pulse_view_area[1]) + ((1.0f - ndc_y) * 0.5f * i2fl(Pulse_view_area[3]));
+	queuePulse(b, x, y);
+}
+
+void HudGaugeRadar::drawPulses()
+{
+	if (Pulse_rings.empty())
+		return;
+
+	// the 3D radars leave their clip area set, and the ring may reach past the gauge
+	resetClip();
+
+	float old_width = GR_CURRENT_LINE_WIDTH;
+	gr_set_line_width(RADAR_PULSE_LINE_WIDTH);
+
+	for (const auto& ring : Pulse_rings) {
+		// ease out: the ring grows fast at first, then slows as it fades
+		float remaining = 1.0f - ring.progress;
+		float grown = 1.0f - (remaining * remaining);
+		float diameter = RADAR_PULSE_START_DIAMETER + ((RADAR_PULSE_END_DIAMETER - RADAR_PULSE_START_DIAMETER) * grown);
+
+		int start_alpha = ring.clr.is_alphacolor ? ring.clr.alpha : 255;
+		color clr;
+		gr_init_alphacolor(&clr, ring.clr.red, ring.clr.green, ring.clr.blue, fl2i(i2fl(start_alpha) * remaining));
+		gr_set_color_fast(&clr);
+
+		renderCircle(fl2i(ring.x), fl2i(ring.y), fl2i(diameter), false);
+	}
+
+	gr_set_line_width(old_width);
+	Pulse_rings.clear();
 }
 
 void HudGaugeRadar::drawRange(bool config)

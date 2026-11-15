@@ -1,5 +1,5 @@
 > **Revision information**
-> OFP Revision: [#129](https://github.com/ofp-fs2open/fs2open.github.com/pull/129)
+> OFP Revision: [#172](https://github.com/ofp-fs2open/fs2open.github.com/pull/172)
 > *Set the revision to your PR when your PR changes what this page documents. Leave it alone for edits that only fix or improve the documentation.*
 
 The **messages.tbl** is used to link actions, animations, and sounds of the messages received during the mission. Personas are used to group messages by the same talker, for example, all the Wingman 1 (Male Terran Pilot) messages go with a Wingman 1 persona.
@@ -61,6 +61,11 @@ Badges show the version a field or behavior was added in. Fields without a badge
 - [+<Species>](#species)
 - [$Allow substitution of missing messages:](#allow-substitution-of-missing-messages)
 - [$No automatic assignment:](#no-automatic-assignment)
+- [$Radar Pulse:](#radar-pulse)
+  - [+Color:](#color)
+  - [+Duration:](#duration)
+  - [+Count:](#count)
+  - [+Message Types:](#message-types)
 - [$Custom data:](#custom-data)
   - [+Val:](#val)
 
@@ -272,6 +277,57 @@ Optional. The +<Species> (such as **+Vasudan**) can be used to assign personas t
 
 ![FSO 23.2](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-23.2.svg) Optional. This excludes a persona from being assigned to a ship that needs to send a message but does not have a specific persona assigned.
 - Syntax: **Boolean**
+
+### $Radar Pulse:
+
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
+
+Optional. Makes the radar point out ships with this persona when they send chosen message types: a ring grows out of the ship's blip on the player's radar and fades, as with the [radar-pulse](OFP-SEXPs#radar-pulse) SEXP. The fields below set the persona's defaults; each [+Message Types:](#message-types) entry lists the types that pulse and can override them.
+- Syntax: none; the fields follow on the next lines.
+- Only listed message types pulse. A `$Radar Pulse:` with no `+Message Types:` does nothing, and logs a warning.
+- `+Color:`, `+Duration:` and `+Count:` before the first `+Message Types:` are the persona defaults; after one, they belong to that entry. Within the defaults or an entry they must come in that order (`+Color:`, `+Duration:`, `+Count:`); a field out of order is an error that stops the game from loading. Indentation doesn't matter.
+- Each setting falls back on its own: the entry's value, then the persona default, then the engine default.
+- The pulse starts when the message plays, not when it's queued, so it lines up with the voice. In multiplayer a player sees the pulse only if the message plays for them, and not every message type is sent to every player.
+- The sending ship's own persona decides, even when the message itself was borrowed from another persona. Messages from Command (no ship) never pulse.
+- The ship only pulses while it has a clear blip on the player's radar: not when it's out of range or hidden by AWACS, nebula or sensor flags.
+- A `-msg.tbm` can't add or change this block on a persona that's already defined: a persona whose name is already taken is ignored, with a duplicate warning.
+
+#### +Color:
+
+Optional. The ring color, red, green and blue from 0 to 255, with an optional fourth value for the ring's starting alpha. Values outside 0 to 255 are clamped. Default: white, alpha 255.
+- Syntax: **Integer Integer Integer [Integer]**
+
+#### +Duration:
+
+Optional. Milliseconds each ring takes to grow and fade. Below 1 logs a warning and uses the default. Default: 1000.
+- Syntax: **Integer**
+
+#### +Count:
+
+Optional. Number of rings, played one after another. Below 1 logs a warning and uses the default. Default: 1.
+- Syntax: **Integer**
+
+#### +Message Types:
+
+A list of message types that pulse: the `$Name:` values in [#Message Frequencies](#message-frequencies), such as **Help**, including [custom message types](#custom-message-types). `+Color:`, `+Duration:` and `+Count:` lines after it apply to every type in its list. Can appear any number of times.
+- Syntax: **( "String" "String" ... )**. A single type still goes in parentheses.
+- An unknown type logs a warning and is skipped; the rest of the list still works.
+- A type listed in two entries uses the later one, with a warning.
+
+```
+$Persona: Wingman 1
+$Type: wingman
++Terran
+$Radar Pulse:
+	+Color: 255 255 160                       ; persona defaults
+	+Duration: 800
+	+Message Types: ( "Help" )
+		+Color: 255 64 64                     ; red, 800 ms (from the persona), 3 rings
+		+Count: 3
+	+Message Types: ( "Check 6" "Cover Me" )  ; pale yellow, 800 ms, 1 ring
+	+Message Types: ( "Death" )
+		+Color: 255 0 0 128                   ; half-transparent red
+```
 
 ### $Custom data:
 

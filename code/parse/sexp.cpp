@@ -90,6 +90,7 @@
 #include "parse/sexp_container.h"
 #include "playerman/player.h"
 #include "prop/prop.h"
+#include "radar/radarsetup.h"
 #include "render/3d.h"
 #include "scripting/global_hooks.h"
 #include "ship/afterburner.h"
@@ -716,6 +717,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "hud-set-max-targeting-range",	OP_HUD_SET_MAX_TARGETING_RANGE,			1,	1,			SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "hud-force-sensor-static",		OP_HUD_FORCE_SENSOR_STATIC,				1,	1,			SEXP_ACTION_OPERATOR,	},	// MjnMixael
 	{ "hud-force-emp-effect",			OP_HUD_FORCE_EMP_EFFECT,				2,	3,			SEXP_ACTION_OPERATOR,	},	// MjnMixael
+	{ "radar-pulse",					OP_RADAR_PULSE,							7,	INT_MAX,			SEXP_ACTION_OPERATOR,	},	// MjnMixael
 	{ "set-squadron-wings",				OP_SET_SQUADRON_WINGS,			1,	MAX_SQUADRON_WINGS,	SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "set-player-target",				OP_SET_PLAYER_TARGET,					1,	2,			SEXP_ACTION_OPERATOR,	},	// LuytenKy
 	{ "clear-player-target",			OP_CLEAR_PLAYER_TARGET,					0,	0,			SEXP_ACTION_OPERATOR,	},	// LuytenKy
@@ -13876,6 +13878,44 @@ void sexp_hud_force_emp(int n)
 	}
 
 	emp_start_local(i2fl(intensity), i2fl(duration) / 1000, text);
+}
+
+/**
+ * Pulses ships on the player's radar: rings grow out of their blips and fade.
+ */
+void sexp_radar_pulse(int n)
+{
+	// red, green, blue, alpha, duration, count
+	std::array<int, 6> values;
+	bool is_nan, is_nan_forever;
+	eval_array(values, n, is_nan, is_nan_forever);
+	if (is_nan || is_nan_forever)
+		return;
+
+	auto channel = [](int v) { return std::clamp(v, 0, 255); };
+	color clr;
+	gr_init_alphacolor(&clr, channel(values[0]), channel(values[1]), channel(values[2]), channel(values[3]));
+	int duration = values[4];
+	int count = values[5];
+
+	for (; n >= 0; n = CDR(n)) {
+		auto ship_entry = eval_ship(n);
+		if (ship_entry) {
+			if (ship_entry->status == ShipStatus::PRESENT)
+				radar_pulse_start(ship_entry->objp(), &clr, duration, count);
+			continue;
+		}
+
+		auto wingp = eval_wing(n);
+		if (!wingp)
+			continue;
+
+		for (int i = 0; i < wingp->current_count; i++) {
+			int shipnum = wingp->ship_index[i];
+			if (shipnum >= 0)
+				radar_pulse_start(&Objects[Ships[shipnum].objnum], &clr, duration, count);
+		}
+	}
 }
 
 void sexp_hud_set_directive(int n)
@@ -29689,6 +29729,11 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
+			case OP_RADAR_PULSE:
+				sexp_radar_pulse(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
 			case OP_SET_SQUADRON_WINGS:
 				sexp_set_squadron_wings(node);
 				sexp_val = SEXP_TRUE;
@@ -32432,6 +32477,7 @@ int query_operator_return_type(int op)
 		case OP_HUD_CLEAR_MESSAGES:
 		case OP_HUD_FORCE_SENSOR_STATIC:
 		case OP_HUD_FORCE_EMP_EFFECT:
+		case OP_RADAR_PULSE:
 		case OP_SET_SQUADRON_WINGS:
 		case OP_SHIP_CHANGE_ALT_NAME:
 		case OP_SHIP_CHANGE_CALLSIGN:
@@ -33919,6 +33965,12 @@ int query_operator_argument_type(int op_index, int argnum)
 				return OPF_NUMBER;
 			else
 				return OPF_MESSAGE_OR_STRING;
+
+		case OP_RADAR_PULSE:
+			if (argnum < 6)
+				return OPF_POSITIVE;
+			else
+				return OPF_SHIP_WING;
 
 		case OP_SET_SQUADRON_WINGS:
 			return OPF_WING;
@@ -37902,6 +37954,7 @@ int get_category(int op_id)
 		case OP_TOGGLE_ASTEROID_FIELD:
 		case OP_HUD_FORCE_SENSOR_STATIC:
 		case OP_HUD_FORCE_EMP_EFFECT:
+		case OP_RADAR_PULSE:
 		case OP_SET_SQUADRON_WINGS:
 		case OP_SET_GRAVITY_ACCEL:
 		case OP_FORCE_REARM:
@@ -38301,6 +38354,7 @@ int get_subcategory(int op_id)
 		case OP_HUD_SET_MAX_TARGETING_RANGE:
 		case OP_HUD_FORCE_SENSOR_STATIC:
 		case OP_HUD_FORCE_EMP_EFFECT:
+		case OP_RADAR_PULSE:
 		case OP_SET_SQUADRON_WINGS:
 			return CHANGE_SUBCATEGORY_HUD;
 
@@ -43441,6 +43495,22 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\t1:\tNumber, emp intensity (0 to 500)\r\n"
 		"\t2:\tNumber, emp duration in milliseconds\r\n"
 		"\t3:\tString or message to display. \"none\" to display nothing. Defaults to \"Emp\"\r\n"
+	},
+
+	{OP_RADAR_PULSE, "radar-pulse\r\n"
+		"\tDraws the player's eye to ships on the radar: a ring grows out of each blip and fades.  "
+		"Works on every radar type.  A ship only pulses while it has a clear blip, so a ship the radar doesn't show (out of range, "
+		"hidden from sensors, or flickering from AWACS or nebula) doesn't pulse; on a DRADIS radar it starts pulsing once the sweep shows it.  "
+		"Ships that haven't arrived or are already gone are skipped.  Pulsing a ship again restarts its pulse.  "
+		"In multiplayer only the host sees it (nobody, on a standalone server), because events run on the host and the pulse isn't sent to clients.\r\n"
+		"Takes 7 or more arguments...\r\n"
+		"\t1:\tRed, 0 to 255\r\n"
+		"\t2:\tGreen, 0 to 255\r\n"
+		"\t3:\tBlue, 0 to 255\r\n"
+		"\t4:\tAlpha the rings start at, 0 to 255 (they fade from there to nothing)\r\n"
+		"\t5:\tMilliseconds each ring takes (below 1 uses the default of 1000)\r\n"
+		"\t6:\tNumber of rings, played one after another (below 1 uses 1)\r\n"
+		"\tRest:\tShips or wings to pulse (a wing pulses every ship in it)\r\n"
 	},
 
 	{OP_SET_SQUADRON_WINGS, "set-squadron-wings\r\n"

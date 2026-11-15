@@ -150,6 +150,9 @@ void HudGaugeRadarStd::drawBlips(int blip_type, int bright, int distort)
 			b->rad = Radar_blip_radius_normal;
 		}
 
+		if (!distort)
+			queuePulse(b, i2fl(x), i2fl(y));
+
 		// maybe distort blip
 		if (distort)
 		{
@@ -365,6 +368,8 @@ void HudGaugeRadarStd::render(float  /*frametime*/, bool config)
 				Radar_static_looping = sound_handle::invalid();
 			}
 		}
+
+		drawPulses();
 	}
 
 	if(g3_yourself)

@@ -286,7 +286,14 @@ void HudGaugeRadarDradis::drawBlips(int blip_type, int bright, int distort)
 	for (b = GET_FIRST(blip_head); b != END_OF_LIST(blip_head); b = GET_NEXT(b))
 	{
 		plotBlip(b, &pos, &alpha);
-		
+
+		// each blip is drawn in one of the two halves (see drawContact); a blip the sweep hasn't
+		// reached yet is invisible, so it doesn't pulse until it shows
+		bool in_this_half = sub_y_clip ? (pos.xyz.y <= 0) : (pos.xyz.y > 0);
+		bool shown = (alpha > 0.0f) || (b->flags & BLIP_CURRENT_TARGET);
+		if (!distort && in_this_half && shown)
+			queuePulse3D(b, &pos);
+
 		gr_set_color_fast(b->blip_color);
 
 		scale_factor = 1.0f;
@@ -335,6 +342,12 @@ void HudGaugeRadarDradis::drawBlips(int blip_type, int bright, int distort)
 void HudGaugeRadarDradis::setupViewHtl()
 {
 	setClip(position[0], position[1], Radar_radius[0], Radar_radius[1]);
+
+	Pulse_view_area[0] = position[0];
+	Pulse_view_area[1] = position[1];
+	Pulse_view_area[2] = Radar_radius[0];
+	Pulse_view_area[3] = Radar_radius[1];
+
 	gr_set_proj_matrix(.625f * PI_2, i2fl(Radar_radius[0])/i2fl(Radar_radius[1]), 0.001f, 5.0f);
 	gr_set_view_matrix(&Orb_eye_position, &vmd_identity_matrix);
 
@@ -553,6 +566,8 @@ void HudGaugeRadarDradis::render(float  /*frametime*/, bool config)
 		g3_end_frame();
 
 	doneDrawingHtl();
+
+	drawPulses();
 }
 
 void HudGaugeRadarDradis::pageIn()

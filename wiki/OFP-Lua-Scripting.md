@@ -1,5 +1,5 @@
 > **Revision information**
-> OFP Revision: [#171](https://github.com/ofp-fs2open/fs2open.github.com/pull/171)
+> OFP Revision: [#172](https://github.com/ofp-fs2open/fs2open.github.com/pull/172)
 > *Set the revision to your PR when your PR changes what this page documents. Leave it alone for edits that only fix or improve the documentation.*
 
 This page covers the Lua scripting API that OFP adds on top of stock FreeSpace Open. The full, always-current reference is the scripting documentation the engine writes itself (run with `-output_scripting`). This page adds context and examples for the OFP-specific parts. Everything else works as described on the [FreeSpace Wiki scripting pages](https://wiki.hard-light.net/index.php/Scripting.tbl).
@@ -20,8 +20,10 @@ This page covers the Lua scripting API that OFP adds on top of stock FreeSpace O
    2. [intelentry:renderTechModel2](#intelentryrendertechmodel2)
 4. [Briefing closeups](#briefing-closeups)
    1. [ui.Briefing.checkStageIcons](#uibriefingcheckstageicons)
-5. [Documentation corrections](#documentation-corrections)
-6. [Sample](#sample)
+5. [Radar pulses](#radar-pulses)
+   1. [object:radarPulse](#objectradarpulse)
+6. [Documentation corrections](#documentation-corrections)
+7. [Sample](#sample)
 
 ---
 
@@ -194,6 +196,37 @@ if name then
     else
         ui.Briefing.renderBriefingModel(name, zoom, pos, x1, y1, x2, y2)
     end
+end
+```
+
+---
+
+## Radar pulses
+
+A radar pulse draws the player's eye to an object on the radar: a ring grows out of its blip and fades. It works on every radar type (2D, 3D orb and DRADIS). The [radar-pulse](OFP-SEXPs#radar-pulse) SEXP and the persona field [$Radar Pulse:](messages.tbl#radar-pulse) start the same pulse.
+
+### object:radarPulse
+
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
+
+```
+boolean object:radarPulse([color Color = nil, number DurationMs = 1000, number Count = 1])
+```
+
+- `Color` defaults to white. Its alpha is the ring's starting alpha.
+- `DurationMs` is the time each ring takes to grow and fade. `Count` rings play one after another.
+- Pulsing an object again restarts its pulse.
+- The object only pulses while it has a clear blip. Anything the radar doesn't show (out of range, hidden from sensors, or flickering from AWACS or nebula) doesn't pulse, and on a DRADIS radar a blip starts pulsing once the sweep shows it. Radar static and EMP hide the rings too.
+- Works on any object that gets a blip: ships, bombs, mines and jump nodes.
+- Returns `false` for an invalid handle, otherwise `true`.
+
+Only this computer's radar changes; nothing is sent to other players in multiplayer.
+
+```lua
+-- three quick red rings on a ship
+local ship = mn.Ships['Alpha 2']
+if ship:isValid() then
+    ship:radarPulse(gr.createColor(255, 64, 64), 500, 3)
 end
 ```
 

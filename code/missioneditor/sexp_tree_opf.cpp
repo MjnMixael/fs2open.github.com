@@ -2994,6 +2994,16 @@ int SexpTreeOPF::get_default_value(sexp_list_item* item, int op, int i) const
 				sprintf(sexp_str_token, "%d", temp);
 				item->set_data(sexp_str_token, (SEXPT_NUMBER | SEXPT_VALID));
 			}
+			else if (Operators[op].value == OP_RADAR_PULSE)
+			{
+				// red, green, blue and alpha are 255; then 1000 ms and 1 ring
+				if (i < 4)
+					item->set_data("255", (SEXPT_NUMBER | SEXPT_VALID));
+				else if (i == 4)
+					item->set_data("1000", (SEXPT_NUMBER | SEXPT_VALID));
+				else
+					item->set_data("1", (SEXPT_NUMBER | SEXPT_VALID));
+			}
 			else if (Operators[op].value == OP_CHANGE_BACKGROUND)
 			{
 				item->set_data("1", (SEXPT_NUMBER | SEXPT_VALID));

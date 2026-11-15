@@ -1,5 +1,5 @@
 > **Revision information**
-> OFP Revision: [#166](https://github.com/ofp-fs2open/fs2open.github.com/pull/166)
+> OFP Revision: [#172](https://github.com/ofp-fs2open/fs2open.github.com/pull/172)
 > *Set the revision to your PR when your PR changes what this page documents. Leave it alone for edits that only fix or improve the documentation.*
 
 This page lists the SEXP operators that exist only in OFP, and the OFP changes to existing SCP operators. Every other operator works in OFP exactly as documented on the [FreeSpace Wiki SEXP page](https://wiki.hard-light.net/index.php/SEXP). Only the differences are listed here.
@@ -13,6 +13,7 @@ A mission that uses anything on this page needs an OFP build. Stock FreeSpace Op
    2. [alter-point-flag](#alter-point-flag)
    3. [Ship custom data operators](#ship-custom-data-operators)
    4. [fail-event](#fail-event)
+   5. [radar-pulse](#radar-pulse)
 2. [Coordinate points in existing operators](#coordinate-points-in-existing-operators)
 3. [Props in existing operators](#props-in-existing-operators)
    1. [replace-texture](#replace-texture)
@@ -23,7 +24,7 @@ A mission that uses anything on this page needs an OFP build. Stock FreeSpace Op
 
 ## New operators
 
-`point-targeted` and `alter-point-flag` work on coordinate points: named locations in a mission that can be drawn in-game as a shape and targeted by the player. See [coordinate_points.tbl](coordinate_points.tbl) for their shapes and mission-file fields. The [ship custom data operators](#ship-custom-data-operators) read and change named values stored on ships. [fail-event](#fail-event) forces events, usually directives, into a failed state.
+`point-targeted` and `alter-point-flag` work on coordinate points: named locations in a mission that can be drawn in-game as a shape and targeted by the player. See [coordinate_points.tbl](coordinate_points.tbl) for their shapes and mission-file fields. The [ship custom data operators](#ship-custom-data-operators) read and change named values stored on ships. [fail-event](#fail-event) forces events, usually directives, into a failed state. [radar-pulse](#radar-pulse) draws the player's eye to ships on the radar.
 
 Category and subcategory are where each operator appears in the editor's operator menus.
 
@@ -40,6 +41,7 @@ Category and subcategory are where each operator appears in the editor's operato
 | [ship-custom-data-set-bool](#ship-custom-data-set-bool) | Action | Change | Ship Status |
 | [ship-custom-data-clear](#ship-custom-data-clear) | Action | Change | Ship Status |
 | [fail-event](#fail-event) | Action | Event/Goals | *(none; Event/Goals has no subcategories)* |
+| [radar-pulse](#radar-pulse) | Action | Change | HUD |
 
 ### point-targeted
 
@@ -216,6 +218,35 @@ Fails one or more events, as if their formulas had become known false. The usual
 - A directive the player hasn't reached yet (for example a chained directive whose earlier event isn't true) fails without appearing on the HUD.
 - An event can't fail itself, because its result is decided after its actions run. Use a separate event instead. The game skips that name with a warning, and qtFRED's error checker reports it.
 - In multiplayer, the change is sent to all clients.
+
+### radar-pulse
+
+![OFP 26.3.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/ofp-26.3.0.svg)
+
+**Category:** Change > HUD
+
+```
+( radar-pulse <red> <green> <blue> <alpha> <duration> <count> <ship or wing> [<ship or wing> ...] )
+```
+
+Draws the player's eye to ships on the radar: a ring grows out of each blip and fades. It works on every radar type (2D, 3D orb and DRADIS).
+
+| # | Argument | Description |
+|---|---|---|
+| 1 | Red | 0 to 255. The editors fill in 255. |
+| 2 | Green | 0 to 255. The editors fill in 255. |
+| 3 | Blue | 0 to 255. The editors fill in 255. |
+| 4 | Alpha | Opacity the rings start at, 0 to 255; they fade from there to nothing. The editors fill in 255. |
+| 5 | Duration | Milliseconds each ring takes to grow and fade. Below 1 uses the default of 1000. The editors fill in 1000. |
+| 6 | Count | Number of rings, played one after another. Below 1 uses 1. The editors fill in 1. |
+| 7+ | Ship or wing | The ships to pulse. A wing pulses every ship in it. At least one is required. |
+
+- Every argument is required; color values outside 0 to 255 are clamped.
+- A ship only pulses while it has a clear blip. A ship the radar doesn't show (out of range, hidden from sensors, or flickering from AWACS or nebula) doesn't pulse, and on a DRADIS radar a blip starts pulsing once the sweep shows it. Radar static and EMP hide the rings too.
+- Pulsing a ship again restarts its pulse.
+- Ships that haven't arrived yet, or have left, are skipped.
+- Personas can also pulse the ship sending a message; see [$Radar Pulse:](messages.tbl#radar-pulse). Scripts can pulse any object with [object:radarPulse](OFP-Lua-Scripting#objectradarpulse).
+- In multiplayer only the host sees the pulse (nobody, on a standalone server): events run on the host, and the pulse isn't sent to clients.
 
 ---
 

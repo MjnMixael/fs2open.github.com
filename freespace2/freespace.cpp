@@ -1090,6 +1090,7 @@ void game_level_init()
 	Multi_ping_timestamp = UI_TIMESTAMP::invalid();
 
 	obj_init();						// Must be inited before the other systems
+	radar_pulse_clear();			// here, not in radar_mission_init, which also runs on returning from in-mission screens
 
 	if ( !(Game_mode & GM_STANDALONE_SERVER) ) {
 		model_page_in_start();		// mark any existing models as unused but don't unload them yet

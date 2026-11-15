@@ -102,6 +102,15 @@ void radar_plot_object( object *objp );
 RadarVisibility radar_is_visible( object *objp );
 void radar_check_2d_icon_options();
 
+// Radar pulses: rings that grow out of an object's blip and fade, to draw the player's eye to it.
+// A pulse only shows while the object has a clear blip, so it never reveals anything the radar hides.
+constexpr int RADAR_PULSE_DEFAULT_DURATION = 1000;	// milliseconds per ring
+
+// Starts a pulse on objp, replacing any pulse it already has. clr defaults to white (its alpha is the
+// ring's starting alpha), duration is per ring, and count rings play back to back.
+void radar_pulse_start(const object* objp, const color* clr = nullptr, int duration = RADAR_PULSE_DEFAULT_DURATION, int count = 1);
+void radar_pulse_clear();
+
 extern sound_handle Radar_static_looping;
 
 class HudGaugeRadar: public HudGauge
@@ -123,6 +132,23 @@ protected:
 	bool		Radar_flicker_on[NUM_FLICKER_TIMERS];
 
 	ubyte Radar_infinity_icon;
+
+	// Pulse rings found while drawing blips, drawn on top afterwards in HUD coordinates
+	struct PulseRing {
+		float x, y;
+		float progress;	// 0 to 1 through the current ring
+		color clr;
+	};
+	SCP_vector<PulseRing> Pulse_rings;
+
+	// The 3D radars' viewport in HUD coordinates (x, y, w, h), set with their view; w = 0 when unset
+	int Pulse_view_area[4] = {0, 0, 0, 0};
+
+	// Queues a ring for this blip if its object is pulsing. x and y are HUD coordinates.
+	void queuePulse(const blip* b, float x, float y);
+	// Queues a ring for a blip drawn at pnt in the current 3D view, using Pulse_view_area
+	void queuePulse3D(const blip* b, const vec3d* pnt);
+	void drawPulses();
 public:
 	HudGaugeRadar();
 	HudGaugeRadar(int _gauge_object, int r, int g, int b);
