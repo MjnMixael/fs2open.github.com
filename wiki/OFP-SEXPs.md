@@ -246,7 +246,7 @@ Draws the player's eye to ships on the radar: a ring grows out of each blip and 
 - Pulsing a ship again restarts its pulse.
 - Ships that haven't arrived yet, or have left, are skipped.
 - Personas can also pulse the ship sending a message; see [$Radar Pulse:](messages.tbl#radar-pulse). Scripts can pulse any object with [object:radarPulse](OFP-Lua-Scripting#objectradarpulse).
-- In multiplayer only the host sees the pulse: events run on the host, and the pulse isn't sent to clients.
+- In multiplayer only the host sees the pulse (nobody, on a standalone server): events run on the host, and the pulse isn't sent to clients.
 
 ---
 

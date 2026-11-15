@@ -316,6 +316,12 @@ static void parse_persona_radar_pulse(persona_radar_pulse& settings, const char*
 		else
 			settings.count = count;
 	}
+
+	// any field left over came out of order, and the rest of the table would no longer parse
+	for (const char* field : { "+Color:", "+Duration:", "+Count:" }) {
+		if (check_for_string(field))
+			Error(LOCATION, "$Radar Pulse: of persona %s has %s out of order; the fields must come as +Color:, +Duration:, +Count:", persona_name, field);
+	}
 }
 
 // functions to deal with parsing personas.  Personas are just a list of names that give someone
@@ -2022,8 +2028,8 @@ void message_queue_process()
 		sender = &Objects[Ships[Message_shipnum].objnum];
 
 		// pulse the sender on the radar if its persona asks for it on this message type. Done here, when
-		// the message plays, so the ring matches the voice. A multiplayer client pulses only for messages it is
-		// sent: Arrive Enemy, Help, Backup and Support Killed go to everyone, other types only to their target
+		// the message plays, so the ring matches the voice. In multiplayer a player pulses only for messages that
+		// play for them; which builtin messages reach which players depends on the type
 		if (builtinMessage) {
 			int persona_index = Ships[Message_shipnum].persona_index;
 			if (persona_index < 0)

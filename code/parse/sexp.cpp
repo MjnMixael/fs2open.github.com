@@ -43502,7 +43502,7 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"Works on every radar type.  A ship only pulses while it has a clear blip, so a ship the radar doesn't show (out of range, "
 		"hidden from sensors, or flickering from AWACS or nebula) doesn't pulse; on a DRADIS radar it starts pulsing once the sweep shows it.  "
 		"Ships that haven't arrived or are already gone are skipped.  Pulsing a ship again restarts its pulse.  "
-		"In multiplayer only the host sees it, because events run on the host and the pulse isn't sent to clients.\r\n"
+		"In multiplayer only the host sees it (nobody, on a standalone server), because events run on the host and the pulse isn't sent to clients.\r\n"
 		"Takes 7 or more arguments...\r\n"
 		"\t1:\tRed, 0 to 255\r\n"
 		"\t2:\tGreen, 0 to 255\r\n"

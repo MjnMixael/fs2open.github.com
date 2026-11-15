@@ -285,9 +285,9 @@ Optional. The +<Species> (such as **+Vasudan**) can be used to assign personas t
 Optional. Makes the radar point out ships with this persona when they send chosen message types: a ring grows out of the ship's blip on the player's radar and fades, as with the [radar-pulse](OFP-SEXPs#radar-pulse) SEXP. The fields below set the persona's defaults; each [+Message Types:](#message-types) entry lists the types that pulse and can override them.
 - Syntax: none; the fields follow on the next lines.
 - Only listed message types pulse. A `$Radar Pulse:` with no `+Message Types:` does nothing, and logs a warning.
-- Fields are read in order. `+Color:`, `+Duration:` and `+Count:` before the first `+Message Types:` are the persona defaults; after one, they belong to that entry. Indentation doesn't matter.
+- `+Color:`, `+Duration:` and `+Count:` before the first `+Message Types:` are the persona defaults; after one, they belong to that entry. Within the defaults or an entry they must come in that order (`+Color:`, `+Duration:`, `+Count:`); a field out of order is an error that stops the game from loading. Indentation doesn't matter.
 - Each setting falls back on its own: the entry's value, then the persona default, then the engine default.
-- The pulse starts when the message plays, not when it's queued, so it lines up with the voice. In multiplayer a player sees the pulse only if the message reaches them: Arrive Enemy, Help, Backup and Support Killed are sent to every player, while other types play only on the host or for the one player they're aimed at.
+- The pulse starts when the message plays, not when it's queued, so it lines up with the voice. In multiplayer a player sees the pulse only if the message plays for them, and not every message type is sent to every player.
 - The sending ship's own persona decides, even when the message itself was borrowed from another persona. Messages from Command (no ship) never pulse.
 - The ship only pulses while it has a clear blip on the player's radar: not when it's out of range or hidden by AWACS, nebula or sensor flags.
 - A `-msg.tbm` can't add or change this block on a persona that's already defined: a persona whose name is already taken is ignored, with a duplicate warning.
