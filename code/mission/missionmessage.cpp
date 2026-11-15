@@ -415,19 +415,19 @@ void persona_parse()
 				Warning(LOCATION, "Persona %s has an empty +Message Types: list in $Radar Pulse:", this_persona.name);
 
 			for (const auto& type_name : type_names) {
-				int type = get_builtin_message_type(type_name.c_str());
-				if (type == MESSAGE_NONE) {
+				int msg_type = get_builtin_message_type(type_name.c_str());
+				if (msg_type == MESSAGE_NONE) {
 					Warning(LOCATION, "Unknown message type '%s' in $Radar Pulse: of persona %s", type_name.c_str(), this_persona.name);
 					continue;
 				}
 
 				auto& types = this_persona.radar_pulse_types;
-				auto existing = std::find_if(types.begin(), types.end(), [type](const std::pair<int, persona_radar_pulse>& entry) { return entry.first == type; });
+				auto existing = std::find_if(types.begin(), types.end(), [msg_type](const std::pair<int, persona_radar_pulse>& entry) { return entry.first == msg_type; });
 				if (existing != types.end()) {
 					Warning(LOCATION, "Persona %s lists message type '%s' more than once in $Radar Pulse:; the later entry is used", this_persona.name, type_name.c_str());
 					existing->second = settings;
 				} else {
-					types.emplace_back(type, settings);
+					types.emplace_back(msg_type, settings);
 				}
 			}
 		}
