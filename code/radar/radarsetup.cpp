@@ -16,6 +16,7 @@
 #include "globalincs/linklist.h"
 #include "graphics/font.h"
 #include "graphics/matrix.h"
+#include "hud/hud.h"
 #include "iff_defs/iff_defs.h"
 #include "io/timer.h"
 #include "jumpnode/jumpnode.h"
@@ -464,7 +465,6 @@ void radar_pulse_clear()
 void radar_mission_init()
 {
 	Blip_last_update.clear();
-	radar_pulse_clear();
 
 	for (int i=0; i<MAX_RADAR_COLORS; i++ )	{
 		for (int j=0; j<MAX_RADAR_LEVELS; j++ )	{
@@ -580,6 +580,10 @@ void HudGaugeRadar::queuePulse(const blip* b, float x, float y)
 {
 	// a flickering blip is somewhere it isn't, so a ring there would point at the real position
 	if (Radar_pulses.empty() || (b->flags & BLIP_DRAW_DISTORTED))
+		return;
+
+	// a blinking target blip is hidden every other half cycle; its ring hides with it
+	if ((b->flags & BLIP_CURRENT_TARGET) && (radar_target_id_flags & RTIF_BLINK) && (Missiontime & 8192))
 		return;
 
 	for (const auto& pulse : Radar_pulses) {

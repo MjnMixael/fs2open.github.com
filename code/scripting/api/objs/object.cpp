@@ -793,7 +793,7 @@ ADE_FUNC(radarPulse, l_Object, "[color Color=nil, number DurationMs=1000, number
 	return ADE_RETURN_TRUE;
 }
 
-ADE_FUNC(findWorldPoint, l_Object, "vector","Calculates the world coordinates of a point in the object's frame of reference", "vector", "Point, or empty vector if handle is not valid")
+ADE_FUNC(findWorldPoint, l_Object, "vector", "Calculates the world coordinates of a point in the object's frame of reference", "vector", "Point, or empty vector if handle is not valid")
 {
 	object_h *objh;
 	vec3d pnt, outpnt;

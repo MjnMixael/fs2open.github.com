@@ -2022,7 +2022,8 @@ void message_queue_process()
 		sender = &Objects[Ships[Message_shipnum].objnum];
 
 		// pulse the sender on the radar if its persona asks for it on this message type. Done here, when
-		// the message plays, so the ring matches the voice; multiplayer clients get it from the message itself
+		// the message plays, so the ring matches the voice. A multiplayer client pulses only for messages it is
+		// sent: Arrive Enemy, Help, Backup and Support Killed go to everyone, other types only to their target
 		if (builtinMessage) {
 			int persona_index = Ships[Message_shipnum].persona_index;
 			if (persona_index < 0)
