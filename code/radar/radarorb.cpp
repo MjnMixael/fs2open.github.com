@@ -270,6 +270,9 @@ void HudGaugeRadarOrb::drawBlips(int blip_type, int bright, int distort)
 			b->rad = Radar_blip_radius_normal;
 		}
 
+		if (!distort)
+			queuePulse3D(b, &pos);
+
 		// maybe distort blip
 		if (distort)
 		{
@@ -469,6 +472,8 @@ void HudGaugeRadarOrb::render(float  /*frametime*/, bool config)
 	
     doneDrawingHtl();
 
+	drawPulses();
+
 	if(g3_yourself)
 		g3_end_frame();
 }
@@ -596,6 +601,11 @@ void HudGaugeRadarOrb::setupViewHtl()
     setClip(position[0],
                  position[1],
                  w, h);
+
+	Pulse_view_area[0] = position[0];
+	Pulse_view_area[1] = position[1];
+	Pulse_view_area[2] = w;
+	Pulse_view_area[3] = h;
 
     gr_set_proj_matrix( .625f * PI_2, float(w)/float(h), 0.001f, 5.0f);
 	gr_set_view_matrix( &Orb_eye_position, &vmd_identity_matrix );

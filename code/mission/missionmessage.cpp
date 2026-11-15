@@ -31,6 +31,7 @@
 #include "parse/parselo.h"
 #include "parse/sexp.h"
 #include "parse/sexp_container.h"
+#include "radar/radarsetup.h"
 #include "scripting/api/objs/message.h"
 #include "scripting/hook_api.h"
 #include "scripting/scripting.h"
@@ -277,6 +278,46 @@ int comm_between_player_and_ship(int other_shipnum, bool for_death_scream);
 
 // following functions to parse messages.tbl -- code pretty much ripped from weapon/ship table parsing code
 
+// The settings fields of $Radar Pulse:, for the persona defaults or one +Message Types: entry
+static void parse_persona_radar_pulse(persona_radar_pulse& settings, const char* persona_name)
+{
+	if (optional_string("+Color:")) {
+		int rgba[4] = { 255, 255, 255, 255 };
+		for (int i = 0; i < 3; i++)
+			stuff_int(&rgba[i]);
+
+		// the starting alpha is optional, on the same line
+		ignore_gray_space();
+		if (isdigit(static_cast<unsigned char>(*Mp)) || *Mp == '-')
+			stuff_int(&rgba[3]);
+
+		for (auto& part : rgba)
+			CLAMP(part, 0, 255);
+
+		color clr;
+		gr_init_alphacolor(&clr, rgba[0], rgba[1], rgba[2], rgba[3]);
+		settings.clr = clr;
+	}
+
+	if (optional_string("+Duration:")) {
+		int duration;
+		stuff_int(&duration);
+		if (duration < 1)
+			Warning(LOCATION, "+Duration: in $Radar Pulse: of persona %s must be at least 1; using the default", persona_name);
+		else
+			settings.duration = duration;
+	}
+
+	if (optional_string("+Count:")) {
+		int count;
+		stuff_int(&count);
+		if (count < 1)
+			Warning(LOCATION, "+Count: in $Radar Pulse: of persona %s must be at least 1; using the default", persona_name);
+		else
+			settings.count = count;
+	}
+}
+
 // functions to deal with parsing personas.  Personas are just a list of names that give someone
 // sending a message an identity which spans the life of the mission
 void persona_parse()
@@ -352,6 +393,41 @@ void persona_parse()
 		stuff_boolean(&temp);
 		if (temp)
 			this_persona.flags |= PERSONA_FLAG_NO_AUTOMATIC_ASSIGNMENT;
+	}
+
+	if (optional_string("$Radar Pulse:")) {
+		parse_persona_radar_pulse(this_persona.radar_pulse_defaults, this_persona.name);
+
+		while (optional_string("+Message Types:")) {
+			SCP_vector<SCP_string> type_names;
+			stuff_string_list(type_names);
+
+			persona_radar_pulse settings;
+			parse_persona_radar_pulse(settings, this_persona.name);
+
+			if (type_names.empty())
+				Warning(LOCATION, "Persona %s has an empty +Message Types: list in $Radar Pulse:", this_persona.name);
+
+			for (const auto& type_name : type_names) {
+				int type = get_builtin_message_type(type_name.c_str());
+				if (type == MESSAGE_NONE) {
+					Warning(LOCATION, "Unknown message type '%s' in $Radar Pulse: of persona %s", type_name.c_str(), this_persona.name);
+					continue;
+				}
+
+				auto& types = this_persona.radar_pulse_types;
+				auto existing = std::find_if(types.begin(), types.end(), [type](const std::pair<int, persona_radar_pulse>& entry) { return entry.first == type; });
+				if (existing != types.end()) {
+					Warning(LOCATION, "Persona %s lists message type '%s' more than once in $Radar Pulse:; the later entry is used", this_persona.name, type_name.c_str());
+					existing->second = settings;
+				} else {
+					types.emplace_back(type, settings);
+				}
+			}
+		}
+
+		if (this_persona.radar_pulse_types.empty())
+			Warning(LOCATION, "$Radar Pulse: of persona %s lists no message types, so it never pulses", this_persona.name);
 	}
 
 	if (optional_string("$Custom data:")) {
@@ -1944,6 +2020,37 @@ void message_queue_process()
 
 	if (Message_shipnum >= 0) {
 		sender = &Objects[Ships[Message_shipnum].objnum];
+
+		// pulse the sender on the radar if its persona asks for it on this message type. Done here, when
+		// the message plays, so the ring matches the voice; multiplayer clients get it from the message itself
+		if (builtinMessage) {
+			int persona_index = Ships[Message_shipnum].persona_index;
+			if (persona_index < 0)
+				persona_index = m->persona_index;
+
+			if (SCP_vector_inbounds(Personas, persona_index)) {
+				const auto& persona = Personas[persona_index];
+				int type = q->builtin_type;
+				auto entry = std::find_if(persona.radar_pulse_types.begin(), persona.radar_pulse_types.end(), [type](const std::pair<int, persona_radar_pulse>& e) { return e.first == type; });
+
+				if (entry != persona.radar_pulse_types.end()) {
+					const auto& settings = entry->second;
+					const auto& defaults = persona.radar_pulse_defaults;
+
+					color clr;
+					if (settings.clr)
+						clr = *settings.clr;
+					else if (defaults.clr)
+						clr = *defaults.clr;
+					else
+						gr_init_alphacolor(&clr, 255, 255, 255, 255);
+
+					int duration = settings.duration.value_or(defaults.duration.value_or(RADAR_PULSE_DEFAULT_DURATION));
+					int count = settings.count.value_or(defaults.count.value_or(1));
+					radar_pulse_start(sender, &clr, duration, count);
+				}
+			}
+		}
 	}
 	if (OnMessageReceivedHook->isActive()) {
 		OnMessageReceivedHook->run(scripting::hook_param_list(

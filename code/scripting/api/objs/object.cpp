@@ -19,6 +19,7 @@
 #include "object/objectshield.h"
 #include "object/objectsnd.h"
 #include "prop/prop.h"
+#include "radar/radarsetup.h"
 #include "coordinate_points/coordinate_point.h"
 #include "scripting/api/LuaEventCallback.h"
 #include "scripting/api/objs/color.h"
@@ -767,7 +768,32 @@ ADE_FUNC(getIFFColor, l_Object, "boolean ReturnType",
 	}
 }
 
-ADE_FUNC(findWorldPoint, l_Object, "vector", "Calculates the world coordinates of a point in the object's frame of reference", "vector", "Point, or empty vector if handle is not valid")
+ADE_FUNC(radarPulse, l_Object, "[color Color=nil, number DurationMs=1000, number Count=1]",
+	"Draws the player's eye to this object on the radar: rings grow out of its blip and fade. Works on every radar type. "
+	"The object only pulses while it has a clear blip, so nothing the radar doesn't show (out of range, hidden from sensors, "
+	"or a flickering blip) pulses; on a DRADIS radar it starts once the sweep shows it. Color defaults to white, and its alpha is "
+	"the ring's starting alpha. DurationMs is the time each ring takes, and Count rings play one after another. "
+	"Pulsing an object again restarts its pulse. Only this computer's radar changes; nothing is sent to other players.",
+	"boolean",
+	"True if the pulse started, false if the handle is invalid")
+{
+	object_h* objh;
+	color clr;
+	gr_init_alphacolor(&clr, 255, 255, 255, 255);
+	int duration = RADAR_PULSE_DEFAULT_DURATION;
+	int count = 1;
+
+	if (!ade_get_args(L, "o|oii", l_Object.GetPtr(&objh), l_Color.Get(&clr), &duration, &count))
+		return ADE_RETURN_FALSE;
+
+	if (!objh->isValid())
+		return ADE_RETURN_FALSE;
+
+	radar_pulse_start(objh->objp(), &clr, duration, count);
+	return ADE_RETURN_TRUE;
+}
+
+ADE_FUNC(findWorldPoint, l_Object, "vector","Calculates the world coordinates of a point in the object's frame of reference", "vector", "Point, or empty vector if handle is not valid")
 {
 	object_h *objh;
 	vec3d pnt, outpnt;

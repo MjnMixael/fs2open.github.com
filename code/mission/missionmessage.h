@@ -14,8 +14,11 @@
 
 #include "anim/packunpack.h"
 #include "globalincs/globals.h"		// include so that we can gets defs for lengths of tokens
+#include "graphics/2d.h"
 #include "graphics/generic.h"
 #include "sound/sound.h"
+
+#include <optional>
 
 class ship;
 
@@ -262,10 +265,19 @@ extern SCP_vector<SCP_string> Generic_message_filenames;
 #define PERSONA_FLAG_SUBSTITUTE_MISSING_MESSAGES    (1<<30)
 #define PERSONA_FLAG_USED                           (1<<31)
 
+// Radar pulse settings from messages.tbl; anything unset falls back to the persona defaults, then the engine defaults
+struct persona_radar_pulse {
+	std::optional<color> clr;
+	std::optional<int> duration;
+	std::optional<int> count;
+};
+
 struct Persona {
 	char name[NAME_LENGTH];
 	int flags;
 	int species_bitfield;
+	persona_radar_pulse radar_pulse_defaults;								// $Radar Pulse: fields before any +Message Types:
+	SCP_vector<std::pair<int, persona_radar_pulse>> radar_pulse_types;	// builtin message types that pulse the sender, with their settings
 	SCP_map<SCP_string, SCP_string> custom_data;
 };
 
