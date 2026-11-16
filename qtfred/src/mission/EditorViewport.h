@@ -473,6 +473,7 @@ class EditorViewport {
 	DataMenuStyle Data_menu_style = DataMenuStyle::Auto;
 
 	bool Classic_menu_layout = false; // FRED2's Editors and Misc menus instead of the grouped ones
+	bool Show_music_toolbar_controls = true; // the Music Player controls at the right end of the main toolbar
 
 	void saveSettings() const;
 

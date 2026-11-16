@@ -45,6 +45,7 @@ private slots:
 	void on_themeCombo_currentIndexChanged(int index);
 	void on_dataMenuStyleCombo_currentIndexChanged(int index);
 	void on_classicMenuLayout_toggled(bool checked);
+	void on_showMusicToolbarControls_toggled(bool checked);
 	void on_showSexpHelpMissionEvents_toggled(bool checked);
 	void on_showSexpHelpMissionGoals_toggled(bool checked);
 	void on_showSexpHelpMissionCutscenes_toggled(bool checked);

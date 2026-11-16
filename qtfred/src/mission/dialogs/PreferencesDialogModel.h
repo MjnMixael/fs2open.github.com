@@ -70,6 +70,9 @@ public:
 	bool getClassicMenuLayout() const;
 	void setClassicMenuLayout(bool value);
 
+	bool getShowMusicToolbarControls() const;
+	void setShowMusicToolbarControls(bool value);
+
 	int  getToolbarIconSize() const;
 	void setToolbarIconSize(int size);
 
@@ -151,6 +154,7 @@ private:
 	ThemeMode _themeMode;
 	DataMenuStyle _dataMenuStyle;
 	bool _classicMenuLayout;
+	bool _showMusicToolbarControls;
 	int  _toolbarIconSize;
 	int  _outlineLod;
 	float _labelFontScale;

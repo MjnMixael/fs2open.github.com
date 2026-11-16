@@ -104,6 +104,7 @@ void PreferencesDialog::applyChanges() {
 	_model->apply();
 	_fredView->setIconSize(QSize(_model->getToolbarIconSize(), _model->getToolbarIconSize()));
 	_fredView->applyMenuLayout(_model->getClassicMenuLayout());
+	_fredView->setMusicToolbarControlsVisible(_model->getShowMusicToolbarControls());
 	_fredView->restartAutosaveTimer();
 	_fredView->updatePlacementTooltips();
 	_viewport->needsUpdate();
@@ -391,6 +392,7 @@ void PreferencesDialog::updateUi() {
 	ui->themeCombo->setCurrentIndex(themeModeToIndex(_model->getThemeMode()));
 	ui->dataMenuStyleCombo->setCurrentIndex(static_cast<int>(_model->getDataMenuStyle()));
 	ui->classicMenuLayout->setChecked(_model->getClassicMenuLayout());
+	ui->showMusicToolbarControls->setChecked(_model->getShowMusicToolbarControls());
 
 	const int iconSize = _model->getToolbarIconSize();
 	ui->toolbarIconSizeCombo->setCurrentIndex(iconSize <= 16 ? 0 : iconSize >= 32 ? 2 : 1);
@@ -493,6 +495,10 @@ void PreferencesDialog::on_dataMenuStyleCombo_currentIndexChanged(int index) {
 
 void PreferencesDialog::on_classicMenuLayout_toggled(bool checked) {
 	_model->setClassicMenuLayout(checked);
+}
+
+void PreferencesDialog::on_showMusicToolbarControls_toggled(bool checked) {
+	_model->setShowMusicToolbarControls(checked);
 }
 
 void PreferencesDialog::on_showSexpHelpMissionEvents_toggled(bool checked) {

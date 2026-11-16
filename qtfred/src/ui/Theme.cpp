@@ -122,6 +122,26 @@ QToolBar::separator {
     border: 2px solid #0078d7;
     padding: 1px 5px;
 }
+/* Music Player controls on the primary toolbar: a framed box, and a track button that
+   always reads as a button whatever track name it shows. */
+QFrame#musicControls {
+    border: 1px solid #8a8a8a;
+    border-radius: 4px;
+}
+QToolButton#musicTrackButton {
+    background-color: #e1e1e1;
+    border: 1px solid #8a8a8a;
+    border-radius: 3px;
+    padding: 1px 8px;
+}
+QToolButton#musicTrackButton:hover {
+    background-color: #e5f1fb;
+    border-color: #0078d7;
+}
+QToolButton#musicTrackButton:pressed {
+    background-color: #cce4f7;
+    border-color: #005499;
+}
 )";
 
 const char* const DARK_BUTTON_QSS = R"(
@@ -210,6 +230,26 @@ QToolBar::separator {
 #contextToolBar QToolButton[keyboardFocus="true"]:focus {
     border: 2px solid #4aa3f0;
     padding: 1px 5px;
+}
+/* Music Player controls on the primary toolbar: a framed box, and a track button that
+   always reads as a button whatever track name it shows. */
+QFrame#musicControls {
+    border: 1px solid #7a7a7a;
+    border-radius: 4px;
+}
+QToolButton#musicTrackButton {
+    background-color: #454545;
+    border: 1px solid #7a7a7a;
+    border-radius: 3px;
+    padding: 1px 8px;
+}
+QToolButton#musicTrackButton:hover {
+    background-color: #555555;
+    border-color: #9a9a9a;
+}
+QToolButton#musicTrackButton:pressed {
+    background-color: #606060;
+    border-color: #aaaaaa;
 }
 QMenu::separator {
     height: 1px;
@@ -492,12 +532,40 @@ QIcon makeThemedIcon(QStyle::StandardPixmap sp, const QColor& color, int size)
 	return {pm};
 }
 
+// The bound StandardPixmap lives on the button, so setBoundStandardIcon can change it
+static const char* const BOUND_PIXMAP_PROPERTY = "fredBoundStandardPixmap";
+
+static void refreshBoundStandardIcon(QAbstractButton* btn)
+{
+	const auto sp = static_cast<QStyle::StandardPixmap>(btn->property(BOUND_PIXMAP_PROPERTY).toInt());
+	const QPalette pal = qApp->palette();
+	const QColor color = pal.color(QPalette::ButtonText);
+	// Qt's generated disabled icon barely differs from a white one, so draw a dimmed one:
+	// the text color a third of the way from the button background
+	const QColor back = pal.color(QPalette::Button);
+	const QColor dimmed((color.red() + 2 * back.red()) / 3, (color.green() + 2 * back.green()) / 3,
+		(color.blue() + 2 * back.blue()) / 3);
+	// several sizes, so the icon stays sharp on buttons with larger icons (e.g. the main toolbar)
+	QIcon icon;
+	for (int size : {16, 24, 32, 48}) {
+		icon.addPixmap(makeThemedIcon(sp, color, size).pixmap(size, size), QIcon::Normal);
+		icon.addPixmap(makeThemedIcon(sp, dimmed, size).pixmap(size, size), QIcon::Disabled);
+	}
+	btn->setIcon(icon);
+}
+
+void setBoundStandardIcon(QAbstractButton* btn, QStyle::StandardPixmap sp)
+{
+	if (btn->property(BOUND_PIXMAP_PROPERTY).toInt() == static_cast<int>(sp))
+		return;
+	btn->setProperty(BOUND_PIXMAP_PROPERTY, static_cast<int>(sp));
+	refreshBoundStandardIcon(btn);
+}
+
 void bindStandardIcon(QAbstractButton* btn, QStyle::StandardPixmap sp)
 {
-	auto refresh = [btn, sp]() {
-		const QColor color = qApp->palette().color(QPalette::ButtonText);
-		btn->setIcon(makeThemedIcon(sp, color));
-	};
+	btn->setProperty(BOUND_PIXMAP_PROPERTY, static_cast<int>(sp));
+	auto refresh = [btn]() { refreshBoundStandardIcon(btn); };
 	refresh();
 	auto* filter = new PaletteChangeFilter(btn, refresh);
 	qApp->installEventFilter(filter);

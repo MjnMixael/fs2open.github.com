@@ -27,6 +27,7 @@ PreferencesDialogModel::PreferencesDialogModel(QObject* parent, EditorViewport* 
 	, _themeMode(viewport->Theme_mode)
 	, _dataMenuStyle(viewport->Data_menu_style)
 	, _classicMenuLayout(viewport->Classic_menu_layout)
+	, _showMusicToolbarControls(viewport->Show_music_toolbar_controls)
 	, _toolbarIconSize(viewport->toolbar_icon_size)
 	, _outlineLod(viewport->view.Outline_lod)
 	, _labelFontScale(viewport->view.Label_font_scale)
@@ -76,6 +77,7 @@ bool PreferencesDialogModel::apply() {
 	_viewport->Theme_mode                       = _themeMode;
 	_viewport->Data_menu_style                  = _dataMenuStyle;
 	_viewport->Classic_menu_layout              = _classicMenuLayout;
+	_viewport->Show_music_toolbar_controls      = _showMusicToolbarControls;
 	_viewport->toolbar_icon_size                = _toolbarIconSize;
 	_viewport->view.Outline_lod                 = _outlineLod;
 	_viewport->view.Label_font_scale            = _labelFontScale;
@@ -197,6 +199,9 @@ void PreferencesDialogModel::setDataMenuStyle(DataMenuStyle value) { modify(_dat
 
 bool PreferencesDialogModel::getClassicMenuLayout() const { return _classicMenuLayout; }
 void PreferencesDialogModel::setClassicMenuLayout(bool value) { modify(_classicMenuLayout, value); }
+
+bool PreferencesDialogModel::getShowMusicToolbarControls() const { return _showMusicToolbarControls; }
+void PreferencesDialogModel::setShowMusicToolbarControls(bool value) { modify(_showMusicToolbarControls, value); }
 
 int  PreferencesDialogModel::getToolbarIconSize() const { return _toolbarIconSize; }
 void PreferencesDialogModel::setToolbarIconSize(int size) { modify(_toolbarIconSize, size); }
