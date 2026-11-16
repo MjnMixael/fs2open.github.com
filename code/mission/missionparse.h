@@ -62,7 +62,7 @@ extern bool check_for_23_3_data();
 extern bool check_for_24_1_data();
 extern bool check_for_24_3_data();
 extern bool check_for_25_1_data();
-extern bool check_for_26_1_data();
+extern bool check_for_26_3_data();
 
 #define WING_PLAYER_BASE	0x80000  // used by Fred to tell ship_index in a wing points to a player
 
@@ -316,7 +316,6 @@ extern int Mission_callsign_count;
 #define MAX_PATH_RESTRICTIONS		10
 typedef struct path_restriction_t {
 	int num_paths;
-	int cached_mask;
 	char path_names[MAX_SHIP_BAY_PATHS][MAX_NAME_LEN];
 } path_restriction_t;
 
@@ -644,7 +643,7 @@ bool mission_check_prop_yet_to_spawn(const char *name);
 bool mission_replace_pending_prop_texture(const char *name, const char *old_texture, const char *new_texture);
 p_object *mission_parse_find_parse_object(const char *name);
 int parse_create_object(p_object *objp, bool standalone_ship = false);
-void resolve_parse_flags(object *objp, flagset<Mission::Parse_Object_Flags> &parse_flags);
+void resolve_parse_flags(const flagset<Mission::Parse_Object_Flags> &parse_flags, ship &s, bool no_ship_max_shield);
 
 void mission_parse_close();
 

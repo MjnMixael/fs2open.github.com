@@ -1055,6 +1055,17 @@ int Fred_mission_save::save_bitmaps()
 			required_string_fred("+Scale:");
 			parse_comments();
 			fout(" %f", sle->scale_x);
+
+			// apparent diameter, only written when this mission actually sets one; see
+			// check_for_26_3_data()
+			fso_comment_push(";;FSO 26.3.0;;");
+			FRED_ENSURE_PROPERTY_VERSION_WITH_DEFAULT_F("+AngularSize:",
+				1,
+				";;FSO 26.3.0;;",
+				SUN_ANGULAR_SIZE_UNSPECIFIED,
+				" %f",
+				sle->angular_size);
+			fso_comment_pop();
 		}
 
 		// save background bitmaps by filename
@@ -2141,11 +2152,11 @@ int Fred_mission_save::save_events()
 
 			// A record has no start token: the parser reads Comment, Color, Path, Position,
 			// Collapsed, Camera Starts After in that order and a record ends where the next field would go
-			// backwards. Pre-26.1 records always began with a Comment or Color, so that
-			// was unambiguous. A 26.1 record can hold only a Position or Collapsed, so
+			// backwards. Older records always began with a Comment or Color, so that
+			// was unambiguous. A 26.3 record can hold only a Position or Collapsed, so
 			// every record then writes +Path (empty for an event root) as its anchor;
 			// otherwise the previous record would swallow its fields on reload.
-			const bool always_write_path = The_mission.required_fso_version >= gameversion::version(26, 1);
+			const bool always_write_path = The_mission.required_fso_version >= gameversion::version(26, 3);
 
 			// see if there is an annotation for this event
 			for (const auto& ea : Event_annotations) {
@@ -2201,10 +2212,10 @@ int Fred_mission_save::save_events()
 					}
 				}
 
-				// Graph-view editor metadata (26.1). check_for_26_1_data() bumps the
+				// Graph-view editor metadata (26.3). check_for_26_3_data() bumps the
 				// required version when any annotation carries it, so it's written
 				// plainly and only in a format new enough to support it.
-				if (ea.has_pos && The_mission.required_fso_version >= gameversion::version(26, 1)) {
+				if (ea.has_pos && The_mission.required_fso_version >= gameversion::version(26, 3)) {
 					if (optional_string_fred("+Position:", "$Formula:"))
 						parse_comments();
 					else
@@ -2213,7 +2224,7 @@ int Fred_mission_save::save_events()
 					fout(" %f, %f", ea.pos_x, ea.pos_y);
 				}
 
-				if (ea.collapsed && The_mission.required_fso_version >= gameversion::version(26, 1)) {
+				if (ea.collapsed && The_mission.required_fso_version >= gameversion::version(26, 3)) {
 					if (optional_string_fred("+Collapsed:", "$Formula:"))
 						parse_comments();
 					else
@@ -2222,7 +2233,7 @@ int Fred_mission_save::save_events()
 					fout(" %d", 1);
 				}
 
-				if (!ea.camera_starts_after.empty() && The_mission.required_fso_version >= gameversion::version(26, 1)) {
+				if (!ea.camera_starts_after.empty() && The_mission.required_fso_version >= gameversion::version(26, 3)) {
 					if (optional_string_fred("+Camera Starts After:", "$Formula:"))
 						parse_comments();
 					else
@@ -3263,9 +3274,9 @@ int Fred_mission_save::save_mission_info()
 	return err;
 }
 
-// Standard format writes every nameplate as a plain $Nameplate: block, which needs 26.1. Compatibility
+// Standard format writes every nameplate as a plain $Nameplate: block, which needs 26.3. Compatibility
 // mode writes file-mode nameplates the legacy way and comments the rest, so older builds still load it.
-static bool nameplates_need_26_1(MissionFormat format)
+static bool nameplates_need_26_3(MissionFormat format)
 {
 	if (format != MissionFormat::STANDARD)
 		return false;
@@ -3291,14 +3302,14 @@ void Fred_mission_save::save_mission_internal(const char* pathname)
 	auto version_24_1 = gameversion::version(24, 1);
 	auto version_24_3 = gameversion::version(24, 3);
 	auto version_25_1 = gameversion::version(25, 1);
-	auto version_26_1 = gameversion::version(26, 1);
-	if (MISSION_VERSION >= version_26_1) {
+	auto version_26_3 = gameversion::version(26, 3);
+	if (MISSION_VERSION >= version_26_3) {
 		Warning(LOCATION,
-			"Notify an SCP coder: now that the required mission version is at least 26.1, the check_for_26_1_data(), "
-			"check_for_25_1_data(), check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can be "
-			"removed");
-	} else if (check_for_26_1_data() || nameplates_need_26_1(save_config.save_format)) {
-		The_mission.required_fso_version = version_26_1;
+			"Notify an SCP coder: now that the required mission version is at least 26.3, the check_for_26_3_data(), "
+			"check_for_25_1_data(), check_for_24_3_data(), check_for_24_1_data(), and check_for_23_3_data() code can "
+			"be removed");
+	} else if (check_for_26_3_data() || nameplates_need_26_3(save_config.save_format)) {
+		The_mission.required_fso_version = version_26_3;
 	} else if (MISSION_VERSION >= version_25_1) {
 		Warning(LOCATION,
 			"Notify an SCP coder: now that the required mission version is at least 25.1, the check_for_25_1_data(), "
@@ -4485,10 +4496,10 @@ int Fred_mission_save::save_objects()
 			}
 		}
 		// nameplate ------------------------------------------------
-		// Standard format bumps the mission to 26.1 (nameplates_need_26_1); Compatibility mode comments it
+		// Standard format bumps the mission to 26.3 (nameplates_need_26_3); Compatibility mode comments it
 		// so older builds skip it, and a file-mode nameplate went out above as a texture replacement instead
 		if (shipp->nameplate.enabled && !legacy_nameplate) {
-			fso_comment_push(";;FSO 26.1.0;;");
+			fso_comment_push(";;FSO 26.3.0;;");
 
 			if (optional_string_fred("$Nameplate:", "$Name:")) {
 				parse_comments(1);

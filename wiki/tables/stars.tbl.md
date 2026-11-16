@@ -30,6 +30,7 @@ Badges show the version a field or behavior was added in. Fields without a badge
   - [$SunGlow:](#sunglow)
   - [$SunRGBI:](#sunrgbi)
   - [$SunSpecularRGB:](#sunspecularrgb)
+  - [$SunAngularSize:](#sunangularsize)
   - [$Flare:](#flare)
     - [+FlareCount:](#flarecount)
     - [$FlareTexture*N*:](#flaretexturen)
@@ -97,6 +98,19 @@ Badges show the version a field or behavior was added in. Fields without a badge
 
 - **Deprecated and ignored.** It used to set a separate specular color for the sun. A value different from `$SunRGBI:`'s color logs a warning.
 - Syntax: **Color**, three **floats**, 0.0 to 1.0, red, green and blue respectively
+
+#### $SunAngularSize:
+
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg)
+
+- Optional. The apparent diameter of the sun in the sky, in degrees, which sets how
+  soft the shadows it casts are. Sol seen from Earth is about 0.53. A value of 0 makes
+  the sun a point source, giving hard shadows. The literal `derived` asks for the size
+  to be measured from the sun bitmap, which is also what happens when the field is left
+  out. A mission can override this per sun with `+AngularSize:`.
+- Syntax: **Float**, 0.0 to 90.0, or the word **derived**
+- A negative value is reported and ignored; a value above 90 is reported and clamped
+  to 90.
 
 #### $Flare:
 

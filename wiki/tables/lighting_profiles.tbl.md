@@ -29,6 +29,8 @@ Badges show the version a field or behavior was added in.
 - [$Tonemapper:](#tonemapper)
 - [$Non-mission lighting profile:](#non-mission-lighting-profile)
 - [$Exposure:](#exposure)
+- [$RTAO Radius:](#rtao-radius)
+- [$RTAO Strength:](#rtao-strength)
 - [PPC Adjustments](#ppc-adjustments)
 - [$PPC Toe Strength:](#ppc-toe-strength)
 - [$PPC Toe Length:](#ppc-toe-length)
@@ -115,6 +117,24 @@ The best way to view the differences between all of these is to open the F3 lab.
 If you find this concept hard to grasp, consider how your eyes adapt to darkness or brightness. A high exposure is like an eye adapted to a dark room, a low exposure is an eye adapted to a bright room. So with high exposure, you'll see more details in dark scenes, but you're also more easily blinded by bright effects.
 - Syntax: ***Float***
 - Default: 4.0
+
+### $RTAO Radius:
+
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg) How far a raytraced ambient occlusion ray reaches, in world units. Only used
+when raytraced ambient occlusion is active. Because the right value depends on the
+scale of the content being lit, fighters against capital ships for instance, it
+belongs to the mod rather than to a user option. A negative value is reported and
+treated as 0.
+- Syntax: ***Float***, 0 or more
+- Default: 20.0
+
+### $RTAO Strength:
+
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg) An exponent applied to the occlusion term, so 1 is physically correct, above 1
+darkens the occluded areas and below 1 lightens them. Only used when raytraced
+ambient occlusion is active. A negative value is reported and treated as 0.
+- Syntax: ***Float***, 0 or more
+- Default: 1.0
 
 ### PPC Adjustments
 

@@ -222,6 +222,7 @@ Badges show the version a field or behavior was added in.
 - [$Default fiction viewer UI:](#default-fiction-viewer-ui)
 - [$Movie subtitle font:](#movie-subtitle-font)
 - [$Movie subtitle color:](#movie-subtitle-color)
+- [$ImGui font:](#imgui-font)
 - [$Disable built-in translations:](#disable-built-in-translations)
 - [$Weapon shockwave damage respects huge ship flags:](#weapon-shockwave-damage-respects-huge-ship-flags)
 - [$Enable external default scripts:](#enable-external-default-scripts)
@@ -1513,6 +1514,17 @@ If set, a hit to a physical subsystem will always deal damage to that subsystem 
 - Specifies which color should be used for displaying subtitles in the cutscene player.
 - Syntax: ***Integer, Integer, Integer, Integer***
 - Default Value: ***255, 255, 255, 255***
+
+### $ImGui font:
+
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg)
+
+- Names the font that the debug ImGui windows use, as that font is named in
+  [fonts.tbl](fonts.tbl). It must be a TrueType font: a named font with no usable
+  TrueType data is reported and the built-in ImGui font is kept. The font system
+  starts after this table is read, so an unknown name is reported then rather than
+  while this table is parsed.
+- Syntax: ***String***
 
 ### $Disable built-in translations:
 
