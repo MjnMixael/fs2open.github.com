@@ -3,7 +3,7 @@
 #include <QDialog>
 #include <QListWidgetItem>
 
-#include <mission/MusicPlayer.h>
+#include <mission/dialogs/MusicPlayerDialogModel.h>
 #include <ui/FredView.h>
 
 namespace fso::fred::dialogs {
@@ -12,8 +12,8 @@ namespace Ui {
 class MusicPlayerDialog;
 }
 
-// A view of the main window's MusicPlayer. Closing it leaves the music playing while the toolbar
-// has the music controls (a preference); with them hidden, closing it stops the music.
+// Its model is a view of the main window's MusicPlayer. Closing it leaves the music playing while
+// the toolbar has the music controls (a preference); with them hidden, closing it stops the music.
 class MusicPlayerDialog final : public QDialog {
 	Q_OBJECT
   public:
@@ -38,7 +38,7 @@ class MusicPlayerDialog final : public QDialog {
 
 	EditorViewport* _viewport = nullptr;
 	std::unique_ptr<Ui::MusicPlayerDialog> ui;
-	MusicPlayer* _player = nullptr;
+	std::unique_ptr<MusicPlayerDialogModel> _model;
 };
 
 } // namespace fso::fred::dialogs

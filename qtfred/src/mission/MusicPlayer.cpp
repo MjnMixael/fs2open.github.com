@@ -18,6 +18,14 @@ MusicPlayer::~MusicPlayer()
 	closeStream();
 }
 
+void MusicPlayer::ensureTracksLoaded()
+{
+	if (_tracksLoaded)
+		return;
+	_tracksLoaded = true;
+	loadTracks();
+}
+
 void MusicPlayer::loadTracks()
 {
 	_tracks.clear();

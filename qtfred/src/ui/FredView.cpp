@@ -1245,8 +1245,7 @@ void FredView::triggerSaveShine() {
 // ---------------------------------------------------------------------------
 
 void FredView::initializeMusicControls() {
-	_musicPlayer = new MusicPlayer(this);
-	_musicPlayer->loadTracks();
+	_musicPlayer = new MusicPlayer(this); // its tracks load when the dialog first opens
 
 	// a stretching spacer puts the controls at the right end of the toolbar
 	auto* spacer = new QWidget(ui->toolBar);
