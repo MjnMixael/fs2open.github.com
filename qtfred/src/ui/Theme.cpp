@@ -534,11 +534,20 @@ QIcon makeThemedIcon(QStyle::StandardPixmap sp, const QColor& color, int size)
 
 // The bound StandardPixmap lives on the button, so setBoundStandardIcon can change it
 static const char* const BOUND_PIXMAP_PROPERTY = "fredBoundStandardPixmap";
+static const char* const BOUND_DRAWN_PROPERTY = "fredBoundStandardDrawn";
 
 static void refreshBoundStandardIcon(QAbstractButton* btn)
 {
 	const auto sp = static_cast<QStyle::StandardPixmap>(btn->property(BOUND_PIXMAP_PROPERTY).toInt());
 	const QPalette pal = qApp->palette();
+
+	// The palette filter fires once per widget on a theme change; draw only when the icon or the
+	// palette actually differs from what was last drawn
+	const QString drawn = QString("%1:%2").arg(static_cast<int>(sp)).arg(pal.cacheKey());
+	if (btn->property(BOUND_DRAWN_PROPERTY).toString() == drawn)
+		return;
+	btn->setProperty(BOUND_DRAWN_PROPERTY, drawn);
+
 	const QColor color = pal.color(QPalette::ButtonText);
 	// Qt's generated disabled icon barely differs from a white one, so draw a dimmed one:
 	// the text color a third of the way from the button background
@@ -564,9 +573,15 @@ void setBoundStandardIcon(QAbstractButton* btn, QStyle::StandardPixmap sp)
 
 void bindStandardIcon(QAbstractButton* btn, QStyle::StandardPixmap sp)
 {
+	const bool alreadyBound = btn->property(BOUND_PIXMAP_PROPERTY).isValid();
 	btn->setProperty(BOUND_PIXMAP_PROPERTY, static_cast<int>(sp));
+	btn->setProperty(BOUND_DRAWN_PROPERTY, QVariant()); // an explicit bind always draws
 	auto refresh = [btn]() { refreshBoundStandardIcon(btn); };
 	refresh();
+
+	// a re-bound button (e.g. Play swapped for Stop) already has its palette filter
+	if (alreadyBound)
+		return;
 	auto* filter = new PaletteChangeFilter(btn, refresh);
 	qApp->installEventFilter(filter);
 }

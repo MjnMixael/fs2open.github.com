@@ -3,12 +3,12 @@
 #include "ui/util/SignalBlockers.h"
 #include "ui_MusicPlayerDialog.h"
 #include "ui/Theme.h"
-#include "mission/EditorViewport.h"
 
 namespace fso::fred::dialogs {
 
 MusicPlayerDialog::MusicPlayerDialog(FredView* parent, EditorViewport* viewport)
-	: QDialog(parent), _viewport(viewport), ui(new Ui::MusicPlayerDialog()), _player(parent->musicPlayer())
+	: QDialog(parent), _viewport(viewport), ui(new Ui::MusicPlayerDialog()),
+	  _model(new MusicPlayerDialogModel(this, viewport, parent->musicPlayer()))
 {
 	setFocus();
 	ui->setupUi(this);
@@ -18,19 +18,13 @@ MusicPlayerDialog::MusicPlayerDialog(FredView* parent, EditorViewport* viewport)
 	fso::fred::bindStandardIcon(ui->nextButton, QStyle::SP_MediaSkipForward);
 	fso::fred::bindStandardIcon(ui->stopButton, QStyle::SP_MediaStop);
 
-	// opens with the loaded track selected, or with nothing selected
-	_player->setCurrentRow(_player->loadedRow());
-
 	populateList();
 	updateUi();
 
-	connect(_player, &MusicPlayer::stateChanged, this, &MusicPlayerDialog::updateUi);
+	connect(_model.get(), &AbstractDialogModel::modelChanged, this, &MusicPlayerDialog::updateUi);
 
-	// without the toolbar controls, closing the dialog would leave no way to stop the music
-	connect(this, &QDialog::finished, this, [this]() {
-		if (!_viewport->Show_music_toolbar_controls)
-			_player->stop();
-	});
+	// closing the dialog any way (X, Escape) ends in finished
+	connect(this, &QDialog::finished, _model.get(), &MusicPlayerDialogModel::reject);
 }
 
 MusicPlayerDialog::~MusicPlayerDialog()
@@ -49,7 +43,7 @@ void MusicPlayerDialog::populateList()
 	util::SignalBlockers block(this);
 	ui->musicList->clear();
 	QStringList items;
-	for (const auto& track : _player->tracks()) {
+	for (const auto& track : _model->tracks()) {
 		items.append(QString::fromStdString(track));
 	}
 	ui->musicList->addItems(items);
@@ -59,20 +53,20 @@ void MusicPlayerDialog::updateUi()
 {
 	util::SignalBlockers block(this);
 
-	const int row = _player->currentRow();
+	const int row = _model->currentRow();
 	if (row < 0)
 		ui->musicList->clearSelection();
 	if (ui->musicList->currentRow() != row)
 		ui->musicList->setCurrentRow(row);
 
 	// Play turns into Pause while music plays
-	const bool playing = _player->isPlaying();
+	const bool playing = _model->isPlaying();
 	setBoundStandardIcon(ui->playButton, playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay);
-	ui->playButton->setEnabled(playing || _player->currentRow() >= 0);
-	ui->stopButton->setEnabled(_player->hasStream());
-	ui->nextButton->setEnabled(_player->canSelectNext());
-	ui->prevButton->setEnabled(_player->canSelectPrev());
-	ui->autoplayCheck->setChecked(_player->autoplay());
+	ui->playButton->setEnabled(playing || _model->currentRow() >= 0);
+	ui->stopButton->setEnabled(_model->hasStream());
+	ui->nextButton->setEnabled(_model->canSelectNext());
+	ui->prevButton->setEnabled(_model->canSelectPrev());
+	ui->autoplayCheck->setChecked(_model->autoplay());
 }
 
 void MusicPlayerDialog::on_musicList_itemSelectionChanged()
@@ -81,39 +75,39 @@ void MusicPlayerDialog::on_musicList_itemSelectionChanged()
 	const auto selected = ui->musicList->selectedItems();
 	if (!selected.isEmpty())
 		row = ui->musicList->row(selected.front());
-	_player->setCurrentRow(row);
+	_model->setCurrentRow(row);
 }
 
 void MusicPlayerDialog::on_musicList_itemDoubleClicked(QListWidgetItem* item)
 {
 	// plays the track even while another one is playing, which the Play / Pause button can't
-	_player->setCurrentRow(ui->musicList->row(item));
-	_player->play();
+	_model->setCurrentRow(ui->musicList->row(item));
+	_model->play();
 }
 
 void MusicPlayerDialog::on_playButton_clicked()
 {
-	_player->togglePlay();
+	_model->togglePlay();
 }
 
 void MusicPlayerDialog::on_stopButton_clicked()
 {
-	_player->stop();
+	_model->stop();
 }
 
 void MusicPlayerDialog::on_nextButton_clicked()
 {
-	_player->selectNext();
+	_model->selectNext();
 }
 
 void MusicPlayerDialog::on_prevButton_clicked()
 {
-	_player->selectPrev();
+	_model->selectPrev();
 }
 
 void MusicPlayerDialog::on_autoplayCheck_toggled(bool on)
 {
-	_player->setAutoplay(on);
+	_model->setAutoplay(on);
 }
 
 void MusicPlayerDialog::on_musicTblButton_clicked()

@@ -117,6 +117,8 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/MissionSpecDialogModel.h
 	src/mission/dialogs/PreferencesDialogModel.cpp
 	src/mission/dialogs/PreferencesDialogModel.h
+	src/mission/dialogs/MusicPlayerDialogModel.cpp
+	src/mission/dialogs/MusicPlayerDialogModel.h
 	src/mission/dialogs/ObjectOrientEditorDialogModel.cpp
 	src/mission/dialogs/ObjectOrientEditorDialogModel.h
 	src/mission/dialogs/PropEditorDialogModel.cpp

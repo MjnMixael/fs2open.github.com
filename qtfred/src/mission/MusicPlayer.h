@@ -15,8 +15,9 @@ class MusicPlayer final : public QObject {
 	explicit MusicPlayer(QObject* parent = nullptr);
 	~MusicPlayer() override;
 
-	// Fills the track list from the music folder, minus editor.tbl's ignored files
-	void loadTracks();
+	// Fills the track list from the music folder, minus the ignored files, the first time it's
+	// called. Not at startup: editor.tbl, which adds ignored files, is parsed after the main window.
+	void ensureTracksLoaded();
 	const SCP_vector<SCP_string>& tracks() const { return _tracks; }
 
 	// The selected track, or -1
@@ -55,6 +56,7 @@ class MusicPlayer final : public QObject {
   private:
 	void tick();
 	void closeStream();
+	void loadTracks();
 	int stepBase() const;
 	static int tryOpenStream(const SCP_string& baseNoExt);
 
@@ -63,6 +65,7 @@ class MusicPlayer final : public QObject {
 	int _streamRow = -1; // the track _musicId was opened from
 	int _musicId = -1;   // audiostream id or -1 when none
 	bool _autoplay = false;
+	bool _tracksLoaded = false;
 	QTimer _timer;
 };
 
