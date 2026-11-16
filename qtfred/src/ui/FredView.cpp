@@ -17,6 +17,9 @@
 #include <QLineEdit>
 #include <QAbstractSpinBox>
 #include <QToolBar>
+#include <QFrame>
+#include <QHBoxLayout>
+#include <QVBoxLayout>
 #include <QMenu>
 #include <QApplication>
 #include <QClipboard>
@@ -83,6 +86,7 @@
 #include <iff_defs/iff_defs.h>
 
 #include "mission/Editor.h"
+#include "mission/MusicPlayer.h"
 #include "ui/dialogs/General/CheckBoxListDialog.h"
 #include "mission/commands/CameraTransformCommand.h"
 #include "mission/commands/FredCommands.h"
@@ -353,6 +357,8 @@ void FredView::setEditor(Editor* editor, EditorViewport* viewport) {
 	ui->toolBar->addWidget(_otherClassBox);
 	connect(_otherClassBox, &ObjectComboBox::classSelected, this, &FredView::onOtherKindSelected);
 	updatePlacementTooltips();
+
+	initializeMusicControls();
 
 	initializeContextToolbar();
 	initializeTransformBar();
@@ -1232,6 +1238,96 @@ void FredView::triggerSaveShine() {
 		overlay->deleteLater();
 	});
 	anim->start(QAbstractAnimation::DeleteWhenStopped);
+}
+
+// ---------------------------------------------------------------------------
+// Music Player controls  (right end of the primary toolbar)
+// ---------------------------------------------------------------------------
+
+void FredView::initializeMusicControls() {
+	_musicPlayer = new MusicPlayer(this);
+	_musicPlayer->loadTracks();
+
+	// a stretching spacer puts the controls at the right end of the toolbar
+	auto* spacer = new QWidget(ui->toolBar);
+	spacer->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
+	_musicSpacerAction = ui->toolBar->addWidget(spacer);
+
+	// the box is centered in a holder that takes the toolbar's height, so the box never makes
+	// the toolbar taller
+	auto* holder = new QWidget(ui->toolBar);
+	auto* holderLayout = new QVBoxLayout(holder);
+	holderLayout->setContentsMargins(0, 0, 0, 0);
+
+	// the controls sit together in a framed box; the theme stylesheets draw its border (#musicControls)
+	auto* box = new QFrame(holder);
+	box->setObjectName("musicControls");
+	box->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	auto* layout = new QHBoxLayout(box);
+	layout->setContentsMargins(3, 2, 3, 2);
+	layout->setSpacing(2);
+	holderLayout->addWidget(box, 0, Qt::AlignVCenter);
+
+	// opens the dialog; it names the playing track, but stays a fixed-size button whatever it says.
+	// The theme stylesheets give it a push-button look (#musicTrackButton).
+	_musicTrackButton = new QToolButton(box);
+	_musicTrackButton->setObjectName("musicTrackButton");
+	_musicTrackButton->setToolButtonStyle(Qt::ToolButtonTextOnly);
+	_musicTrackButton->setFixedWidth(160);
+	_musicTrackButton->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+	_musicTrackButton->setText(tr("Music Player")); // so its height below is measured with text
+	connect(_musicTrackButton, &QToolButton::clicked, this, [this]() { on_actionMusic_Player_triggered(false); });
+	layout->addWidget(_musicTrackButton);
+	layout->addSpacing(2);
+
+	// the icon buttons are square and as tall as the track button, whatever the toolbar icon size
+	const int side = _musicTrackButton->sizeHint().height();
+	auto addControl = [this, box, layout, side](QStyle::StandardPixmap sp, const QString& tip, void (MusicPlayer::*handler)()) {
+		auto* button = new QToolButton(box);
+		bindStandardIcon(button, sp);
+		button->setToolTip(tip);
+		button->setFixedSize(side, side);
+		button->setIconSize(QSize(side - 8, side - 8));
+		connect(button, &QToolButton::clicked, _musicPlayer, handler);
+		layout->addWidget(button);
+		return button;
+	};
+	_musicPrevButton = addControl(QStyle::SP_MediaSkipBackward, tr("Previous track"), &MusicPlayer::selectPrev);
+	_musicPlayButton = addControl(QStyle::SP_MediaPlay, tr("Pause or resume"), &MusicPlayer::togglePause);
+	_musicStopButton = addControl(QStyle::SP_MediaStop, tr("Stop"), &MusicPlayer::stop);
+	_musicNextButton = addControl(QStyle::SP_MediaSkipForward, tr("Next track"), &MusicPlayer::selectNext);
+	_musicBoxAction = ui->toolBar->addWidget(holder);
+
+	connect(_musicPlayer, &MusicPlayer::stateChanged, this, &FredView::updateMusicControls);
+	updateMusicControls();
+	setMusicToolbarControlsVisible(_viewport->Show_music_toolbar_controls);
+}
+
+void FredView::updateMusicControls() {
+	const QString track = QString::fromStdString(_musicPlayer->loadedTrack());
+	const QString label = track.isEmpty() ? tr("Music Player") : track;
+	const int room = _musicTrackButton->width() - 20; // the button's own padding and border
+	_musicTrackButton->setText(_musicTrackButton->fontMetrics().elidedText(label, Qt::ElideRight, room));
+	_musicTrackButton->setToolTip(track.isEmpty() ? tr("Open the Music Player") : tr("%1\nOpen the Music Player").arg(track));
+
+	// Play turns into Pause while music plays. The toolbar only works on a loaded track: starting
+	// one takes the dialog, so with nothing loaded every button is disabled.
+	const bool playing = _musicPlayer->isPlaying();
+	const bool loaded = _musicPlayer->hasStream();
+	setBoundStandardIcon(_musicPlayButton, playing ? QStyle::SP_MediaPause : QStyle::SP_MediaPlay);
+	_musicPlayButton->setEnabled(loaded);
+	_musicPrevButton->setEnabled(loaded && _musicPlayer->canSelectPrev());
+	_musicStopButton->setEnabled(loaded);
+	_musicNextButton->setEnabled(loaded && _musicPlayer->canSelectNext());
+}
+
+void FredView::setMusicToolbarControlsVisible(bool visible) {
+	_musicSpacerAction->setVisible(visible);
+	_musicBoxAction->setVisible(visible);
+
+	// with no controls on the toolbar and the dialog closed, nothing could stop the music
+	if (!visible && findChild<dialogs::MusicPlayerDialog*>(QString(), Qt::FindDirectChildrenOnly) == nullptr)
+		_musicPlayer->stop();
 }
 
 // ---------------------------------------------------------------------------

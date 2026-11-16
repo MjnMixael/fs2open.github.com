@@ -175,6 +175,7 @@ void EditorViewport::loadSettings() {
 	}
 
 	Classic_menu_layout                = settings.value("classic_menu_layout",                Classic_menu_layout).toBool();
+	Show_music_toolbar_controls        = settings.value("show_music_toolbar_controls",        Show_music_toolbar_controls).toBool();
 
 	view.Universal_heading                 = settings.value("view_universal_heading",                 view.Universal_heading).toBool();
 	view.Show_stars                        = settings.value("view_show_stars",                        view.Show_stars).toBool();
@@ -230,6 +231,7 @@ void EditorViewport::saveSettings() const {
 	writeThemeModeSetting(Theme_mode);
 	settings.setValue("data_menu_style",                     static_cast<int>(Data_menu_style));
 	settings.setValue("classic_menu_layout",                 Classic_menu_layout);
+	settings.setValue("show_music_toolbar_controls",         Show_music_toolbar_controls);
 
 	settings.setValue("view_universal_heading",                 view.Universal_heading);
 	settings.setValue("view_show_stars",                        view.Show_stars);

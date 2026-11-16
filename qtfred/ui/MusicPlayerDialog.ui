@@ -27,6 +27,9 @@
        <layout class="QHBoxLayout" name="horizontalLayout">
         <item>
          <widget class="QPushButton" name="prevButton">
+          <property name="toolTip">
+           <string>Previous track</string>
+          </property>
           <property name="text">
            <string/>
           </property>
@@ -34,6 +37,9 @@
         </item>
         <item>
          <widget class="QPushButton" name="playButton">
+          <property name="toolTip">
+           <string>Play or pause. Play starts the selected track, or resumes it if it is the paused one.</string>
+          </property>
           <property name="text">
            <string/>
           </property>
@@ -41,6 +47,9 @@
         </item>
         <item>
          <widget class="QPushButton" name="nextButton">
+          <property name="toolTip">
+           <string>Next track</string>
+          </property>
           <property name="text">
            <string/>
           </property>
@@ -48,6 +57,9 @@
         </item>
         <item>
          <widget class="QPushButton" name="stopButton">
+          <property name="toolTip">
+           <string>Stop</string>
+          </property>
           <property name="text">
            <string/>
           </property>

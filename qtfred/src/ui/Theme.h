@@ -34,6 +34,9 @@ QIcon makeThemedIcon(QStyle::StandardPixmap sp, const QColor& color, int size = 
 // Bind a palette-aware icon to a button and refresh it when the theme changes.
 void bindStandardIcon(QAbstractButton* btn, QStyle::StandardPixmap sp);
 
+// Change the icon of a button bound with bindStandardIcon (e.g. Play to Pause); it keeps following the theme.
+void setBoundStandardIcon(QAbstractButton* btn, QStyle::StandardPixmap sp);
+
 // Palette-aware icons drawn by QPainter that have no QStyle::StandardPixmap equivalent.
 // The MoveTo* values are "jump to end" arrows: an arrow with a bar across the end it
 // points toward (e.g. MoveToTop is an up arrow with a bar along the top).

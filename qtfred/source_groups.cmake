@@ -31,6 +31,8 @@ add_file_folder("Source/Mission"
     src/mission/FredRenderer.cpp
     src/mission/FredRenderer.h
     src/mission/IDialogProvider.h
+    src/mission/MusicPlayer.cpp
+    src/mission/MusicPlayer.h
     src/mission/ViewportHandle.h
     src/mission/management.cpp
     src/mission/management.h
@@ -115,8 +117,6 @@ add_file_folder("Source/Mission/Dialogs"
 	src/mission/dialogs/MissionSpecDialogModel.h
 	src/mission/dialogs/PreferencesDialogModel.cpp
 	src/mission/dialogs/PreferencesDialogModel.h
-	src/mission/dialogs/MusicPlayerDialogModel.cpp
-	src/mission/dialogs/MusicPlayerDialogModel.h
 	src/mission/dialogs/ObjectOrientEditorDialogModel.cpp
 	src/mission/dialogs/ObjectOrientEditorDialogModel.h
 	src/mission/dialogs/PropEditorDialogModel.cpp

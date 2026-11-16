@@ -35,6 +35,7 @@ namespace fso {
 namespace fred {
 
 class Editor;
+class MusicPlayer;
 class RenderWidget;
 struct ErrorTarget;
 
@@ -83,6 +84,10 @@ class FredView: public QMainWindow, public IDialogProvider {
 
 	// Switches between the grouped menus and FRED2's classic Editors and Misc menus.
 	void applyMenuLayout(bool classic);
+
+	// The music player outlives the Music Player dialog, so music plays on with it closed
+	MusicPlayer* musicPlayer() const { return _musicPlayer; }
+	void setMusicToolbarControlsVisible(bool visible);
 
  public slots:
 	void openLoadMissionDialog();
@@ -342,6 +347,15 @@ class FredView: public QMainWindow, public IDialogProvider {
 	ObjectComboBox* _propClassBox = nullptr;
 	ObjectComboBox* _otherClassBox = nullptr;
 
+	MusicPlayer* _musicPlayer = nullptr;
+	QAction* _musicSpacerAction = nullptr; // the toolbar entries the preference shows or hides
+	QAction* _musicBoxAction = nullptr;
+	QToolButton* _musicTrackButton = nullptr;
+	QToolButton* _musicPrevButton = nullptr;
+	QToolButton* _musicPlayButton = nullptr;
+	QToolButton* _musicStopButton = nullptr;
+	QToolButton* _musicNextButton = nullptr;
+
 	QUndoGroup* _undoGroup    = nullptr;
 	QUndoStack* _mainStack    = nullptr;
 	QUndoStack* _cameraStack  = nullptr;
@@ -385,6 +399,8 @@ class FredView: public QMainWindow, public IDialogProvider {
 	void onUpdateWingActionStatus();
 
 	void initializeContextToolbar();
+	void initializeMusicControls();
+	void updateMusicControls();
 	void onUpdateContextToolbar();
 	void quickRenameCurrentObject();
 

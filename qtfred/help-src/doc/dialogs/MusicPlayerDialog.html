@@ -16,16 +16,38 @@ audition tracks without launching FreeSpace Open. Useful when choosing tracks fo
 <a href="DebriefingDialog.html">Debriefing</a>, or
 <a href="CommandBriefingDialog.html">Command Briefing</a>.</p>
 
+<p>Nothing is selected when the editor starts. To play music, open the dialog and select
+a track, then press Play or double-click the track. Every button is disabled unless it can do
+something right now.</p>
+
+<p>The right end of the main toolbar has a box of controls for the track that is loaded
+(playing or paused), so you can work with the dialog closed: the music keeps playing when you
+close it. The first button in the box names the loaded track; click it to open the dialog. The
+toolbar can pause, resume, stop and skip the loaded track, but it can't start a track, so its
+buttons are disabled while nothing is loaded. Autoplay is set in the dialog, and keeps working
+with the dialog closed. To hide the toolbar controls, turn off
+<strong>Music Player controls on the toolbar</strong> in
+<a href="../general/PreferencesDialog.html">Preferences</a>. With them hidden, closing the
+dialog stops the music.</p>
+
+<p>When you open the dialog again, the loaded track is selected, or nothing if no track is
+loaded.</p>
+
 <h2>Controls</h2>
 <table>
     <tr><th>Control</th><th>Description</th></tr>
     <tr><td>Track list</td><td>All music files found in the game's music folder.
-        Click a track to select it.</td></tr>
-    <tr><td>Play / Stop</td><td>Start or stop playback of the selected track.</td></tr>
-    <tr><td>Previous / Next</td><td>Jump to the previous or next track in the
-        list.</td></tr>
+        Click a track to select it, or double-click it to play it right away.</td></tr>
+    <tr><td>Play / Pause</td><td>In the dialog, plays the selected track, or resumes it if it is
+        the paused one. On the toolbar, pauses or resumes the loaded track. While music plays,
+        the button turns into Pause.</td></tr>
+    <tr><td>Stop</td><td>Stop the music and unload the track.</td></tr>
+    <tr><td>Previous / Next</td><td>Move to the previous or next track in the list. With a
+        track loaded, they step from it and the new track plays; otherwise they move the
+        selection.</td></tr>
     <tr><td>Autoplay</td><td>When enabled, playback advances automatically to the
         next track when the current one ends, like a playlist.</td></tr>
+    <tr><td>Music.tbl</td><td>Show the music table data.</td></tr>
 </table>
 </body>
 </html>
