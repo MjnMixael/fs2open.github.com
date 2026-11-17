@@ -726,6 +726,7 @@ void write_world(pilot::FileHandler* handler, const checkpoint::checkpoint_data&
 	handler->endArrayWrite();
 	handler->writeBool("lightshafts_on", env.lightshafts_on);
 	handler->writeFloat("lightshafts_intensity", env.lightshafts_intensity);
+	handler->writeBool("lightshafts_override", env.lightshafts_override);
 
 	handler->writeString("sound_env_preset", env.sound_env_preset.c_str());
 	handler->writeFloat("sound_env_volume", env.sound_env_volume);
@@ -1060,6 +1061,7 @@ void read_world(pilot::FileHandler* handler, checkpoint::checkpoint_data& data)
 	}
 	env.lightshafts_on = handler->readBoolOr("lightshafts_on", true);
 	env.lightshafts_intensity = handler->readFloatOr("lightshafts_intensity", 0.0f);
+	env.lightshafts_override = handler->readBoolOr("lightshafts_override", false);
 
 	env.sound_env_preset = handler->readStringOr("sound_env_preset", "");
 	env.sound_env_volume = handler->readFloatOr("sound_env_volume", 0.0f);
@@ -2670,6 +2672,19 @@ void write_mission_extras(pilot::FileHandler* handler, const checkpoint::checkpo
 	handler->writeBool("disable_cockpits", state.disable_cockpits);
 	handler->writeBool("disable_cockpit_sway", state.disable_cockpit_sway);
 	handler->writeBool("sensor_static_forced", state.sensor_static_forced);
+	handler->startArrayWrite("radar_pulses", state.radar_pulses.size());
+	for (const auto& pulse : state.radar_pulses) {
+		handler->startSectionWrite(Section::Unnamed);
+		handler->writeString("ship", pulse.ship.c_str());
+		handler->writeInt("color_r", pulse.color[0]);
+		handler->writeInt("color_g", pulse.color[1]);
+		handler->writeInt("color_b", pulse.color[2]);
+		handler->writeInt("color_a", pulse.color[3]);
+		handler->writeInt("duration", pulse.duration);
+		handler->writeInt("count", pulse.count);
+		handler->endSectionWrite();
+	}
+	handler->endArrayWrite();
 
 	handler->startArrayWrite("ignored_keys", state.ignored_keys.size());
 	for (const auto& key : state.ignored_keys) {
@@ -2873,6 +2888,24 @@ void read_mission_extras(pilot::FileHandler* handler, checkpoint::checkpoint_dat
 	state.disable_cockpits = handler->readBoolOr("disable_cockpits", false);
 	state.disable_cockpit_sway = handler->readBoolOr("disable_cockpit_sway", false);
 	state.sensor_static_forced = handler->readBoolOr("sensor_static_forced", false);
+	state.radar_pulses.clear();
+	if (handler->hasField("radar_pulses")) {
+		auto count = handler->startArrayRead("radar_pulses");
+		for (size_t i = 0; i < count; i++, handler->nextArraySection()) {
+			checkpoint::radar_pulse_state pulse;
+			pulse.ship = handler->readStringOr("ship", "");
+			pulse.color[0] = handler->readIntOr("color_r", 255);
+			pulse.color[1] = handler->readIntOr("color_g", 255);
+			pulse.color[2] = handler->readIntOr("color_b", 255);
+			pulse.color[3] = handler->readIntOr("color_a", 255);
+			pulse.duration = handler->readIntOr("duration", 0);
+			pulse.count = handler->readIntOr("count", 0);
+			if (!pulse.ship.empty() && pulse.count > 0) {
+				state.radar_pulses.push_back(std::move(pulse));
+			}
+		}
+		handler->endArrayRead();
+	}
 
 	state.ignored_keys.clear();
 	if (handler->hasField("ignored_keys")) {

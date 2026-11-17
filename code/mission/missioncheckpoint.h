@@ -1178,6 +1178,7 @@ struct environment_state {
 	SCP_vector<post_effect_state> post_effects;
 	bool lightshafts_on = true;
 	float lightshafts_intensity = 0.0f;
+	bool lightshafts_override = false;	// set-lightshafts-override
 
 	// The sound environment (set-sound-environment, update-sound-environment).  The preset goes
 	// by name; the EFX preset list is a table.  An empty preset means the environment is off.
@@ -1298,6 +1299,15 @@ struct message_state {
 // A HUD gauge's runtime switches: hud-set-active / hud-activate-gauge-type, and hud-set-color.
 // Built-in gauges go by their config name, custom gauges by their custom name; the two are
 // separate namespaces, hence the flag.
+// A radar pulse still running (radar-pulse, Object:radarPulse) on a ship, by name.  count is the
+// rings left; the one in progress starts over on restore.
+struct radar_pulse_state {
+	SCP_string ship;
+	int color[4] = {255, 255, 255, 255};
+	int duration = 0;
+	int count = 0;
+};
+
 struct hud_gauge_state {
 	SCP_string name;
 	bool custom = false;
@@ -1412,6 +1422,7 @@ struct mission_extra_state {
 	bool disable_cockpits = false;
 	bool disable_cockpit_sway = false;
 	bool sensor_static_forced = false;   // hud-force-sensor-static
+	SCP_vector<radar_pulse_state> radar_pulses;
 
 	SCP_vector<ignored_key_state> ignored_keys;
 	SCP_vector<scrollback_line_state> scrollback;

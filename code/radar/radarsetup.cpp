@@ -462,6 +462,22 @@ void radar_pulse_clear()
 	Radar_pulses.clear();
 }
 
+SCP_vector<radar_pulse_info> radar_pulse_get_active()
+{
+	SCP_vector<radar_pulse_info> out;
+	for (const auto& pulse : Radar_pulses) {
+		if (radar_pulse_finished(pulse))
+			continue;
+
+		int rings_done = std::max(timestamp_since(pulse.start), 0) / pulse.duration;
+		if (rings_done >= pulse.count)
+			continue;
+
+		out.push_back({pulse.objnum, pulse.clr, pulse.duration, pulse.count - rings_done});
+	}
+	return out;
+}
+
 void radar_mission_init()
 {
 	Blip_last_update.clear();
