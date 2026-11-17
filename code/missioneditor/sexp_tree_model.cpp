@@ -1985,8 +1985,11 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 	if (!adjusted_comment.empty())
 		adjusted_comment.insert(0, "\r\n\r\n");
 
-	if (SEXPT_TYPE(tree_nodes[i].type) == SEXPT_OPERATOR) {
-		// For operators, mini-help stays empty
+	// an operator used as an argument also gets its parent's mini-help line, but keeps its own help text
+	const bool is_operator = (SEXPT_TYPE(tree_nodes[i].type) == SEXPT_OPERATOR);
+
+	if (is_operator && tree_nodes[i].parent < 0) {
+		// For root operators, mini-help stays empty
 	} else {
 		int z = tree_nodes[i].parent;
 		if (z < 0) {
@@ -1998,9 +2001,23 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 		int index = get_operator_index(tree_nodes[z].text);
 		int sibling_place = get_sibling_place(i) + 1;
 
-		// Mini-help box
-		if ((SEXPT_TYPE(tree_nodes[i].type) == SEXPT_NUMBER)
-			|| ((SEXPT_TYPE(tree_nodes[i].type) == SEXPT_STRING) && sibling_place > 0)) {
+		// Mini-help box. A container data node's modifiers have no operator help to quote, so describe them
+		if (tree_nodes[i].type & SEXPT_MODIFIER) {
+			const auto* container = get_sexp_container(tree_nodes[z].text);
+			const int first = tree_nodes[z].child;
+
+			if (container != nullptr && container->is_list() && i == first)
+				result.mini_help_text = "List modifier: Get_First, Get_Last, Remove_First, Remove_Last, Get_Random, Remove_Random, or At";
+			else if (container != nullptr && container->is_map() && i == first)
+				result.mini_help_text = "Map key";
+			else if (container != nullptr && container->is_list() && first >= 0 && tree_nodes[first].next == i &&
+				get_list_modifier(tree_nodes[first].text) == ListModifier::AT_INDEX)
+				result.mini_help_text = "List index for At (0 is the first item)";
+			else
+				result.mini_help_text = "Modifier for the container named by the data so far";
+		}
+		// variables and containers carry a number or string bit alongside their own
+		else if (is_operator || (tree_nodes[i].type & (SEXPT_NUMBER | SEXPT_STRING))) {
 			char buffer[10240] = {""};
 
 			const char* helpstr = help(code);
@@ -2052,14 +2069,15 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 				}
 			}
 
-			if (display_number) {
+			// operators like "and" have no numbered lines, so a bare number on each child is just noise
+			if (display_number && !is_operator) {
 				sprintf(buffer, "%d:", sibling_place);
 			}
 
 			result.mini_help_text = buffer;
 		}
 
-		if (index >= 0) {
+		if (index >= 0 && !is_operator) {
 			int c = 0;
 			int j = tree_nodes[z].child;
 			while ((j >= 0) && (j != i)) {
@@ -2170,7 +2188,8 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 			}
 		}
 
-		i = z;
+		if (!is_operator)
+			i = z;
 	}
 
 	int code = get_operator_const(tree_nodes[i].text);
