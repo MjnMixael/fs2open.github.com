@@ -21,6 +21,8 @@
 #include "camera/photomode.h"
 #include "controlconfig/controlsconfig.h"
 #include "graphics/grinternal.h"
+#include "graphics/post_processing.h"
+#include "radar/radarsetup.h"
 #include "hud/hudmessage.h"
 #include "io/keycontrol.h"
 #include "math/bitarray.h"
@@ -2205,6 +2207,25 @@ void store_mission_extras(mission_extra_state& out)
 	out.disable_cockpit_sway = Disable_cockpit_sway;
 	out.sensor_static_forced = Sensor_static_forced;
 
+	// Radar pulses.  Only ships: the SEXP pulses nothing else, and a script pulsing another kind of
+	// object has no name to find it by on the way back.
+	for (const auto& pulse : radar_pulse_get_active()) {
+		const object& obj = Objects[pulse.objnum];
+		if (obj.type != OBJ_SHIP) {
+			continue;
+		}
+
+		radar_pulse_state state;
+		state.ship = Ships[obj.instance].ship_name;
+		state.color[0] = pulse.clr.red;
+		state.color[1] = pulse.clr.green;
+		state.color[2] = pulse.clr.blue;
+		state.color[3] = pulse.clr.is_alphacolor ? pulse.clr.alpha : 255;
+		state.duration = pulse.duration;
+		state.count = pulse.count;
+		out.radar_pulses.push_back(std::move(state));
+	}
+
 	// Ignored_keys is CCFG_MAX long, so actions a script added past that cannot be ignored and
 	// are not looked at.
 	for (int i = 0; i < CCFG_MAX && i < static_cast<int>(Control_config.size()); i++) {
@@ -2899,6 +2920,7 @@ void store_environment(environment_state& out)
 		out.lightshafts_on = lightshafts.on;
 		out.lightshafts_intensity = lightshafts.intensity;
 	}
+	out.lightshafts_override = Lightshafts_override;
 
 	// The preset by name; -1 (the <none> case of set-sound-environment) is an empty name.
 	if (Game_sound_env.id >= 0 && Game_sound_env.id < static_cast<int>(EFX_presets.size())) {
@@ -3355,6 +3377,7 @@ void apply_environment(const checkpoint_data& data)
 		stars_load_debris(The_mission.flags[Mission::Mission_Flags::Fullneb] ? 1 : 0, env.motion_debris_type);
 	}
 	Motion_debris_override = env.motion_debris_override;
+	Lightshafts_override = env.lightshafts_override;
 
 	// The mission parse has already put its own soundtrack in place, so there is only work to do
 	// if a SEXP had changed it.  Go through the same entry point the change-soundtrack SEXP uses:
@@ -7319,6 +7342,19 @@ void apply_hud_state(const checkpoint_data& data)
 		Disable_cockpits = extras.disable_cockpits;
 		Disable_cockpit_sway = extras.disable_cockpit_sway;
 		Sensor_static_forced = extras.sensor_static_forced;
+
+		// Radar pulses, after the ships they ring.  The ring in progress at the save starts over.
+		radar_pulse_clear();
+		for (const auto& pulse : extras.radar_pulses) {
+			auto entry = ship_registry_get(pulse.ship);
+			if (entry == nullptr || !entry->has_objp() || entry->status != ShipStatus::PRESENT) {
+				continue;
+			}
+
+			color clr;
+			gr_init_alphacolor(&clr, pulse.color[0], pulse.color[1], pulse.color[2], pulse.color[3]);
+			radar_pulse_start(entry->objp(), &clr, pulse.duration, pulse.count);
+		}
 
 		for (int i = 0; i < CCFG_MAX; i++) {
 			Ignored_keys[i] = 0;

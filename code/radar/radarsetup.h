@@ -111,6 +111,15 @@ constexpr int RADAR_PULSE_DEFAULT_DURATION = 1000;	// milliseconds per ring
 void radar_pulse_start(const object* objp, const color* clr = nullptr, int duration = RADAR_PULSE_DEFAULT_DURATION, int count = 1);
 void radar_pulse_clear();
 
+// A pulse still running, for the checkpoint.  count is the rings left, counting the one in progress.
+struct radar_pulse_info {
+	int objnum;
+	color clr;
+	int duration;
+	int count;
+};
+SCP_vector<radar_pulse_info> radar_pulse_get_active();
+
 extern sound_handle Radar_static_looping;
 
 class HudGaugeRadar: public HudGauge
