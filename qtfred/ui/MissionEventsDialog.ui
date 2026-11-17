@@ -1110,7 +1110,7 @@ in Milliseconds</string>
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="miniHelpBox">
+        <widget class="fso::fred::MarqueeLineEdit" name="miniHelpBox">
          <property name="focusPolicy">
           <enum>Qt::ClickFocus</enum>
          </property>
@@ -1148,6 +1148,11 @@ in Milliseconds</string>
    <class>fso::fred::EventGraphView</class>
    <extends>QGraphicsView</extends>
    <header>ui/widgets/EventGraphView.h</header>
+  </customwidget>
+  <customwidget>
+   <class>fso::fred::MarqueeLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>ui/widgets/MarqueeLineEdit.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>
