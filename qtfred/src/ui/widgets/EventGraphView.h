@@ -137,6 +137,9 @@ class EventGraphView final : public QGraphicsView {
 	bool isEventNodeSelected() const;
 	// The event index of the selected event card, or -1 if none is selected.
 	int selectedEventIndex() const;
+	// The helpNodeChanged() key for the current selection: the single selected card's annotation key,
+	// or NoHelpNode. (A clicked arg bullet isn't a selection, so this gives its card.)
+	int helpKey() const;
 	// How many different events have a selected card (box select can pick several).
 	int selectedEventCount() const;
 	// The card with this annotation key has collapsed bullets to reveal (gates the

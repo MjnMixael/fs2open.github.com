@@ -61,6 +61,9 @@ void MarqueeLineEdit::updateTimer()
 void MarqueeLineEdit::tick()
 {
 	const int elapsed = static_cast<int>(_sinceTick.restart());
+	// a minimized window sends no hide event, so just hold still until it's back
+	if (window()->isMinimized())
+		return;
 
 	if (_pauseLeft > 0) {
 		_pauseLeft -= elapsed;

@@ -2204,7 +2204,7 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 }
 
 // -----------------------------------------------------------------------
-// compute_number_sum — add up an operator's number arguments
+// compute_number_sum - add up an operator's number arguments
 // -----------------------------------------------------------------------
 // For an operator node: its direct number arguments. For an argument node: its operator's, plus a running
 // total up to and including the node. Only literal numbers are summed; variables, number containers and

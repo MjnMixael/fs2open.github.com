@@ -1155,9 +1155,7 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 		Q_EMIT graphSelectionChanged();
 
 		// After eventSelected, which points the tree (and so the help boxes) at the event
-		const auto selected = m_scene->selectedItems();
-		auto* card = (selected.size() == 1) ? dynamic_cast<graphdetail::CardItem*>(selected.first()) : nullptr;
-		Q_EMIT helpNodeChanged(card ? card->annotationKey() : NoHelpNode);
+		Q_EMIT helpNodeChanged(helpKey());
 	});
 
 	setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
@@ -2047,6 +2045,13 @@ int EventGraphView::selectedEventIndex() const
 		if (auto* ev = qgraphicsitem_cast<graphdetail::EventNodeItem*>(it))
 			return ev->eventIndex();
 	return -1;
+}
+
+int EventGraphView::helpKey() const
+{
+	const auto selected = m_scene->selectedItems();
+	auto* card = (selected.size() == 1) ? dynamic_cast<graphdetail::CardItem*>(selected.first()) : nullptr;
+	return card ? card->annotationKey() : NoHelpNode;
 }
 
 int EventGraphView::selectedEventCount() const
@@ -3325,6 +3330,8 @@ void EventGraphView::contextMenuEvent(QContextMenuEvent* e)
 			const int bulletNode = card->bulletNodeAt(mapToScene(e->pos()));
 			const int key = (bulletNode >= 0) ? bulletNode : card->annotationKey();
 			if (key != -1) {
+				// the menu points the help at its node; keep the sum bar on the same node
+				Q_EMIT helpNodeChanged(key);
 				Q_EMIT nodeContextMenuRequested(key, e->globalPos());
 			} else {
 				QMenu menu(this);
