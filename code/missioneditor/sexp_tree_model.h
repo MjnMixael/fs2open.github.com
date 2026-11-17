@@ -585,6 +585,19 @@ public:
 	// Compute help and mini-help text for a tree node, including any user comment
 	HelpTextResult compute_help_text(int node_index, const SCP_string& node_comment) const;
 
+	// --- Number sum (the Events editor's sum bar) ---
+	struct NumberSumResult {
+		long long total = 0;      // sum of the literal number arguments
+		long long to_here = 0;    // the same, up to and including the node (argument nodes only)
+		bool has_to_here = false; // the node is an argument, so to_here applies
+		int numbers = 0;          // literal numbers summed
+		int variables = 0;        // number variables, counted but not summed
+		int containers = 0;       // number container data, counted but not summed
+		int operators = 0;        // number-returning operators, counted but not summed
+	};
+	// Add up the number arguments of an operator node, or of an argument node's operator
+	NumberSumResult compute_number_sum(int node) const;
+
 	// --- Label edit validation ---
 	struct LabelEditResult {
 		bool update_node = true;

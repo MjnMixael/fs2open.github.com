@@ -367,6 +367,11 @@ void MissionEventsDialog::initEventWidgets() {
 	connect(ui->eventTree, &sexp_tree_view::rootNodeFormulaChanged, this, &MissionEventsDialog::rootNodeFormulaChanged);
 	connect(ui->eventTree, &sexp_tree_view::miniHelpChanged, this, [this](const QString& help) { ui->miniHelpBox->setText(help); });
 	connect(ui->eventTree, &sexp_tree_view::helpChanged, this, [this](const QString& help) { ui->helpBox->setPlainText(help); });
+	// The sum bar follows the tree's selection and its edits. In the graph view the graph's card selection
+	// takes over (helpNodeChanged), since the tree selection is only kept in step with the event there
+	const auto refreshNumberSum = [this]() { updateNumberSum(ui->eventTree->get_node(ui->eventTree->currentItem())); };
+	connect(ui->eventTree, &QTreeWidget::itemSelectionChanged, this, refreshNumberSum);
+	connect(ui->eventTree, &sexp_tree_view::modified, this, refreshNumberSum);
 	connect(ui->eventTree, &sexp_tree_view::selectedRootChanged, this, [this](int formula) { MissionEventsDialog::rootNodeSelectedByFormula(formula); });
 
 	connect(ui->eventTree, &sexp_tree_view::nodeAnnotationChanged, this, [this](void* h, const QString& note) {
@@ -615,6 +620,7 @@ void MissionEventsDialog::initGraphView()
 		} else {
 			ui->eventTree->update_help(treeItemForAnnotationKey(key));
 		}
+		updateNumberSum(key); // event roots, aggregate cards and NoHelpNode are all negative: blank
 	});
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
@@ -837,6 +843,41 @@ void MissionEventsDialog::selectEventInTree(int eventIndex)
 	}
 }
 
+// The sum bar: SexpTreeModel::compute_number_sum() does the adding up. Shown for two or more number
+// arguments, since a lone number is its own sum.
+void MissionEventsDialog::updateNumberSum(int node)
+{
+	ui->numberSumLabel->clear();
+
+	const auto sum = ui->eventTree->_model.compute_number_sum(node);
+	const int variables = sum.variables;
+	const int containers = sum.containers;
+	const int operators = sum.operators;
+	if (sum.numbers + variables + containers + operators < 2)
+		return;
+
+	const auto count = [](int n, const QString& one, const QString& many) {
+		return (n == 1) ? one : many.arg(n);
+	};
+	QStringList uncounted;
+	if (variables > 0)
+		uncounted << count(variables, tr("1 variable"), tr("%1 variables"));
+	if (containers > 0)
+		uncounted << count(containers, tr("1 container"), tr("%1 containers"));
+	if (operators > 0)
+		uncounted << count(operators, tr("1 operator"), tr("%1 operators"));
+
+	// right-aligned, so the totals sit at the right edge and the note leads into them
+	QString text;
+	if (!uncounted.isEmpty())
+		text = tr("(%1 not counted)    ").arg(uncounted.join(QStringLiteral(", ")));
+	text += tr("Sum: %1").arg(sum.total);
+	if (sum.has_to_here)
+		text += tr("    To here: %1").arg(sum.to_here);
+
+	ui->numberSumLabel->setText(text);
+}
+
 // This dialog edits a working copy of the events. If it was already open with unapplied
 // edits, the working copy can differ from Mission_events, so trust the index only when the
 // name there still matches; otherwise take the first event with that name.
@@ -1038,6 +1079,11 @@ void MissionEventsDialog::applyViewChrome(int index)
 	const bool treeView = (index == TreeViewIndex);
 	const bool advancedView = (index == AdvancedViewIndex);
 	const bool graphView = (index == GraphViewIndex);
+
+	// The sum bar needs a node selection, which the advanced text view doesn't have. The graph starts it
+	// blank until a card is clicked; the tree picks up its own selection
+	ui->numberSumLabel->setVisible(!advancedView);
+	updateNumberSum(treeView ? ui->eventTree->get_node(ui->eventTree->currentItem()) : -1);
 
 	// The search box filters in tree view, finds-in-text in advanced view, and
 	// highlights matching nodes in the graph view; its placeholder follows suit.

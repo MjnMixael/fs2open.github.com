@@ -2204,6 +2204,63 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 }
 
 // -----------------------------------------------------------------------
+// compute_number_sum — add up an operator's number arguments
+// -----------------------------------------------------------------------
+// For an operator node: its direct number arguments. For an argument node: its operator's, plus a running
+// total up to and including the node. Only literal numbers are summed; variables, number containers and
+// number-returning operators are only known at run time, so they are counted instead. Container modifiers
+// (keys and list positions) and nodes without an operator get an empty result.
+SexpTreeModel::NumberSumResult SexpTreeModel::compute_number_sum(int node) const
+{
+	NumberSumResult result;
+
+	if (!SCP_vector_inbounds(tree_nodes, node) || tree_nodes[node].type == SEXPT_UNUSED)
+		return result;
+	if (tree_nodes[node].type & SEXPT_MODIFIER)
+		return result;
+
+	int op = node;
+	int up_to = -1;
+	if (SEXPT_TYPE(tree_nodes[node].type) != SEXPT_OPERATOR) {
+		op = tree_nodes[node].parent;
+		up_to = node;
+		if (!SCP_vector_inbounds(tree_nodes, op) || SEXPT_TYPE(tree_nodes[op].type) != SEXPT_OPERATOR)
+			return result;
+	}
+	result.has_to_here = (up_to >= 0);
+
+	bool past_selected = false;
+	for (int c = tree_nodes[op].child; c >= 0; c = tree_nodes[c].next) {
+		const int type = tree_nodes[c].type;
+		if (type & SEXPT_VARIABLE) {
+			if (type & SEXPT_NUMBER)
+				++result.variables;
+		} else if (type & SEXPT_CONTAINER_DATA) {
+			const auto* container = get_sexp_container(tree_nodes[c].text);
+			if (container != nullptr && any(container->type & ContainerType::NUMBER_DATA))
+				++result.containers;
+		} else if (SEXPT_TYPE(type) == SEXPT_OPERATOR) {
+			const int code = get_operator_const(tree_nodes[c].text);
+			if (code >= FIRST_OP) {
+				const int ret = query_operator_return_type(code);
+				if (ret == OPR_NUMBER || ret == OPR_POSITIVE)
+					++result.operators;
+			}
+		} else if (type & SEXPT_NUMBER) {
+			const long long value = atoll(tree_nodes[c].text);
+			result.total += value;
+			if (!past_selected)
+				result.to_here += value;
+			++result.numbers;
+		}
+		if (c == up_to)
+			past_selected = true;
+	}
+
+	return result;
+}
+
+// -----------------------------------------------------------------------
 // validate_label_edit — validate and resolve edited node text
 // -----------------------------------------------------------------------
 // Validate user-entered text for a tree node. For operator nodes, resolves the
