@@ -411,9 +411,6 @@ void persona_parse()
 			persona_radar_pulse settings;
 			parse_persona_radar_pulse(settings, this_persona.name);
 
-			if (type_names.empty())
-				Warning(LOCATION, "Persona %s has an empty +Message Types: list in $Radar Pulse:", this_persona.name);
-
 			for (const auto& type_name : type_names) {
 				int msg_type = get_builtin_message_type(type_name.c_str());
 				if (msg_type == MESSAGE_NONE) {
@@ -431,9 +428,6 @@ void persona_parse()
 				}
 			}
 		}
-
-		if (this_persona.radar_pulse_types.empty())
-			Warning(LOCATION, "$Radar Pulse: of persona %s lists no message types, so it never pulses", this_persona.name);
 	}
 
 	if (optional_string("$Custom data:")) {
