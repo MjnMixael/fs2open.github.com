@@ -1153,6 +1153,11 @@ EventGraphView::EventGraphView(QWidget* parent) : QGraphicsView(parent)
 		// tell the dialog to re-evaluate on every selection change (this fires for
 		// object / empty selections too, which emit no eventSelected).
 		Q_EMIT graphSelectionChanged();
+
+		// After eventSelected, which points the tree (and so the help boxes) at the event
+		const auto selected = m_scene->selectedItems();
+		auto* card = (selected.size() == 1) ? dynamic_cast<graphdetail::CardItem*>(selected.first()) : nullptr;
+		Q_EMIT helpNodeChanged(card ? card->annotationKey() : NoHelpNode);
 	});
 
 	setRenderHints(QPainter::Antialiasing | QPainter::TextAntialiasing);
@@ -3134,9 +3139,13 @@ void EventGraphView::mousePressEvent(QMouseEvent* e)
 					m_scene->clearSelection();
 					card->setSelected(true);
 				}
+				Q_EMIT helpNodeChanged(card->bulletNodeAt(sp)); // the help follows the clicked arg
 				e->accept();
 				return;
 			}
+			// Back from a bullet to the body of the same card: no selection change, so say so here
+			if (card->isSelected() && m_scene->selectedItems().size() == 1)
+				Q_EMIT helpNodeChanged(card->annotationKey());
 			if (m_mode == Mode::Basic && (card->flags() & QGraphicsItem::ItemIsMovable)) {
 				m_dragItem = card;
 				m_dragStartPos = card->pos();

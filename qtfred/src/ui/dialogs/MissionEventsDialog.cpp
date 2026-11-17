@@ -605,6 +605,17 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::nodeEditRequested, this, &MissionEventsDialog::editGraphNode);
 	// Collapse/expand an event's subtree (Basic view).
 	connect(ui->eventGraph, &EventGraphView::eventCollapseToggled, this, &MissionEventsDialog::toggleEventCollapse);
+	// Selecting a card or clicking an arg bullet shows its help, as selecting the node in the tree does
+	connect(ui->eventGraph, &EventGraphView::helpNodeChanged, this, [this](int key) {
+		if (key == EventGraphView::NoHelpNode) {
+			ui->eventTree->update_help(nullptr);
+		} else if (key == -1) {
+			ui->helpBox->setPlainText(tr("This card stands for several nodes, so it has no help of its own."));
+			ui->miniHelpBox->clear();
+		} else {
+			ui->eventTree->update_help(treeItemForAnnotationKey(key));
+		}
+	});
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodesMoved, this, [this](const QVector<QPair<int, QPointF>>& moves) {

@@ -16,6 +16,7 @@
 #include <QTransform>
 #include <QPointF>
 #include <QPair>
+#include <climits>
 
 class QGraphicsScene;
 class QComboBox;
@@ -106,6 +107,9 @@ struct GraphAnnotation {
 class EventGraphView final : public QGraphicsView {
 	Q_OBJECT
   public:
+	// helpNodeChanged() key when no single card is selected (no annotation key is this low)
+	static constexpr int NoHelpNode = INT_MIN;
+
 	explicit EventGraphView(QWidget* parent = nullptr);
 	~EventGraphView() override;
 
@@ -192,6 +196,9 @@ class EventGraphView final : public QGraphicsView {
 	void nodeEditRequested(int treeNode, const QPoint& globalPos);
 	// The user clicked an event card's collapse box (Basic view).
 	void eventCollapseToggled(int eventIndex);
+	// The single selected card or clicked arg bullet, for the help boxes: its annotation key, -1 for an
+	// aggregate card that stands for many nodes, or NoHelpNode when no single card is selected.
+	void helpNodeChanged(int key);
 
   protected:
 	void wheelEvent(QWheelEvent* e) override;
