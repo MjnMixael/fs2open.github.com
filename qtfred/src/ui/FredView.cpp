@@ -28,6 +28,7 @@
 #include <QSignalBlocker>
 #include <QStyle>
 #include <QSettings>
+#include <QShortcut>
 #include <QDateTime>
 #include <QPainter>
 #include <QVariantAnimation>
@@ -1300,6 +1301,38 @@ void FredView::initializeMusicControls() {
 	connect(_musicPlayer, &MusicPlayer::stateChanged, this, &FredView::updateMusicControls);
 	updateMusicControls();
 	setMusicToolbarControlsVisible(_viewport->Show_music_toolbar_controls);
+
+	initializeMusicMediaKeys();
+}
+
+// The keyboard's media keys work the loaded track like the toolbar does, from any window of the editor while
+// it has focus. Like the toolbar, they never start a track. Windows and Linux (X11) deliver these keys to
+// the focused app; macOS sends them to its Now Playing app instead, so they do nothing there.
+void FredView::initializeMusicMediaKeys() {
+	auto addKey = [this](Qt::Key key, auto handler) {
+		auto* shortcut = new QShortcut(QKeySequence(key), this);
+		shortcut->setContext(Qt::ApplicationShortcut);
+		connect(shortcut, &QShortcut::activated, _musicPlayer, handler);
+	};
+	addKey(Qt::Key_MediaTogglePlayPause, [this]() { _musicPlayer->togglePause(); });
+	addKey(Qt::Key_MediaPlay, [this]() {
+		if (_musicPlayer->isPaused())
+			_musicPlayer->togglePause();
+	});
+	addKey(Qt::Key_MediaPause, [this]() {
+		if (_musicPlayer->isPlaying())
+			_musicPlayer->togglePause();
+	});
+	addKey(Qt::Key_MediaStop, [this]() { _musicPlayer->stop(); });
+	// with nothing loaded, Previous / Next would only move the dialog's selection
+	addKey(Qt::Key_MediaNext, [this]() {
+		if (_musicPlayer->hasStream())
+			_musicPlayer->selectNext();
+	});
+	addKey(Qt::Key_MediaPrevious, [this]() {
+		if (_musicPlayer->hasStream())
+			_musicPlayer->selectPrev();
+	});
 }
 
 void FredView::updateMusicControls() {

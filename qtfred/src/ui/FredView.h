@@ -400,6 +400,7 @@ class FredView: public QMainWindow, public IDialogProvider {
 
 	void initializeContextToolbar();
 	void initializeMusicControls();
+	void initializeMusicMediaKeys();
 	void updateMusicControls();
 	void onUpdateContextToolbar();
 	void quickRenameCurrentObject();
