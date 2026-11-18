@@ -260,6 +260,22 @@
         </widget>
        </item>
        <item>
+        <widget class="QLabel" name="numberSumLabel">
+         <property name="alignment">
+          <set>Qt::AlignRight|Qt::AlignVCenter</set>
+         </property>
+         <property name="toolTip">
+          <string>Sum of the number arguments of the selected operator, or of the selected argument's operator with a running total up to it</string>
+         </property>
+         <property name="text">
+          <string/>
+         </property>
+         <property name="textInteractionFlags">
+          <set>Qt::TextSelectableByMouse</set>
+         </property>
+        </widget>
+       </item>
+       <item>
         <layout class="QFormLayout" name="formLayout">
          <item row="0" column="1">
           <widget class="QLineEdit" name="editDirectiveText"/>
@@ -1094,7 +1110,7 @@ in Milliseconds</string>
         </widget>
        </item>
        <item>
-        <widget class="QLineEdit" name="miniHelpBox">
+        <widget class="fso::fred::MarqueeLineEdit" name="miniHelpBox">
          <property name="focusPolicy">
           <enum>Qt::ClickFocus</enum>
          </property>
@@ -1132,6 +1148,11 @@ in Milliseconds</string>
    <class>fso::fred::EventGraphView</class>
    <extends>QGraphicsView</extends>
    <header>ui/widgets/EventGraphView.h</header>
+  </customwidget>
+  <customwidget>
+   <class>fso::fred::MarqueeLineEdit</class>
+   <extends>QLineEdit</extends>
+   <header>ui/widgets/MarqueeLineEdit.h</header>
   </customwidget>
  </customwidgets>
  <tabstops>

@@ -376,6 +376,8 @@ add_file_folder("Source/UI/Widgets"
 	src/ui/widgets/CampaignMissionGraph.h
 	src/ui/widgets/EventGraphView.cpp
 	src/ui/widgets/EventGraphView.h
+	src/ui/widgets/MarqueeLineEdit.cpp
+	src/ui/widgets/MarqueeLineEdit.h
 	src/ui/widgets/MissionTextHighlighter.cpp
 	src/ui/widgets/MissionTextHighlighter.h
 	src/ui/widgets/ObjectComboBox.cpp

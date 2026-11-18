@@ -122,6 +122,14 @@ QToolBar::separator {
     border: 2px solid #0078d7;
     padding: 1px 5px;
 }
+/* Status-bar lines under editor views (the Events editor's number sum): a recessed strip,
+   a shade off the window, with quieter text. */
+QLabel#numberSumLabel {
+    background-color: #e4e4e4;
+    border: 1px solid #c4c4c4;
+    color: #6e6e6e;
+    padding: 1px 6px;
+}
 /* Music Player controls on the primary toolbar: a framed box, and a track button that
    always reads as a button whatever track name it shows. */
 QFrame#musicControls {
@@ -230,6 +238,14 @@ QToolBar::separator {
 #contextToolBar QToolButton[keyboardFocus="true"]:focus {
     border: 2px solid #4aa3f0;
     padding: 1px 5px;
+}
+/* Status-bar lines under editor views (the Events editor's number sum): a recessed strip,
+   a shade off the window, with quieter text. */
+QLabel#numberSumLabel {
+    background-color: #2d2d2d;
+    border: 1px solid #232323;
+    color: #969696;
+    padding: 1px 6px;
 }
 /* Music Player controls on the primary toolbar: a framed box, and a track button that
    always reads as a button whatever track name it shows. */

@@ -1985,8 +1985,11 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 	if (!adjusted_comment.empty())
 		adjusted_comment.insert(0, "\r\n\r\n");
 
-	if (SEXPT_TYPE(tree_nodes[i].type) == SEXPT_OPERATOR) {
-		// For operators, mini-help stays empty
+	// an operator used as an argument also gets its parent's mini-help line, but keeps its own help text
+	const bool is_operator = (SEXPT_TYPE(tree_nodes[i].type) == SEXPT_OPERATOR);
+
+	if (is_operator && tree_nodes[i].parent < 0) {
+		// For root operators, mini-help stays empty
 	} else {
 		int z = tree_nodes[i].parent;
 		if (z < 0) {
@@ -1998,9 +2001,23 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 		int index = get_operator_index(tree_nodes[z].text);
 		int sibling_place = get_sibling_place(i) + 1;
 
-		// Mini-help box
-		if ((SEXPT_TYPE(tree_nodes[i].type) == SEXPT_NUMBER)
-			|| ((SEXPT_TYPE(tree_nodes[i].type) == SEXPT_STRING) && sibling_place > 0)) {
+		// Mini-help box. A container data node's modifiers have no operator help to quote, so describe them
+		if (tree_nodes[i].type & SEXPT_MODIFIER) {
+			const auto* container = get_sexp_container(tree_nodes[z].text);
+			const int first = tree_nodes[z].child;
+
+			if (container != nullptr && container->is_list() && i == first)
+				result.mini_help_text = "List modifier: Get_First, Get_Last, Remove_First, Remove_Last, Get_Random, Remove_Random, or At";
+			else if (container != nullptr && container->is_map() && i == first)
+				result.mini_help_text = "Map key";
+			else if (container != nullptr && container->is_list() && first >= 0 && tree_nodes[first].next == i &&
+				get_list_modifier(tree_nodes[first].text) == ListModifier::AT_INDEX)
+				result.mini_help_text = "List index for At (0 is the first item)";
+			else
+				result.mini_help_text = "Modifier for the container named by the data so far";
+		}
+		// variables and containers carry a number or string bit alongside their own
+		else if (is_operator || (tree_nodes[i].type & (SEXPT_NUMBER | SEXPT_STRING))) {
 			char buffer[10240] = {""};
 
 			const char* helpstr = help(code);
@@ -2052,14 +2069,15 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 				}
 			}
 
-			if (display_number) {
+			// operators like "and" have no numbered lines, so a bare number on each child is just noise
+			if (display_number && !is_operator) {
 				sprintf(buffer, "%d:", sibling_place);
 			}
 
 			result.mini_help_text = buffer;
 		}
 
-		if (index >= 0) {
+		if (index >= 0 && !is_operator) {
 			int c = 0;
 			int j = tree_nodes[z].child;
 			while ((j >= 0) && (j != i)) {
@@ -2170,7 +2188,8 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 			}
 		}
 
-		i = z;
+		if (!is_operator)
+			i = z;
 	}
 
 	int code = get_operator_const(tree_nodes[i].text);
@@ -2179,6 +2198,63 @@ SexpTreeModel::HelpTextResult SexpTreeModel::compute_help_text(int node_index, c
 		result.help_text = SCP_string("No help available") + adjusted_comment;
 	} else {
 		result.help_text = SCP_string(str) + adjusted_comment;
+	}
+
+	return result;
+}
+
+// -----------------------------------------------------------------------
+// compute_number_sum - add up an operator's number arguments
+// -----------------------------------------------------------------------
+// For an operator node: its direct number arguments. For an argument node: its operator's, plus a running
+// total up to and including the node. Only literal numbers are summed; variables, number containers and
+// number-returning operators are only known at run time, so they are counted instead. Container modifiers
+// (keys and list positions) and nodes without an operator get an empty result.
+SexpTreeModel::NumberSumResult SexpTreeModel::compute_number_sum(int node) const
+{
+	NumberSumResult result;
+
+	if (!SCP_vector_inbounds(tree_nodes, node) || tree_nodes[node].type == SEXPT_UNUSED)
+		return result;
+	if (tree_nodes[node].type & SEXPT_MODIFIER)
+		return result;
+
+	int op = node;
+	int up_to = -1;
+	if (SEXPT_TYPE(tree_nodes[node].type) != SEXPT_OPERATOR) {
+		op = tree_nodes[node].parent;
+		up_to = node;
+		if (!SCP_vector_inbounds(tree_nodes, op) || SEXPT_TYPE(tree_nodes[op].type) != SEXPT_OPERATOR)
+			return result;
+	}
+	result.has_to_here = (up_to >= 0);
+
+	bool past_selected = false;
+	for (int c = tree_nodes[op].child; c >= 0; c = tree_nodes[c].next) {
+		const int type = tree_nodes[c].type;
+		if (type & SEXPT_VARIABLE) {
+			if (type & SEXPT_NUMBER)
+				++result.variables;
+		} else if (type & SEXPT_CONTAINER_DATA) {
+			const auto* container = get_sexp_container(tree_nodes[c].text);
+			if (container != nullptr && any(container->type & ContainerType::NUMBER_DATA))
+				++result.containers;
+		} else if (SEXPT_TYPE(type) == SEXPT_OPERATOR) {
+			const int code = get_operator_const(tree_nodes[c].text);
+			if (code >= FIRST_OP) {
+				const int ret = query_operator_return_type(code);
+				if (ret == OPR_NUMBER || ret == OPR_POSITIVE)
+					++result.operators;
+			}
+		} else if (type & SEXPT_NUMBER) {
+			const long long value = atoll(tree_nodes[c].text);
+			result.total += value;
+			if (!past_selected)
+				result.to_here += value;
+			++result.numbers;
+		}
+		if (c == up_to)
+			past_selected = true;
 	}
 
 	return result;

@@ -367,6 +367,14 @@ void MissionEventsDialog::initEventWidgets() {
 	connect(ui->eventTree, &sexp_tree_view::rootNodeFormulaChanged, this, &MissionEventsDialog::rootNodeFormulaChanged);
 	connect(ui->eventTree, &sexp_tree_view::miniHelpChanged, this, [this](const QString& help) { ui->miniHelpBox->setText(help); });
 	connect(ui->eventTree, &sexp_tree_view::helpChanged, this, [this](const QString& help) { ui->helpBox->setPlainText(help); });
+	// The sum bar follows the tree's selection and its edits. In the graph view the graph's card selection
+	// takes over (showGraphHelp), since the tree selection is only kept in step with the event there
+	const auto refreshNumberSum = [this]() {
+		if (ui->eventViewStack->currentIndex() == TreeViewIndex)
+			updateNumberSum(ui->eventTree->get_node(ui->eventTree->currentItem()));
+	};
+	connect(ui->eventTree, &QTreeWidget::itemSelectionChanged, this, refreshNumberSum);
+	connect(ui->eventTree, &sexp_tree_view::modified, this, refreshNumberSum);
 	connect(ui->eventTree, &sexp_tree_view::selectedRootChanged, this, [this](int formula) { MissionEventsDialog::rootNodeSelectedByFormula(formula); });
 
 	connect(ui->eventTree, &sexp_tree_view::nodeAnnotationChanged, this, [this](void* h, const QString& note) {
@@ -605,6 +613,8 @@ void MissionEventsDialog::initGraphView()
 	connect(ui->eventGraph, &EventGraphView::nodeEditRequested, this, &MissionEventsDialog::editGraphNode);
 	// Collapse/expand an event's subtree (Basic view).
 	connect(ui->eventGraph, &EventGraphView::eventCollapseToggled, this, &MissionEventsDialog::toggleEventCollapse);
+	// Selecting a card or clicking an arg bullet shows its help, as selecting the node in the tree does
+	connect(ui->eventGraph, &EventGraphView::helpNodeChanged, this, &MissionEventsDialog::showGraphHelp);
 	// Basic view: persist a dragged node's position on its annotation, as one
 	// undo step (the same before/after snapshot pattern as note/color edits).
 	connect(ui->eventGraph, &EventGraphView::nodesMoved, this, [this](const QVector<QPair<int, QPointF>>& moves) {
@@ -733,6 +743,11 @@ void MissionEventsDialog::refreshGraphView()
 	ui->eventGraph->reload();
 
 	_graphDirty = false;
+
+	// the rebuild restores the selection without signals, so bring the help back in line with it. (Also
+	// rebuilt while hidden, e.g. on load; the tree's help stands then)
+	if (ui->eventViewStack->currentIndex() == GraphViewIndex)
+		showGraphHelp(ui->eventGraph->helpKey());
 }
 
 // Map a graph card's annotation key to the tree item to target. Regular nodes use
@@ -806,6 +821,22 @@ void MissionEventsDialog::refreshGraphIfCurrent()
 		refreshGraphView();
 }
 
+// The help boxes and sum bar for a graph card or arg bullet (an EventGraphView::helpNodeChanged key).
+// Also re-run after a graph rebuild, which reselects quietly, and after the tree selection is pushed
+// to the graph's event, which points the help at the event's row.
+void MissionEventsDialog::showGraphHelp(int key)
+{
+	if (key == EventGraphView::NoHelpNode) {
+		ui->eventTree->update_help(nullptr);
+	} else if (key == -1) {
+		ui->helpBox->setPlainText(tr("This card isn't a single node in the tree, so it has no help of its own."));
+		ui->miniHelpBox->clear();
+	} else {
+		ui->eventTree->update_help(treeItemForAnnotationKey(key));
+	}
+	updateNumberSum(key); // event roots, keyless cards and NoHelpNode are all negative: blank
+}
+
 // Select an event's root item in the tree without changing the current view.
 // Keeps the tree selection (and the model's current event) in sync with a
 // graph selection, so switching to the tree view lands on the same event.
@@ -824,6 +855,41 @@ void MissionEventsDialog::selectEventInTree(int eventIndex)
 			break;
 		}
 	}
+}
+
+// The sum bar: SexpTreeModel::compute_number_sum() does the adding up. Shown for two or more number
+// arguments, since a lone number is its own sum.
+void MissionEventsDialog::updateNumberSum(int node)
+{
+	ui->numberSumLabel->clear();
+
+	const auto sum = ui->eventTree->_model.compute_number_sum(node);
+	const int variables = sum.variables;
+	const int containers = sum.containers;
+	const int operators = sum.operators;
+	if (sum.numbers + variables + containers + operators < 2)
+		return;
+
+	const auto count = [](int n, const QString& one, const QString& many) {
+		return (n == 1) ? one : many.arg(n);
+	};
+	QStringList uncounted;
+	if (variables > 0)
+		uncounted << count(variables, tr("1 variable"), tr("%1 variables"));
+	if (containers > 0)
+		uncounted << count(containers, tr("1 container"), tr("%1 containers"));
+	if (operators > 0)
+		uncounted << count(operators, tr("1 operator"), tr("%1 operators"));
+
+	// right-aligned, so the totals sit at the right edge and the note leads into them
+	QString text;
+	if (!uncounted.isEmpty())
+		text = tr("(%1 not counted)    ").arg(uncounted.join(QStringLiteral(", ")));
+	text += tr("Sum: %1").arg(sum.total);
+	if (sum.has_to_here)
+		text += tr("    To here: %1").arg(sum.to_here);
+
+	ui->numberSumLabel->setText(text);
 }
 
 // This dialog edits a working copy of the events. If it was already open with unapplied
@@ -1028,6 +1094,15 @@ void MissionEventsDialog::applyViewChrome(int index)
 	const bool advancedView = (index == AdvancedViewIndex);
 	const bool graphView = (index == GraphViewIndex);
 
+	// The help boxes and sum bar follow the view's own selection. The advanced text view has none, so its
+	// sum bar is blank (but stays, so the layout doesn't shift)
+	if (treeView)
+		updateNumberSum(ui->eventTree->get_node(ui->eventTree->currentItem()));
+	else if (graphView)
+		showGraphHelp(ui->eventGraph->helpKey());
+	else
+		updateNumberSum(-1);
+
 	// The search box filters in tree view, finds-in-text in advanced view, and
 	// highlights matching nodes in the graph view; its placeholder follows suit.
 	ui->eventSearchEdit->setEnabled(treeView || advancedView || graphView);
@@ -1174,6 +1249,7 @@ void MissionEventsDialog::pushEventStateSnapshot(const QByteArray& before, const
 					}
 				}
 				updateEventCreateButtons();
+				showGraphHelp(ui->eventGraph->helpKey()); // the tree reselect pointed it at the event
 			}
 			_suppressTreeUndo = false;
 		},

@@ -181,6 +181,8 @@ private: // NOLINT(readability-redundant-access-specifiers)
 	void toggleEventCollapse(int eventIndex); // collapse/expand an event's subtree (Basic)
 	QTreeWidgetItem* treeItemForAnnotationKey(int key) const;
 	void selectEventInTree(int eventIndex); // select the event's root, no view switch
+	void updateNumberSum(int node);          // the sum bar for a tree_nodes[] node, or blank
+	void showGraphHelp(int key);             // help boxes and sum bar for a graph helpNodeChanged key
 	void jumpToEventInTree(int eventIndex);  // switch to tree view, then select
 	void jumpToNodeInTree(int treeNode);     // switch to tree view, then hilite the node
 	GraphEventMeta buildEventMeta(int eventIndex) const; // status/annotation-key for one event
