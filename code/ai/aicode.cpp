@@ -491,14 +491,13 @@ void garbage_collect_path_points()
 	int	i;
 	int	pp_xlate[MAX_PATH_POINTS];
 	object	*A;
-	ship_obj	*so;
 
 	//	Scan all objects and create Path_points xlate table.
 	for (i=0; i<MAX_PATH_POINTS; i++)
 		pp_xlate[i] = 0;
 
 	//	in pp_xlate, mark all used Path_point records
-	for ( so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {
+	for (auto so : ship_obj_list_all()) {
 		A = &Objects[so->objnum];
 		if (A->flags[Object::Object_Flags::Should_be_dead])
 			continue;
@@ -532,7 +531,7 @@ void garbage_collect_path_points()
 	Ppfp = &Path_points[xlt];
 
 	//	Now, using pp_xlate, fixup all aip->path_cur and aip->path_start indices
-	for ( so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {
+	for (auto so : ship_obj_list_all()) {
 		A = &Objects[so->objnum];
 		if (A->flags[Object::Object_Flags::Should_be_dead])
 			continue;
@@ -3414,6 +3413,13 @@ void ai_do_objects_docked_stuff(object *docker, int docker_point, object *dockee
 		return;
 	}
 
+	// OFP - a dock group is always all dormant or all awake, so a dormant object never docks
+	if (obj_is_dormant(docker) || obj_is_dormant(dockee))
+	{
+		mprintf(("ai_do_objects_docked_stuff: refusing to dock with a dormant object\n"));
+		return;
+	}
+
 	// link the two objects
 	dock_dock_objects(docker, docker_point, dockee, dockee_point);
 
@@ -5691,7 +5697,7 @@ vec3d	G_predicted_pos, G_fire_pos;
 void ai_set_or_clear_preferred_primary_weapon(bool set_it, const object_ship_wing_point_team *subject, const object_ship_wing_point_team *target, int weapon_idx)
 {
 	// force the ai to reselect a primary instead of possibly waiting the normal elapsed time
-	for (auto so : list_range(&Ship_obj_list))
+	for (auto so : ship_obj_list_all())
 	{
 		auto subject_objp = &Objects[so->objnum];
 		if (subject_objp->flags[Object::Object_Flags::Should_be_dead])
@@ -8395,6 +8401,16 @@ void ai_set_guard_wing(object *objp, int wingnum)
 		aip->mode = AIM_NONE;
 	} else {
 		leader_shipnum = Wings[wingnum].ship_index[0];
+
+		// OFP - guard the first ship in the wing that isn't dormant
+		for (int i = 0; i < Wings[wingnum].current_count; i++) {
+			int shipnum = Wings[wingnum].ship_index[i];
+			if (shipnum >= 0 && !obj_is_dormant(&Objects[Ships[shipnum].objnum])) {
+				leader_shipnum = shipnum;
+				break;
+			}
+		}
+
 		leader_objnum = Ships[leader_shipnum].objnum;
 
 		Assert((leader_objnum >= 0) && (leader_objnum < MAX_OBJECTS));
@@ -12577,9 +12593,10 @@ object *get_wing_leader(int wingnum)
 
 	ship_num = wingp->ship_index[0];
 
-	//	If this ship is disabled, try another ship in the wing.
+	//	If this ship is disabled (or, OFP, dormant), try another ship in the wing.
 	int n = 0;
-	while (!Ships[ship_num].flags[Ship::Ship_Flags::Maneuver_despite_engines] && ship_subsystems_blown(&Ships[ship_num], SUBSYSTEM_ENGINE)) {
+	while ((!Ships[ship_num].flags[Ship::Ship_Flags::Maneuver_despite_engines] && ship_subsystems_blown(&Ships[ship_num], SUBSYSTEM_ENGINE))
+		|| obj_is_dormant(&Objects[Ships[ship_num].objnum])) {
 		n++;
 
 		if (n >= wingp->current_count) {
@@ -16841,7 +16858,7 @@ void ai_ship_destroy(int shipnum)
 	ai_manage_bay_doors(dead_objp, dead_aip, true);
 
 	//	For all objects that had this ship as a target, wipe it out, forcing find of a new enemy.
-	for ( auto so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {
+	for (auto so : ship_obj_list_all()) {
 		if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 			continue;
 
@@ -17215,6 +17232,8 @@ bool test_line_of_sight(const vec3d* from, const vec3d* to, SCP_unordered_set<in
 
 	for (object* objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
 		if (objp->flags[Object::Object_Flags::Should_be_dead])
+			continue;
+		if (obj_is_dormant(objp))
 			continue;
 
 		//Don't collision check against excluded objects

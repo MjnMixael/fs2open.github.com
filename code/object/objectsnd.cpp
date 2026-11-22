@@ -475,6 +475,12 @@ void obj_snd_do_frame()
 	for ( osp = GET_FIRST(&obj_snd_list); osp !=END_OF_LIST(&obj_snd_list); osp = GET_NEXT(osp) ) {
 		Assert(osp != nullptr);
 		objp = &Objects[osp->objnum];
+
+		// OFP - dormant objects are silent; obj_set_dormant() stopped their sounds
+		if (obj_is_dormant(objp)) {
+			continue;
+		}
+
 		if ((Player_obj == objp) && (observer_obj == Player_obj) && !(osp->flags & OS_PLAY_ON_PLAYER)) {
 			// we don't play sounds if the view is from the player
 			// unless OS_PLAY_ON_PLAYER was set manually

@@ -406,6 +406,30 @@ ADE_VIRTVAR(CollisionGroups, l_Object, "number", "Collision group data", "number
 	return ade_set_args(L, "i", objh->objp()->collision_group_id);
 }
 
+ADE_VIRTVAR(Dormant, l_Object, "boolean",
+	"Whether the object is dormant: still in the mission with all its state, but not drawn, not colliding, not moving, "
+	"running no AI, and ignored by radar, targeting and damage. Setting it parks or wakes the object the same way the "
+	"set-dormant SEXP does (docked objects change together). Ships, props, debris, coordinate points and jump nodes can be "
+	"made dormant, but never the player, anything docked to the player, or a ship that is arriving, departing, dying, "
+	"docking, undocking or rearming. Single player only.",
+	"boolean",
+	"True if the object is dormant for any reason, false if not or if the handle is invalid")
+{
+	object_h *objh = nullptr;
+	bool dormant = false;
+	if (!ade_get_args(L, "o|b", l_Object.GetPtr(&objh), &dormant))
+		return ADE_RETURN_FALSE;
+
+	if (!objh->isValid())
+		return ADE_RETURN_FALSE;
+
+	if (ADE_SETTING_VAR && !(Game_mode & GM_MULTIPLAYER)) {
+		obj_set_dormant(objh->objp(), Object::Object_Flags::Dormant_manual, dormant);
+	}
+
+	return ade_set_args(L, "b", obj_is_dormant(objh->objp()));
+}
+
 ADE_FUNC(addToCollisionGroup, l_Object, "number group", "Adds this object to the specified collision group.  The group must be between 0 and 31, inclusive.", nullptr, "Returns nothing")
 {
 	object_h *objh = nullptr;

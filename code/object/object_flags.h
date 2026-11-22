@@ -33,6 +33,8 @@ namespace Object {
 		Collides_with_parent,	// Asteroth - Only used for weapons with 'Can_damage_shooter'
 		Attackable_if_no_collide,	// Cyborg - Allows the AI to attack this object, even if no-collide is set (Cue Admiral Ackbar)
 		Collision_cache_stale,	// This object has a stale collision cache, and will be recalculated this frame
+		Dormant_scene,			// OFP - dormant because its scene is not active.  Change only through obj_set_dormant()
+		Dormant_manual,			// OFP - dormant because a designer parked it (set-dormant).  Change only through obj_set_dormant()
 
 		NUM_VALUES
 	};

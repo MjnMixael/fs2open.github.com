@@ -872,6 +872,8 @@ int get_nearest_turret_objnum(int turret_parent_objnum, const ship_subsys *turre
 			for (auto ptr: list_range(&obj_used_list)) {
 				if (ptr->flags[Object::Object_Flags::Should_be_dead])
 					continue;
+				if (obj_is_dormant(ptr))
+					continue;
 
 				found_something = false;
 

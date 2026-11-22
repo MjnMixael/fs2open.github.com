@@ -154,6 +154,7 @@ enum sexp_opf_t : int {
 	OPF_CHILD_LUA_ENUM,			    // MjnMixael - Used to let Lua Enums reference Enums
 	OPF_MISSION_CUSTOM_STRING,      // MjnMixael - The custom strings as defined in FRED
 	OPF_MESSAGE_TYPE,      // naomimyselfandi - A message type (Attack Target et al.)
+	OPF_DORMANT_OBJECT,				// MjnMixael - anything that can be made dormant: ship, wing, prop, coordinate point or jump node
 
 	//Must always be at the end of the list
 	First_available_opf_id
@@ -1044,6 +1045,7 @@ enum : int {
 	OP_SHIP_CUSTOM_DATA_SET_BOOL,	// MjnMixael
 	OP_FAIL_EVENT,	// MjnMixael
 	OP_RADAR_PULSE,	// MjnMixael
+	OP_SET_DORMANT,	// MjnMixael
 
 	// this should come after every operator
 	First_available_operator_id
@@ -1330,6 +1332,7 @@ enum sexp_error_check
 	SEXP_CHECK_VARIABLE_TYPE_MISMATCH,
 	SEXP_CHECK_POTENTIAL_ISSUE,
 	SEXP_CHECK_INVALID_SHIP_WING_PROP,  // invalid ship/wing/prop
+	SEXP_CHECK_INVALID_DORMANT_OBJECT,  // OFP - invalid ship/wing/prop/coordinate point/jump node
 };
 
 

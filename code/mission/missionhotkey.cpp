@@ -859,9 +859,8 @@ void save_hotkeys()
 {
 	for (int i=0; i<MAX_KEYED_TARGETS; i++) {
 		hud_target_hotkey_clear(i);
-		ship_obj* so;
 
-		for ( so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {
+		for (auto so : ship_obj_list_all()) {
 			if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 				continue;
 			if ( Hotkey_bits[Objects[so->objnum].instance] & (1 << i) ) {

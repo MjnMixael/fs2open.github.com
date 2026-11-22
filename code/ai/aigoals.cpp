@@ -619,13 +619,12 @@ void ai_goal_purge_invalid_goals( ai_goal *aigp, ai_goal *goal_list, ai_info *ai
 void ai_goal_purge_all_invalid_goals(ai_goal *aigp)
 {
 	int i;
-	ship_obj *sop;
 
 	// only purge goals if a new goal is one of the types that require purging
 	if (!causes_invalid_goal_purge_all_ships(aigp->ai_mode))
 		return;
 	
-	for (sop = GET_FIRST(&Ship_obj_list); sop != END_OF_LIST(&Ship_obj_list); sop = GET_NEXT(sop))
+	for (auto sop : ship_obj_list_all())
 	{
 		if (Objects[sop->objnum].flags[Object::Object_Flags::Should_be_dead])
 			continue;
@@ -2058,8 +2057,22 @@ ai_achievability ai_mission_goal_achievable( int objnum, ai_goal *aigp )
 			return ai_achievability::NOT_ACHIEVABLE;
 		else if ( wingp->total_arrived_count == 0 )
 			return ai_achievability::NOT_KNOWN;
-		else
-			return ai_achievability::ACHIEVABLE;
+
+		// OFP - if every ship the wing has in the mission is dormant, wait for one to wake up
+		if (wingp->current_count > 0) {
+			bool any_awake = false;
+			for (int i = 0; i < wingp->current_count; i++) {
+				int shipnum = wingp->ship_index[i];
+				if (shipnum >= 0 && !obj_is_dormant(&Objects[Ships[shipnum].objnum])) {
+					any_awake = true;
+					break;
+				}
+			}
+			if (!any_awake)
+				return ai_achievability::NOT_KNOWN;
+		}
+
+		return ai_achievability::ACHIEVABLE;
 	}
 	// Goober5000 - undocking from an unspecified object is always achievable;
 	// undocking from a specified object is handled below
@@ -2072,6 +2085,12 @@ ai_achievability ai_mission_goal_achievable( int objnum, ai_goal *aigp )
 		if (!target_ship_entry)
 		{
 			status = SHIP_STATUS_UNKNOWN;
+		}
+		// OFP - a dormant goal ship is in the mission but can't be interacted with; wait for it like an unarrived
+		// ship, except that a support ship drops a rearm goal (it would otherwise hold up its whole queue)
+		else if (target_ship_entry->status == ShipStatus::PRESENT && target_ship_entry->has_objp() && obj_is_dormant(target_ship_entry->objp()))
+		{
+			status = (aigp->ai_mode == AI_GOAL_REARM_REPAIR) ? SHIP_STATUS_GONE : SHIP_STATUS_NOT_ARRIVED;
 		}
 		// goal ship is currently in mission
 		else if (target_ship_entry->status == ShipStatus::PRESENT || target_ship_entry->status == ShipStatus::DEATH_ROLL)

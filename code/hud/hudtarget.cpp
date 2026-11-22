@@ -2512,6 +2512,8 @@ void hud_target_in_reticle_new()
 	for ( A = GET_FIRST(&obj_used_list); A !=END_OF_LIST(&obj_used_list); A = GET_NEXT(A) ) {
 		if (A->flags[Object::Object_Flags::Should_be_dead])
 			continue;
+		if (obj_is_dormant(A))
+			continue;
 
 		if ( !object_targetable_in_reticle(A) ) {
 			continue;
@@ -2621,6 +2623,8 @@ void hud_target_in_reticle_old()
 
 	for ( A = GET_FIRST(&obj_used_list); A !=END_OF_LIST(&obj_used_list); A = GET_NEXT(A) ) {
 		if (A->flags[Object::Object_Flags::Should_be_dead])
+			continue;
+		if (obj_is_dormant(A))
 			continue;
 
 		if ( !object_targetable_in_reticle(A) ) {

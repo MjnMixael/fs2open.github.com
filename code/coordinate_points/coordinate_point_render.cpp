@@ -215,6 +215,10 @@ bool coordinate_point_visible_to_local_player(const mission_coordinate_point& cp
 	if (cp.objnum < 0 || !cp.flags[CoordinatePoint::Flags::Visible_in_mission]) {
 		return false;
 	}
+	// OFP - a dormant point is hidden, separately from the designer's Visible_in_mission flag
+	if (obj_is_dormant(&Objects[cp.objnum])) {
+		return false;
+	}
 	// Multiplayer team filter: a point assigned to a specific team is hidden from players on
 	// other teams. Singleplayer and "no team" (team < 0) points are visible to everyone.
 	if (Net_player != nullptr && cp.multi_team >= 0 && cp.multi_team != Net_player->p_info.team) {

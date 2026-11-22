@@ -323,8 +323,12 @@ bool CJumpNode::IsHidden() const
 {
 	if(m_flags & JN_HIDE)
 		return true;
-	else
-		return false;
+
+	// OFP - a dormant jump node is hidden too (separately from the designer's own hide flag)
+	if (m_objnum >= 0 && obj_is_dormant(&Objects[m_objnum]))
+		return true;
+
+	return false;
 }
 
 /**
@@ -535,6 +539,10 @@ CJumpNode *jumpnode_get_which_in(const object *objp)
 
 	for (auto &jnp : Jump_nodes) {
 		if (jnp.GetModelNumber() < 0)
+			continue;
+
+		// OFP - a dormant jump node can't be jumped through
+		if (jnp.GetSCPObjectNumber() >= 0 && obj_is_dormant(jnp.GetSCPObject()))
 			continue;
 
 		float radius = jnp.GetRadius();

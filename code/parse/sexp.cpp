@@ -824,6 +824,7 @@ SCP_vector<sexp_oper> Operators = {
 	{ "weapon-create",					OP_WEAPON_CREATE,						5,	10,			SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "ship-vanish",					OP_SHIP_VANISH,							1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},
 	{ "prop-vanish",					OP_PROP_VANISH,							1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},  // MjnMixael
+	{ "set-dormant",					OP_SET_DORMANT,							2,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// MjnMixael
 	{ "ship-vaporize",					OP_SHIP_VAPORIZE,						1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "ship-no-vaporize",				OP_SHIP_NO_VAPORIZE,					1,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
 	{ "set-explosion-option",			OP_SET_EXPLOSION_OPTION,				3,	INT_MAX,	SEXP_ACTION_OPERATOR,	},	// Goober5000
@@ -2685,6 +2686,27 @@ int check_sexp_syntax(int node, int desired_return_type, int recursive, int *bad
 				}
 
 				return SEXP_CHECK_INVALID_SHIP_WING_PROP;
+
+			case OPF_DORMANT_OBJECT:
+				if (node_subtype != SEXP_ATOM_STRING) {
+					return SEXP_CHECK_TYPE_MISMATCH;
+				}
+				if (ship_name_lookup(CTEXT(node), 1) >= 0 || wing_name_lookup(CTEXT(node), 1) >= 0) {
+					break;
+				}
+				if (prop_name_lookup(CTEXT(node)) >= 0) {
+					break;
+				}
+				if (find_coordinate_point_by_name(CTEXT(node)) != nullptr || jumpnode_get_by_name(CTEXT(node)) != nullptr) {
+					break;
+				}
+
+				// also check the arrival/spawn lists if we're running the game
+				if (!Fred_running && (mission_check_ship_yet_to_arrive(CTEXT(node)) || mission_check_prop_yet_to_spawn(CTEXT(node)))) {
+					break;
+				}
+
+				return SEXP_CHECK_INVALID_DORMANT_OBJECT;
 
 			case OPF_AWACS_SUBSYSTEM:
 			case OPF_ROTATING_SUBSYSTEM:
@@ -13192,7 +13214,7 @@ void sexp_change_iff_helper(object_ship_wing_point_team &oswpt, int new_team)
 
 		case OSWPT_TYPE_WHOLE_TEAM:
 		{
-			for (auto so: list_range(&Ship_obj_list)) {
+			for (auto so : ship_obj_list_all()) {
 				if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 					continue;
 
@@ -15367,6 +15389,8 @@ void sexp_explosion_effect(int n)
 			{
 				if (objp->flags[Object::Object_Flags::Should_be_dead])
 					continue;
+				if (obj_is_dormant(objp))
+					continue;
 
 				if ( (objp->type != OBJ_SHIP) && (objp->type != OBJ_ASTEROID) )
 				{
@@ -16800,6 +16824,13 @@ void sexp_set_docked(int n)
 
 	auto dockee_point_name = CTEXT(n);
 
+	// OFP - dormant ships can't dock or be docked to
+	if (obj_is_dormant(docker->objp()) || obj_is_dormant(dockee->objp()))
+	{
+		mprintf(("set-docked: %s or %s is dormant, so they can't dock\n", docker->name, dockee->name));
+		return;
+	}
+
 	//Get dockpoints by name
 	int docker_point_index = model_find_dock_name_index(Ship_info[docker->shipp()->ship_info_index].model_num, docker_point_name);
 	int dockee_point_index = model_find_dock_name_index(Ship_info[dockee->shipp()->ship_info_index].model_num, dockee_point_name);
@@ -18126,7 +18157,7 @@ void sexp_alter_ship_flag_helper(object_ship_wing_point_team &oswpt, bool future
 
 		case OSWPT_TYPE_WHOLE_TEAM:
 			Assert (oswpt.team >= 0);
-			for (auto so: list_range(&Ship_obj_list)) {
+			for (auto so : ship_obj_list_all()) {
 				if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 					continue;
 
@@ -18259,7 +18290,7 @@ void sexp_alter_ship_flag_helper(object_ship_wing_point_team &oswpt, bool future
 void alter_flag_for_all_ships(bool future_ships, Object::Object_Flags object_flag, Ship::Ship_Flags ship_flag, Mission::Parse_Object_Flags parse_obj_flag, AI::AI_Flags ai_flag, bool set_flag)
 {
 	// set all the ships present in the mission
-	for (auto so: list_range(&Ship_obj_list)) {
+	for (auto so : ship_obj_list_all()) {
 		if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 			continue;
 
@@ -19940,8 +19971,7 @@ void sexp_set_guard_range(int node)
 				set_guard_range_ship(range, shipnum, shipp);
 			}
 		} else if (oswpt.type == OSWPT_TYPE_WHOLE_TEAM) {
-			ship_obj* so;
-			for (so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so)) {
+			for (auto so : ship_obj_list_all()) {
 				if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 					continue;
 
@@ -20236,6 +20266,58 @@ void sexp_prop_vanish(int n)
 		if (prop_entry != nullptr) {
 			Objects[prop_entry->objnum].flags.set(Object::Object_Flags::Should_be_dead);
 		}
+	}
+}
+
+// OFP - park objects offstage: dormant objects keep all their state but take no part in the mission
+void sexp_set_dormant(int n)
+{
+	// single player only; dormancy is never sent over the network
+	if (Game_mode & GM_MULTIPLAYER)
+		return;
+
+	bool dormant = is_sexp_true(n);
+	n = CDR(n);
+
+	auto set_one = [dormant](object *objp, const char *name) {
+		if (!obj_set_dormant(objp, Object::Object_Flags::Dormant_manual, dormant))
+			mprintf(("set-dormant: %s can't be made dormant right now (player, docked to the player, arriving, departing or dying)\n", name));
+	};
+
+	for (; n != -1; n = CDR(n)) {
+		auto ship_entry = eval_ship(n);
+		if (ship_entry) {
+			if (ship_entry->status == ShipStatus::PRESENT)
+				set_one(ship_entry->objp(), ship_entry->name);
+			continue;
+		}
+
+		auto wingp = eval_wing(n);
+		if (wingp) {
+			for (int i = 0; i < wingp->current_count; i++) {
+				int shipnum = wingp->ship_index[i];
+				if (shipnum >= 0)
+					set_one(&Objects[Ships[shipnum].objnum], Ships[shipnum].ship_name);
+			}
+			continue;
+		}
+
+		auto prop_entry = eval_prop(n);
+		if (prop_entry != nullptr) {
+			set_one(&Objects[prop_entry->objnum], CTEXT(n));
+			continue;
+		}
+
+		auto cp = find_coordinate_point_by_name(CTEXT(n));
+		if (cp != nullptr) {
+			if (cp->objnum >= 0)
+				set_one(&Objects[cp->objnum], CTEXT(n));
+			continue;
+		}
+
+		auto jnp = jumpnode_get_by_name(CTEXT(n));
+		if (jnp != nullptr && jnp->GetSCPObjectNumber() >= 0)
+			set_one(&Objects[jnp->GetSCPObjectNumber()], CTEXT(n));
 	}
 }
 
@@ -29584,6 +29666,11 @@ int eval_sexp(int cur_node, int referenced_node)
 				sexp_val = SEXP_TRUE;
 				break;
 
+			case OP_SET_DORMANT:
+				sexp_set_dormant(node);
+				sexp_val = SEXP_TRUE;
+				break;
+
 			case OP_DESTROY_INSTANTLY:
 			case OP_DESTROY_INSTANTLY_WITH_DEBRIS:
 				sexp_destroy_instantly(node, (op_num == OP_DESTROY_INSTANTLY_WITH_DEBRIS));
@@ -32336,6 +32423,7 @@ int query_operator_return_type(int op)
 		case OP_SET_GUARD_RANGE:
 		case OP_SHIP_VANISH:
 		case OP_PROP_VANISH:
+		case OP_SET_DORMANT:
 		case OP_DESTROY_INSTANTLY:
 		case OP_DESTROY_INSTANTLY_WITH_DEBRIS:
 		case OP_SHIELDS_ON:
@@ -32979,6 +33067,12 @@ int query_operator_argument_type(int op_index, int argnum)
 
 		case OP_PROP_VANISH:
 			return OPF_PROP;
+
+		case OP_SET_DORMANT:
+			if (argnum == 0)
+				return OPF_BOOL;
+			else
+				return OPF_DORMANT_OBJECT;
 
 		case OP_ALTER_SHIP_FLAG:
 			if(argnum == 0)
@@ -36128,6 +36222,9 @@ const char *sexp_error_message(int num)
 		case SEXP_CHECK_INVALID_SHIP_WING_PROP:
 			return "Invalid ship, wing, or prop name";
 
+		case SEXP_CHECK_INVALID_DORMANT_OBJECT:
+			return "Invalid ship, wing, prop, coordinate point, or jump node name";
+
 		case SEXP_CHECK_INVALID_SHIP_TYPE:
 			return "Invalid ship type";
 
@@ -37662,6 +37759,7 @@ int get_category(int op_id)
 		case OP_SET_SPECIAL_WARPOUT_NAME:
 		case OP_SHIP_VANISH:
 		case OP_PROP_VANISH:
+		case OP_SET_DORMANT:
 		case OP_SHIELDS_ON:
 		case OP_SHIELDS_OFF:
 		case OP_CHANGE_AI_LEVEL:
@@ -38132,6 +38230,7 @@ int get_subcategory(int op_id)
 		case OP_TURRET_PROTECT_SHIP:
 		case OP_TURRET_UNPROTECT_SHIP:
 		case OP_SHIP_INVISIBLE:
+		case OP_SET_DORMANT:
 		case OP_SHIP_VISIBLE:
 		case OP_SHIP_STEALTHY:
 		case OP_SHIP_UNSTEALTHY:
@@ -42246,6 +42345,20 @@ SCP_vector<sexp_help_struct> Sexp_help = {
 		"\tMakes the named prop vanish\r\n"
 		"\tSingle Player Only!\r\n"
 		"\t1: List of prop names to vanish (prop must be in-mission)\r\n"},
+
+	{ OP_SET_DORMANT, "set-dormant\r\n"
+		"\tParks objects offstage, or brings them back.  A dormant object stays in the mission with all its state "
+		"(damage, weapons, orders, docking, position), but isn't drawn, doesn't collide, doesn't move, runs no AI, can't be damaged, "
+		"and is ignored by radar, targeting, squad orders and AI.  Beams it fires or is hit by end, and its particle effects stop.  "
+		"SEXPs that name it still work on it.  A dormant ship that is destroyed by a SEXP dies instantly, without an explosion.  "
+		"A dormant coordinate point or jump node is hidden, can't be targeted, and a dormant jump node can't be jumped through.  "
+		"Docked objects always change together, and nothing can dock with a dormant ship.  The player, anything docked to the player, "
+		"and ships that are arriving, departing, dying, docking, undocking or rearming can't be made dormant.  "
+		"Ships that haven't arrived yet are skipped.\r\n"
+		"\tSingle Player Only!  Does nothing in multiplayer.\r\n"
+		"Takes 2 or more arguments...\r\n"
+		"\t1:\tTrue to make the objects dormant, false to wake them\r\n"
+		"\tRest:\tShips, wings, props, coordinate points or jump nodes (a wing applies to every ship in it)\r\n"},
 
 	{ OP_DESTROY_INSTANTLY, "destroy-instantly\r\n"
 		"\tSelf-destructs the named ship without explosion, death roll, or debris.  That is, the ship is instantly gone from the mission and the only indication of what happened is a mission log entry.\r\n"

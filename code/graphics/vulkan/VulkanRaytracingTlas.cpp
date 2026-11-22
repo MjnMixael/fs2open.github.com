@@ -179,6 +179,11 @@ void VulkanRaytracingManager::gatherShadowCasterInstances(SCP_vector<vk::Acceler
 			continue;
 		}
 
+		// OFP - dormant objects aren't drawn, so they cast no raytraced shadows either
+		if (obj_is_dormant(objp)) {
+			continue;
+		}
+
 		switch (objp->type) {
 		case OBJ_SHIP: {
 			ship* shipp = &Ships[objp->instance];

@@ -214,7 +214,7 @@ void obj_render_all(const std::function<void(object*)>& render_function, bool *d
 	objp = Objects;
 
 	for (i=0;i<=Highest_object_index;i++,objp++) {
-		if ( (objp->type != OBJ_NONE) && (objp->flags[Object::Object_Flags::Renders]) )	{
+		if ( (objp->type != OBJ_NONE) && (objp->flags[Object::Object_Flags::Renders]) && !obj_is_dormant(objp) )	{
             objp->flags.remove(Object::Object_Flags::Was_rendered);
 
 			if ( obj_in_view_cone(objp) )	{
@@ -340,7 +340,7 @@ void obj_render_queue_all()
 	bool full_neb = is_full_nebula();
 
 	for ( i = 0; i <= Highest_object_index; i++,objp++ ) {
-		if ( (objp->type != OBJ_NONE) && ( objp->flags [Object::Object_Flags::Renders] ) )	{
+		if ( (objp->type != OBJ_NONE) && ( objp->flags [Object::Object_Flags::Renders] ) && !obj_is_dormant(objp) )	{
             objp->flags.remove(Object::Object_Flags::Was_rendered);
 
 			if ( !obj_in_view_cone(objp) ) {

@@ -60,6 +60,26 @@ bool ParticleSource::process() {
 	float parent_lifetime = m_host->getLifetime();
 	float particleMultiplier = m_host->getParticleMultiplier();
 
+	// OFP - a source on a dormant object emits nothing.  Keep it alive, and hold its spawn timers at
+	// "now" so it doesn't burst out a backlog of particles when the object wakes up.
+	if (auto host_obj = attachment.extract_object(); host_obj && host_obj->objnum >= 0
+		&& Objects[host_obj->objnum].signature == host_obj->sig && obj_is_dormant(&Objects[host_obj->objnum])) {
+		bool still_running = false;
+		for (size_t i = 0; i < effectList.size(); i++) {
+			if (!m_effect_is_running[i])
+				continue;
+
+			auto& timing = m_timing[i];
+			if (timestamp_elapsed(timing.m_nextCreation))
+				timing.m_nextCreation = _timestamp();
+
+			bool isDone = timestamp_compare(timing.m_endTimestamp, timing.m_nextCreation) < 0;
+			m_effect_is_running[i] = !isDone;
+			still_running |= !isDone;
+		}
+		return still_running;
+	}
+
 	bool result = false;
 	for (size_t i = 0; i < effectList.size(); i++) {
 		const auto& effect = effectList[i];

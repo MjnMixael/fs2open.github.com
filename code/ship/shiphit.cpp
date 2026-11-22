@@ -1940,6 +1940,12 @@ void ship_hit_kill(object *ship_objp, object *other_obj, const vec3d *hitpos, fl
 	if (sp->flags[Ship::Ship_Flags::Dying])
 		return;
 
+	// OFP - a dormant ship never runs its death roll (it isn't processed), so it dies instantly and quietly
+	if (obj_is_dormant(ship_objp)) {
+		ship_destroy_instantly(ship_objp, false);
+		return;
+	}
+
 	if (scripting::hooks::OnShipDeathStarted->isActive())
 	{
 		// add scripting hook for 'On Ship Death Started' -- Goober5000

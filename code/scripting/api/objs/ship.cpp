@@ -2932,6 +2932,10 @@ ADE_FUNC(setDocked, l_Ship, "ship dockee_ship, [string | number docker_point, st
 		return ADE_RETURN_FALSE;
 	}
 
+	// OFP - dormant ships can't dock or be docked to
+	if (obj_is_dormant(docker_objh->objp()) || obj_is_dormant(dockee_objh->objp()))
+		return ADE_RETURN_FALSE;
+
 	//Set docked
 	dock_orient_and_approach(docker_objh->objp(), docker_point, dockee_objh->objp(), dockee_point, DOA_DOCK_STAY);
 	ai_do_objects_docked_stuff(docker_objh->objp(), docker_point, dockee_objh->objp(), dockee_point, true);

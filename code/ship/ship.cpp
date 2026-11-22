@@ -362,6 +362,7 @@ bool Sensor_static_forced = false; //forced static effect sexp initialization
 #define		SHIP_OBJ_USED	(1<<0)				// flag used in ship_obj struct
 #define		MAX_SHIP_OBJS	MAX_SHIPS			// max number of ships tracked in ship list
 ship_obj		Ship_objs[MAX_SHIP_OBJS];		// array used to store ship object indexes
+ship_obj		Dormant_ship_obj_list;					// OFP - dormant ships, see ship_obj_list_set_dormant()
 ship_obj		Ship_obj_list;							// head of linked list of ship_obj structs, Standalone ship cannot be in this list or it will cause bugs.
 
 SCP_vector<ship_info>	Ship_info;
@@ -906,6 +907,7 @@ static void ship_obj_list_init()
 	int i;
 
 	list_init(&Ship_obj_list);
+	list_init(&Dormant_ship_obj_list);
 	for ( i = 0; i < MAX_SHIP_OBJS; i++ ) {
 		ship_obj_list_reset_slot(i);
 	}
@@ -947,6 +949,21 @@ static void ship_obj_list_remove(int index)
 	ship_obj_list_reset_slot(index);
 }
 
+void ship_obj_list_set_dormant(ship *shipp, bool dormant)
+{
+	int index = shipp->ship_list_index;
+	Assertion(index >= 0 && index < MAX_SHIP_OBJS, "Ship %s has no ship_obj node!", shipp->ship_name);
+	if (index < 0 || index >= MAX_SHIP_OBJS)
+		return;
+
+	// list_remove only touches the node's neighbors, so it works whichever list the node is on
+	list_remove(Ship_obj_list, &Ship_objs[index]);
+	if (dormant)
+		list_append(&Dormant_ship_obj_list, &Ship_objs[index]);
+	else
+		list_append(&Ship_obj_list, &Ship_objs[index]);
+}
+
 ship_obj *get_ship_obj_ptr_from_index(int index)
 {
 	Assert(index >= 0 && index < MAX_SHIP_OBJS);
@@ -967,7 +984,7 @@ int ship_get_num_ships()
 		return count;
 	}
 
-	for (auto so : list_range(&Ship_obj_list)) {
+	for (auto so : ship_obj_list_all()) {
 		if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 			continue;
 
@@ -6543,7 +6560,7 @@ static int ship_allocate_subsystems(int num_so, bool page_in = false)
 		Num_ship_subsystems = num_subsystems_save;
 
 	// because the Ship_subsystems vector changed, it might have moved in memory, so invalidate all the subsystem caches
-	for (auto so : list_range(&Ship_obj_list))
+	for (auto so : ship_obj_list_all())
 	{
 		// don't skip should-be-dead ships for this flag removal
 		Ships[Objects[so->objnum].instance].flags.remove(Ship::Ship_Flags::Subsystem_cache_valid);
@@ -8981,7 +8998,7 @@ void wing_maybe_cleanup( wing *wingp, int team )
 			{
 				// apparently, there have been reports of ships still present in the mission when this log
 				// entry is written.  Do a sanity check here to find out for sure.
-				for (ship_obj *so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so))
+				for (auto so : ship_obj_list_all())
 				{
 					if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 						continue;
@@ -9394,6 +9411,8 @@ static void ship_blow_up_area_apply_blast( object *exp_objp)
 		float damage = 0.0f;
 		for ( objp = GET_FIRST(&obj_used_list); objp !=END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp) ) {
 			if (objp->flags[Object::Object_Flags::Should_be_dead])
+				continue;
+			if (obj_is_dormant(objp))
 				continue;
 
 			if ( (objp->type != OBJ_SHIP) && (objp->type != OBJ_ASTEROID) ) {
@@ -11327,7 +11346,6 @@ static void ship_make_create_time_unique(ship *shipp)
 	static int last_smctu_final_time = -1;
 	int		sanity_counter = 0, collision;
 	ship		*compare_shipp;
-	ship_obj	*so;
 	uint		new_create_time;
 
 	new_create_time = shipp->create_time;
@@ -11336,7 +11354,7 @@ static void ship_make_create_time_unique(ship *shipp)
 
 		collision = 0;
 
-		for ( so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {
+		for (auto so : ship_obj_list_all()) {
 			// we probably don't need to skip should-be-dead ships
 			compare_shipp = &Ships[Objects[so->objnum].instance];
 
@@ -19078,9 +19096,8 @@ flagset<Ship::Info_Flags> ship_get_SIF(int sh)
 
 int ship_get_by_signature(int signature)
 {
-	ship_obj *so;
 		
-	for ( so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {		
+	for (auto so : ship_obj_list_all()) {		
 		if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 			continue;
 
@@ -21778,7 +21795,7 @@ float get_guard_range_ship(int guarded_shipnum, const ship* guarder_shipp)
 
 void clear_guard_ranges_for_ship(int guarded_shipnum)
 {
-	for (auto so: list_range(&Ship_obj_list))
+	for (auto so : ship_obj_list_all())
 	{
 		if (Objects[so->objnum].flags[Object::Object_Flags::Should_be_dead])
 			continue;

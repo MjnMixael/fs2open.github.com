@@ -819,6 +819,19 @@ sexp_list_item *SexpTreeOPF::get_listing_opf_ship_wing_prop() const
 	return head.next;
 }
 
+sexp_list_item *SexpTreeOPF::get_listing_opf_dormant_object() const
+{
+	sexp_list_item head;
+
+	head.add_list(get_listing_opf_ship());
+	head.add_list(get_listing_opf_wing());
+	head.add_list(get_listing_opf_prop());
+	head.add_list(get_listing_opf_coordinate_point());
+	head.add_list(get_listing_opf_jump_nodes());
+
+	return head.next;
+}
+
 sexp_list_item *SexpTreeOPF::get_listing_opf_order_recipient() const
 {
 	sexp_list_item head;
@@ -2222,6 +2235,10 @@ sexp_list_item *SexpTreeOPF::get_listing_opf(int opf, int parent_node, int arg_i
 			list = get_listing_opf_ship_wing_prop();
 			break;
 
+		case OPF_DORMANT_OBJECT:
+			list = get_listing_opf_dormant_object();
+			break;
+
 		case OPF_SHIP_WING_WHOLETEAM:
 			list = get_listing_opf_ship_wing_wholeteam();
 			break;
@@ -2720,6 +2737,18 @@ int SexpTreeOPF::query_default_argument_available(int op, int i) const
 
 			return 0;
 
+		case OPF_DORMANT_OBJECT:
+			ptr = GET_FIRST(&obj_used_list);
+			while (ptr != END_OF_LIST(&obj_used_list)) {
+				if (ptr->type == OBJ_SHIP || ptr->type == OBJ_START || ptr->type == OBJ_PROP
+					|| ptr->type == OBJ_COORDINATE_POINT || ptr->type == OBJ_JUMP_NODE)
+					return 1;
+
+				ptr = GET_NEXT(ptr);
+			}
+
+			return 0;
+
 		case OPF_PROP:
 			ptr = GET_FIRST(&obj_used_list);
 			while (ptr != END_OF_LIST(&obj_used_list)) {
@@ -3184,6 +3213,7 @@ int SexpTreeOPF::get_default_value(sexp_list_item* item, int op, int i) const
 		case OPF_SHIP_WING:
 		case OPF_SHIP_PROP:
 		case OPF_SHIP_WING_PROP:
+		case OPF_DORMANT_OBJECT:
 		case OPF_SHIP_WING_WHOLETEAM:
 		case OPF_SHIP_WING_SHIPONTEAM_POINT:
 		case OPF_SHIP_WING_POINT:

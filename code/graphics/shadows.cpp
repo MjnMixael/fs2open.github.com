@@ -1050,6 +1050,10 @@ void shadows_render_all(fov_t fov, matrix *eye_orient, vec3d *eye_pos,
 		if ( objp->flags[Object::Object_Flags::Should_be_dead] )
 			continue;
 
+		// OFP - dormant objects aren't drawn, so they cast no shadows either
+		if ( obj_is_dormant(objp) )
+			continue;
+
 		bool cull = true;
 		for (const auto& Shadow_frustum : Shadow_frustums) {
 			if ( shadows_obj_in_frustum(objp, &light_matrix, &Shadow_frustum.min, &Shadow_frustum.max) ) {

@@ -1678,6 +1678,51 @@ typedef struct ship_obj {
 } ship_obj;
 extern ship_obj Ship_obj_list;
 
+// OFP - dormant ships are moved off Ship_obj_list onto this list, so the many loops that look for
+// ships to target, order, count or sense skip them for free.  Bookkeeping loops that must still see
+// every ship in the mission iterate ship_obj_list_all() instead.
+extern ship_obj Dormant_ship_obj_list;
+
+class ship_obj_all_range
+{
+public:
+	class iterator
+	{
+		ship_obj *ptr;
+
+	public:
+		explicit iterator(ship_obj *x) : ptr(x) {}
+
+		ship_obj *operator*() const { return ptr; }
+		bool operator==(const iterator &other) const { return ptr == other.ptr; }
+		bool operator!=(const iterator &other) const { return ptr != other.ptr; }
+
+		iterator &operator++()
+		{
+			ptr = GET_NEXT(ptr);
+			if (ptr == END_OF_LIST(&Ship_obj_list))
+				ptr = GET_FIRST(&Dormant_ship_obj_list);
+			return *this;
+		}
+	};
+
+	iterator begin() const
+	{
+		auto first = GET_FIRST(&Ship_obj_list);
+		if (first == END_OF_LIST(&Ship_obj_list))
+			first = GET_FIRST(&Dormant_ship_obj_list);
+		return iterator(first);
+	}
+	iterator end() const { return iterator(END_OF_LIST(&Dormant_ship_obj_list)); }
+};
+
+// Every ship in the mission, active ones first, then dormant ones.  Same rule as list_range():
+// don't remove the current element inside the loop.
+inline ship_obj_all_range ship_obj_list_all() { return {}; }
+
+// moves a ship between Ship_obj_list and Dormant_ship_obj_list; only called from obj_set_dormant()
+void ship_obj_list_set_dormant(ship *shipp, bool dormant);
+
 typedef struct engine_wash_info
 {
 	char		name[NAME_LENGTH];

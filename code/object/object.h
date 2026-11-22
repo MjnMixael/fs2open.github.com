@@ -333,6 +333,21 @@ void obj_player_fire_stuff( object *objp, control_info ci );
 // do, then put code in here to correctly handle the case.
 void obj_set_flags(object *obj, const flagset<Object::Object_Flags>& new_flags);
 
+// OFP - dormant objects stay in the mission with all their state, but are not rendered, don't
+// collide, don't move, run no AI and are ignored by sensors, targeting and damage.
+// An object is dormant if either reason flag is set.
+inline bool obj_is_dormant(const object *objp)
+{
+	return objp->flags[Object::Object_Flags::Dormant_scene] || objp->flags[Object::Object_Flags::Dormant_manual];
+}
+
+// Whether this object can be made dormant at all (ships and props; never the player or anything docked to it)
+bool obj_can_be_dormant(const object *objp);
+
+// Sets or clears one dormancy reason (Dormant_scene or Dormant_manual).  Docked objects always
+// change together.  Returns false if the object can't be made dormant.
+bool obj_set_dormant(object *objp, Object::Object_Flags reason, bool dormant);
+
 // get the team for any object
 int obj_team(object *objp);
 

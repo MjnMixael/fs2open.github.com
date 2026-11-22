@@ -314,7 +314,7 @@ bool StartAutopilot()
 
 	for (i = 0; i < MAX_SHIPS; i++)
 	{
-		if (Ships[i].objnum != -1 && 
+		if (Ships[i].objnum != -1 && !obj_is_dormant(&Objects[Ships[i].objnum]) && 
 				(Ships[i].flags[Ship::Ship_Flags::Navpoint_carry] || 
 					(Ships[i].wingnum != -1 && Wings[Ships[i].wingnum].flags[Ship::Wing_Flags::Nav_carry])
 				)
@@ -347,7 +347,7 @@ bool StartAutopilot()
 
 	for (i = 0; i < MAX_SHIPS; i++)
 	{
-		if (Ships[i].objnum != -1 && 
+		if (Ships[i].objnum != -1 && !obj_is_dormant(&Objects[Ships[i].objnum]) && 
 				(Ships[i].flags[Ship::Ship_Flags::Navpoint_carry] || 
 					(Ships[i].wingnum != -1 && Wings[Ships[i].wingnum].flags[Ship::Wing_Flags::Nav_carry])
 				)
@@ -520,7 +520,7 @@ bool StartAutopilot()
 	// fixup has to go down here because ships are assigned goals during wing goals as well
 	for (i = 0; i < MAX_SHIPS; i++)
 	{
-		if (Ships[i].objnum != -1)
+		if (Ships[i].objnum != -1 && !obj_is_dormant(&Objects[Ships[i].objnum]))
 		{
 			if (Ships[i].flags[Ship::Ship_Flags::Navpoint_carry] || 
 				(Ships[i].wingnum != -1 && Wings[Ships[i].wingnum].flags[Ship::Wing_Flags::Nav_carry]))
@@ -895,7 +895,7 @@ void EndAutoPilot()
 	for (i = 0; i < MAX_SHIPS; i++)
 
 	{
-		if (Ships[i].objnum != -1 && 
+		if (Ships[i].objnum != -1 && !obj_is_dormant(&Objects[Ships[i].objnum]) && 
 			(
 				Ships[i].flags[Ship::Ship_Flags::Navpoint_carry] || 
 				(Ships[i].wingnum != -1 && Wings[Ships[i].wingnum].flags[Ship::Wing_Flags::Nav_carry] )
@@ -1019,7 +1019,7 @@ void nav_warp(bool prewarp=false)
 	// to the cinematic location or the final destination
 	for (int i = 0; i < MAX_SHIPS; i++)
 	{
-		if (Ships[i].objnum != -1
+		if (Ships[i].objnum != -1 && !obj_is_dormant(&Objects[Ships[i].objnum])
 			&& (Ships[i].flags[Ship::Ship_Flags::Navpoint_carry] 
 				|| (Ships[i].wingnum != -1 && Wings[Ships[i].wingnum].flags[Ship::Wing_Flags::Nav_carry])))
 		{
@@ -1167,7 +1167,7 @@ void NavSystem_Do()
 	*/
 	for (int i = 0; i < MAX_SHIPS; i++)
 	{
-		if (Ships[i].objnum != -1 && Ships[i].flags[Ship::Ship_Flags::Navpoint_needslink])
+		if (Ships[i].objnum != -1 && !obj_is_dormant(&Objects[Ships[i].objnum]) && Ships[i].flags[Ship::Ship_Flags::Navpoint_needslink])
 		{
 			object *other_objp = &Objects[Ships[i].objnum];
 

@@ -1876,6 +1876,18 @@ void beam_delete_all()
 	}
 }
 
+// OFP - end every beam fired by or aimed at this object (used when an object goes dormant)
+void beam_delete_all_involving(const object* objp)
+{
+	beam* b = GET_FIRST(&Beam_used_list);
+	while (b != END_OF_LIST(&Beam_used_list)) {
+		beam* next = GET_NEXT(b);
+		if (b->objp == objp || b->target == objp)
+			beam_delete(b);
+		b = next;
+	}
+}
+
 // output top and bottom vectors
 // fvec == forward vector (eye viewpoint basically. in world coords)
 // pos == world coordinate of the point we're calculating "around"

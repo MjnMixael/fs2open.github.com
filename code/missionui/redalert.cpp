@@ -752,7 +752,7 @@ void red_alert_store_ship_status()
 
 
 	// store status for all existing ships
-	for (const auto so : list_range(&Ship_obj_list)) {
+	for (const auto so : ship_obj_list_all()) {
 		auto ship_objp = &Objects[so->objnum];
 		if (ship_objp->flags[Object::Object_Flags::Should_be_dead])
 			continue;

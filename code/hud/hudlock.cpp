@@ -852,6 +852,8 @@ void hud_lock_acquire_uncaged_target(lock_info *current_lock, weapon_info *wip)
 	for ( A = GET_FIRST(&obj_used_list); A !=END_OF_LIST(&obj_used_list); A = GET_NEXT(A) ) {
 		if (A->flags[Object::Object_Flags::Should_be_dead])
 			continue;
+		if (obj_is_dormant(A))
+			continue;
 
 		if (!weapon_multilock_can_lock_on_target(Player_obj, A, wip, &dot))
 			continue;
@@ -933,6 +935,8 @@ void hud_lock_acquire_uncaged_target_weapon(lock_info* current_lock, weapon_info
 
 	for (A = GET_FIRST(&obj_used_list); A != END_OF_LIST(&obj_used_list); A = GET_NEXT(A)) {
 		if (A->flags[Object::Object_Flags::Should_be_dead])
+			continue;
+		if (obj_is_dormant(A))
 			continue;
 
 		if (!weapon_multilock_can_lock_on_target(Player_obj, A, wip, &dot, true))

@@ -144,6 +144,7 @@ RefObjectKind EventReferenceIndex::classify(int opf, const char* token)
 	case OPF_SHIP_WING_POINT_OR_NONE:
 	case OPF_SHIP_PROP:
 	case OPF_SHIP_WING_PROP:
+	case OPF_DORMANT_OBJECT:
 	case OPF_ORDER_RECIPIENT:
 		return resolveAmbiguous(token);
 

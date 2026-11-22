@@ -55,6 +55,8 @@
 #include "weapon/weapon.h"
 #include "tracing/Monitor.h"
 #include "graphics/light.h"
+#include "hud/hudescort.h"
+#include "hud/hudtarget.h"
 #include "graphics/color.h"
 #include "math/curve.h"
 
@@ -1155,6 +1157,242 @@ void obj_check_object( object *obj )
 }
 #endif
 
+// OFP - dormancy ---------------------------------------------------------------
+
+extern void ai_cleanup_dock_mode_subjective(object *objp);
+
+static bool obj_can_be_dormant_single(const object *objp)
+{
+	if (objp->flags[Object::Object_Flags::Should_be_dead])
+		return false;
+
+	switch (objp->type) {
+		case OBJ_SHIP: {
+			if (objp == Player_obj || objp->flags[Object::Object_Flags::Player_ship])
+				return false;
+
+			// a ship in the middle of a warp or a death roll would be frozen half way through
+			auto shipp = &Ships[objp->instance];
+			if (shipp->is_dying_or_departing() || shipp->is_arriving())
+				return false;
+
+			// same for a ship in the middle of docking, undocking or a rearm
+			auto aip = &Ai_info[shipp->ai_index];
+			if (aip->mode == AIM_DOCK || aip->ai_flags[AI::AI_Flags::Repairing] || aip->ai_flags[AI::AI_Flags::Being_repaired])
+				return false;
+
+			return true;
+		}
+
+		case OBJ_PROP:
+		case OBJ_DEBRIS:
+		case OBJ_COORDINATE_POINT:
+		case OBJ_JUMP_NODE:
+			return true;
+
+		default:
+			return false;
+	}
+}
+
+static void obj_get_dock_group(object *objp, SCP_vector<object *> &group)
+{
+	group.clear();
+	group.push_back(objp);
+
+	for (size_t i = 0; i < group.size(); ++i) {
+		for (auto dock = group[i]->dock_list; dock != nullptr; dock = dock->next) {
+			if (std::find(group.begin(), group.end(), dock->docked_objp) == group.end())
+				group.push_back(dock->docked_objp);
+		}
+	}
+}
+
+bool obj_can_be_dormant(const object *objp)
+{
+	if (Fred_running || (Game_mode & GM_MULTIPLAYER))
+		return false;
+
+	SCP_vector<object *> group;
+	obj_get_dock_group(const_cast<object *>(objp), group);
+
+	return std::all_of(group.begin(), group.end(), obj_can_be_dormant_single);
+}
+
+// remove every reference that would let the rest of the game keep interacting with a dormant object
+static void obj_drop_references_to(object *objp)
+{
+	int objnum = OBJ_INDEX(objp);
+
+	if (Player_ai != nullptr && Player_ai->target_objnum == objnum)
+		hud_cease_targeting(false);
+
+	for (auto so : list_range(&Ship_obj_list)) {
+		auto shipp = &Ships[Objects[so->objnum].instance];
+		auto aip = &Ai_info[shipp->ai_index];
+		if (aip->target_objnum == objnum)
+			set_target_objnum(aip, -1);
+
+		// turrets pick their own targets
+		for (auto ss : list_range(&shipp->subsys_list)) {
+			if (ss->turret_enemy_objnum == objnum) {
+				ss->turret_enemy_objnum = -1;
+				ss->turret_enemy_sig = 0;
+			}
+		}
+	}
+
+	for (auto wobjp : list_range(&obj_used_list)) {
+		if (wobjp->type != OBJ_WEAPON)
+			continue;
+
+		auto wp = &Weapons[wobjp->instance];
+		if (wp->homing_object == objp) {
+			wp->homing_object = &obj_used_list;
+			wp->homing_subsys = nullptr;
+		}
+	}
+}
+
+// Orders aimed at a ship that goes dormant are kept and put on hold by ai_mission_goal_achievable(),
+// which treats a dormant target like one that hasn't arrived.  The ships carrying out those orders
+// also have to forget that they were running them; otherwise, when the target wakes, the order looks
+// unchanged and is never restarted, and the ship idles for the rest of the mission.
+static void obj_pause_orders_on(object *objp)
+{
+	int objnum = OBJ_INDEX(objp);
+	auto shipp = &Ships[objp->instance];
+	const char *wing_name = (shipp->wingnum >= 0) ? Wings[shipp->wingnum].name : nullptr;
+
+	for (auto so : list_range(&Ship_obj_list)) {
+		auto other_objp = &Objects[so->objnum];
+		if (other_objp == objp || other_objp == Player_obj)
+			continue;
+
+		auto other_aip = &Ai_info[Ships[other_objp->instance].ai_index];
+		bool pause = false;
+
+		int ag = other_aip->active_goal;
+		if (ag >= 0 && ag < MAX_AI_GOALS) {
+			const auto &goal = other_aip->goals[ag];
+			if (goal.target_name != nullptr) {
+				if (!stricmp(goal.target_name, shipp->ship_name))
+					pause = true;
+				else if (wing_name != nullptr && (goal.ai_mode == AI_GOAL_CHASE_WING || goal.ai_mode == AI_GOAL_GUARD_WING)
+					&& !stricmp(goal.target_name, wing_name))
+					pause = true;
+			}
+		}
+
+		if (other_aip->guard_objnum == objnum)
+			pause = true;
+
+		// followers of a dormant formation leader are released, as when the leader dies
+		if (other_aip->ai_flags[AI::AI_Flags::Formation_object] && other_aip->goal_objnum == objnum) {
+			other_aip->ai_flags.remove(AI::AI_Flags::Formation_object);
+			pause = true;
+		}
+
+		if (pause) {
+			other_aip->active_goal = AI_ACTIVE_GOAL_NONE;
+			other_aip->mode = AIM_NONE;
+		}
+	}
+}
+
+static void obj_enter_dormancy(object *objp)
+{
+	int objnum = OBJ_INDEX(objp);
+
+	obj_remove_collider(objnum);
+	obj_snd_stop(objp, -1);
+	beam_delete_all_involving(objp);
+
+	if (objp->type == OBJ_SHIP) {
+		auto shipp = &Ships[objp->instance];
+
+		// a ship waiting for a support ship gives up its place in the queue
+		if (Ai_info[shipp->ai_index].ai_flags[AI::AI_Flags::Awaiting_repair])
+			ai_abort_rearm_request(objp);
+
+		// anyone flying in to dock with this ship backs off
+		for (auto so : list_range(&Ship_obj_list)) {
+			auto other_objp = &Objects[so->objnum];
+			auto other_aip = &Ai_info[Ships[other_objp->instance].ai_index];
+			if (other_aip->mode == AIM_DOCK && other_aip->goal_objnum == objnum)
+				ai_cleanup_dock_mode_subjective(other_objp);
+		}
+
+		obj_pause_orders_on(objp);
+
+		ship_stop_fire_primary(objp);
+		ship_obj_list_set_dormant(shipp, true);
+
+		// if this ship was flying in formation on someone, close up the gap it leaves
+		auto aip = &Ai_info[shipp->ai_index];
+		if (aip->ai_flags[AI::AI_Flags::Formation_object] && aip->goal_objnum >= 0)
+			ai_formation_object_recalculate_slotnums(aip->goal_objnum);
+
+		if (shipp->flags[Ship::Ship_Flags::Escort])
+			hud_remove_ship_from_escort(objnum);
+	}
+
+	obj_drop_references_to(objp);
+}
+
+static void obj_leave_dormancy(object *objp)
+{
+	int objnum = OBJ_INDEX(objp);
+
+	// nothing moved while dormant, so don't let the first frame see a jump
+	objp->last_pos = objp->pos;
+	objp->last_orient = objp->orient;
+
+	// obj_add_collider refuses dormant objects, so rebuild collision membership from the flag
+	obj_remove_collider(objnum);
+	if (objp->flags[Object::Object_Flags::Collides])
+		obj_add_collider(objnum);
+
+	if (objp->type == OBJ_SHIP) {
+		auto shipp = &Ships[objp->instance];
+
+		ship_obj_list_set_dormant(shipp, false);
+
+		if (shipp->flags[Ship::Ship_Flags::Escort])
+			hud_add_ship_to_escort(objnum, 1);
+
+		// a formation follower takes its slot back
+		auto aip = &Ai_info[shipp->ai_index];
+		if (aip->ai_flags[AI::AI_Flags::Formation_object] && aip->goal_objnum >= 0)
+			ai_formation_object_recalculate_slotnums(aip->goal_objnum);
+	}
+}
+
+bool obj_set_dormant(object *objp, Object::Object_Flags reason, bool dormant)
+{
+	Assertion(reason == Object::Object_Flags::Dormant_scene || reason == Object::Object_Flags::Dormant_manual,
+		"obj_set_dormant() called with a flag that is not a dormancy reason!");
+
+	if (dormant && !obj_can_be_dormant(objp))
+		return false;
+
+	SCP_vector<object *> group;
+	obj_get_dock_group(objp, group);
+
+	for (auto member : group) {
+		bool was_dormant = obj_is_dormant(member);
+		member->flags.set(reason, dormant);
+		bool now_dormant = obj_is_dormant(member);
+
+		if (!was_dormant && now_dormant)
+			obj_enter_dormancy(member);
+		else if (was_dormant && !now_dormant)
+			obj_leave_dormancy(member);
+	}
+
+	return true;
+}
+
 /**
  * Call this if you want to change an object flag so that the
  * object code knows what's going on.  For instance if you turn
@@ -1640,6 +1878,11 @@ void obj_move_all(float frametime)
 			continue;
 		}
 
+		// OFP - dormant objects don't move, think or process at all
+		if (obj_is_dormant(objp)) {
+			continue;
+		}
+
 		// if this is an observer object, skip it
 		if (objp->type == OBJ_OBSERVER) {
 			continue;
@@ -1775,6 +2018,11 @@ void obj_move_all(float frametime)
 	for (objp = GET_FIRST(&obj_used_list); objp != END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp)) {
 		// skip objects which should be dead
 		if (objp->flags[Object::Object_Flags::Should_be_dead]) {
+			continue;
+		}
+
+		// OFP - dormant objects (and their whole dock group) stay where they are
+		if (obj_is_dormant(objp)) {
 			continue;
 		}
 

@@ -5420,6 +5420,8 @@ void find_homing_object(object *weapon_objp, int num)
 	for ( object* objp = GET_FIRST(&obj_used_list); objp !=END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp) ) {
 		if (objp->flags[Object::Object_Flags::Should_be_dead])
 			continue;
+		if (obj_is_dormant(objp))
+			continue;
 
 		if ((objp->type == OBJ_SHIP) || ((objp->type == OBJ_WEAPON) && (Weapon_info[Weapons[objp->instance].weapon_info_index].wi_flags[Weapon::Info_Flags::Cmeasure])))
 		{
@@ -8155,6 +8157,8 @@ void weapon_do_area_effect(object *wobjp, const shockwave_create_info *sci, cons
 	for ( objp = GET_FIRST(&obj_used_list); objp !=END_OF_LIST(&obj_used_list); objp = GET_NEXT(objp) ) {
 		if (objp->flags[Object::Object_Flags::Should_be_dead])
 			continue;
+		if (obj_is_dormant(objp))
+			continue;
 		if ( (objp->type != OBJ_SHIP) && (objp->type != OBJ_ASTEROID) && (objp->type != OBJ_WEAPON) ) {
 			continue;
 		}
@@ -8659,7 +8663,7 @@ bool weapon_hit( object* weapon_obj, object* impacted_obj, const vec3d* hitpos, 
 		return armed_weapon;
 
 	// For all objects that had this weapon as a target, wipe it out, forcing find of a new enemy
-	for ( auto so = GET_FIRST(&Ship_obj_list); so != END_OF_LIST(&Ship_obj_list); so = GET_NEXT(so) ) {
+	for (auto so : ship_obj_list_all()) {
 		auto ship_objp = &Objects[so->objnum];
 		if (ship_objp->flags[Object::Object_Flags::Should_be_dead])
 			continue;
