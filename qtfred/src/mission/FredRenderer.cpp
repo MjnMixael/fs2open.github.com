@@ -1192,7 +1192,11 @@ void FredRenderer::render_volumetric_overlay() {
 	const int r = static_cast<int>(std::get<0>(col) * alpha * 255.0f);
 	const int g = static_cast<int>(std::get<1>(col) * alpha * 255.0f);
 	const int b = static_cast<int>(std::get<2>(col) * alpha * 255.0f);
-	const vec3d pos = neb.getPos();
+	// The game centers the volume's bounding box on +Position: (see
+	// volumetric_nebula::renderVolumeBitmap), not the POF origin, so shift the
+	// model back by its bounding-box center to land where the mission puts it.
+	const polymodel* pm = model_get(_volumetric_model_num);
+	const vec3d pos = neb.getPos() - ((pm->mins + pm->maxs) * 0.5f);
 
 	enable_htl();
 
