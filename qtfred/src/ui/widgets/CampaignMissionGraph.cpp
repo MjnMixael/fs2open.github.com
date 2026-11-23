@@ -41,24 +41,28 @@ MissionNodeItem::MissionNodeItem(int missionIndex,
 
 QRectF MissionNodeItem::boundingRect() const
 {
-	// The ports are centered on the top and bottom edges, so half of each sits outside the
-	// card; a rect that stops at the card leaves port trails behind when the node moves.
-	// The extra 2 covers the selected border pen and antialiasing.
-	const qreal m = m_style.portRadius + 2.0;
-	return m_rect.adjusted(-m, -m, m, m);
+	// the ports are drawn centered on the top and bottom edges, so half of each sticks out of the card
+	const qreal portExtent = m_style.portRadius + kMaxBorderWidth;
+	return m_rect.adjusted(-1, -portExtent, 1, portExtent);
 }
 
 QPainterPath MissionNodeItem::shape() const
 {
+	// the card and its ports; winding fill, or the half of each port inside the card would be a hole
+	const qreal r = m_style.portRadius + kMaxBorderWidth / 2;
+	const qreal centerX = m_rect.center().x();
 	QPainterPath path;
-	path.addRoundedRect(m_rect, m_style.nodeRadius, m_style.nodeRadius);
-	const qreal r = m_style.portRadius;
-	const qreal cx = m_rect.center().x();
-	path.addEllipse(QPointF(cx, m_rect.top()), r, r);
-	path.addEllipse(QPointF(cx - m_style.portOffsetX, m_rect.bottom()), r, r);
-	path.addEllipse(QPointF(cx + m_style.portOffsetX, m_rect.bottom()), r, r);
 	path.setFillRule(Qt::WindingFill);
+	path.addRect(cardRect());
+	path.addEllipse(QPointF(centerX, m_rect.top()), r, r);
+	path.addEllipse(QPointF(centerX - m_style.portOffsetX, m_rect.bottom()), r, r);
+	path.addEllipse(QPointF(centerX + m_style.portOffsetX, m_rect.bottom()), r, r);
 	return path;
+}
+
+QRectF MissionNodeItem::cardRect() const
+{
+	return m_rect.adjusted(-1, -1, 1, 1);
 }
 
 static inline QPainterPath roundedRectPath(const QRectF& r, qreal rad)
@@ -73,7 +77,7 @@ void MissionNodeItem::paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidge
 	p->setRenderHint(QPainter::Antialiasing, true);
 
 	// Precompute geometry
-	const qreal borderW = isSelected() ? 2.0 : 1.0;
+	const qreal borderW = isSelected() ? kMaxBorderWidth : 1.0;
 	const QPen borderPen(m_style.nodeBorder, borderW, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
 
 	const qreal topPortY = m_rect.top();       // center exactly on edge; half visible
@@ -554,6 +558,9 @@ CampaignMissionGraph::CampaignMissionGraph(QWidget* parent) : QGraphicsView(pare
 }
 CampaignMissionGraph::~CampaignMissionGraph()
 {
+	// The constructor filters the application for palette changes; stop before anything else.
+	qApp->removeEventFilter(this);
+
 	// The scene is a child object, so Qt would only delete it after this destructor has run.
 	// Deleting a selected node emits selectionChanged into onSceneSelectionChanged, and on an
 	// already destroyed graph that asserts ("Called object is not of the correct type") or
@@ -1162,6 +1169,7 @@ void CampaignMissionGraph::cancelDrag()
 	}
 
 	m_drag = DragState{}; // resets flags and clears the QPointer
+	setDragMode(QGraphicsView::ScrollHandDrag);
 }
 
 void CampaignMissionGraph::applyFocusEmphasis()
@@ -1352,12 +1360,11 @@ void CampaignMissionGraph::mousePressEvent(QMouseEvent* ev)
 
 void CampaignMissionGraph::mouseReleaseEvent(QMouseEvent* ev)
 {
-	if (m_drag.active) {
+	if (ev->button() == Qt::LeftButton && m_drag.active) {
 		const QPointF sp = mapToScene(ev->pos());
 		bool made = tryFinishConnectionAt(sp);
 
 		cancelDrag();
-		setDragMode(QGraphicsView::ScrollHandDrag);
 
 		if (made) {
 			// Edges reflect the new branch; keep viewport stable
@@ -1375,6 +1382,11 @@ void CampaignMissionGraph::mouseReleaseEvent(QMouseEvent* ev)
 
 void CampaignMissionGraph::contextMenuEvent(QContextMenuEvent* e)
 {
+	// a context menu request ends a connection drag: the menu would take the left release that finishes it
+	if (m_drag.active) {
+		cancelDrag();
+	}
+
 	const QPointF sp = mapToScene(e->pos());
 
 	// Node under cursor?
@@ -1419,7 +1431,7 @@ void CampaignMissionGraph::contextMenuEvent(QContextMenuEvent* e)
 	}
 
 	// END sink under cursor? no special menu
-	if (m_endSink && m_endSink->sceneBoundingRect().contains(sp)) {
+	if (m_endSink && m_endSink->contains(m_endSink->mapFromScene(sp))) {
 		QGraphicsView::contextMenuEvent(e);
 		return;
 	}

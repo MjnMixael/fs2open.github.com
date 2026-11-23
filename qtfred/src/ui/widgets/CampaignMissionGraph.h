@@ -251,6 +251,9 @@ namespace detail {
 
 using fso::fred::dialogs::CampaignSpecialMode;
 
+// widest border a card paints, used to pad its bounds around the ports (a stroke needs half; the rest is slack)
+constexpr qreal kMaxBorderWidth = 2.0;
+
 /**
  * One mission node item.
  */
@@ -273,15 +276,19 @@ class MissionNodeItem final : public QGraphicsObject {
 	QPainterPath shape() const override;
 	void paint(QPainter* p, const QStyleOptionGraphicsItem* opt, QWidget* w) override;
 
+	// The card itself, in item coordinates (boundingRect() also covers the ports)
+	QRectF cardRect() const;
+
+	// qgraphicsitem_cast matches on this; without it any scene item would cast to a mission card
+	static constexpr int Type = UserType + 1;
+	int type() const override
+	{
+		return Type;
+	}
+
 	int missionIndex() const
 	{
 		return m_idx;
-	}
-
-	// The card itself, in item coordinates (boundingRect() also covers the ports)
-	QRectF cardRect() const
-	{
-		return m_rect;
 	}
 
 	enum class Port {
@@ -406,9 +413,25 @@ class EndSinkItem final : public QGraphicsObject {
 
 	QRectF boundingRect() const override
 	{
-		// Expand upward by the port radius so the top port isn't clipped, plus room for the pens
-		QRectF pill(QPointF(0, 0), m_style.endSinkSize);
-		return pill.adjusted(-2.0, -m_style.portRadius - 2.0, +2.0, +2.0);
+		// Expand upward by port radius plus the port's pen so the top port isn't clipped
+		return pillRect().adjusted(-kBorderWidth, -(m_style.portRadius + kBorderWidth), kBorderWidth, kBorderWidth);
+	}
+
+	QRectF pillRect() const
+	{
+		return {QPointF(0, 0), m_style.endSinkSize};
+	}
+
+	// the pill and its port, winding fill as for the cards; the rest of the strip above is only for repainting
+	QPainterPath shape() const override
+	{
+		const QRectF pill = pillRect();
+		QPainterPath path;
+		path.setFillRule(Qt::WindingFill);
+		path.addRect(pill);
+		const qreal r = m_style.portRadius + kBorderWidth / 2;
+		path.addEllipse(QPointF(pill.center().x(), pill.top()), r, r);
+		return path;
 	}
 
 	void paint(QPainter* p, const QStyleOptionGraphicsItem*, QWidget*) override
@@ -416,17 +439,17 @@ class EndSinkItem final : public QGraphicsObject {
 		p->setRenderHint(QPainter::Antialiasing, true);
 
 		// draw relative to the pill rect (not the expanded boundingRect)
-		const QRectF pill(QPointF(0, 0), m_style.endSinkSize);
+		const QRectF pill = pillRect();
 
 		// Inbound port, centered on the pill's top edge
-		QPen portPen(m_style.endSinkBorder, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+		QPen portPen(m_style.endSinkBorder, kBorderWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
 		p->setPen(portPen);
 		p->setBrush(m_style.inboundPortColor);
 		const QPointF portCenter(pill.center().x(), pill.top());
 		p->drawEllipse(portCenter, m_style.portRadius, m_style.portRadius);
 
 		// Pill on top
-		QPen border(m_style.endSinkBorder, 1.5, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
+		QPen border(m_style.endSinkBorder, kBorderWidth, Qt::SolidLine, Qt::RoundCap, Qt::RoundJoin);
 		p->setPen(border);
 		p->setBrush(m_style.endSinkFill);
 		p->drawRoundedRect(pill, m_style.endSinkRadius, m_style.endSinkRadius);
@@ -443,12 +466,14 @@ class EndSinkItem final : public QGraphicsObject {
 	QPointF inboundAnchorScenePos() const
 	{
 		// Anchor on the pill's top-center
-		const QRectF pill(QPointF(0, 0), m_style.endSinkSize);
+		const QRectF pill = pillRect();
 		return mapToScene(QPointF(pill.center().x(), pill.top()));
 	}
 
 
   private:
+	static constexpr qreal kBorderWidth = 1.5;
+
 	CampaignGraphStyle m_style;
 };
 

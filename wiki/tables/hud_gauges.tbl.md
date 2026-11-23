@@ -1528,6 +1528,8 @@ Adds a 3D orb radar gauge
 
 Adds a BSG style radar (a.k.a DRADIS).
 
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg) This gauge always draws its own display and ignores the player's **3D Radar** option. If every radar gauge the mod loads is a BSG radar, nothing reads that option, so it is locked at the player's current value instead of being left to change with no effect.
+
 [Position](#position) (Optional)
 
 ![FSO 3.7.2](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-3.7.2.svg) [Scale Gauge:](#scale-gauge) (Optional)
@@ -3085,6 +3087,8 @@ Used by: [+Target Monitor:](#target-monitor)
 
 - Syntax: **String**
 
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg) This also feeds the player's **Dual Scan Lines** option, which chooses between the default and dual styles. A target monitor set to **discoscanlines** has no say either way. If every other target monitor the mod loads sets this field, the mod's choice replaces the player's option; if even one leaves it out, that gauge follows the option and the player keeps control. If every target monitor is **discoscanlines**, nothing reads the option and it is removed from the options screen.
+
 Used by: [+Target Monitor:](#target-monitor)
 
 #### Cargo Scan Start Offsets:
@@ -3503,6 +3507,8 @@ Used by: [+Custom:](#custom), [+Scripted Gauge:](#scripted-gauge), [+Messages:](
 
 - Syntax: **Boolean**
 
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg) This is also a player option, **Rearm Timer**. If every support gauge the mod loads sets this field, the mod's value replaces the player's option; if even one leaves it out, that gauge follows the option and the player keeps control.
+
 Used by: [+Support:](#support)
 
 #### First Background Size:
@@ -3740,6 +3746,8 @@ Used by: [+Throttle:](#throttle)
 ![FSO 23.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-23.0.svg) Optional. Shows extra information about the target next to its brackets.
 
 - Syntax: **Boolean**
+
+![FSO 27.0](https://raw.githubusercontent.com/wiki/ofp-fs2open/fs2open.github.com/images/badges/fso-27.0.svg) This is also a player option, **Extra Target Info**. One setting covers every ship, so any gauge that sets this field replaces the player's option, even a ship-specific HUD.
 
 Used by: [+Target Brackets:](#target-brackets)
 
