@@ -1999,7 +1999,7 @@ void load_training_scalars(const SCP_map<SCP_string, int>& in)
 // for, the mission mood, the training context and the reinforcement allowances.
 // The gauge set the HUD is drawing: the player's ship class has its own if the table gave it
 // one, otherwise the defaults.  hud_get_gauge() searches in the same order.
-const SCP_vector<std::unique_ptr<HudGauge>>& live_hud_gauges()
+const SCP_vector<SCP_polymorphic<HudGauge>>& live_hud_gauges()
 {
 	if (Player_ship != nullptr && Player_ship->ship_info_index >= 0 &&
 	    !Ship_info[Player_ship->ship_info_index].hud_gauges.empty()) {
